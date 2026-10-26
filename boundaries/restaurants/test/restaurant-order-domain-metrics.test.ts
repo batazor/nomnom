@@ -313,6 +313,7 @@ const newOrder = (id: string) =>
     id,
     orderId: `order-${id}`,
     restaurantId: "r-1",
+    marketId: "berlin",
     items: [{ menuItemId: "pho", quantity: 1 }],
     receivedAt: at(0),
   });

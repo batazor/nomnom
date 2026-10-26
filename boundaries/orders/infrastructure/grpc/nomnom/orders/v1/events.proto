@@ -18,15 +18,21 @@ message OrderPlaced {
   google.protobuf.Timestamp placed_at = 5;
   // Состав заказа по ценам catalog snapshot; restaurants создаёт по нему Restaurant Order.
   repeated OrderItem items = 6;
+  // Market of the aggregate (ADR 41).
+  string market_id = 7;
 }
 
 // Заказ успешно завершён.
 message OrderCompleted {
   string order_id = 1;
+  // Market of the aggregate (ADR 41).
+  string market_id = 2;
 }
 
 // Заказ завершён отрицательным итогом: отменой или неудачей.
 message OrderCancelled {
   string order_id = 1;
   Cancellation cancellation = 2;
+  // Market of the aggregate (ADR 41).
+  string market_id = 3;
 }

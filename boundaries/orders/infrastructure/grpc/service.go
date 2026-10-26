@@ -93,6 +93,7 @@ func (s *Service) ListCustomerOrders(ctx context.Context, request *ordersv1.List
 	page, err := s.module.ListCustomerOrders.Handle(ctx, listcustomerorders.Query{
 		Subject:    subject,
 		CustomerID: order.CustomerID(request.GetCustomerId()),
+		MarketID:   request.GetMarketId(),
 		Limit:      int(request.GetPageSize()),
 		Cursor:     request.GetPageToken(),
 	})
@@ -170,6 +171,7 @@ func orderView(view orderdetails.View) *ordersv1.Order {
 		OrderId:          string(view.OrderID),
 		CustomerId:       string(view.CustomerID),
 		RestaurantId:     string(view.RestaurantID),
+		MarketId:         view.MarketID.String(),
 		Items:            make([]*ordersv1.OrderItem, 0, len(view.Items)),
 		Total:            money(view.Total),
 		State:            orderState(view.State),

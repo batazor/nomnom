@@ -189,11 +189,13 @@ func (x *Money) GetCurrency() string {
 }
 
 type Payment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Amount        *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
-	State         PaymentState           `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.payments.v1.PaymentState" json:"state,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
+	OrderId   string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Amount    *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	State     PaymentState           `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.payments.v1.PaymentState" json:"state,omitempty"`
+	// Market of the Order (ADR 41); immutable.
+	MarketId      string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -254,6 +256,13 @@ func (x *Payment) GetState() PaymentState {
 		return x.State
 	}
 	return PaymentState_PAYMENT_STATE_UNSPECIFIED
+}
+
+func (x *Payment) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
 }
 
 // Result of a financial operation; provider references are not exposed.
@@ -349,13 +358,14 @@ const file_nomnom_payments_v1_payments_proto_rawDesc = "" +
 	"!nomnom/payments/v1/payments.proto\x12\x12nomnom.payments.v1\";\n" +
 	"\x05Money\x12\x16\n" +
 	"\x06amount\x18\x01 \x01(\tR\x06amount\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\xae\x01\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\xcb\x01\n" +
 	"\aPayment\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x121\n" +
 	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\x126\n" +
-	"\x05state\x18\x04 \x01(\x0e2 .nomnom.payments.v1.PaymentStateR\x05state\"\xa2\x02\n" +
+	"\x05state\x18\x04 \x01(\x0e2 .nomnom.payments.v1.PaymentStateR\x05state\x12\x1b\n" +
+	"\tmarket_id\x18\x05 \x01(\tR\bmarketId\"\xa2\x02\n" +
 	"\x10PaymentOperation\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12!\n" +

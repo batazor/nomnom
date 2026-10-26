@@ -14,6 +14,7 @@ type OrderPlaced struct {
 	OrderID      ID
 	CustomerID   CustomerID
 	RestaurantID RestaurantID
+	MarketID     vo.MarketID
 	Total        vo.Money
 	PlacedAt     time.Time
 	// Items is the composition at placement; restaurants creates its Restaurant
@@ -25,6 +26,7 @@ func (OrderPlaced) isOrderDomainEvent() {}
 
 type OrderCancelled struct {
 	OrderID     ID
+	MarketID    vo.MarketID
 	RequestedAt time.Time
 	Reason      CancellationReason
 }
@@ -32,7 +34,8 @@ type OrderCancelled struct {
 func (OrderCancelled) isOrderDomainEvent() {}
 
 type OrderCompleted struct {
-	OrderID ID
+	OrderID  ID
+	MarketID vo.MarketID
 	// PlacedAt is the start of fulfillment, carried for its duration.
 	PlacedAt time.Time
 	// CompletedAt is the moment of completion and the time of the event.

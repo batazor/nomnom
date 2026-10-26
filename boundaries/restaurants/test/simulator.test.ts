@@ -173,6 +173,61 @@ const createSimulatorWorld = async (random: () => number) => {
   return { ...world, state, simulator, logged, givenOwnedKitchen, stateOf };
 };
 
+test("ADR 41 the Simulator keeps the Market of every order and names none itself", async () => {
+  // Delays of both orders, then two accept outcomes with their step delays.
+  const world = await createSimulatorWorld(
+    sequence(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+  );
+  const berlin = await world.givenOwnedKitchen("Berlin Pho");
+  const hamburgKitchen = await world.givenKitchen(
+    "Fischbude",
+    ["Jan"],
+    "hamburg",
+  );
+  world.kitchenAccessControl.grantStaff(owner, hamburgKitchen.restaurantId);
+  const berlinOrder = await world.givenReceivedOrder(
+    berlin.restaurantId,
+    berlin.phoId,
+  );
+  const hamburgOrder = await world.givenReceivedOrder(
+    hamburgKitchen.restaurantId,
+    hamburgKitchen.phoId,
+  );
+
+  assert.deepEqual(
+    (await world.board.listPendingKitchenOrders()).map((order) => [
+      order.restaurantOrderId,
+      order.marketId,
+    ]),
+    [
+      [berlinOrder.restaurantOrderId, "berlin"],
+      [hamburgOrder.restaurantOrderId, "hamburg"],
+    ],
+  );
+  await world.state.setEnabled(true, world.clock.now());
+  await world.simulator.tick();
+  world.clock.advance(DELAY.minMs);
+  await world.simulator.tick();
+
+  const accepted = (await world.outbox.records())
+    .map(
+      (record) =>
+        record.event as unknown as Readonly<{
+          type: string;
+          restaurantOrderId: string;
+          marketId: string;
+        }>,
+    )
+    .filter((event) => event.type === "RestaurantOrderAccepted");
+  assert.deepEqual(
+    accepted.map((event) => [event.restaurantOrderId, event.marketId]).sort(),
+    [
+      [berlinOrder.restaurantOrderId, "berlin"],
+      [hamburgOrder.restaurantOrderId, "hamburg"],
+    ].sort(),
+  );
+});
+
 test("AC-764 a disabled Simulator changes nothing", async () => {
   const world = await createSimulatorWorld(sequence());
   const { restaurantId, phoId } = await world.givenOwnedKitchen();

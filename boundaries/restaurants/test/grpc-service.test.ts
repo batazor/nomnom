@@ -48,6 +48,7 @@ test("GetRestaurant maps the application view", async () => {
   assert.equal(response.restaurant?.restaurantId, restaurantId);
   assert.equal(response.restaurant?.name, "Pho Bar");
   assert.equal(response.restaurant?.isOpen, true);
+  assert.equal(response.restaurant?.marketId, "berlin");
 });
 
 test("FR-493 GetMenu returns the public menu with prices and availability", async () => {
@@ -88,7 +89,7 @@ test("AC-565 ListRestaurants pages open restaurants with a next page token", asy
   await world.givenRestaurant("Closed Bar", { open: false });
 
   const first = await service.listRestaurants(
-    create(ListRestaurantsRequestSchema, { pageSize: 1 }),
+    create(ListRestaurantsRequestSchema, { marketId: "berlin", pageSize: 1 }),
     context,
   );
 
@@ -97,6 +98,7 @@ test("AC-565 ListRestaurants pages open restaurants with a next page token", asy
 
   const second = await service.listRestaurants(
     create(ListRestaurantsRequestSchema, {
+      marketId: "berlin",
       pageSize: 1,
       pageToken: first.nextPageToken,
     }),
@@ -106,9 +108,43 @@ test("AC-565 ListRestaurants pages open restaurants with a next page token", asy
   assert.equal(second.restaurants.length, 1);
   assert.equal(second.nextPageToken, "");
   assert.deepEqual(
-    [...first.restaurants, ...second.restaurants].map((r) => r.name).sort(),
-    ["Pho Bar", "Ramen Bar"],
+    [...first.restaurants, ...second.restaurants]
+      .map((r) => [r.name, r.marketId])
+      .sort(),
+    [
+      ["Pho Bar", "berlin"],
+      ["Ramen Bar", "berlin"],
+    ],
   );
+});
+
+test("ADR 41 ListRestaurants returns only the requested Market and requires it", async () => {
+  const { world, service } = await createWorld();
+  await world.givenRestaurant("Pho Bar");
+  await world.givenRestaurant("Hamburg Bar", {
+    open: true,
+    marketId: "hamburg",
+  });
+
+  const hamburg = await service.listRestaurants(
+    create(ListRestaurantsRequestSchema, { marketId: "hamburg" }),
+    context,
+  );
+
+  assert.deepEqual(
+    hamburg.restaurants.map((r) => [r.name, r.marketId]),
+    [["Hamburg Bar", "hamburg"]],
+  );
+  for (const marketId of ["", "Hamburg", "h"]) {
+    await assert.rejects(
+      async () =>
+        service.listRestaurants(
+          create(ListRestaurantsRequestSchema, { marketId }),
+          context,
+        ),
+      rejectsWith(Code.InvalidArgument),
+    );
+  }
 });
 
 test("ListOwnedRestaurants lists restaurants of the calling owner", async () => {
@@ -117,9 +153,13 @@ test("ListOwnedRestaurants lists restaurants of the calling owner", async () => 
   });
   await world.givenRestaurant("Pho Bar");
   await world.givenRestaurant("Closed Bar", { open: false });
+  await world.givenRestaurant("Hamburg Bar", {
+    open: true,
+    marketId: "hamburg",
+  });
 
   const response = await service.listOwnedRestaurants(
-    create(ListOwnedRestaurantsRequestSchema, {}),
+    create(ListOwnedRestaurantsRequestSchema, { marketId: "berlin" }),
     context,
   );
 
@@ -128,6 +168,16 @@ test("ListOwnedRestaurants lists restaurants of the calling owner", async () => 
     "Pho Bar",
   ]);
   assert.equal(response.nextPageToken, "");
+  for (const marketId of ["", "Berlin"]) {
+    await assert.rejects(
+      async () =>
+        service.listOwnedRestaurants(
+          create(ListOwnedRestaurantsRequestSchema, { marketId }),
+          context,
+        ),
+      rejectsWith(Code.InvalidArgument),
+    );
+  }
 });
 
 test("ListOwnedRestaurants rejects a service subject with PERMISSION_DENIED", async () => {
@@ -138,7 +188,7 @@ test("ListOwnedRestaurants rejects a service subject with PERMISSION_DENIED", as
   await assert.rejects(
     async () =>
       service.listOwnedRestaurants(
-        create(ListOwnedRestaurantsRequestSchema, {}),
+        create(ListOwnedRestaurantsRequestSchema, { marketId: "berlin" }),
         context,
       ),
     rejectsWith(Code.PermissionDenied),
@@ -151,7 +201,10 @@ test("ListRestaurants includes closed restaurants on request with the default pa
   await world.givenRestaurant("Closed Bar", { open: false });
 
   const response = await service.listRestaurants(
-    create(ListRestaurantsRequestSchema, { includeClosed: true }),
+    create(ListRestaurantsRequestSchema, {
+      marketId: "berlin",
+      includeClosed: true,
+    }),
     context,
   );
 
@@ -168,7 +221,10 @@ test("ListRestaurants maps a page size out of range to INVALID_ARGUMENT", async 
   await assert.rejects(
     async () =>
       service.listRestaurants(
-        create(ListRestaurantsRequestSchema, { pageSize: 101 }),
+        create(ListRestaurantsRequestSchema, {
+          marketId: "berlin",
+          pageSize: 101,
+        }),
         context,
       ),
     rejectsWith(Code.InvalidArgument),

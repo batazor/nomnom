@@ -1,6 +1,7 @@
 package vo
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -41,4 +42,21 @@ func TestMoneyArithmeticIsExactAndSingleCurrency(t *testing.T) {
 func TestQuantityMustBePositive(t *testing.T) {
 	_, err := NewQuantity(0)
 	require.ErrorIs(t, err, ErrInvalidQuantity)
+}
+
+func TestMarketIDIsASlug(t *testing.T) {
+	market, err := NewMarketID("berlin")
+	require.NoError(t, err)
+	assert.Equal(t, "berlin", market.String())
+	assert.False(t, market.IsZero())
+
+	_, err = NewMarketID("new-york-2")
+	require.NoError(t, err)
+
+	for _, invalid := range []string{"", "b", "Berlin", "1berlin", "-berlin", "berlin_city", "a" + strings.Repeat("b", 32)} {
+		_, err := NewMarketID(invalid)
+		require.ErrorIs(t, err, ErrInvalidMarketID, invalid)
+		require.ErrorIs(t, err, ErrInvalidValue, invalid)
+	}
+	assert.True(t, MarketID{}.IsZero())
 }

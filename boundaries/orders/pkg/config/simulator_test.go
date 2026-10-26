@@ -21,6 +21,7 @@ func validSimulatorEnvironment() map[string]string {
 		EnvSimulatorMinDelay:   "30s",
 		EnvSimulatorMaxDelay:   "2m",
 		EnvSimulatorCustomerID: "customer-1",
+		EnvSimulatorMarketIDs:  "berlin, hamburg",
 	}
 }
 
@@ -31,7 +32,8 @@ func TestLoadReadsSimulatorFromEnvironment(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.NoError(t, cfg.Simulator.Validate())
-	assert.Equal(t, SimulatorConfig{Interval: 5 * time.Second, MinDelay: 30 * time.Second, MaxDelay: 2 * time.Minute, CustomerID: "customer-1"}, cfg.Simulator)
+	assert.Equal(t, SimulatorConfig{Interval: 5 * time.Second, MinDelay: 30 * time.Second, MaxDelay: 2 * time.Minute, CustomerID: "customer-1", MarketIDs: "berlin, hamburg"}, cfg.Simulator)
+	assert.Equal(t, []string{"berlin", "hamburg"}, cfg.Simulator.Markets())
 }
 
 func TestSimulatorRejectsInvalidConfig(t *testing.T) {
@@ -41,6 +43,10 @@ func TestSimulatorRejectsInvalidConfig(t *testing.T) {
 		"missing min delay":    {EnvSimulatorMinDelay: ""},
 		"missing max delay":    {EnvSimulatorMaxDelay: ""},
 		"missing customer":     {EnvSimulatorCustomerID: ""},
+		"missing markets":      {EnvSimulatorMarketIDs: ""},
+		"malformed market":     {EnvSimulatorMarketIDs: "berlin,Hamburg"},
+		"empty market entry":   {EnvSimulatorMarketIDs: "berlin,"},
+		"repeated market":      {EnvSimulatorMarketIDs: "berlin,berlin"},
 		"zero interval":        {EnvSimulatorInterval: "0s"},
 	} {
 		t.Run(name, func(t *testing.T) {

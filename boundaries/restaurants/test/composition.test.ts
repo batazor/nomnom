@@ -245,6 +245,7 @@ describe("composed processes against MongoDB", () => {
         id: "r-composed",
         name: "Pho House",
         ownerId: "owner",
+        marketId: "berlin",
         registeredAt: new Date(Date.UTC(2026, 9, 25, 9)),
       });
       await container.cradle.restaurants.save(restaurant);
@@ -252,6 +253,7 @@ describe("composed processes against MongoDB", () => {
         restaurantId: "r-composed",
       });
       assert.equal(view.name, "Pho House");
+      assert.equal(view.marketId, "berlin");
     } finally {
       await container.dispose();
     }

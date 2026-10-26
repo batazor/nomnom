@@ -1,5 +1,6 @@
 use super::*;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryCancellationReason, DeliveryFailureCode, DeliveryFailureReason, DeliveryId,
     DeliveryOfferId, OrderId,
@@ -26,6 +27,7 @@ fn maps_courier_assignment() {
         courier_id,
         created_at_epoch_seconds: Some(1_000),
         expected_pickup_at_epoch_seconds: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(record.event_type, COURIER_ASSIGNED_TO_DELIVERY);
@@ -33,6 +35,7 @@ fn maps_courier_assignment() {
         v1::CourierAssignedToDelivery::decode(record.payload.as_slice()).expect("decode"),
         v1::CourierAssignedToDelivery {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             courier_id: "courier-1".to_owned(),
             expected_pickup_at: None,
@@ -51,6 +54,7 @@ fn maps_expected_times_named_by_the_courier() {
         courier_id: courier_id.clone(),
         created_at_epoch_seconds: Some(1_000),
         expected_pickup_at_epoch_seconds: Some(1_600),
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(
@@ -68,6 +72,7 @@ fn maps_expected_times_named_by_the_courier() {
         order_id,
         courier_id,
         expected_delivered_at_epoch_seconds: Some(2_400),
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(
@@ -89,6 +94,7 @@ fn maps_pickup_and_completion() {
         order_id: order_id.clone(),
         courier_id: courier_id.clone(),
         expected_delivered_at_epoch_seconds: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(picked.event_type, DELIVERY_PICKED_UP);
@@ -96,6 +102,7 @@ fn maps_pickup_and_completion() {
         v1::DeliveryPickedUp::decode(picked.payload.as_slice()).expect("decode"),
         v1::DeliveryPickedUp {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             expected_delivered_at: None,
         }
@@ -106,6 +113,7 @@ fn maps_pickup_and_completion() {
         order_id,
         courier_id,
         created_at_epoch_seconds: Some(1_000),
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(completed.event_type, DELIVERY_COMPLETED);
@@ -113,6 +121,7 @@ fn maps_pickup_and_completion() {
         v1::DeliveryCompleted::decode(completed.payload.as_slice()).expect("decode"),
         v1::DeliveryCompleted {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
         }
     );
@@ -127,6 +136,7 @@ fn maps_failure_with_reason_code_and_detail() {
             order_id,
             courier_id,
             reason,
+            market_id: MarketId::new("berlin").expect("market id"),
         })
         .expect("published");
         assert_eq!(record.event_type, DELIVERY_FAILED);
@@ -138,6 +148,7 @@ fn maps_failure_with_reason_code_and_detail() {
         ),
         v1::DeliveryFailed {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             reason: "customer_unreachable".to_owned(),
             detail: "rang twice".to_owned(),
@@ -187,6 +198,7 @@ fn maps_courier_unassignment() {
         delivery_id,
         order_id,
         courier_id,
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(record.event_type, COURIER_UNASSIGNED_FROM_DELIVERY);
@@ -194,6 +206,7 @@ fn maps_courier_unassignment() {
         v1::CourierUnassignedFromDelivery::decode(record.payload.as_slice()).expect("decode"),
         v1::CourierUnassignedFromDelivery {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             courier_id: "courier-1".to_owned(),
         }
@@ -208,6 +221,7 @@ fn maps_cancellation_with_and_without_reason() {
         order_id: order_id.clone(),
         released_courier_id: Some(courier_id),
         reason: DeliveryCancellationReason::new("customer request"),
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(record.event_type, DELIVERY_CANCELLED);
@@ -215,6 +229,7 @@ fn maps_cancellation_with_and_without_reason() {
         v1::DeliveryCancelled::decode(record.payload.as_slice()).expect("decode"),
         v1::DeliveryCancelled {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             reason: "customer request".to_owned(),
         }
@@ -225,12 +240,14 @@ fn maps_cancellation_with_and_without_reason() {
         order_id,
         released_courier_id: None,
         reason: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     })
     .expect("published");
     assert_eq!(
         v1::DeliveryCancelled::decode(without_reason.payload.as_slice()).expect("decode"),
         v1::DeliveryCancelled {
             order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
             delivery_id: "delivery-1".to_owned(),
             reason: String::new(),
         }

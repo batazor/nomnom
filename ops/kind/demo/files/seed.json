@@ -1,5 +1,12 @@
 {
   "operator": "kind-operator",
+  "cells": [
+    {"id": "cell-1", "gatewayAddress": "internal-gateway.envoy-gateway-system.svc.cluster.local:8080"}
+  ],
+  "markets": [
+    {"id": "berlin", "name": "Berlin", "currency": "EUR", "cellId": "cell-1"}
+  ],
+  "market": "berlin",
   "owner": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
   "kitchen": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
   "couriers": [

@@ -6,12 +6,12 @@ use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::application::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
-use crate::slices::courier::domains::courier::CourierStatus;
+use crate::slices::courier::domains::courier::{CourierError, CourierStatus, MarketId};
 use crate::slices::delivery::applications::authorization::DeliveryResource;
 use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{
-    NOW, OFFER_TTL, ObservingRelationships, World, candidate, subject,
+    NOW, OFFER_TTL, ObservingRelationships, World, candidate, hamburg, subject,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryOfferError, DeliveryOfferReason, DeliveryValidationError, DomainEvent,
@@ -72,6 +72,7 @@ fn assignment_fact() -> Vec<OutboxMessage> {
             courier_id: CourierId::new("courier-1"),
             created_at_epoch_seconds: None,
             expected_pickup_at_epoch_seconds: None,
+            market_id: MarketId::new("berlin").expect("market id"),
         }),
     ]
 }
@@ -145,6 +146,7 @@ fn accepting_with_expected_pickup_time_records_it() {
         courier_id: CourierId::new("courier-1"),
         created_at_epoch_seconds: None,
         expected_pickup_at_epoch_seconds: Some(NOW + 300),
+        market_id: MarketId::new("berlin").expect("market id"),
     });
     assert_eq!(world.store.outbox_messages(), expected);
 }
@@ -308,6 +310,30 @@ fn offer_of_another_courier_is_rejected() {
     assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
 }
 
+/// ADR 41: an offer that reached a courier of another Market (written
+/// before the rule, or by hand) never becomes a Courier Assignment.
+#[test]
+fn courier_of_another_market_cannot_accept() {
+    let world = World::new();
+    world.waiting_delivery("delivery-1");
+    world.courier_in("courier-h", CourierStatus::Available, &hamburg());
+    world.offer("offer-h", "delivery-1", "courier-h");
+    world
+        .locator
+        .set_candidates(vec![candidate("courier-h", 1_000)]);
+
+    assert_eq!(
+        handler(&world).execute(&subject("courier-h"), input("offer-h", "courier-h")),
+        Err(DeliveryApplicationError::CourierPrecondition(
+            CourierError::OtherMarket
+        ))
+    );
+    assert_eq!(world.offer_state("offer-h"), OfferState::Pending);
+    assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
+    assert_eq!(world.courier_status("courier-h"), CourierStatus::Available);
+    assert!(world.store.outbox_messages().is_empty());
+}
+
 /// AC-327
 #[test]
 fn repeated_acceptance_is_idempotent_without_second_fact() {
@@ -373,14 +399,22 @@ impl CourierAssignment for RecordingAssignment<'_> {
         self.store.status(courier_id)
     }
 
-    fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+    fn ensure_available(
+        &self,
+        courier_id: &CourierId,
+        market_id: &MarketId,
+    ) -> Result<(), CourierAssignmentError> {
         self.record("ensure_available", courier_id);
-        self.store.ensure_available(courier_id)
+        self.store.ensure_available(courier_id, market_id)
     }
 
-    fn occupy(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+    fn occupy(
+        &self,
+        courier_id: &CourierId,
+        market_id: &MarketId,
+    ) -> Result<(), CourierAssignmentError> {
         self.record("occupy", courier_id);
-        self.store.occupy(courier_id)
+        self.store.occupy(courier_id, market_id)
     }
 
     fn release(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {

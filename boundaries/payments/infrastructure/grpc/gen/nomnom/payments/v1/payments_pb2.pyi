@@ -43,16 +43,18 @@ class Money(_message.Message):
     def __init__(self, amount: _Optional[str] = ..., currency: _Optional[str] = ...) -> None: ...
 
 class Payment(_message.Message):
-    __slots__ = ("payment_id", "order_id", "amount", "state")
+    __slots__ = ("payment_id", "order_id", "amount", "state", "market_id")
     PAYMENT_ID_FIELD_NUMBER: _ClassVar[int]
     ORDER_ID_FIELD_NUMBER: _ClassVar[int]
     AMOUNT_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
+    MARKET_ID_FIELD_NUMBER: _ClassVar[int]
     payment_id: str
     order_id: str
     amount: Money
     state: PaymentState
-    def __init__(self, payment_id: _Optional[str] = ..., order_id: _Optional[str] = ..., amount: _Optional[_Union[Money, _Mapping]] = ..., state: _Optional[_Union[PaymentState, str]] = ...) -> None: ...
+    market_id: str
+    def __init__(self, payment_id: _Optional[str] = ..., order_id: _Optional[str] = ..., amount: _Optional[_Union[Money, _Mapping]] = ..., state: _Optional[_Union[PaymentState, str]] = ..., market_id: _Optional[str] = ...) -> None: ...
 
 class PaymentOperation(_message.Message):
     __slots__ = ("payment_id", "operation_id", "status", "payment_state", "decline_reason", "replayed")

@@ -16,6 +16,8 @@ export type RegisterRestaurant = Readonly<{
   subject: Subject;
   name: string;
   ownerId: string;
+  /** Required (ADR 41): Market of the new restaurant, immutable. */
+  marketId: string;
 }>;
 
 export type RegisterRestaurantResult = RestaurantView &
@@ -53,6 +55,7 @@ export class RegisterRestaurantHandler {
       id: this.#ids.next(),
       name: command.name,
       ownerId: command.ownerId,
+      marketId: command.marketId,
       registeredAt: this.#clock.now(),
     });
     const revision = await this.#ownerRelationships.touchOwner({

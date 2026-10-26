@@ -176,6 +176,7 @@ mod tests {
                 register_courier::Input {
                     courier_id: "courier-1".to_owned(),
                     name: "Timur".to_owned(),
+                    market_id: "berlin".to_owned(),
                 },
             )
             .expect("courier registered");
@@ -194,6 +195,7 @@ mod tests {
                 &operator(),
                 create_delivery::Input {
                     order_id: "order-1".to_owned(),
+                    market_id: "berlin".to_owned(),
                 },
             )
             .expect("delivery created");
@@ -213,6 +215,7 @@ mod tests {
                     register_courier::Input {
                         courier_id: "courier-1".to_owned(),
                         name: "Timur".to_owned(),
+                        market_id: "berlin".to_owned(),
                     },
                 )
                 .is_err()
@@ -224,6 +227,7 @@ mod tests {
                     &operator(),
                     create_delivery::Input {
                         order_id: "order-1".to_owned(),
+                        market_id: "berlin".to_owned(),
                     },
                 )
                 .is_err()

@@ -390,8 +390,10 @@ type Order struct {
 	ExpectedReadyAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=expected_ready_at,json=expectedReadyAt,proto3" json:"expected_ready_at,omitempty"`
 	ExpectedPickupAt    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=expected_pickup_at,json=expectedPickupAt,proto3" json:"expected_pickup_at,omitempty"`
 	ExpectedDeliveredAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expected_delivered_at,json=expectedDeliveredAt,proto3" json:"expected_delivered_at,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Market of the Restaurant at Place Order (ADR 41); immutable.
+	MarketId      string `protobuf:"bytes,15,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
@@ -513,6 +515,13 @@ func (x *Order) GetExpectedDeliveredAt() *timestamppb.Timestamp {
 		return x.ExpectedDeliveredAt
 	}
 	return nil
+}
+
+func (x *Order) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
 }
 
 type OrderSummary struct {
@@ -637,7 +646,7 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
 	"\x12CancellationWindow\x125\n" +
 	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
-	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\x9c\x06\n" +
+	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xb9\x06\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -653,7 +662,8 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x13cancellation_window\x18\v \x01(\v2$.nomnom.orders.v1.CancellationWindowR\x12cancellationWindow\x12F\n" +
 	"\x11expected_ready_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12H\n" +
 	"\x12expected_pickup_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\x12N\n" +
-	"\x15expected_delivered_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAtJ\x04\b\x05\x10\x06R\x10delivery_address\"\xb1\x02\n" +
+	"\x15expected_delivered_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAt\x12\x1b\n" +
+	"\tmarket_id\x18\x0f \x01(\tR\bmarketIdJ\x04\b\x05\x10\x06R\x10delivery_address\"\xb1\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +

@@ -65,6 +65,13 @@ make kind-down
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
   `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
+  Тот же hook после Kafka запускает Job `dead-letter-topics`
+  ([`manifests/messaging/dead-letter-topics.yaml`](manifests/messaging/dead-letter-topics.yaml)): DLQ
+  consumers объявляются явно — retention 30 дней, одна partition ([Разбор DLQ](../../docs/dlq.md)).
+- `orders-reconciler` — release chart `orders` с `values-reconciler.yaml` и
+  [`values/orders-reconciler.yaml`](values/orders-reconciler.yaml): тот же образ,
+  `command: ["/orders-reconciler"]`, без Service; каждую минуту сверяет relations `order` SpiceDB ↔
+  PostgreSQL и догоняет проекцию `OrderDetails` после rolling update (ADR orders 4).
 - `orders-worker` (Temporal worker Order Fulfillment Workflow) — release chart `orders` с
   `values-worker.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml): тот же образ,
   своя `command`, без Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии

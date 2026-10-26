@@ -239,6 +239,39 @@ spec:
         - protocol: TCP
           port: 50051
 ---
+# controlplane (ADR 41): своя PostgreSQL и SpiceDB (platform#manage_markets). Kafka, Debezium и
+# Temporal ему не нужны: control plane не публикует событий.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-infrastructure-egress
+  namespace: nomnom-controlplane
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+              app.kubernetes.io/instance: controlplane
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: spicedb
+      ports:
+        - protocol: TCP
+          port: 50051
+---
 # BFF: JWKS identity providers (ADR 35) — Dex и тестовый test-idp; Kafka — Cosmo Streams
 # подписок orderChanged (ADR 36).
 apiVersion: networking.k8s.io/v1

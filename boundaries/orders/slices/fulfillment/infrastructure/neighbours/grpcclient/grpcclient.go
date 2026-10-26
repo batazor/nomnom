@@ -89,8 +89,9 @@ func (p *Payments) Refund(ctx context.Context, r neighbours.PaymentRequest) erro
 
 func (p *Payments) payment(ctx context.Context, r neighbours.PaymentRequest) (string, error) {
 	resp, err := p.client.CreatePayment(ctx, &paymentsv1.CreatePaymentRequest{
-		OrderId: r.OrderID,
-		Amount:  &paymentsv1.Money{Amount: r.Amount, Currency: r.Currency},
+		OrderId:  r.OrderID,
+		Amount:   &paymentsv1.Money{Amount: r.Amount, Currency: r.Currency},
+		MarketId: r.MarketID,
 	})
 	if err != nil {
 		return "", mapError("payments.CreatePayment", err)
@@ -175,7 +176,7 @@ func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
 var _ neighbours.Delivery = (*Delivery)(nil)
 
 func (d *Delivery) Create(ctx context.Context, request neighbours.DeliveryRequest) error {
-	_, err := d.client.CreateDelivery(ctx, &deliveryv1.CreateDeliveryRequest{OrderId: request.OrderID})
+	_, err := d.client.CreateDelivery(ctx, &deliveryv1.CreateDeliveryRequest{OrderId: request.OrderID, MarketId: request.MarketID})
 	return mapError("delivery.CreateDelivery", err)
 }
 

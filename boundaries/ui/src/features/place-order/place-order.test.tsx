@@ -2,7 +2,15 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse } from "msw";
 import { graphql } from "msw/graphql";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 
 import { AppProviders } from "../../app/providers";
 import { AppRouter } from "../../app/router";
@@ -21,6 +29,8 @@ const cartKey = `nomnom.cart.v1.${kitchen}`;
 const publicGraphql = graphql.link(/\/graphql$/);
 
 beforeAll(() => mockServer.listen({ onUnhandledFrame: "error" }));
+// The board opens only in a chosen Market (ADR 41).
+beforeEach(() => localStorage.setItem("nomnom.market.v1", "berlin"));
 afterEach(() => {
   mockServer.resetHandlers();
   mockStore.reset();

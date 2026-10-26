@@ -25,9 +25,15 @@ const integration = protobufIntegrationEvents(RESTAURANT_EVENTS_TOPIC);
 /** Explicit allowlist: Domain Event type → Integration Event. */
 const MAPPERS: EventAllowlist<RestaurantEvent> = {
   RestaurantOpened: (event) =>
-    integration(RestaurantOpenedSchema, { restaurantId: event.restaurantId }),
+    integration(RestaurantOpenedSchema, {
+      restaurantId: event.restaurantId,
+      marketId: event.marketId,
+    }),
   RestaurantClosed: (event) =>
-    integration(RestaurantClosedSchema, { restaurantId: event.restaurantId }),
+    integration(RestaurantClosedSchema, {
+      restaurantId: event.restaurantId,
+      marketId: event.marketId,
+    }),
 };
 
 /** Integration Event types of the topic (full Protobuf message names). */

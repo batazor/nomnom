@@ -20,7 +20,7 @@ DI должен дополнять Vertical Slice Architecture: срез ост�
 
 Принять отдельную стратегию Dependency Injection для каждого bounded context:
 
-- `orders` (Go): compile-time DI через [`github.com/google/wire`](https://github.com/google/wire);
+- `orders` и `controlplane` (Go, [ADR 41](0041-cell-based-architecture-with-control-plane.md)): compile-time DI через [`github.com/google/wire`](https://github.com/google/wire);
 - `restaurants` (TypeScript): Awilix;
 - `delivery` (Rust): compile-time DI через [`shaku`](https://github.com/AzureMarker/shaku);
 - `payments` (Python): Dependency Injector — Accepted для `payments` на Python 3.14 (см. [Payments](#payments)).

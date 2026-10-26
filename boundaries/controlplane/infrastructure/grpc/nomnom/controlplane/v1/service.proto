@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package nomnom.controlplane.v1;
+
+import "nomnom/controlplane/v1/controlplane.proto";
+
+// Registry of Cells, Markets and Market Placements (ADR 41). Never on the hot
+// path: Cells do not call it, BFF caches the Placement Map.
+service ControlPlaneService {
+  // Writes require platform#manage_markets. A repeat with the same values
+  // succeeds with created = false; other values for a known id are
+  // ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
+  rpc RegisterCell(RegisterCellRequest) returns (RegisterCellResponse);
+  rpc CreateMarket(CreateMarketRequest) returns (CreateMarketResponse);
+
+  // Reads for the service identity of BFF.
+  rpc ListMarkets(ListMarketsRequest) returns (ListMarketsResponse);
+  rpc GetPlacementMap(GetPlacementMapRequest) returns (GetPlacementMapResponse);
+}
+
+message RegisterCellRequest {
+  string cell_id = 1;
+  string gateway_address = 2;
+}
+
+message RegisterCellResponse {
+  Cell cell = 1;
+  bool created = 2;
+}
+
+message CreateMarketRequest {
+  string market_id = 1;
+  // 1..64 characters after trim.
+  string name = 2;
+  string currency = 3;
+  string cell_id = 4;
+}
+
+message CreateMarketResponse {
+  Market market = 1;
+  bool created = 2;
+}
+
+message ListMarketsRequest {}
+
+message ListMarketsResponse {
+  // By name, then by market_id.
+  repeated Market markets = 1;
+}
+
+message GetPlacementMapRequest {}
+
+message GetPlacementMapResponse {
+  // One per Market, by market_id.
+  repeated Placement placements = 1;
+}

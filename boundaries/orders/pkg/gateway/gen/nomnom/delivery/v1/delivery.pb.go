@@ -185,11 +185,13 @@ func (CourierAvailability) EnumDescriptor() ([]byte, []int) {
 }
 
 type Delivery struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DeliveryId    string                 `protobuf:"bytes,1,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	CourierId     string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
-	State         DeliveryState          `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.delivery.v1.DeliveryState" json:"state,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	DeliveryId string                 `protobuf:"bytes,1,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	OrderId    string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	CourierId  string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	State      DeliveryState          `protobuf:"varint,4,opt,name=state,proto3,enum=nomnom.delivery.v1.DeliveryState" json:"state,omitempty"`
+	// Market of the Order (ADR 41); immutable.
+	MarketId      string `protobuf:"bytes,7,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -250,6 +252,13 @@ func (x *Delivery) GetState() DeliveryState {
 		return x.State
 	}
 	return DeliveryState_DELIVERY_STATE_UNSPECIFIED
+}
+
+func (x *Delivery) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
 }
 
 // Pending, not yet expired Delivery Offer addressed to a courier.
@@ -325,14 +334,15 @@ var File_nomnom_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
-	"!nomnom/delivery/v1/delivery.proto\x12\x12nomnom.delivery.v1\"\xcb\x01\n" +
+	"!nomnom/delivery/v1/delivery.proto\x12\x12nomnom.delivery.v1\"\xe8\x01\n" +
 	"\bDelivery\x12\x1f\n" +
 	"\vdelivery_id\x18\x01 \x01(\tR\n" +
 	"deliveryId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12\x1d\n" +
 	"\n" +
 	"courier_id\x18\x03 \x01(\tR\tcourierId\x127\n" +
-	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05stateJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x0epickup_addressR\x0fdropoff_address\"\xcc\x01\n" +
+	"\x05state\x18\x04 \x01(\x0e2!.nomnom.delivery.v1.DeliveryStateR\x05state\x12\x1b\n" +
+	"\tmarket_id\x18\a \x01(\tR\bmarketIdJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x0epickup_addressR\x0fdropoff_address\"\xcc\x01\n" +
 	"\rDeliveryOffer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +

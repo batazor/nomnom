@@ -68,7 +68,7 @@ spec:
         - name: applied_at
           value: (x_k8s_get($client, 'networking.k8s.io/v1', 'NetworkPolicy', 'envoy-gateway-system', 'internal-gateway-default-deny').metadata.creationTimestamp)
         - name: namespaces
-          value: [nomnom-orders, nomnom-restaurants, nomnom-delivery, nomnom-payments, nomnom-bff, envoy-gateway-system, kube-system]
+          value: [nomnom-orders, nomnom-restaurants, nomnom-delivery, nomnom-payments, nomnom-controlplane, nomnom-bff, envoy-gateway-system, kube-system]
       try:
         # Списки ниже — имена нарушителей: пустой список и есть проверка.
         - assert:

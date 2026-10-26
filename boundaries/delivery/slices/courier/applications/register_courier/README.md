@@ -5,7 +5,7 @@
 - **Тип:** Command.
 - **Actor:** Оператор или диспетчер Courier Pool (`platform#manage_couriers`, FR-620).
 - **Намерение:** Создать курьера в системе доставки.
-- **Результат:** Создан `Courier` с именем (`CourierName`: 1–64 символа после trim, FR-301) и исходным состоянием доступности.
+- **Результат:** Создан `Courier` с именем (`CourierName`: 1–64 символа после trim, FR-301), Market (`MarketId`, обязательный и неизменяемый, ADR 41) и исходным состоянием доступности. Пустой или не slug `market_id` — `InvalidCourierRequest::Market`.
 
 ## Границы
 

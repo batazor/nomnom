@@ -2,7 +2,7 @@ import unittest
 from typing import override
 
 import pytest
-from payment_fakes import ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
 from slices.payment.applications.cancel_authorization import (
@@ -49,7 +49,7 @@ class CancelAuthorizationTest(unittest.TestCase):
             self.kit.published(),
             [
                 PaymentAuthorizationCancelled(
-                    payment_id, OrderId("order-1"), Money.parse("25.00", "EUR")
+                    payment_id, OrderId("order-1"), MARKET, Money.parse("25.00", "EUR")
                 )
             ],
         )

@@ -23,10 +23,12 @@ const (
 
 // Сумма авторизована у провайдера (Authorization).
 type PaymentAuthorized struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Amount        *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
+	OrderId   string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Amount    *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -82,12 +84,21 @@ func (x *PaymentAuthorized) GetAmount() *Money {
 	return nil
 }
 
+func (x *PaymentAuthorized) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Авторизованная сумма списана (Capture).
 type PaymentCaptured struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Amount        *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
+	OrderId   string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Amount    *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,12 +154,21 @@ func (x *PaymentCaptured) GetAmount() *Money {
 	return nil
 }
 
+func (x *PaymentCaptured) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Авторизация отменена до списания (Authorization Cancellation).
 type PaymentAuthorizationCancelled struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Amount        *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
+	OrderId   string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Amount    *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -204,12 +224,21 @@ func (x *PaymentAuthorizationCancelled) GetAmount() *Money {
 	return nil
 }
 
+func (x *PaymentAuthorizationCancelled) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Списанная сумма возвращена (Refund).
 type PaymentRefunded struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Amount        *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
+	OrderId   string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Amount    *Money                 `protobuf:"bytes,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -265,12 +294,21 @@ func (x *PaymentRefunded) GetAmount() *Money {
 	return nil
 }
 
+func (x *PaymentRefunded) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Payment завершился неудачей по бизнес-причине.
 type PaymentFailed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
+	OrderId   string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Reason    string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -326,36 +364,48 @@ func (x *PaymentFailed) GetReason() string {
 	return ""
 }
 
+func (x *PaymentFailed) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 var File_nomnom_payments_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_payments_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1fnomnom/payments/v1/events.proto\x12\x12nomnom.payments.v1\x1a!nomnom/payments/v1/payments.proto\"\x80\x01\n" +
+	"\x1fnomnom/payments/v1/events.proto\x12\x12nomnom.payments.v1\x1a!nomnom/payments/v1/payments.proto\"\x9d\x01\n" +
 	"\x11PaymentAuthorized\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x121\n" +
-	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\"~\n" +
+	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"\x9b\x01\n" +
 	"\x0fPaymentCaptured\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x121\n" +
-	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\"\x8c\x01\n" +
+	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"\xa9\x01\n" +
 	"\x1dPaymentAuthorizationCancelled\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x121\n" +
-	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\"~\n" +
+	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"\x9b\x01\n" +
 	"\x0fPaymentRefunded\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x121\n" +
-	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\"a\n" +
+	"\x06amount\x18\x03 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"~\n" +
 	"\rPaymentFailed\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reasonB\xcc\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketIdB\xcc\x01\n" +
 	"\x16com.nomnom.payments.v1B\vEventsProtoP\x01Z;nomnom/orders/pkg/gateway/gen/nomnom/payments/v1;paymentsv1\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3"
 
 var (

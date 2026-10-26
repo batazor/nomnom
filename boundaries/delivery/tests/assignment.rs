@@ -7,6 +7,7 @@
 
 mod support;
 
+use delivery::slices::courier::domains::courier::MarketId;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -71,12 +72,17 @@ fn seed(store: &Store) -> Seed {
         &Courier::new(
             seed.courier_id.clone(),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("courier");
     DeliveryRepository::add(
         store,
-        &Delivery::new(seed.delivery_id.clone(), OrderId::new(unique("order"))),
+        &Delivery::new(
+            seed.delivery_id.clone(),
+            OrderId::new(unique("order")),
+            MarketId::new("berlin").expect("market id"),
+        ),
     )
     .expect("delivery");
     let offer = DeliveryOffer::new(
@@ -99,6 +105,7 @@ fn accept(
     let authorization = StaticAuthorization::allow_all();
     let locator = StaticCourierLocator::new(vec![CourierCandidate {
         courier_id: seed.courier_id.clone(),
+        market_id: MarketId::new("berlin").expect("market id"),
         within_delivery_zone: true,
         distance_to_pickup_meters: 1_000,
         active_assignments: 0,
@@ -221,6 +228,7 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
         &Courier::new(
             courier_id.clone(),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("courier");
@@ -234,6 +242,7 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
     let delivery = Delivery::new(
         DeliveryId::new(unique("delivery")),
         OrderId::new(unique("order")),
+        MarketId::new("berlin").expect("market id"),
     )
     .with_created_at(Some(created_at));
     DeliveryRepository::add(&*store, &delivery).expect("delivery");
@@ -256,6 +265,7 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
             std::thread::spawn(move || {
                 let locator = StaticCourierLocator::new(vec![CourierCandidate {
                     courier_id,
+                    market_id: MarketId::new("berlin").expect("market id"),
                     within_delivery_zone: true,
                     distance_to_pickup_meters: 1_000,
                     active_assignments: 0,

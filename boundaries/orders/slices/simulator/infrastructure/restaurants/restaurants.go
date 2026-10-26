@@ -1,6 +1,7 @@
 // Package restaurants implements the catalog port of the customer Simulator on
 // the public reads ListRestaurants and GetMenu of restaurants, called through
-// the internal gateway like the Place Order catalog.
+// the internal gateway like the Place Order catalog, for the Markets configured
+// in SIMULATOR__MARKET_IDS.
 package restaurants
 
 import (
@@ -12,35 +13,54 @@ import (
 
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
 )
 
 // pageSize is the maximum page of ListRestaurants.
 const pageSize = 100
 
+// Catalog lists the open restaurants of the configured Markets (ADR 41):
+// ListRestaurants is per Market. The Market of the Order is not chosen here:
+// Place Order takes it from the chosen Restaurant.
 type Catalog struct {
 	client  restaurantsv1.RestaurantsServiceClient
+	markets []vo.MarketID
 	timeout time.Duration
 }
 
 var _ customersimulator.Catalog = (*Catalog)(nil)
 
-func New(conn grpc.ClientConnInterface, timeout time.Duration) *Catalog {
-	return &Catalog{client: restaurantsv1.NewRestaurantsServiceClient(conn), timeout: timeout}
+func New(conn grpc.ClientConnInterface, markets []vo.MarketID, timeout time.Duration) *Catalog {
+	return &Catalog{client: restaurantsv1.NewRestaurantsServiceClient(conn), markets: markets, timeout: timeout}
 }
 
-// OpenRestaurants reads every page of the open restaurants.
+// OpenRestaurants reads every page of the open restaurants of every Market.
 func (c *Catalog) OpenRestaurants(ctx context.Context) ([]order.RestaurantID, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+	var ids []order.RestaurantID
+	for _, market := range c.markets {
+		open, err := c.openRestaurants(ctx, market)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, open...)
+	}
+	return ids, nil
+}
+
+func (c *Catalog) openRestaurants(ctx context.Context, market vo.MarketID) ([]order.RestaurantID, error) {
 	var (
 		ids   []order.RestaurantID
 		token string
 	)
 	for {
-		page, err := c.client.ListRestaurants(ctx, &restaurantsv1.ListRestaurantsRequest{PageSize: pageSize, PageToken: token})
+		page, err := c.client.ListRestaurants(ctx, &restaurantsv1.ListRestaurantsRequest{
+			PageSize: pageSize, PageToken: token, MarketId: market.String(),
+		})
 		if err != nil {
-			return nil, fmt.Errorf("restaurants.ListRestaurants: %w", err)
+			return nil, fmt.Errorf("restaurants.ListRestaurants %q: %w", market, err)
 		}
 		for _, restaurant := range page.GetRestaurants() {
 			if restaurant.GetIsOpen() {

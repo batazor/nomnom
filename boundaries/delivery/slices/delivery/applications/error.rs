@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use crate::pkg::application::{AuthorizationError, RelationshipWriteError, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
-use crate::slices::courier::domains::courier::{CourierError, CourierId};
+use crate::slices::courier::domains::courier::{CourierError, CourierId, MarketId, MarketIdError};
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryOfferError, DeliveryOfferId, DeliveryValidationError,
     OrderId, TransitionError,
@@ -16,6 +16,7 @@ use super::courier_locator::LocatorError;
 pub enum InvalidDeliveryRequest {
     EmptyIdentifier(&'static str),
     Validation(DeliveryValidationError),
+    Market(MarketIdError),
 }
 
 impl Display for InvalidDeliveryRequest {
@@ -23,6 +24,7 @@ impl Display for InvalidDeliveryRequest {
         match self {
             Self::EmptyIdentifier(field) => write!(formatter, "{field} must not be empty"),
             Self::Validation(error) => Display::fmt(error, formatter),
+            Self::Market(error) => Display::fmt(error, formatter),
         }
     }
 }
@@ -36,6 +38,12 @@ pub enum DeliveryApplicationError {
     DeliveryNotFound(DeliveryId),
     /// No Delivery was created for the order.
     DeliveryForOrderNotFound(OrderId),
+    /// Create Delivery repeated for an order whose Delivery belongs to
+    /// another Market: the Market of a Delivery is immutable (ADR 41).
+    DeliveryForOrderInOtherMarket {
+        order_id: OrderId,
+        market_id: MarketId,
+    },
     CourierNotFound(CourierId),
     DeliveryOfferNotFound(DeliveryOfferId),
     /// The current `Delivery` state or assignment forbids the operation.
@@ -64,6 +72,15 @@ impl Display for DeliveryApplicationError {
             Self::DeliveryForOrderNotFound(id) => {
                 write!(formatter, "delivery of order {} not found", id.as_str())
             }
+            Self::DeliveryForOrderInOtherMarket {
+                order_id,
+                market_id,
+            } => write!(
+                formatter,
+                "delivery of order {} already exists in market {}",
+                order_id.as_str(),
+                market_id.as_str()
+            ),
             Self::CourierNotFound(id) => write!(formatter, "courier {} not found", id.as_str()),
             Self::DeliveryOfferNotFound(id) => {
                 write!(formatter, "delivery offer {} not found", id.as_str())

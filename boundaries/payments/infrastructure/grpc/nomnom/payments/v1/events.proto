@@ -15,6 +15,8 @@ message PaymentAuthorized {
   string payment_id = 1;
   string order_id = 2;
   Money amount = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // Авторизованная сумма списана (Capture).
@@ -22,6 +24,8 @@ message PaymentCaptured {
   string payment_id = 1;
   string order_id = 2;
   Money amount = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // Авторизация отменена до списания (Authorization Cancellation).
@@ -29,6 +33,8 @@ message PaymentAuthorizationCancelled {
   string payment_id = 1;
   string order_id = 2;
   Money amount = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // Списанная сумма возвращена (Refund).
@@ -36,6 +42,8 @@ message PaymentRefunded {
   string payment_id = 1;
   string order_id = 2;
   Money amount = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // Payment завершился неудачей по бизнес-причине.
@@ -43,4 +51,6 @@ message PaymentFailed {
   string payment_id = 1;
   string order_id = 2;
   string reason = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }

@@ -38,6 +38,8 @@ assertions:
     - platform:nomnom#dispatch_delivery@user:example-operator
     # AC-761: only the platform operator switches the Simulator.
     - platform:nomnom#operate_simulator@user:example-operator
+    # ADR 41: only the platform operator registers Cells and creates Markets.
+    - platform:nomnom#manage_markets@user:example-operator
   assertFalse:
     - order:example-order#view@user:example-stranger
     - order:example-order#cancel@user:example-owner
@@ -60,3 +62,5 @@ assertions:
     - platform:nomnom#manage_couriers@user:example-courier
     - platform:nomnom#manage_couriers@user:example-stranger
     - platform:nomnom#operate_simulator@user:example-dispatcher
+    - platform:nomnom#manage_markets@user:example-dispatcher
+    - platform:nomnom#manage_markets@user:example-owner

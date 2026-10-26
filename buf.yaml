@@ -8,6 +8,8 @@ modules:
     name: buf.build/nomnom/delivery
   - path: boundaries/payments/infrastructure/grpc
     name: buf.build/nomnom/payments
+  - path: boundaries/controlplane/infrastructure/grpc
+    name: buf.build/nomnom/controlplane
 deps:
   - buf.build/protocolbuffers/wellknowntypes
 lint:

@@ -2,7 +2,7 @@ import unittest
 from typing import override
 
 import pytest
-from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
 from pkg.application import PermissionDeniedError
@@ -41,7 +41,7 @@ class RefundPaymentTest(unittest.TestCase):
         self.assertEqual(self.kit.provider.requests[0].amount, Money.parse("25.00", "EUR"))
         self.assertEqual(
             self.kit.published(),
-            [PaymentRefunded(payment_id, OrderId("order-1"), Money.parse("25.00", "EUR"))],
+            [PaymentRefunded(payment_id, OrderId("order-1"), MARKET, Money.parse("25.00", "EUR"))],
         )
         self.assertEqual(self.kit.permissions.checks[0][:2], (OPERATOR, PaymentPermission.REFUND))
 

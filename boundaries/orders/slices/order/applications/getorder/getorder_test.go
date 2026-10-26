@@ -58,6 +58,7 @@ func TestGetOrderReturnsView(t *testing.T) {
 	assert.Equal(t, orderdetails.View{Details: orderdetails.Details{
 		OrderID:      "order-1",
 		CustomerID:   "customer-1",
+		MarketID:     ordertest.MarketID(t),
 		RestaurantID: "restaurant-1",
 		Items:        []orderdetails.Item{{MenuItemID: "menu-1", Name: "Margherita", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
 		Total:        ordertest.Money(t, "20"),

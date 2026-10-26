@@ -53,6 +53,7 @@ from .specifications import (
     PaymentRefundContext,
     SpecificationResult,
 )
+from .vo.market import InvalidMarketIdError, MarketId
 from .vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 __all__ = [
@@ -63,9 +64,11 @@ __all__ = [
     "DuplicateIdempotencyKeyError",
     "DuplicatePaymentError",
     "GuardFailedError",
+    "InvalidMarketIdError",
     "InvalidMoneyError",
     "InvalidOperationTransitionError",
     "InvalidTransitionError",
+    "MarketId",
     "Money",
     "OperationAlreadyCompletedError",
     "OperationAlreadyPendingError",

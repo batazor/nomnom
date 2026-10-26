@@ -8,6 +8,7 @@ resources:
   - namespaces/nomnom-restaurants
   - namespaces/nomnom-delivery
   - namespaces/nomnom-payments
+  - namespaces/nomnom-controlplane
   - namespaces/nomnom-bff
   - app-infrastructure.yaml
   - gateway.yaml

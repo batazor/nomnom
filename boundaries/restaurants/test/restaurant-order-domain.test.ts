@@ -24,6 +24,7 @@ const receive = (items = [{ menuItemId: "pho", quantity: 2 }]) =>
     id: "ro-1",
     orderId: "order-1",
     restaurantId: "r-1",
+    marketId: "berlin",
     items,
     receivedAt: at(0),
   });
@@ -157,6 +158,7 @@ test("happy path fills the timeline and records each fact", () => {
     restaurantOrderId: "ro-1",
     orderId: "order-1",
     restaurantId: "r-1",
+    marketId: "berlin",
     occurredAt: at(10),
   });
 });

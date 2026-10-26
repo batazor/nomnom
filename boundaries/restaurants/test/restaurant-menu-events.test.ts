@@ -58,13 +58,14 @@ test("RestaurantOpened and RestaurantClosed go to restaurant-events with restaur
   ] as const) {
     const mapped = restaurantEventMapper(
       restaurant,
-      event({ type, restaurantId: "rest-1" }),
+      event({ type, restaurantId: "rest-1", marketId: "berlin" }),
     );
     assert.ok(mapped, type);
     assert.equal(mapped.topic, RESTAURANT_EVENTS_TOPIC);
     assert.equal(mapped.topic, "restaurants.v1.restaurant-events");
     assert.equal(mapped.eventType, `nomnom.restaurants.v1.${type}`);
     assert.equal(fromBinary(schema, mapped.payload).restaurantId, "rest-1");
+    assert.equal(fromBinary(schema, mapped.payload).marketId, "berlin");
   }
 });
 
@@ -76,6 +77,7 @@ test("MenuItemAvailabilityChanged goes to menu-events with menu, restaurant, ite
       menuId: "menu-1",
       restaurantId: "rest-1",
       menuItemId: "pho",
+      marketId: "berlin",
       isAvailable: false,
     }),
   );
@@ -91,6 +93,7 @@ test("MenuItemAvailabilityChanged goes to menu-events with menu, restaurant, ite
   assert.equal(message.restaurantId, "rest-1");
   assert.equal(message.menuItemId, "pho");
   assert.equal(message.available, false);
+  assert.equal(message.marketId, "berlin");
 });
 
 test("internal Restaurant and Menu facts are not published", () => {
@@ -276,7 +279,13 @@ test("Add, Update and Set Availability produce menu-events records keyed by the 
     assert.equal(record.topic, MENU_EVENTS_TOPIC);
     assert.equal(record.aggregateId, off.menuId);
   }
-  const keys = { menuId: off.menuId, restaurantId, menuItemId };
+  // ADR 41: every menu fact carries the Market of the restaurant.
+  const keys = {
+    menuId: off.menuId,
+    restaurantId,
+    menuItemId,
+    marketId: "berlin",
+  };
   const { $typeName: _added, ...addedKeys } = fromBinary(
     MenuItemAddedSchema,
     added.payload,
@@ -295,6 +304,11 @@ test("Add, Update and Set Availability produce menu-events records keyed by the 
     fromBinary(MenuItemAvailabilityChangedSchema, availability.payload)
       .available,
     true,
+  );
+  assert.equal(
+    fromBinary(MenuItemAvailabilityChangedSchema, availability.payload)
+      .marketId,
+    "berlin",
   );
   assert.equal(new Set(records.map((record) => record.eventId)).size, 5);
 });

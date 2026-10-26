@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from pkg.application import Subject
 from slices.payment.domains.payment import (
     DuplicatePaymentError,
+    InvalidMarketIdError,
     InvalidMoneyError,
+    MarketId,
     Money,
     OrderId,
     Payment,
@@ -21,10 +23,14 @@ from ..ports import PaymentIdSource, PaymentPermission, PaymentPermissionChecker
 
 @dataclass(frozen=True)
 class CreatePaymentInput:
-    """Request to create the Payment of an Order; ``amount`` is an exact decimal string."""
+    """Request to create the Payment of an Order in its Market.
+
+    ``amount`` is an exact decimal string; ``market_id`` is the Market of the Order.
+    """
 
     subject: Subject
     order_id: str
+    market_id: str
     amount: str
     currency: str
 
@@ -55,17 +61,20 @@ class CreatePaymentHandler:
         self._ids = ids
 
     def handle(self, command: CreatePaymentInput) -> CreatePaymentResult:
-        """Create the Payment of the Order, or return the existing one with the same amount.
+        """Create the Payment of the Order, or return the existing one with the same terms.
 
         Raises:
-            InvalidPaymentRequestError: The order id is blank or the amount is not a
-                positive exact decimal in an ISO 4217 currency.
+            InvalidPaymentRequestError: The order id is blank, the market id is not a
+                Market slug or the amount is not a positive exact decimal in an ISO 4217
+                currency.
             PermissionDeniedError: The subject may not create the Payment.
-            PaymentAlreadyExistsError: The Order already has a Payment with another amount.
+            PaymentAlreadyExistsError: The Order already has a Payment with another
+                Market or amount.
         """
         if not command.order_id.strip():
             raise InvalidPaymentRequestError("order id is required")
         order_id = OrderId(command.order_id)
+        market_id = _market(command.market_id)
         amount = _positive_money(command.amount, command.currency)
         payment_id = self._ids.new_payment_id()
         require_permission(
@@ -77,16 +86,23 @@ class CreatePaymentHandler:
 
         existing = self._payments.get_by_order(order_id)
         if existing is not None:
-            return _same_terms(existing, amount)
-        payment = Payment(payment_id, order_id, amount)
+            return _same_terms(existing, market_id, amount)
+        payment = Payment(payment_id, order_id, market_id, amount)
         try:
             self._payments.add(payment)
         except DuplicatePaymentError:
             concurrent = self._payments.get_by_order(order_id)
             if concurrent is None:
                 raise
-            return _same_terms(concurrent, amount)
+            return _same_terms(concurrent, market_id, amount)
         return CreatePaymentResult(payment.id, payment.state, created=True)
+
+
+def _market(market_id: str) -> MarketId:
+    try:
+        return MarketId(market_id)
+    except InvalidMarketIdError as error:
+        raise InvalidPaymentRequestError(str(error)) from error
 
 
 def _positive_money(amount: str, currency: str) -> Money:
@@ -99,7 +115,7 @@ def _positive_money(amount: str, currency: str) -> Money:
     return money
 
 
-def _same_terms(existing: Payment, amount: Money) -> CreatePaymentResult:
-    if existing.amount != amount:
+def _same_terms(existing: Payment, market_id: MarketId, amount: Money) -> CreatePaymentResult:
+    if existing.market_id != market_id or existing.amount != amount:
         raise PaymentAlreadyExistsError(existing.order_id)
     return CreatePaymentResult(existing.id, existing.state, created=False)

@@ -13,6 +13,7 @@ import (
 	"nomnom/orders/pkg/config"
 	gatewayclient "nomnom/orders/pkg/gateway"
 	orderdi "nomnom/orders/slices/order/di"
+	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
@@ -39,6 +40,14 @@ func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig,
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
 	}
+	markets := make([]vo.MarketID, 0, len(cfg.Markets()))
+	for _, raw := range cfg.Markets() {
+		market, err := vo.NewMarketID(raw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("simulator config: %w", err)
+		}
+		markets = append(markets, market)
+	}
 	conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("simulator catalog: %w", err)
@@ -46,7 +55,7 @@ func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig,
 	state := simulatorrepository.NewState(store.Pool())
 	customer := customersimulator.New(customersimulator.Dependencies{
 		Switch:              state,
-		Catalog:             restaurants.New(conn, catalog.Timeout),
+		Catalog:             restaurants.New(conn, markets, catalog.Timeout),
 		PlaceOrder:          order.PlaceOrder,
 		GetOrder:            order.GetOrder,
 		RequestCancellation: order.RequestOrderCancellation,

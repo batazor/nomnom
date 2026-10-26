@@ -31,6 +31,7 @@ const seed = (
     schemaVersion: RESTAURANT_SCHEMA_VERSION,
     name: "Pho",
     ownerId: "owner",
+    marketId: "berlin",
     isOpen: false,
     ...restaurant,
     staff: restaurant.staff === undefined ? undefined : [...restaurant.staff],

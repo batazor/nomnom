@@ -39,7 +39,7 @@ impl CourierRepository for Store {
     fn get(&self, id: &CourierId) -> Result<Option<Courier>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             CourierRow,
-            "SELECT id, name, status, retired_at, authorization_revision, version
+            "SELECT id, name, market_id, status, retired_at, authorization_revision, version
              FROM couriers WHERE id = $1",
             id.as_str()
         )
@@ -58,8 +58,8 @@ impl CourierRepository for Store {
         let inserted = sql!(self, "INSERT", |connection| sqlx::query!(
             "WITH changed AS (
                  INSERT INTO couriers (id, name, status, retired_at, authorization_revision,
-                     version)
-                 VALUES ($2, $6, $3, $7, $4, $5) ON CONFLICT DO NOTHING RETURNING id
+                     version, market_id)
+                 VALUES ($2, $6, $3, $7, $4, $5, $8) ON CONFLICT DO NOTHING RETURNING id
              ), expired AS (
                  DELETE FROM delivery_outbox WHERE event_id IN (
                      SELECT event_id FROM delivery_outbox
@@ -87,7 +87,8 @@ impl CourierRepository for Store {
                 .map(AuthorizationRevision::as_str),
             version,
             courier.name().as_str(),
-            courier.retired_at_epoch_seconds()
+            courier.retired_at_epoch_seconds(),
+            courier.market_id().as_str()
         )
         .execute(connection))?;
         if inserted.rows_affected() == 0 {
@@ -147,7 +148,7 @@ impl DeliveryRepository for Store {
     fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
-            "SELECT id, order_id, courier_id, state, failure_reason,
+            "SELECT id, order_id, market_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
                  expected_pickup_at, expected_delivered_at
              FROM deliveries WHERE id = $1",
@@ -161,7 +162,7 @@ impl DeliveryRepository for Store {
     fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
         sql!(self, "SELECT", |connection| sqlx::query_as!(
             DeliveryRow,
-            "SELECT id, order_id, courier_id, state, failure_reason,
+            "SELECT id, order_id, market_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
                  expected_pickup_at, expected_delivered_at
              FROM deliveries WHERE order_id = $1",
@@ -179,8 +180,9 @@ impl DeliveryRepository for Store {
         let inserted = sql!(self, "INSERT", |connection| sqlx::query!(
             "INSERT INTO deliveries (id, order_id, courier_id,
                  state, failure_reason, authorization_revision, version,
-                 created_at, failure_detail, expected_pickup_at, expected_delivered_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 created_at, failure_detail, expected_pickup_at, expected_delivered_at,
+                 market_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              ON CONFLICT DO NOTHING",
             delivery.id().as_str(),
             delivery.order_id().as_str(),
@@ -200,7 +202,8 @@ impl DeliveryRepository for Store {
                 .map(ExpectedTime::epoch_seconds),
             delivery
                 .expected_delivered_at()
-                .map(ExpectedTime::epoch_seconds)
+                .map(ExpectedTime::epoch_seconds),
+            delivery.market_id().as_str()
         )
         .execute(connection))?;
         if inserted.rows_affected() == 0 {

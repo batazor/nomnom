@@ -5,6 +5,7 @@ import { SignInProvider } from "../shared/auth/sign-in";
 import type { RuntimeConfig } from "../shared/config/runtime-config";
 import type { SubscriptionTransport } from "../shared/graphql/client";
 import { I18nProvider, useI18n } from "../shared/i18n/i18n";
+import { MarketProvider } from "../shared/market/market";
 import {
   AsRole,
   RoleClientSettings,
@@ -65,10 +66,12 @@ export function AppProviders({
           <AppToasts>
             <SignInProvider config={config.oidc}>
               <RoleSessionProvider mocks={config.enableMocks}>
-                <RoleClientSettings settings={settings}>
-                  {/* Outside the board columns the app acts as the customer. */}
-                  <AsRole as="customer">{children}</AsRole>
-                </RoleClientSettings>
+                <MarketProvider>
+                  <RoleClientSettings settings={settings}>
+                    {/* Outside the board columns the app acts as the customer. */}
+                    <AsRole as="customer">{children}</AsRole>
+                  </RoleClientSettings>
+                </MarketProvider>
               </RoleSessionProvider>
             </SignInProvider>
           </AppToasts>

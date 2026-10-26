@@ -17,6 +17,7 @@ from .fsm import (
     transition,
 )
 from .ids import OrderId, PaymentId
+from .vo.market import MarketId
 from .vo.money import Money
 
 # Leaf states reached only through a successful Authorization. A data invariant, not a
@@ -27,19 +28,22 @@ _STATES_WITH_PROVIDER_REFERENCE = frozenset(
 
 
 class Payment:
-    """Aggregate of a monetary operation for one Order.
+    """Aggregate of a monetary operation for one Order in the Market of that Order.
 
     State changes go only through the Payment state machine; each successful change
     records a domain event to be pulled with ``pull_events`` and its transition to be
-    pulled with ``pull_transitions``. Raises ``ValueError`` when created with a
-    non-positive amount.
+    pulled with ``pull_transitions``. The Market is set at creation and never changes.
+    Raises ``ValueError`` when created with a non-positive amount.
     """
 
-    def __init__(self, payment_id: PaymentId, order_id: OrderId, amount: Money) -> None:
+    def __init__(
+        self, payment_id: PaymentId, order_id: OrderId, market_id: MarketId, amount: Money
+    ) -> None:
         if amount.amount <= 0:
             raise ValueError("payment amount must be positive")
         self._id = payment_id
         self._order_id = order_id
+        self._market_id = market_id
         self._amount = amount
         self._state = PaymentState.PENDING
         self._provider_reference: str | None = None
@@ -52,6 +56,7 @@ class Payment:
         cls,
         payment_id: PaymentId,
         order_id: OrderId,
+        market_id: MarketId,
         amount: Money,
         state: PaymentState,
         provider_reference: str | None,
@@ -66,7 +71,7 @@ class Payment:
             provider_reference is None or not provider_reference.strip()
         ):
             raise ValueError("successful payment state requires a provider reference")
-        payment = cls(payment_id, order_id, amount)
+        payment = cls(payment_id, order_id, market_id, amount)
         payment._state = state
         payment._provider_reference = provider_reference
         payment._version = version
@@ -94,13 +99,17 @@ class Payment:
         self._provider_reference = provider_reference.strip()
         self._state = result.to_state
         self._transitions.append(result)
-        self._events.append(PaymentAuthorized(self._id, self._order_id, self._amount))
+        self._events.append(
+            PaymentAuthorized(self._id, self._order_id, self._market_id, self._amount)
+        )
         return result
 
     def capture(self) -> TransitionResult:
         """Move to ``captured`` after a full Capture; raises the state machine errors."""
         result = self._apply(PaymentTrigger.CAPTURE)
-        self._events.append(PaymentCaptured(self._id, self._order_id, self._amount))
+        self._events.append(
+            PaymentCaptured(self._id, self._order_id, self._market_id, self._amount)
+        )
         return result
 
     def cancel_authorization(self) -> TransitionResult:
@@ -110,13 +119,17 @@ class Payment:
         """
         result = self._apply(PaymentTrigger.CANCEL_AUTHORIZATION)
         self._provider_reference = None
-        self._events.append(PaymentAuthorizationCancelled(self._id, self._order_id, self._amount))
+        self._events.append(
+            PaymentAuthorizationCancelled(self._id, self._order_id, self._market_id, self._amount)
+        )
         return result
 
     def refund(self) -> TransitionResult:
         """Move to ``refunded`` after a full Refund; raises the state machine errors."""
         result = self._apply(PaymentTrigger.REFUND)
-        self._events.append(PaymentRefunded(self._id, self._order_id, self._amount))
+        self._events.append(
+            PaymentRefunded(self._id, self._order_id, self._market_id, self._amount)
+        )
         return result
 
     def fail(self, reason: str) -> TransitionResult:
@@ -127,7 +140,9 @@ class Payment:
         if not reason.strip():
             raise ValueError("payment failure reason must not be empty")
         result = self._apply(PaymentTrigger.FAIL)
-        self._events.append(PaymentFailed(self._id, self._order_id, reason.strip()))
+        self._events.append(
+            PaymentFailed(self._id, self._order_id, self._market_id, reason.strip())
+        )
         return result
 
     def _apply(self, trigger: PaymentTrigger) -> TransitionResult:
@@ -157,6 +172,11 @@ class Payment:
     def order_id(self) -> OrderId:
         """Order the Payment belongs to."""
         return self._order_id
+
+    @property
+    def market_id(self) -> MarketId:
+        """Market of the Order, fixed at creation."""
+        return self._market_id
 
     @property
     def amount(self) -> Money:

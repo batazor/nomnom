@@ -45,6 +45,7 @@ func (c *Catalog) Snapshot(_ context.Context, restaurantID order.RestaurantID, m
 		return placeorder.CatalogSnapshot{}, fmt.Errorf("%w: %q", placeorder.ErrUnknownRestaurant, restaurantID)
 	}
 	requested := placeorder.CatalogSnapshot{
+		MarketID:     snapshot.MarketID,
 		Currency:     snapshot.Currency,
 		Items:        make(map[order.MenuItemID]placeorder.CatalogItem, len(menuItemIDs)),
 		MinimumTotal: snapshot.MinimumTotal,

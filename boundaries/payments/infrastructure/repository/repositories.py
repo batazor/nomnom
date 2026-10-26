@@ -15,6 +15,7 @@ from pkg.application import AggregateRef, ConcurrencyConflictError
 from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,
+    MarketId,
     Money,
     OperationAlreadyPendingError,
     OperationId,
@@ -38,7 +39,7 @@ PROVIDER_CONSUMER = "payment-provider"
 # ADR 37: an Outbox row is needed only until Debezium reads its insert from the WAL.
 OUTBOX_RETENTION = timedelta(hours=1)
 
-_PAYMENT_COLUMNS = "id, order_id, amount, currency, state, provider_reference, version"
+_PAYMENT_COLUMNS = "id, order_id, market_id, amount, currency, state, provider_reference, version"
 _OPERATION_COLUMNS = (
     "id, payment_id, kind, idempotency_key, amount, currency, requested_at, state, "
     "provider_reference, decline_reason, completed_at, version"
@@ -74,10 +75,11 @@ class DatabasePaymentRepository:
                 with conn.transaction():
                     conn.execute(
                         f"INSERT INTO payments ({_PAYMENT_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
-                        "VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
                         (
                             payment.id,
                             payment.order_id,
+                            payment.market_id.value,
                             payment.amount.amount,
                             payment.amount.currency,
                             payment.state.value,
@@ -111,10 +113,11 @@ class DatabasePaymentRepository:
             row = conn.execute(query, (value,)).fetchone()
         if row is None:
             return None
-        payment_id, order_id, amount, currency, state, reference, version = row
+        payment_id, order_id, market_id, amount, currency, state, reference, version = row
         return Payment.restore(
             PaymentId(payment_id),
             OrderId(order_id),
+            MarketId(market_id),
             Money(amount, currency),
             PaymentState(state),
             reference,

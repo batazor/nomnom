@@ -1,0 +1,82 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - depguard
+  settings:
+    # Направление импортов слоёв ADR 6. Пакеты сравниваются по префиксу пути,
+    # поэтому новый слайс дописывает сюда свои domains, applications и di.
+    depguard:
+      rules:
+        domains:
+          list-mode: strict
+          files:
+            - "**/slices/*/domains/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains
+        value-objects:
+          list-mode: strict
+          files:
+            - "**/slices/*/domains/*/vo/**"
+            - "!$test"
+          allow:
+            - $gostd
+        applications:
+          list-mode: strict
+          files:
+            - "**/slices/*/applications/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/batazor/nomnom/boundaries/controlplane/pkg/application
+            - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains
+            - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications
+        shared-packages:
+          files:
+            - "**/controlplane/pkg/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/slices
+              desc: pkg не знает о слайсах
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/infrastructure
+              desc: pkg не зависит от adapters процесса
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/di
+              desc: pkg не зависит от composition root
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/cmd
+              desc: pkg не зависит от процессов
+        infrastructure:
+          files:
+            - "**/controlplane/infrastructure/**"
+            - "**/slices/*/infrastructure/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/di
+              desc: adapters не зависят от composition root
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/slices/topology/di
+              desc: adapters не зависят от composition root
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/cmd
+              desc: adapters не зависят от процессов
+        generated-code:
+          files:
+            - "**/controlplane/pkg/**"
+            - "**/slices/**"
+            - "!**/slices/*/di/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen
+              desc: generated code импортируют только adapters и composition root (ADR 7)
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/batazor/nomnom/boundaries/controlplane

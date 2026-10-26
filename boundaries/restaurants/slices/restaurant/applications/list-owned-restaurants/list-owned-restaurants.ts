@@ -1,5 +1,6 @@
 import { PermissionDeniedError } from "../../../../pkg/application/errors.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
+import { MarketId } from "../../domains/restaurant/restaurant.ts";
 import {
   DEFAULT_RESTAURANT_PAGE_SIZE,
   InvalidPageSizeError,
@@ -9,6 +10,8 @@ import type { RestaurantView } from "../restaurant-view.ts";
 
 export type ListOwnedRestaurants = Readonly<{
   subject: Subject;
+  /** Required (ADR 41): only restaurants of this Market are listed. */
+  marketId: string;
   /** Page size, 1..100; defaults to 50. */
   limit?: number;
   /** Cursor returned by the previous page. */
@@ -24,13 +27,14 @@ export type ListOwnedRestaurantsResult = Readonly<{
 export interface OwnedRestaurantsReader {
   listOwned(criteria: {
     ownerId: string;
+    marketId: string;
     after: string | undefined;
     limit: number;
   }): Promise<readonly RestaurantView[]>;
 }
 
 /**
- * Lists open and closed restaurants owned by the calling user. `ownerId` is
+ * Lists open and closed restaurants of one Market owned by the calling user. `ownerId` is
  * the source of `restaurant#owner` and `restaurant#manage = owner`, so the
  * filter is the authorization: a user sees only restaurants they manage
  * without a check per restaurant. A service subject owns nothing and is denied.
@@ -48,6 +52,7 @@ export class ListOwnedRestaurantsHandler {
     if (query.subject.type !== "user") {
       throw new PermissionDeniedError("list_owned_restaurants");
     }
+    const marketId = MarketId.of(query.marketId);
     const limit = query.limit ?? DEFAULT_RESTAURANT_PAGE_SIZE;
     if (
       !Number.isInteger(limit) ||
@@ -58,6 +63,7 @@ export class ListOwnedRestaurantsHandler {
     }
     const page = await this.#reader.listOwned({
       ownerId: query.subject.id,
+      marketId: marketId.value,
       after: query.cursor,
       limit: limit + 1,
     });

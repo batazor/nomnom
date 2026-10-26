@@ -28,8 +28,10 @@ type RestaurantOrderAccepted struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	OrderId         string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	ExpectedReadyAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expected_ready_at,json=expectedReadyAt,proto3" json:"expected_ready_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RestaurantOrderAccepted) Reset() {
@@ -76,11 +78,20 @@ func (x *RestaurantOrderAccepted) GetExpectedReadyAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *RestaurantOrderAccepted) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Ресторан отказался принять Kitchen Order.
 type RestaurantOrderRejected struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Reason  string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -129,10 +140,19 @@ func (x *RestaurantOrderRejected) GetReason() string {
 	return ""
 }
 
+func (x *RestaurantOrderRejected) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Начато Preparation.
 type PreparationStarted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -174,13 +194,22 @@ func (x *PreparationStarted) GetOrderId() string {
 	return ""
 }
 
+func (x *PreparationStarted) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Preparation задерживается; expected_ready_at — новая ожидаемая готовность.
 type PreparationDelayed struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	OrderId         string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	ExpectedReadyAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expected_ready_at,json=expectedReadyAt,proto3" json:"expected_ready_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreparationDelayed) Reset() {
@@ -227,11 +256,20 @@ func (x *PreparationDelayed) GetExpectedReadyAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *PreparationDelayed) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Preparation не может быть завершено.
 type PreparationFailed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Reason  string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -280,10 +318,19 @@ func (x *PreparationFailed) GetReason() string {
 	return ""
 }
 
+func (x *PreparationFailed) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Kitchen Order готов к Pickup.
 type RestaurantOrderReady struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -325,6 +372,13 @@ func (x *RestaurantOrderReady) GetOrderId() string {
 	return ""
 }
 
+func (x *RestaurantOrderReady) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
 // preparation_started — отмена произошла после начала Preparation.
 type RestaurantOrderCancelled struct {
@@ -332,8 +386,10 @@ type RestaurantOrderCancelled struct {
 	OrderId            string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	Reason             string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 	PreparationStarted bool                   `protobuf:"varint,3,opt,name=preparation_started,json=preparationStarted,proto3" json:"preparation_started,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RestaurantOrderCancelled) Reset() {
@@ -387,10 +443,19 @@ func (x *RestaurantOrderCancelled) GetPreparationStarted() bool {
 	return false
 }
 
+func (x *RestaurantOrderCancelled) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Ресторан открыт для новых Restaurant Order (Open Restaurant).
 type RestaurantOpened struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RestaurantId  string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -432,11 +497,20 @@ func (x *RestaurantOpened) GetRestaurantId() string {
 	return ""
 }
 
+func (x *RestaurantOpened) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Ресторан закрыт для новых Restaurant Order (Close Restaurant); уже полученные
 // и принятые заказы не отменяются.
 type RestaurantClosed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RestaurantId  string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -478,13 +552,22 @@ func (x *RestaurantClosed) GetRestaurantId() string {
 	return ""
 }
 
+func (x *RestaurantClosed) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // В меню добавлен Menu Item (Add Menu Item). Состав и цену соседи читают через
 // GetMenu: событие несёт только ключи.
 type MenuItemAdded struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MenuId        string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
-	RestaurantId  string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	MenuItemId    string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	MenuId       string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
+	RestaurantId string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	MenuItemId   string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -540,14 +623,23 @@ func (x *MenuItemAdded) GetMenuItemId() string {
 	return ""
 }
 
+func (x *MenuItemAdded) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Изменились название, описание или цена Menu Item (Update Menu Item). Новые
 // значения соседи читают через GetMenu; заказ хранит снимок цены на момент
 // Place Order, поэтому уже оформленные заказы не меняются.
 type MenuItemUpdated struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MenuId        string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
-	RestaurantId  string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	MenuItemId    string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	MenuId       string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
+	RestaurantId string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	MenuItemId   string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -603,14 +695,23 @@ func (x *MenuItemUpdated) GetMenuItemId() string {
 	return ""
 }
 
+func (x *MenuItemUpdated) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
 // Item с новой доступностью); available — новое значение.
 type MenuItemAvailabilityChanged struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MenuId        string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
-	RestaurantId  string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
-	MenuItemId    string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
-	Available     bool                   `protobuf:"varint,4,opt,name=available,proto3" json:"available,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	MenuId       string                 `protobuf:"bytes,1,opt,name=menu_id,json=menuId,proto3" json:"menu_id,omitempty"`
+	RestaurantId string                 `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	MenuItemId   string                 `protobuf:"bytes,3,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
+	Available    bool                   `protobuf:"varint,4,opt,name=available,proto3" json:"available,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -673,51 +774,70 @@ func (x *MenuItemAvailabilityChanged) GetAvailable() bool {
 	return false
 }
 
+func (x *MenuItemAvailabilityChanged) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 var File_nomnom_restaurants_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\"nomnom/restaurants/v1/events.proto\x12\x15nomnom.restaurants.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"|\n" +
+	"\"nomnom/restaurants/v1/events.proto\x12\x15nomnom.restaurants.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x99\x01\n" +
 	"\x17RestaurantOrderAccepted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12F\n" +
-	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\"L\n" +
+	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"i\n" +
 	"\x17RestaurantOrderRejected\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"/\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"L\n" +
 	"\x12PreparationStarted\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"w\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x94\x01\n" +
 	"\x12PreparationDelayed\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12F\n" +
-	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\"F\n" +
+	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"c\n" +
 	"\x11PreparationFailed\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"1\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"N\n" +
 	"\x14RestaurantOrderReady\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"~\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x9b\x01\n" +
 	"\x18RestaurantOrderCancelled\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12/\n" +
-	"\x13preparation_started\x18\x03 \x01(\bR\x12preparationStarted\"7\n" +
+	"\x13preparation_started\x18\x03 \x01(\bR\x12preparationStarted\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"T\n" +
 	"\x10RestaurantOpened\x12#\n" +
-	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"7\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"T\n" +
 	"\x10RestaurantClosed\x12#\n" +
-	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\"o\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x8c\x01\n" +
 	"\rMenuItemAdded\x12\x17\n" +
 	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
 	"\fmenu_item_id\x18\x03 \x01(\tR\n" +
-	"menuItemId\"q\n" +
+	"menuItemId\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"\x8e\x01\n" +
 	"\x0fMenuItemUpdated\x12\x17\n" +
 	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
 	"\fmenu_item_id\x18\x03 \x01(\tR\n" +
-	"menuItemId\"\x9b\x01\n" +
+	"menuItemId\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"\xb8\x01\n" +
 	"\x1bMenuItemAvailabilityChanged\x12\x17\n" +
 	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
 	"\fmenu_item_id\x18\x03 \x01(\tR\n" +
 	"menuItemId\x12\x1c\n" +
-	"\tavailable\x18\x04 \x01(\bR\tavailableB\xfb\x01\n" +
+	"\tavailable\x18\x04 \x01(\bR\tavailable\x12\x1b\n" +
+	"\tmarket_id\x18\x05 \x01(\tR\bmarketIdB\xfb\x01\n" +
 	"\x19com.nomnom.restaurants.v1B\vEventsProtoP\x01Z[nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1;restaurantsv1\xa2\x02\x03NRX\xaa\x02\x15Nomnom.Restaurants.V1\xca\x02\x15Nomnom\\Restaurants\\V1\xe2\x02!Nomnom\\Restaurants\\V1\\GPBMetadata\xea\x02\x17Nomnom::Restaurants::V1b\x06proto3"
 
 var (

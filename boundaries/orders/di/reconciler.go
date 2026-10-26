@@ -20,9 +20,13 @@ import (
 
 // RelationshipReconciler — lifecycle.Worker процесса orders-reconciler: сверяет
 // relations order (customer, restaurant, delivery) в SpiceDB с заказами
-// PostgreSQL сразу после старта и затем каждые interval. Ошибка прохода логируется; следующий проход повторит его.
+// PostgreSQL сразу после старта и затем каждые interval. Тем же проходом догоняет
+// проекцию OrderDetails (ADR orders 4): строки, которые старые pods изменили во
+// время rolling update без проекции, отстают не дольше interval. Ошибка прохода
+// логируется; следующий проход повторит его.
 type RelationshipReconciler struct {
 	reconciler *reconcile.Reconciler
+	store      *repository.Store
 	interval   time.Duration
 	newMetrics func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
 	metrics    *telemetry.Metrics
@@ -36,6 +40,7 @@ func NewRelationshipReconciler(cfg config.Config, store *repository.Store, clien
 	ctx, cancel := context.WithCancel(context.Background())
 	return &RelationshipReconciler{
 		reconciler: reconcile.New(client, store, cfg.Reconciler.Grace, cfg.Reconciler.PageSize),
+		store:      store,
 		interval:   cfg.Reconciler.Interval,
 		newMetrics: telemetry.Start,
 		tracer:     otel.Tracer(reconcilerInstrumentation),
@@ -79,12 +84,28 @@ func (r *RelationshipReconciler) pass() {
 	}
 }
 
+// catchUp — catch-up проекции OrderDetails в своём root span.
+func (r *RelationshipReconciler) catchUp() {
+	ctx, span := r.tracer.Start(r.ctx, "catch up order details")
+	defer span.End()
+	projected, err := r.store.CatchUpOrderDetails(ctx)
+	switch {
+	case r.ctx.Err() != nil:
+	case err != nil:
+		span.SetStatus(codes.Error, telemetry.ErrorType(err))
+		slog.ErrorContext(ctx, "catch up order details failed", telemetry.LogErrorKey, err)
+	default:
+		slog.InfoContext(ctx, "catch up order details completed", slog.Int("projected", projected))
+	}
+}
+
 func (r *RelationshipReconciler) Run() error {
 	defer close(r.done)
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
 	for {
 		r.pass()
+		r.catchUp()
 		if r.ctx.Err() != nil {
 			return nil
 		}

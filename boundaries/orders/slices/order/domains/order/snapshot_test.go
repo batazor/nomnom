@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"nomnom/orders/slices/order/domains/order/vo"
 )
 
 func TestSnapshotRoundTripAndRestoreValidation(t *testing.T) {
@@ -33,6 +35,11 @@ func TestSnapshotRoundTripAndRestoreValidation(t *testing.T) {
 	duplicate.Facts = []RecordedFact{{Fact: FactPickedUp, OccurredAt: testNow}, {Fact: FactPickedUp, OccurredAt: testNow}}
 	_, err = Restore(duplicate)
 	require.ErrorIs(t, err, ErrInvalidSnapshot)
+
+	marketless := snapshot
+	marketless.MarketID = vo.MarketID{}
+	_, err = Restore(marketless)
+	require.ErrorIs(t, err, ErrMarketRequired)
 
 	foreign := snapshot
 	foreign.Facts = []RecordedFact{{Fact: "payment_captured", OccurredAt: testNow}}

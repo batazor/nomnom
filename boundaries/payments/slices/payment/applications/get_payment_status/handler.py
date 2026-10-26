@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from pkg.application import Subject
-from slices.payment.domains.payment import OrderId, PaymentId, PaymentState
+from slices.payment.domains.payment import MarketId, OrderId, PaymentId, PaymentState
 
 from ..access import require_permission
 from ..errors import InvalidPaymentRequestError, PaymentNotFoundError
@@ -26,6 +26,7 @@ class GetPaymentStatusResult:
 
     payment_id: PaymentId
     order_id: OrderId
+    market_id: MarketId
     amount: Decimal
     currency: str
     state: PaymentState

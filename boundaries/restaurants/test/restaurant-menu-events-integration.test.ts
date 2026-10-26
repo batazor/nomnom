@@ -107,11 +107,17 @@ describe("Restaurant and Menu Integration Events are written to the Outbox", () 
         id: restaurantId,
         name: "Pho House",
         ownerId: owner.id,
+        marketId: "berlin",
         registeredAt: now,
       }),
     );
     const menuId = `m-${randomUUID()}`;
-    const menu = Menu.create({ id: menuId, restaurantId, createdAt: now });
+    const menu = Menu.create({
+      id: menuId,
+      restaurantId,
+      marketId: "berlin",
+      createdAt: now,
+    });
     menu.addItem({
       id: "pho",
       name: "Pho",
@@ -196,6 +202,11 @@ describe("Restaurant and Menu Integration Events are written to the Outbox", () 
         .restaurantId,
       restaurantId,
     );
+    assert.equal(
+      fromBinary(RestaurantOpenedSchema, restaurantRecord.payload.buffer)
+        .marketId,
+      "berlin",
+    );
 
     assert.ok(menuRecord, "MenuItemAvailabilityChanged for menu-events");
     assert.equal(menuRecord.eventId, availabilityId);
@@ -209,5 +220,6 @@ describe("Restaurant and Menu Integration Events are written to the Outbox", () 
     assert.equal(payload.restaurantId, restaurantId);
     assert.equal(payload.menuItemId, "pho");
     assert.equal(payload.available, false);
+    assert.equal(payload.marketId, "berlin");
   });
 });

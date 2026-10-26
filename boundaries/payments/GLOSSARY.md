@@ -8,6 +8,10 @@
 Денежная операция на определённую сумму, связанная с одним заказом.
 _Avoid_: Order, transaction
 
+**Market**:
+Город доставки, к которому относится заказ и его Payment (`market_id`, slug, например `berlin`); задаётся в Create Payment и не меняется ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)).
+_Avoid_: Region, tenant, cell
+
 **Authorization**:
 Подтверждение платёжным провайдером возможности последующего списания суммы.
 _Avoid_: Capture, payment confirmation

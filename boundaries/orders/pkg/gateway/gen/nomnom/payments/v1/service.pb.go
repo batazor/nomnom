@@ -110,9 +110,11 @@ func (x *GetPaymentStatusResponse) GetPayment() *Payment {
 }
 
 type CreatePaymentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Amount        *Money                 `protobuf:"bytes,2,opt,name=amount,proto3" json:"amount,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Amount  *Money                 `protobuf:"bytes,2,opt,name=amount,proto3" json:"amount,omitempty"`
+	// Required (ADR 41): Market of the Order.
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -159,6 +161,13 @@ func (x *CreatePaymentRequest) GetAmount() *Money {
 		return x.Amount
 	}
 	return nil
+}
+
+func (x *CreatePaymentRequest) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
 }
 
 type CreatePaymentResponse struct {
@@ -615,10 +624,11 @@ const file_nomnom_payments_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\"Q\n" +
 	"\x18GetPaymentStatusResponse\x125\n" +
-	"\apayment\x18\x01 \x01(\v2\x1b.nomnom.payments.v1.PaymentR\apayment\"d\n" +
+	"\apayment\x18\x01 \x01(\v2\x1b.nomnom.payments.v1.PaymentR\apayment\"\x81\x01\n" +
 	"\x14CreatePaymentRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x121\n" +
-	"\x06amount\x18\x02 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\"\x88\x01\n" +
+	"\x06amount\x18\x02 \x01(\v2\x19.nomnom.payments.v1.MoneyR\x06amount\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"\x88\x01\n" +
 	"\x15CreatePaymentResponse\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x126\n" +

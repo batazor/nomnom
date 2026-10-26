@@ -15,12 +15,16 @@ spec:
   scenarios:
     - bindings:
         - {name: method, value: nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest}
+        - {name: request, value: '{}'}
         - {name: message, value: verified caller identity is required}
     - bindings:
         - {name: method, value: nomnom.delivery.v1.DeliveryService/CreateDelivery}
+        # ADR 41: market_id обязателен; ответ всё равно решает аутентификация.
+        - {name: request, value: '{"marketId":"berlin"}'}
         - {name: message, value: verified caller identity is required}
     - bindings:
         - {name: method, value: nomnom.payments.v1.PaymentsService/CreatePayment}
+        - {name: request, value: '{"marketId":"berlin"}'}
         - {name: message, value: invalid caller identity}
   steps:
     - use:
@@ -28,4 +32,5 @@ spec:
         with:
           bindings:
             - {name: authorize, value: true}
+            - {name: request, value: ($request)}
             - {name: code, value: 16}

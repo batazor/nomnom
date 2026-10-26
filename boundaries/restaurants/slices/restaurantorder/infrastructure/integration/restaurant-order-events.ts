@@ -33,31 +33,42 @@ const MAPPERS: EventAllowlist<RestaurantOrderEvent> = {
     integration(RestaurantOrderAcceptedSchema, {
       orderId: event.orderId,
       expectedReadyAt: timestampFromDate(event.expectedReadyAt),
+      marketId: event.marketId,
     }),
   RestaurantOrderRejected: (event) =>
     integration(RestaurantOrderRejectedSchema, {
       orderId: event.orderId,
       reason: event.reason ?? "",
+      marketId: event.marketId,
     }),
   PreparationStarted: (event) =>
-    integration(PreparationStartedSchema, { orderId: event.orderId }),
+    integration(PreparationStartedSchema, {
+      orderId: event.orderId,
+      marketId: event.marketId,
+    }),
   PreparationDelayed: (event) =>
     integration(PreparationDelayedSchema, {
       orderId: event.orderId,
       expectedReadyAt: timestampFromDate(event.expectedReadyAt),
+      marketId: event.marketId,
     }),
   RestaurantOrderFailed: (event) =>
     integration(PreparationFailedSchema, {
       orderId: event.orderId,
       reason: event.reason,
+      marketId: event.marketId,
     }),
   RestaurantOrderReady: (event) =>
-    integration(RestaurantOrderReadySchema, { orderId: event.orderId }),
+    integration(RestaurantOrderReadySchema, {
+      orderId: event.orderId,
+      marketId: event.marketId,
+    }),
   RestaurantOrderCancelled: (event) =>
     integration(RestaurantOrderCancelledSchema, {
       orderId: event.orderId,
       reason: event.reason ?? "",
       preparationStarted: event.preparationStarted,
+      marketId: event.marketId,
     }),
 };
 

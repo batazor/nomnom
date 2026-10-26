@@ -5,7 +5,7 @@ from slices.payment.domains.payment import OperationId, OrderId, PaymentId, Paym
 
 
 class InvalidPaymentRequestError(ApplicationError):
-    """The request is malformed: amount, currency, idempotency key or provider result."""
+    """The request is malformed: market, amount, currency, idempotency key or provider result."""
 
 
 class PaymentNotFoundError(ApplicationError):
@@ -25,7 +25,7 @@ class PaymentOperationNotFoundError(ApplicationError):
 
 
 class PaymentAlreadyExistsError(ApplicationError):
-    """The Order already has a Payment with a different amount or currency."""
+    """The Order already has a Payment with a different Market, amount or currency."""
 
     def __init__(self, order_id: OrderId) -> None:
         super().__init__(f"payment for order {order_id} already exists with other terms")

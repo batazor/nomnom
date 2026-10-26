@@ -75,15 +75,20 @@ cors:
     - Authorization
     - traceparent
     - tracestate
+    # ADR 41: the Market of the request, the routing hint of the cell router.
+    - X-Nomnom-Market
 
 # ADR 32: the plugin verifies the customer's access token itself, so the
-# Router forwards Authorization to it as gRPC metadata authorization. No other
-# client header reaches the plugin.
+# Router forwards Authorization to it as gRPC metadata authorization. ADR 41:
+# X-Nomnom-Market reaches it as x-nomnom-market, the Market the cell router
+# picks the Cell by. No other client header reaches the plugin.
 headers:
   all:
     request:
       - op: propagate
         named: Authorization
+      - op: propagate
+        named: X-Nomnom-Market
 
 # ADR 36: Cosmo Streams consume Order Change Notifications from Kafka. The
 # Helm chart requires BFF__KAFKA_BROKERS; an unreachable broker stops the

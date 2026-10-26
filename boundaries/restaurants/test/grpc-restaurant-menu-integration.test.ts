@@ -112,12 +112,14 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
         id: restaurantId,
         name: "Pho House",
         ownerId: manager.id,
+        marketId: "berlin",
         registeredAt: clock.now(),
       }),
     );
     const menu = Menu.create({
       id: menuId,
       restaurantId,
+      marketId: "berlin",
       createdAt: clock.now(),
     });
     menu.addItem({

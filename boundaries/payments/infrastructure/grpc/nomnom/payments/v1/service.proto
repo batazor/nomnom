@@ -27,6 +27,8 @@ message GetPaymentStatusResponse {
 message CreatePaymentRequest {
   string order_id = 1;
   Money amount = 2;
+  // Required (ADR 41): Market of the Order.
+  string market_id = 3;
 }
 
 message CreatePaymentResponse {

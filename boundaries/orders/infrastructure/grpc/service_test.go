@@ -113,11 +113,44 @@ func TestListCustomerOrdersCallsApplicationHandler(t *testing.T) {
 
 	response, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
 		CustomerId: "customer-1",
+		MarketId:   "berlin",
 	})
 
 	require.NoError(t, err)
 	assert.Empty(t, response.GetOrders())
 	assert.Empty(t, response.GetNextPageToken())
+}
+
+// ADR 41: the history is per Market; every Order carries its market_id.
+func TestListCustomerOrdersReturnsOnlyTheRequestedMarket(t *testing.T) {
+	store := repositorytest.Open(t)
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-berlin")))
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-hamburg", ordertest.WithMarket("hamburg"))))
+	client := newClientWith(t, fixedSubject{subject: customer}, store, fake.NewAuthorizer())
+
+	response, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
+		CustomerId: "customer-1",
+		MarketId:   "hamburg",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, response.GetOrders(), 1)
+	assert.Equal(t, "order-hamburg", response.GetOrders()[0].GetOrderId())
+	assert.Equal(t, "hamburg", response.GetOrders()[0].GetOrder().GetMarketId())
+}
+
+// ADR 41: market_id is required and must be a Market slug.
+func TestListCustomerOrdersRequiresMarket(t *testing.T) {
+	client := newClient(t, fixedSubject{subject: customer})
+	for name, market := range map[string]string{"missing": "", "malformed": "Berlin"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
+				CustomerId: "customer-1",
+				MarketId:   market,
+			})
+			requireReason(t, err, codes.InvalidArgument, "INVALID_ARGUMENT")
+		})
+	}
 }
 
 func TestServiceReturnsStructuredInvalidArgument(t *testing.T) {
@@ -151,6 +184,7 @@ func TestServiceRejectsUnverifiedCaller(t *testing.T) {
 
 	_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
 		CustomerId: "customer-1",
+		MarketId:   "berlin",
 	})
 	require.Error(t, err)
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
@@ -197,6 +231,7 @@ func TestGetOrderMapsExpectedTimes(t *testing.T) {
 	response, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-1"})
 
 	require.NoError(t, err)
+	assert.Equal(t, ordertest.Market, response.GetOrder().GetMarketId())
 	assert.Equal(t, expected.ReadyAt, response.GetOrder().GetExpectedReadyAt().AsTime())
 	assert.Equal(t, expected.PickupAt, response.GetOrder().GetExpectedPickupAt().AsTime())
 	assert.Nil(t, response.GetOrder().GetExpectedDeliveredAt())
@@ -228,6 +263,7 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 	store, authorizer, ports := repositorytest.Open(t), fake.NewAuthorizer(), newCommandPorts()
 	catalog := fake.NewCatalog()
 	catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
+		MarketID:     ordertest.MarketID(t),
 		Currency:     "EUR",
 		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
 		MinimumTotal: ordertest.Money(t, "0"),
@@ -301,6 +337,7 @@ func catalogClient(t *testing.T, snapshot placeorder.CatalogSnapshot) ordersv1.O
 // AC-567: an unavailable Menu Item is ORDER_NOT_ORDERABLE with its code and id.
 func TestPlaceOrderNamesUnorderableItems(t *testing.T) {
 	client := catalogClient(t, placeorder.CatalogSnapshot{
+		MarketID: ordertest.MarketID(t),
 		Currency: "EUR",
 		Items: map[order.MenuItemID]placeorder.CatalogItem{
 			"pizza":      {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
@@ -319,6 +356,7 @@ func TestPlaceOrderNamesUnorderableItems(t *testing.T) {
 
 func TestPlaceOrderNamesEveryReasonCodeOnce(t *testing.T) {
 	client := catalogClient(t, placeorder.CatalogSnapshot{
+		MarketID:     ordertest.MarketID(t),
 		Currency:     "EUR",
 		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
 		MinimumTotal: ordertest.Money(t, "0"),

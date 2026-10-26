@@ -8,7 +8,7 @@ use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::application::{RelationshipWriteError, Subject};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::domains::courier::{
-    Courier, CourierId, CourierName, CourierRepository, CourierStatus,
+    Courier, CourierId, CourierName, CourierRepository, CourierStatus, MarketId,
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -54,12 +54,19 @@ impl World {
         }
     }
 
+    /// Courier of the launch Market `berlin`, the Market of every seeded
+    /// Delivery.
     pub fn courier(&self, id: &str, status: CourierStatus) {
+        self.courier_in(id, status, &berlin());
+    }
+
+    pub fn courier_in(&self, id: &str, status: CourierStatus, market_id: &MarketId) {
         CourierRepository::add(
             &self.store,
             &Courier::restore(
                 CourierId::new(id),
                 CourierName::new("Timur").expect("courier name"),
+                market_id.clone(),
                 status,
             ),
         )
@@ -67,7 +74,15 @@ impl World {
     }
 
     pub fn waiting_delivery(&self, id: &str) -> Delivery {
-        let delivery = new_delivery(id);
+        self.waiting_delivery_in(id, &berlin())
+    }
+
+    pub fn waiting_delivery_in(&self, id: &str, market_id: &MarketId) -> Delivery {
+        let delivery = Delivery::new(
+            DeliveryId::new(id),
+            OrderId::new(format!("order-of-{id}")),
+            market_id.clone(),
+        );
         DeliveryRepository::add(&self.store, &delivery).expect("seed delivery");
         delivery
     }
@@ -137,8 +152,21 @@ impl World {
     }
 }
 
+pub fn berlin() -> MarketId {
+    MarketId::new("berlin").expect("market id")
+}
+
+pub fn hamburg() -> MarketId {
+    MarketId::new("hamburg").expect("market id")
+}
+
+/// Waiting Delivery of the Market `berlin`.
 pub fn new_delivery(id: &str) -> Delivery {
-    Delivery::new(DeliveryId::new(id), OrderId::new(format!("order-of-{id}")))
+    Delivery::new(
+        DeliveryId::new(id),
+        OrderId::new(format!("order-of-{id}")),
+        berlin(),
+    )
 }
 
 pub fn subject(id: &str) -> Subject {
@@ -149,9 +177,11 @@ pub fn service() -> Subject {
     Subject::Service("assignment-process".to_owned())
 }
 
+/// Candidate of the Market `berlin`.
 pub fn candidate(courier: &str, distance_to_pickup_meters: u32) -> CourierCandidate {
     CourierCandidate {
         courier_id: CourierId::new(courier),
+        market_id: berlin(),
         within_delivery_zone: true,
         distance_to_pickup_meters,
         active_assignments: 0,

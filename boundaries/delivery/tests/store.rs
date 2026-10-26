@@ -4,12 +4,13 @@
 
 mod support;
 
+use delivery::slices::courier::domains::courier::MarketId;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use delivery::di;
-use delivery::infrastructure::locator::CourierPositions;
+use delivery::infrastructure::locator::{CourierPositions, LocatedCourier};
 use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::infrastructure::repository::{
     MIGRATION_SETS, OutboxMapper, OutboxRecord, Store, event_id, migrate,
@@ -73,13 +74,18 @@ fn unique(prefix: &str) -> String {
 }
 
 fn new_delivery(id: &str) -> Delivery {
-    Delivery::new(DeliveryId::new(id), OrderId::new(unique("order")))
+    Delivery::new(
+        DeliveryId::new(id),
+        OrderId::new(unique("order")),
+        MarketId::new("berlin").expect("market id"),
+    )
 }
 
 fn assigned(delivery: &Delivery, courier: &str) -> Delivery {
     Delivery::restore(
         delivery.id().clone(),
         delivery.order_id().clone(),
+        MarketId::new("berlin").expect("market id"),
         Some(CourierId::new(courier)),
         State::Assigned,
         None,
@@ -223,6 +229,89 @@ fn replicas_starting_together_apply_migrations_once() {
     assert_eq!(applied, vec![vec![], vec![], vec![], embedded()]);
 }
 
+/// ADR 41: couriers and deliveries stored before Markets existed belong to the
+/// launch Market `berlin`. The Market migrations backfill them explicitly and
+/// make `market_id` required, without a default for new rows.
+#[test]
+fn market_migrations_backfill_the_launch_market() {
+    const MARKET_MIGRATIONS: [(&str, i64); 2] = [("couriers", 3), ("deliveries", 7)];
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let config = support::empty_database(&format!("market_backfill_{nanos}"));
+    support::off_runtime(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime")
+            .block_on(async {
+                let pool = sqlx::PgPool::connect(&config.uri).await.expect("connect");
+                let apply = |market: bool| {
+                    MIGRATION_SETS.iter().flat_map(move |set| {
+                        set.migrator.iter().filter(move |migration| {
+                            MARKET_MIGRATIONS
+                                .iter()
+                                .any(|(id, version)| *id == set.id && *version <= migration.version)
+                                == market
+                        })
+                    })
+                };
+                for migration in apply(false) {
+                    sqlx::raw_sql(migration.sql.clone())
+                        .execute(&pool)
+                        .await
+                        .expect("migration before markets");
+                }
+                sqlx::raw_sql(sqlx::AssertSqlSafe(
+                    "INSERT INTO couriers (id, name, status, version)
+                     VALUES ('old-courier', 'Timur', 'available', 0);
+                     INSERT INTO deliveries (id, order_id, state, version)
+                     VALUES ('old-delivery', 'old-order', 'waiting', 0);",
+                ))
+                .execute(&pool)
+                .await
+                .expect("rows before markets");
+                for migration in apply(true) {
+                    sqlx::raw_sql(migration.sql.clone())
+                        .execute(&pool)
+                        .await
+                        .expect("market migration");
+                }
+
+                let markets: Vec<(String,)> = sqlx::query_as(
+                    "SELECT market_id FROM couriers WHERE id = 'old-courier'
+                     UNION ALL
+                     SELECT market_id FROM deliveries WHERE id = 'old-delivery'",
+                )
+                .fetch_all(&pool)
+                .await
+                .expect("backfilled markets");
+                assert_eq!(
+                    markets,
+                    vec![("berlin".to_owned(),), ("berlin".to_owned(),)]
+                );
+                for statement in [
+                    "INSERT INTO couriers (id, name, status, version)
+                     VALUES ('new-courier', 'Anna', 'available', 0)",
+                    "INSERT INTO deliveries (id, order_id, state, version)
+                     VALUES ('new-delivery', 'new-order', 'waiting', 0)",
+                    "INSERT INTO couriers (id, name, status, version, market_id)
+                     VALUES ('bad-courier', 'Anna', 'available', 0, 'Berlin')",
+                ] {
+                    assert!(
+                        sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
+                            .execute(&pool)
+                            .await
+                            .is_err(),
+                        "{statement}"
+                    );
+                }
+                pool.close().await;
+            });
+    });
+}
+
 /// Embedded migrations as `(id, version)`, sets in their order.
 fn embedded() -> Vec<(&'static str, i64)> {
     MIGRATION_SETS
@@ -279,6 +368,7 @@ fn courier_round_trip_with_optimistic_versions() {
     let mut courier = Courier::new(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
+        MarketId::new("berlin").expect("market id"),
     );
     courier.record_authorization_revision(AuthorizationRevision::new("zed-1"));
     CourierRepository::add(&store, &courier).expect("add");
@@ -296,6 +386,7 @@ fn courier_round_trip_with_optimistic_versions() {
     let busy = Courier::restore(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
+        MarketId::new("berlin").expect("market id"),
         CourierStatus::Busy,
     )
     .with_authorization_revision(loaded.authorization_revision().cloned())
@@ -321,7 +412,8 @@ fn courier_round_trip_with_optimistic_versions() {
             &store,
             &Courier::new(
                 CourierId::new(unique("missing")),
-                CourierName::new("Timur").expect("courier name")
+                CourierName::new("Timur").expect("courier name"),
+                MarketId::new("berlin").expect("market id")
             )
         ),
         Err(RepositoryError::Conflict)
@@ -337,6 +429,7 @@ fn courier_writes_notify_the_courier_entity() {
     let courier = Courier::new(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
+        MarketId::new("berlin").expect("market id"),
     );
     CourierRepository::add(&store, &courier).expect("add");
     assert_eq!(
@@ -346,6 +439,7 @@ fn courier_writes_notify_the_courier_entity() {
     let available = Courier::restore(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
+        MarketId::new("berlin").expect("market id"),
         CourierStatus::Available,
     )
     .with_version(courier.version());
@@ -378,11 +472,13 @@ fn courier_writes_notify_the_courier_pool() {
     let courier = Courier::new(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
+        MarketId::new("berlin").expect("market id"),
     );
     CourierRepository::add(&store, &courier).expect("add");
     let mut retired = Courier::restore(
         CourierId::new(&id),
         CourierName::new("Timur").expect("courier name"),
+        MarketId::new("berlin").expect("market id"),
         CourierStatus::Unavailable,
     )
     .with_version(courier.version());
@@ -478,6 +574,7 @@ fn outbox_writes_delete_rows_older_than_an_hour() {
         &Courier::new(
             courier.clone(),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("courier");
@@ -496,10 +593,43 @@ fn outbox_writes_delete_rows_older_than_an_hour() {
         courier_id: courier.clone(),
         created_at_epoch_seconds: None,
         expected_pickup_at_epoch_seconds: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     };
     DeliveryOutbox::add(&store, OutboxMessage::delivery(event)).expect("outbox");
     assert!(outbox_rows(&expired).is_empty(), "Integration Event");
     assert_eq!(outbox_rows(delivery.id().as_str()).len(), 1);
+}
+
+/// ADR 41: the Market of a courier and of a Delivery is stored and read back.
+#[test]
+fn courier_and_delivery_keep_their_market() {
+    let store = store();
+    let hamburg = MarketId::new("hamburg").expect("market id");
+    let courier = Courier::new(
+        CourierId::new(unique("courier")),
+        CourierName::new("Timur").expect("courier name"),
+        hamburg.clone(),
+    );
+    CourierRepository::add(&store, &courier).expect("add courier");
+    let delivery = Delivery::new(
+        DeliveryId::new(unique("delivery")),
+        OrderId::new(unique("order")),
+        hamburg.clone(),
+    );
+    DeliveryRepository::add(&store, &delivery).expect("add delivery");
+
+    assert_eq!(
+        CourierRepository::get(&store, courier.id())
+            .expect("get courier")
+            .map(|courier| courier.market_id().clone()),
+        Some(hamburg.clone())
+    );
+    assert_eq!(
+        DeliveryRepository::find_by_order(&store, delivery.order_id())
+            .expect("find delivery")
+            .map(|delivery| delivery.market_id().clone()),
+        Some(hamburg)
+    );
 }
 
 #[test]
@@ -512,6 +642,7 @@ fn delivery_round_trip_keeps_revision_and_order_uniqueness() {
     let same_order = Delivery::new(
         DeliveryId::new(unique("delivery")),
         delivery.order_id().clone(),
+        MarketId::new("berlin").expect("market id"),
     );
     assert_eq!(
         DeliveryRepository::add(&store, &same_order),
@@ -567,6 +698,7 @@ fn concurrent_updates_conflict_and_only_one_wins() {
                             courier_id: CourierId::new(courier),
                             created_at_epoch_seconds: None,
                             expected_pickup_at_epoch_seconds: None,
+                            market_id: MarketId::new("berlin").expect("market id"),
                         }),
                     )?;
                     Ok::<_, TestError>(())
@@ -621,6 +753,7 @@ fn unit_of_work_commits_or_rolls_back_aggregate_and_outbox_together() {
         courier_id: CourierId::new("courier-1"),
         created_at_epoch_seconds: None,
         expected_pickup_at_epoch_seconds: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     };
     // No contract: the mapper returns None and nothing is written.
     let unpublished = DomainEvent::DeliveryCancelled {
@@ -628,6 +761,7 @@ fn unit_of_work_commits_or_rolls_back_aggregate_and_outbox_together() {
         order_id: delivery.order_id().clone(),
         released_courier_id: None,
         reason: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     };
 
     let rolled_back: Result<(), TestError> = store.run(|| {
@@ -667,6 +801,7 @@ fn offers_locations_and_reconciliation_reads() {
         &Courier::new(
             courier_id.clone(),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("courier");
@@ -780,6 +915,7 @@ fn reconciliation_reads_only_active_assignments() {
         &Courier::new(
             courier_id.clone(),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("courier");
@@ -817,42 +953,64 @@ fn reconciliation_reads_only_active_assignments() {
     );
 }
 
-/// FR-542: the locator reads latest positions of available couriers only.
+/// FR-542, ADR 41: the locator reads latest positions of the available
+/// couriers of one Market only, each with its stored Market.
 #[test]
-fn available_positions_are_positions_of_available_couriers() {
+fn available_positions_are_positions_of_available_couriers_of_the_market() {
     let store = store();
+    let berlin = MarketId::new("berlin").expect("market id");
+    let hamburg = MarketId::new("hamburg").expect("market id");
     let available = CourierId::new(unique("available"));
     let busy = CourierId::new(unique("busy"));
-    CourierRepository::add(
-        &store,
-        &Courier::restore(
-            available.clone(),
-            CourierName::new("Timur").expect("courier name"),
-            CourierStatus::Available,
-        ),
-    )
-    .expect("available courier");
-    CourierRepository::add(
-        &store,
-        &Courier::restore(
-            busy.clone(),
-            CourierName::new("Timur").expect("courier name"),
-            CourierStatus::Busy,
-        ),
-    )
-    .expect("busy courier");
+    let elsewhere = CourierId::new(unique("hamburg"));
+    for (courier_id, market_id, status) in [
+        (&available, &berlin, CourierStatus::Available),
+        (&busy, &berlin, CourierStatus::Busy),
+        (&elsewhere, &hamburg, CourierStatus::Available),
+    ] {
+        CourierRepository::add(
+            &store,
+            &Courier::restore(
+                courier_id.clone(),
+                CourierName::new("Timur").expect("courier name"),
+                market_id.clone(),
+                status,
+            ),
+        )
+        .expect("seed courier");
+    }
     let position = |courier_id: &CourierId| CourierPosition {
         courier_id: courier_id.clone(),
         location: Location::new(52.37, 4.89).expect("location"),
         recorded_at_epoch_seconds: 7,
     };
-    store.record(&position(&available)).expect("record");
-    store.record(&position(&busy)).expect("record");
+    let located = |courier_id: &CourierId, market_id: &MarketId| LocatedCourier {
+        position: position(courier_id),
+        market_id: market_id.clone(),
+    };
+    for courier_id in [&available, &busy, &elsewhere] {
+        store.record(&position(courier_id)).expect("record");
+    }
 
-    let positions = store.available_positions().expect("positions");
+    let positions = store.available_positions(&berlin).expect("positions");
 
-    assert!(positions.contains(&position(&available)));
-    assert!(positions.iter().all(|position| position.courier_id != busy));
+    assert!(positions.contains(&located(&available, &berlin)));
+    assert!(positions.iter().all(|located| {
+        located.position.courier_id != busy
+            && located.position.courier_id != elsewhere
+            && located.market_id == berlin
+    }));
+    assert!(
+        store
+            .available_positions(&hamburg)
+            .expect("positions")
+            .contains(&located(&elsewhere, &hamburg))
+    );
+    assert_eq!(
+        store.located(&elsewhere),
+        Ok(Some(located(&elsewhere, &hamburg)))
+    );
+    assert_eq!(store.located(&CourierId::new(unique("unknown"))), Ok(None));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -861,7 +1019,11 @@ async fn works_inside_a_multi_thread_runtime() {
     let id = CourierId::new(unique("courier"));
     CourierRepository::add(
         &store,
-        &Courier::new(id.clone(), CourierName::new("Timur").expect("courier name")),
+        &Courier::new(
+            id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
+        ),
     )
     .expect("add");
     assert!(CourierRepository::get(&store, &id).expect("get").is_some());
@@ -874,7 +1036,11 @@ async fn works_inside_a_current_thread_runtime() {
     let result: Result<(), TestError> = store.run(|| {
         CourierRepository::add(
             &store,
-            &Courier::new(id.clone(), CourierName::new("Timur").expect("courier name")),
+            &Courier::new(
+                id.clone(),
+                CourierName::new("Timur").expect("courier name"),
+                MarketId::new("berlin").expect("market id"),
+            ),
         )?;
         Ok(())
     });

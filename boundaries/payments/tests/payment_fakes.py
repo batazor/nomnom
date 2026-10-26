@@ -50,6 +50,7 @@ from slices.payment.applications.ports import (
     ProviderUnavailableError,
 )
 from slices.payment.domains.payment import (
+    MarketId,
     Money,
     OperationId,
     OperationKind,
@@ -66,6 +67,8 @@ T = TypeVar("T")
 ORCHESTRATOR = Subject(SubjectKind.SERVICE, "orders-activity-worker")
 OPERATOR = Subject(SubjectKind.USER, "operator-1")
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
+# Market of the test Orders (the launch Market of ADR 41).
+MARKET = MarketId("berlin")
 
 
 class PickledEventsMapper:
@@ -273,14 +276,23 @@ class PaymentsTestKit:
         payment_id: str = "payment-0",
         order_id: str = "order-1",
         amount: str = "25.00",
+        market_id: MarketId = MARKET,
     ) -> PaymentId:
         reference = "auth-ref" if state in _STATES_WITH_REFERENCE else None
         money = Money.parse(amount, "EUR")
         with self.database.connection() as conn:
             conn.execute(
-                "INSERT INTO payments (id, order_id, amount, currency, state, "
-                "provider_reference, version) VALUES (%s, %s, %s, %s, %s, %s, 1)",
-                (payment_id, order_id, money.amount, money.currency, state.value, reference),
+                "INSERT INTO payments (id, order_id, market_id, amount, currency, state, "
+                "provider_reference, version) VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
+                (
+                    payment_id,
+                    order_id,
+                    market_id.value,
+                    money.amount,
+                    money.currency,
+                    state.value,
+                    reference,
+                ),
             )
         return PaymentId(payment_id)
 

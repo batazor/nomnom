@@ -481,6 +481,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
             register_courier::Input {
                 courier_id: "courier-1".to_owned(),
                 name: "Timur".to_owned(),
+                market_id: "berlin".to_owned(),
             },
         )
         .expect("courier registered");
@@ -500,6 +501,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
             &operator(),
             create_delivery::Input {
                 order_id: "order-1".to_owned(),
+                market_id: "berlin".to_owned(),
             },
         )
         .expect("delivery created");

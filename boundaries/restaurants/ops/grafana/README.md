@@ -172,6 +172,7 @@ Rule group `restaurants` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.
 | Restaurants: gRPC technical errors | critical | активно | — |
 | Restaurants: gRPC p95 latency | warning | активно | — |
 | Restaurants: messages sent to DLQ | warning | ждёт метрик | [`nomnom_messaging_poison_messages_total`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Restaurants: unresolved dead letters | warning | ждёт метрик | [`kafka_consumergroup_current_offset`](../../../../docs/observability/metric-inventory.md#messaging), [`kafka_topic_partition_current_offset`](../../../../docs/observability/metric-inventory.md#messaging), [`kafka_topic_partition_oldest_offset`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Restaurants: cache bypassed | warning | ждёт метрик | [`nomnom_cache_lookups_total`](../../../../docs/observability/metric-inventory.md#cache) |
 | Restaurants: mongodb pool saturated | warning | ждёт метрик | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
 | Restaurants: mongodb pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |

@@ -21,7 +21,10 @@ export type CreateMenuResult = Readonly<{
   version: number;
 }>;
 
-/** Creates the single, initially empty menu of an existing restaurant. */
+/**
+ * Creates the single, initially empty menu of an existing restaurant, in the
+ * Market of that restaurant (ADR 41).
+ */
 export class CreateMenuHandler {
   readonly #accessControl: MenuAccessControl;
   readonly #restaurants: RestaurantRepository;
@@ -48,7 +51,8 @@ export class CreateMenuHandler {
       this.#accessControl.canManageMenu(command.subject, command.restaurantId),
       "create menu",
     );
-    if ((await this.#restaurants.get(command.restaurantId)) === undefined) {
+    const restaurant = await this.#restaurants.get(command.restaurantId);
+    if (restaurant === undefined) {
       throw new NotFoundError("Restaurant", command.restaurantId);
     }
     if (
@@ -59,6 +63,7 @@ export class CreateMenuHandler {
     const menu = Menu.create({
       id: this.#ids.next(),
       restaurantId: command.restaurantId,
+      marketId: restaurant.marketId.value,
       createdAt: this.#clock.now(),
     });
     const version = await this.#menus.save(menu);

@@ -1,7 +1,11 @@
 use super::*;
 
 fn delivery() -> Delivery {
-    Delivery::new(DeliveryId::new("delivery-1"), OrderId::new("order-1"))
+    Delivery::new(
+        DeliveryId::new("delivery-1"),
+        OrderId::new("order-1"),
+        MarketId::new("berlin").expect("market id"),
+    )
 }
 
 fn assigned(courier: &str) -> Delivery {
@@ -59,18 +63,21 @@ fn delivery_lifecycle_is_strict_and_records_facts() {
                 courier_id: courier_id.clone(),
                 created_at_epoch_seconds: None,
                 expected_pickup_at_epoch_seconds: None,
+                market_id: MarketId::new("berlin").expect("market id"),
             },
             DomainEvent::DeliveryPickedUp {
                 delivery_id: delivery_id.clone(),
                 order_id: order_id.clone(),
                 courier_id: courier_id.clone(),
                 expected_delivered_at_epoch_seconds: None,
+                market_id: MarketId::new("berlin").expect("market id"),
             },
             DomainEvent::DeliveryCompleted {
                 delivery_id,
                 order_id,
                 courier_id,
                 created_at_epoch_seconds: None,
+                market_id: MarketId::new("berlin").expect("market id"),
             },
         ]
     );
@@ -126,6 +133,7 @@ fn unassign_returns_delivery_to_waiting() {
             delivery_id: DeliveryId::new("delivery-1"),
             order_id: OrderId::new("order-1"),
             courier_id: CourierId::new("courier-1"),
+            market_id: MarketId::new("berlin").expect("market id"),
         }]
     );
     assert_eq!(
@@ -155,6 +163,7 @@ fn failure_is_recorded_with_reason_by_courier_or_dispatcher() {
             order_id: OrderId::new("order-1"),
             courier_id: CourierId::new("courier-1"),
             reason: reason(),
+            market_id: MarketId::new("berlin").expect("market id"),
         }]
     );
 
@@ -193,6 +202,7 @@ fn cancellation_before_pickup_releases_the_courier() {
             order_id: OrderId::new("order-1"),
             released_courier_id: Some(CourierId::new("courier-1")),
             reason,
+            market_id: MarketId::new("berlin").expect("market id"),
         }]
     );
     assert_eq!(
@@ -247,6 +257,7 @@ fn restore_validates_courier_and_failure_reason() {
         Delivery::restore(
             DeliveryId::new("delivery-1"),
             OrderId::new("order-1"),
+            MarketId::new("berlin").expect("market id"),
             courier.map(CourierId::new),
             state,
             reason,
@@ -284,6 +295,7 @@ fn active_courier_exists_only_while_assigned_or_picked_up() {
         Delivery::restore(
             DeliveryId::new("delivery-1"),
             OrderId::new("order-1"),
+            MarketId::new("berlin").expect("market id"),
             courier_id,
             state,
             reason,
@@ -406,6 +418,7 @@ fn pickup_carries_the_expected_handover_time() {
             order_id: OrderId::new("order-1"),
             courier_id: CourierId::new("courier-1"),
             expected_delivered_at_epoch_seconds: Some(2_400),
+            market_id: MarketId::new("berlin").expect("market id"),
         }]
     );
 }

@@ -33,7 +33,7 @@ const projectionBatch = 500
 const projectionLockKey int64 = 0x6f72645f64657461
 
 // detailsDocument is the stored form of orderdetails.Details without the
-// columns order_id, customer_id and placed_at.
+// columns order_id, customer_id, market_id and placed_at.
 type detailsDocument struct {
 	RestaurantID string                `json:"restaurant_id"`
 	Items        []itemDocument        `json:"items"`
@@ -109,7 +109,11 @@ func newDetailsDocument(snap order.Snapshot, total vo.Money) detailsDocument {
 	return doc
 }
 
-func (d detailsDocument) details(id order.ID, customerID order.CustomerID, placedAt time.Time) (orderdetails.Details, error) {
+func (d detailsDocument) details(id order.ID, customerID order.CustomerID, marketID string, placedAt time.Time) (orderdetails.Details, error) {
+	market, err := vo.NewMarketID(marketID)
+	if err != nil {
+		return orderdetails.Details{}, fmt.Errorf("order %s market: %w", id, err)
+	}
 	total, err := vo.ParseMoney(d.Total.Amount, d.Total.Currency)
 	if err != nil {
 		return orderdetails.Details{}, fmt.Errorf("order %s total: %w", id, err)
@@ -117,6 +121,7 @@ func (d detailsDocument) details(id order.ID, customerID order.CustomerID, place
 	result := orderdetails.Details{
 		OrderID:      id,
 		CustomerID:   customerID,
+		MarketID:     market,
 		RestaurantID: order.RestaurantID(d.RestaurantID),
 		Items:        make([]orderdetails.Item, 0, len(d.Items)),
 		Total:        total,
@@ -162,10 +167,11 @@ func (s *Store) projectDetails(ctx context.Context, snap order.Snapshot, version
 		return fmt.Errorf("encode details of %s: %w", snap.ID, err)
 	}
 	_, err = s.exec(ctx, psql.Insert("order_details").
-		Columns("order_id", "customer_id", "placed_at", "order_version", "projection_version", "details").
-		Values(snap.ID, snap.CustomerID, snap.PlacedAt, version, OrderDetailsProjectionVersion, document).
+		Columns("order_id", "customer_id", "market_id", "placed_at", "order_version", "projection_version", "details").
+		Values(snap.ID, snap.CustomerID, snap.MarketID.String(), snap.PlacedAt, version, OrderDetailsProjectionVersion, document).
 		Suffix(`ON CONFLICT (order_id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
+			market_id = EXCLUDED.market_id,
 			placed_at = EXCLUDED.placed_at,
 			order_version = EXCLUDED.order_version,
 			projection_version = EXCLUDED.projection_version,
@@ -183,33 +189,35 @@ func (s *Store) projectDetails(ctx context.Context, snap order.Snapshot, version
 func (s *Store) OrderDetails(ctx context.Context, id order.ID) (orderdetails.Details, error) {
 	var (
 		customerID order.CustomerID
+		marketID   string
 		placedAt   time.Time
 		raw        []byte
 	)
-	err := s.queryRow(ctx, psql.Select("customer_id", "placed_at", "details").
-		From("order_details").Where(sq.Eq{"order_id": id}), &customerID, &placedAt, &raw)
+	err := s.queryRow(ctx, psql.Select("customer_id", "market_id", "placed_at", "details").
+		From("order_details").Where(sq.Eq{"order_id": id}), &customerID, &marketID, &placedAt, &raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return orderdetails.Details{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, id)
 	}
 	if err != nil {
 		return orderdetails.Details{}, fmt.Errorf("read details of %s: %w", id, err)
 	}
-	return decodeDetails(id, customerID, placedAt, raw)
+	return decodeDetails(id, customerID, marketID, placedAt, raw)
 }
 
-func decodeDetails(id order.ID, customerID order.CustomerID, placedAt time.Time, raw []byte) (orderdetails.Details, error) {
+func decodeDetails(id order.ID, customerID order.CustomerID, marketID string, placedAt time.Time, raw []byte) (orderdetails.Details, error) {
 	var doc detailsDocument
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return orderdetails.Details{}, fmt.Errorf("decode details of %s: %w", id, err)
 	}
-	return doc.details(id, customerID, placedAt)
+	return doc.details(id, customerID, marketID, placedAt)
 }
 
-// ListCustomerOrders pages the projection by (placed_at desc, order_id desc)
-// with a keyset cursor.
+// ListCustomerOrders pages the projection of one Customer in one Market by
+// (placed_at desc, order_id desc) with a keyset cursor, on the index
+// order_details_customer_market_history.
 func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Rows, error) {
 	query := psql.Select("order_id", "placed_at", "details").
-		From("order_details").Where(sq.Eq{"customer_id": request.CustomerID})
+		From("order_details").Where(sq.Eq{"customer_id": request.CustomerID, "market_id": request.MarketID.String()})
 	if request.Cursor != "" {
 		placedAt, id, err := decodeCursor(request.Cursor)
 		if err != nil {
@@ -233,7 +241,7 @@ func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorde
 		if err := rows.Scan(&id, &placedAt, &raw); err != nil {
 			return listcustomerorders.Rows{}, fmt.Errorf("scan order details: %w", err)
 		}
-		details, err := decodeDetails(id, request.CustomerID, placedAt, raw)
+		details, err := decodeDetails(id, request.CustomerID, request.MarketID.String(), placedAt, raw)
 		if err != nil {
 			return listcustomerorders.Rows{}, err
 		}

@@ -9,6 +9,8 @@ message Restaurant {
   // The pickup address is dropped from the project.
   reserved 4;
   reserved "address";
+  // Market of the Restaurant (ADR 41); immutable.
+  string market_id = 5;
 }
 
 // Exact amount: a decimal string with a dot separator and an ISO 4217 currency.

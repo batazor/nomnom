@@ -15,6 +15,7 @@ var (
 	ErrPlacedAtRequired          = errors.New("order placement requires placed_at")
 	ErrInvalidCancellationReason = errors.New("cancellation reason requires a known outcome and a code")
 	ErrInvalidSnapshot           = errors.New("invalid order snapshot")
+	ErrMarketRequired            = fmt.Errorf("%w: order requires a market_id", vo.ErrInvalidMarketID)
 )
 
 type ID string
@@ -54,6 +55,7 @@ type Order struct {
 	id           ID
 	customerID   CustomerID
 	restaurantID RestaurantID
+	marketID     vo.MarketID
 	items        []Item
 	total        vo.Money
 	placedAt     time.Time
@@ -66,13 +68,19 @@ type Order struct {
 	events       []DomainEvent
 }
 
-// New builds an Order without recording a domain event; use Place for a new placement.
+// New builds an Order without recording a domain event; use Place for a new
+// placement. marketID is the Market of the Restaurant (ADR 41): required and
+// immutable for the life of the Order.
 func New(
 	id ID,
 	customerID CustomerID,
 	restaurantID RestaurantID,
+	marketID vo.MarketID,
 	items []Item,
 ) (*Order, error) {
+	if marketID.IsZero() {
+		return nil, ErrMarketRequired
+	}
 	total, err := calculateTotal(items)
 	if err != nil {
 		return nil, err
@@ -81,17 +89,20 @@ func New(
 		id:           id,
 		customerID:   customerID,
 		restaurantID: restaurantID,
+		marketID:     marketID,
 		items:        append([]Item(nil), items...),
 		total:        total,
 		state:        StatePlaced,
 	}, nil
 }
 
-// Place creates a placed Order from a verified catalog snapshot and records OrderPlaced.
+// Place creates a placed Order from a verified catalog snapshot and records
+// OrderPlaced; marketID is the Market of the Restaurant in that snapshot.
 func Place(
 	id ID,
 	customerID CustomerID,
 	restaurantID RestaurantID,
+	marketID vo.MarketID,
 	items []Item,
 	placedAt time.Time,
 	orderability OrderabilityContext,
@@ -99,7 +110,7 @@ func Place(
 	if placedAt.IsZero() {
 		return nil, ErrPlacedAtRequired
 	}
-	order, err := New(id, customerID, restaurantID, items)
+	order, err := New(id, customerID, restaurantID, marketID, items)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +122,7 @@ func Place(
 		OrderID:      id,
 		CustomerID:   customerID,
 		RestaurantID: restaurantID,
+		MarketID:     marketID,
 		Total:        order.total,
 		PlacedAt:     placedAt,
 		Items:        order.Items(),
@@ -167,7 +179,7 @@ func (o *Order) Complete(completedAt time.Time) (TransitionResult, error) {
 	if err != nil {
 		return TransitionResult{}, err
 	}
-	o.events = append(o.events, OrderCompleted{OrderID: o.id, PlacedAt: o.placedAt, CompletedAt: completedAt})
+	o.events = append(o.events, OrderCompleted{OrderID: o.id, MarketID: o.marketID, PlacedAt: o.placedAt, CompletedAt: completedAt})
 	return result, nil
 }
 
@@ -186,6 +198,7 @@ func (o *Order) Version() uint64                        { return o.version }
 func (o *Order) Total() vo.Money                        { return o.total }
 func (o *Order) CustomerID() CustomerID                 { return o.customerID }
 func (o *Order) RestaurantID() RestaurantID             { return o.restaurantID }
+func (o *Order) MarketID() vo.MarketID                  { return o.marketID }
 func (o *Order) PlacedAt() time.Time                    { return o.placedAt }
 func (o *Order) CancellationReason() CancellationReason { return o.cancellation }
 func (o *Order) CancelledAt() time.Time                 { return o.cancelledAt }

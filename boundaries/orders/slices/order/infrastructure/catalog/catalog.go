@@ -26,6 +26,11 @@ import (
 // than one currency, so no Order total can be computed.
 var ErrMixedCurrencies = fmt.Errorf("%w: menu prices items in more than one currency", vo.ErrInvalidValue)
 
+// ErrInvalidRestaurant means restaurants returned a Restaurant that breaks its
+// contract, such as one without a valid market_id. It is not invalid input of
+// Place Order.
+var ErrInvalidRestaurant = errors.New("restaurant violates the restaurants contract")
+
 // Limits are the order total limits in the currency of the menu.
 type Limits struct {
 	MinimumTotal decimal.Decimal
@@ -57,6 +62,13 @@ func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID,
 	if err != nil {
 		return placeorder.CatalogSnapshot{}, mapError("restaurants.GetRestaurant", restaurantID, err)
 	}
+	// The Order is placed in the Market of the Restaurant (ADR 41); restaurants
+	// always publishes it, so a missing or malformed market_id is a broken
+	// contract of the dependency, never a Market chosen here.
+	marketID, err := vo.NewMarketID(restaurant.GetRestaurant().GetMarketId())
+	if err != nil {
+		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q: %w: %v", restaurantID, ErrInvalidRestaurant, err)
+	}
 	if !restaurant.GetRestaurant().GetIsOpen() {
 		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurant %q: %w", restaurantID, placeorder.ErrRestaurantNotAcceptingOrders)
 	}
@@ -65,7 +77,12 @@ func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID,
 	if err != nil {
 		return placeorder.CatalogSnapshot{}, mapError("restaurants.GetMenu", restaurantID, err)
 	}
-	return c.snapshot(restaurantID, menu.GetItems(), menuItemIDs)
+	snapshot, err := c.snapshot(restaurantID, menu.GetItems(), menuItemIDs)
+	if err != nil {
+		return placeorder.CatalogSnapshot{}, err
+	}
+	snapshot.MarketID = marketID
+	return snapshot, nil
 }
 
 // snapshot keeps only the requested Menu Items: items missing from the menu

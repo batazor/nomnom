@@ -10,6 +10,10 @@ _Avoid_: Driver, delivery agent
 
 _Допущение_: курьер — пользователь платформы с тем же идентификатором (`courier_id` = `user_id`). Поэтому Register Courier пишет `courier:<id>#self@user:<id>`, а назначение — `delivery:<id>#courier@user:<courier_id>`.
 
+**Market**:
+Город, в котором работает доставка (ADR 41): курьер работает в одном Market, доставка принадлежит Market заказа. Курьеру предлагаются и назначаются только доставки его Market. `market_id` задаётся при регистрации курьера и создании доставки и не меняется.
+_Avoid_: City (в коде), region, tenant, zone
+
 **Courier Availability**:
 Может ли курьер получать новые назначения: доступен, занят доставкой или вне линии.
 _Avoid_: Location, shift

@@ -56,7 +56,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			order, err := Place("order-1", "customer-1", "restaurant-1", items, tt.placedAt, tt.context)
+			order, err := Place("order-1", "customer-1", "restaurant-1", testMarket(t), items, tt.placedAt, tt.context)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 				return
@@ -79,6 +79,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 				OrderID:      "order-1",
 				CustomerID:   "customer-1",
 				RestaurantID: "restaurant-1",
+				MarketID:     testMarket(t),
 				Total:        mustPolicyMoney(t, "20"),
 				PlacedAt:     testNow,
 				Items:        items,
@@ -93,7 +94,7 @@ func TestCompleteRecordsOrderCompletedOnce(t *testing.T) {
 	completedAt := testNow.Add(time.Hour)
 	_, err := order.Complete(completedAt)
 	require.NoError(t, err)
-	assert.Equal(t, []DomainEvent{OrderCompleted{OrderID: "order-1", PlacedAt: testNow, CompletedAt: completedAt}}, order.PullEvents())
+	assert.Equal(t, []DomainEvent{OrderCompleted{OrderID: "order-1", MarketID: testMarket(t), PlacedAt: testNow, CompletedAt: completedAt}}, order.PullEvents())
 
 	_, err = order.Complete(completedAt.Add(time.Minute))
 	var already AlreadyInState

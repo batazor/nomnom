@@ -15,16 +15,18 @@ import {
 } from "../../domains/menu/menu.ts";
 
 export const MENUS_COLLECTION = "menus";
-export const MENU_SCHEMA_VERSION = 1;
+export const MENU_SCHEMA_VERSION = 2;
 
 /**
  * One document per Menu aggregate with its Menu Items embedded: they are read
  * and changed together and the item count is bounded by one restaurant menu.
- * At most one Menu per restaurant (unique `restaurantId`). Money is stored as
+ * At most one Menu per restaurant (unique `restaurantId`); `marketId` is the
+ * Market of the restaurant (ADR 41, required since schemaVersion 2). Money is stored as
  * a decimal string with currency, never as a binary float.
  */
 export type MenuDocument = VersionedDocument & {
   restaurantId: string;
+  marketId: string;
   items: {
     id: string;
     name: string;
@@ -37,6 +39,7 @@ export type MenuDocument = VersionedDocument & {
 const toSnapshot = (document: MenuDocument): MenuSnapshot => ({
   id: document._id,
   restaurantId: document.restaurantId,
+  marketId: document.marketId,
   items: document.items.map((item) => ({
     id: item.id,
     name: item.name,
@@ -80,6 +83,7 @@ export class DatabaseMenuRepository implements MenuRepository {
     return this.#collection.save(menu.id, menu.version, {
       schemaVersion: MENU_SCHEMA_VERSION,
       restaurantId: snapshot.restaurantId,
+      marketId: snapshot.marketId,
       items: snapshot.items.map((item) => ({
         id: item.id,
         name: item.name,

@@ -1,5 +1,6 @@
 import { Link, Outlet } from "react-router-dom";
 
+import { MarketSwitcher, WhenMarketChosen } from "../features/choose-market";
 import { SimulatorToggle } from "../features/demo-simulator";
 import { useI18n } from "../shared/i18n/i18n";
 
@@ -18,8 +19,11 @@ export function AppLayout() {
           </span>
         </Link>
         <div className="app-topbar-end">
-          <span className="location-label">{t("app.location")}</span>
-          <SimulatorToggle />
+          <MarketSwitcher />
+          {/* The Simulator lives in the Cell of the Market. */}
+          <WhenMarketChosen>
+            <SimulatorToggle />
+          </WhenMarketChosen>
         </div>
       </header>
       <div className="app-sheet">

@@ -7,8 +7,10 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   PreparationDelayedSchema,
   PreparationFailedSchema,
+  PreparationStartedSchema,
   RestaurantOrderAcceptedSchema,
   RestaurantOrderCancelledSchema,
+  RestaurantOrderReadySchema,
   RestaurantOrderRejectedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import {
@@ -26,6 +28,7 @@ const base = {
   restaurantOrderId: "ro-1",
   orderId: "order-1",
   restaurantId: "rest-1",
+  marketId: "berlin",
   occurredAt: new Date("2026-10-25T09:00:00.000Z"),
 };
 const at = new Date("2026-10-25T09:30:00.000Z");
@@ -54,6 +57,7 @@ test("AC-769 maps RestaurantOrderAccepted with expected_ready_at to its contract
   );
   const payload = fromBinary(RestaurantOrderAcceptedSchema, mapped.payload);
   assert.equal(payload.orderId, "order-1");
+  assert.equal(payload.marketId, "berlin");
   assert.ok(payload.expectedReadyAt !== undefined);
   assert.deepEqual(timestampDate(payload.expectedReadyAt), expectedReadyAt);
 });
@@ -121,6 +125,32 @@ test("PreparationStarted and RestaurantOrderReady are published", () => {
     map({ ...base, type: "RestaurantOrderReady", readyAt: at }).eventType,
     "nomnom.restaurants.v1.RestaurantOrderReady",
   );
+});
+
+test("ADR 41 every published Kitchen Order fact carries the Market of the order", () => {
+  const schemas = {
+    RestaurantOrderAccepted: RestaurantOrderAcceptedSchema,
+    RestaurantOrderRejected: RestaurantOrderRejectedSchema,
+    PreparationStarted: PreparationStartedSchema,
+    PreparationDelayed: PreparationDelayedSchema,
+    RestaurantOrderFailed: PreparationFailedSchema,
+    RestaurantOrderReady: RestaurantOrderReadySchema,
+    RestaurantOrderCancelled: RestaurantOrderCancelledSchema,
+  } as const;
+  for (const [type, schema] of Object.entries(schemas)) {
+    const mapped = map({
+      ...base,
+      type,
+      acceptedAt: at,
+      expectedReadyAt: at,
+      preparationStartedAt: at,
+      readyAt: at,
+      stage: RestaurantOrderState.Preparing,
+      preparationStarted: false,
+      reason: "reason",
+    });
+    assert.equal(fromBinary(schema, mapped.payload).marketId, "berlin", type);
+  }
 });
 
 test("events without a contract are not published", () => {

@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
@@ -31,6 +32,7 @@ type restaurantsServer struct {
 	open   bool
 	err    error
 	got    string
+	market string
 	seenMD metadata.MD
 }
 
@@ -63,6 +65,7 @@ func (s *restaurantsServer) CloseRestaurant(ctx context.Context, request *restau
 func (s *restaurantsServer) ListOwnedRestaurants(ctx context.Context, request *restaurantsv1.ListOwnedRestaurantsRequest) (*restaurantsv1.ListOwnedRestaurantsResponse, error) {
 	s.seenMD, _ = metadata.FromIncomingContext(ctx)
 	s.got = request.GetPageToken()
+	s.market = request.GetMarketId()
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -94,8 +97,10 @@ func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 	return NewRestaurants(conn)
 }
 
+// ownerContext is a request of owner-1 in Market berlin.
 func ownerContext() context.Context {
-	return identity.WithUser(context.Background(), identity.User{ID: "owner-1"})
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(cellrouter.MarketMetadata, "berlin"))
+	return identity.WithUser(ctx, identity.User{ID: "owner-1"})
 }
 
 // The commands go to restaurants on behalf of the user: service token and
@@ -155,6 +160,7 @@ func TestListOwnedCarriesUserAssertion(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "restaurant-1", server.got)
+	assert.Equal(t, "berlin", server.market, "the list is of the request Market")
 	assert.Equal(t, applications.OwnedPage{
 		Restaurants: []applications.Restaurant{{ID: "restaurant-2", Name: "Пельменная"}},
 		NextCursor:  "restaurant-2",

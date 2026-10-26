@@ -2,7 +2,7 @@ import unittest
 from typing import override
 
 import pytest
-from payment_fakes import ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
 from pkg.application import AggregateRef, AuthorizationUnavailableError, PermissionDeniedError
@@ -69,7 +69,11 @@ class AuthorizePaymentTest(unittest.TestCase):
         )
         self.assertEqual(
             self.kit.published(),
-            [PaymentAuthorized(self.payment_id, OrderId("order-1"), Money.parse("25.00", "EUR"))],
+            [
+                PaymentAuthorized(
+                    self.payment_id, OrderId("order-1"), MARKET, Money.parse("25.00", "EUR")
+                )
+            ],
         )
 
     def test_ac_405_declined_authorization_fails_payment(self) -> None:
@@ -89,7 +93,7 @@ class AuthorizePaymentTest(unittest.TestCase):
                 PaymentOperationDeclined(
                     result.operation_id, self.payment_id, OperationKind.AUTHORIZE, "card_declined"
                 ),
-                PaymentFailed(self.payment_id, OrderId("order-1"), "card_declined"),
+                PaymentFailed(self.payment_id, OrderId("order-1"), MARKET, "card_declined"),
             ],
         )
 

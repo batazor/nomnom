@@ -63,6 +63,8 @@ message Order {
   google.protobuf.Timestamp expected_ready_at = 12;
   google.protobuf.Timestamp expected_pickup_at = 13;
   google.protobuf.Timestamp expected_delivered_at = 14;
+  // Market of the Restaurant at Place Order (ADR 41); immutable.
+  string market_id = 15;
 }
 
 message OrderSummary {

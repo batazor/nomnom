@@ -49,16 +49,19 @@ import {
 import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
 
 export const RESTAURANT_ORDERS_COLLECTION = "restaurant_orders";
-export const RESTAURANT_ORDER_SCHEMA_VERSION = 2;
+export const RESTAURANT_ORDER_SCHEMA_VERSION = 3;
 
 /**
  * One document per Restaurant Order with its Preparation Items and timeline
  * embedded (bounded by one order). It references Restaurant and the `orders`
- * Order only by id; `orderId` is unique (idempotent Receive).
+ * Order only by id; `orderId` is unique (idempotent Receive). `marketId` is
+ * the Market of the restaurant that received it (ADR 41, required since
+ * schemaVersion 3).
  */
 export type RestaurantOrderDocument = VersionedDocument & {
   orderId: string;
   restaurantId: string;
+  marketId: string;
   items: { menuItemId: string; quantity: number; options: string[] }[];
   state: RestaurantOrderState;
   timeline: {
@@ -82,6 +85,7 @@ const toSnapshot = (
   id: document._id,
   orderId: document.orderId,
   restaurantId: document.restaurantId,
+  marketId: document.marketId,
   items: document.items.map((item) => ({
     menuItemId: item.menuItemId,
     quantity: item.quantity,
@@ -150,6 +154,7 @@ export class DatabaseRestaurantOrderRepository
           schemaVersion: RESTAURANT_ORDER_SCHEMA_VERSION,
           orderId: snapshot.orderId,
           restaurantId: snapshot.restaurantId,
+          marketId: snapshot.marketId,
           items: snapshot.items.map((item) => ({
             menuItemId: item.menuItemId,
             quantity: item.quantity,
@@ -347,6 +352,7 @@ export class DatabaseKitchenBoard
     return documents.map((document) => ({
       restaurantOrderId: document._id,
       restaurantId: document.restaurantId,
+      marketId: document.marketId,
       state: document.state as PendingKitchenOrder["state"],
       expectedReadyAt: document.timeline.expectedReadyAt,
     }));

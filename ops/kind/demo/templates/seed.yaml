@@ -2,9 +2,11 @@
 # через ttlSecondsAfterFinished и pod между deploy не держит. Не Helm hook: hook держал бы
 # helm до конца Job, а internal gateway Skaffold применяет уже после charts — Job ждёт его
 # повторами (seed.py, backoffLimit). ServiceAccount nomnom-bff/demo-seed допущен allowlist и
-# userDelegates restaurants и delivery только в kind (values/restaurants.yaml,
-# values/delivery.yaml): Job вызывает их через internal gateway от имени оператора, владельца
-# и курьера с user assertion, подписанным ключом BFF (ADR 32).
+# userDelegates restaurants, delivery и controlplane только в kind (values/restaurants.yaml,
+# values/delivery.yaml, values/controlplane.yaml): Job вызывает их через internal gateway от
+# имени оператора, владельца и курьера с user assertion, подписанным ключом BFF (ADR 32).
+# Сначала оператор регистрирует Cell cell-1 и Market berlin (ADR 41): bootstrap chart ставится
+# до charts приложений и control plane не застаёт, а этот Job ждёт gateway повторами.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -81,6 +83,11 @@ spec:
               - serviceAccountToken:
                   audience: nomnom.delivery
                   path: nomnom.delivery
+                  expirationSeconds: 3600
+              # ADR 41: RegisterCell и CreateMarket (values/controlplane.yaml).
+              - serviceAccountToken:
+                  audience: nomnom.controlplane
+                  path: nomnom.controlplane
                   expirationSeconds: 3600
         - name: assertion-key
           secret:

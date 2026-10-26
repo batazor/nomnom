@@ -1,5 +1,6 @@
 //! Find Courier: the assignment process selects the nearest available and
-//! eligible courier for a waiting Delivery, or reports that there is none.
+//! eligible courier of the Delivery's Market (ADR 41) for a waiting Delivery,
+//! or reports that there is none.
 //! No offer or assignment is created and no state changes.
 //!
 //! [`select_candidate`] is the application service without authorization;
@@ -130,8 +131,8 @@ pub fn select_candidate(
 
     let mut eligible = Vec::new();
     let mut rejections = Vec::new();
-    for candidate in locator.candidates()? {
-        match evaluate(&candidate, &offered, couriers, policy)? {
+    for candidate in locator.candidates(delivery.market_id())? {
+        match evaluate(delivery, &candidate, &offered, couriers, policy)? {
             Some(reason) => rejections.push(CandidateRejection {
                 courier_id: candidate.courier_id,
                 reason,
@@ -157,8 +158,12 @@ pub fn select_candidate(
     })
 }
 
-/// Returns why the candidate cannot be selected, or `None` if it can.
+/// Returns why the candidate cannot be selected, or `None` if it can. A
+/// courier of another Market is never selectable (ADR 41): the
+/// `CourierEligibleForDelivery` specification checks the candidate's Market
+/// and the `courier` slice port the registered courier's.
 fn evaluate(
+    delivery: &Delivery,
     candidate: &CourierCandidate,
     offered: &HashSet<CourierId>,
     couriers: &dyn CourierAssignment,
@@ -167,7 +172,24 @@ fn evaluate(
     if offered.contains(&candidate.courier_id) {
         return Ok(Some(CandidateRejectionReason::AlreadyOffered));
     }
-    match couriers.ensure_available(&candidate.courier_id) {
+    let eligibility = courier_eligible_for_delivery(CourierEligibilityContext {
+        delivery_market_id: delivery.market_id(),
+        courier_market_id: &candidate.market_id,
+        within_delivery_zone: candidate.within_delivery_zone,
+        distance_to_pickup_meters: candidate.distance_to_pickup_meters,
+        maximum_distance_meters: policy.maximum_distance_meters,
+        active_assignments: candidate.active_assignments,
+        maximum_active_assignments: policy.maximum_active_assignments,
+    });
+    if eligibility
+        .reasons
+        .contains(&CourierEligibilityReason::OtherMarket)
+    {
+        return Ok(Some(CandidateRejectionReason::Ineligible(
+            eligibility.reasons,
+        )));
+    }
+    match couriers.ensure_available(&candidate.courier_id, delivery.market_id()) {
         Ok(()) => {}
         Err(CourierAssignmentError::CourierNotFound(_)) => {
             return Ok(Some(CandidateRejectionReason::CourierNotRegistered));
@@ -177,13 +199,6 @@ fn evaluate(
         }
         Err(error @ CourierAssignmentError::Repository(_)) => return Err(error.into()),
     }
-    let eligibility = courier_eligible_for_delivery(CourierEligibilityContext {
-        within_delivery_zone: candidate.within_delivery_zone,
-        distance_to_pickup_meters: candidate.distance_to_pickup_meters,
-        maximum_distance_meters: policy.maximum_distance_meters,
-        active_assignments: candidate.active_assignments,
-        maximum_active_assignments: policy.maximum_active_assignments,
-    });
     if eligibility.satisfied() {
         Ok(None)
     } else {

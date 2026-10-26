@@ -86,6 +86,7 @@ mod tests {
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierId;
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::delivery::applications::authorization::DeliveryResource;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -139,6 +140,7 @@ mod tests {
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
                 expected_delivered_at_epoch_seconds: None,
+                market_id: MarketId::new("berlin").expect("market id"),
             })]
         );
     }
@@ -168,6 +170,7 @@ mod tests {
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
                 expected_delivered_at_epoch_seconds: Some(NOW + 900),
+                market_id: MarketId::new("berlin").expect("market id"),
             })]
         );
     }

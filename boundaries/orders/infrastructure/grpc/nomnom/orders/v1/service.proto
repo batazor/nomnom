@@ -31,6 +31,8 @@ message ListCustomerOrdersRequest {
   string customer_id = 1;
   int32 page_size = 2;
   string page_token = 3;
+  // Required (ADR 41): only Orders of this Market.
+  string market_id = 4;
 }
 
 message ListCustomerOrdersResponse {

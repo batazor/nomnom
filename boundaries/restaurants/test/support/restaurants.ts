@@ -31,6 +31,10 @@ export const stranger: Subject = { type: "user", id: "stranger" };
 
 export const startOfDay = new Date(Date.UTC(2026, 9, 25, 9));
 
+/** Launch Market of the tests (ADR 41) and a second one that must not mix. */
+export const market = "berlin";
+export const otherMarket = "hamburg";
+
 /**
  * Shared infrastructure of the `restaurants` boundary for tests: a fresh
  * MongoDB database with its Unit of Work and recording Outbox.
@@ -85,15 +89,19 @@ export const createRestaurantWorld = async (
   const assignStaff = new AssignStaffHandler(changeStaff);
   const revokeStaff = new RevokeStaffHandler(changeStaff);
 
-  /** Registers a restaurant owned by {@link owner}, optionally opened. */
+  /**
+   * Registers a restaurant owned by {@link owner} in {@link market} unless
+   * another Market is named, optionally opened.
+   */
   const givenRestaurant = async (
     name: string,
-    state: { open: boolean } = { open: true },
+    state: { open: boolean; marketId?: string } = { open: true },
   ): Promise<string> => {
     const { restaurantId } = await register.execute({
       subject: operator,
       name,
       ownerId: owner.id,
+      marketId: state.marketId ?? market,
     });
     if (state.open) {
       await open.execute({ subject: owner, restaurantId });

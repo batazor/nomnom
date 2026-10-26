@@ -297,6 +297,7 @@ impl ObservedOutbox {
             order_id,
             courier_id,
             reason,
+            ..
         } = event
         {
             log.record(&ReportedFailure {

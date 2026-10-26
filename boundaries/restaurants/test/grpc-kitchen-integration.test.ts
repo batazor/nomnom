@@ -112,6 +112,7 @@ describe("kitchen command RPCs over MongoDB", () => {
       id: restaurantId,
       name: "Pho House",
       ownerId: "owner",
+      marketId: "berlin",
       registeredAt: clock.now(),
     });
     restaurant.open(clock.now());
@@ -119,6 +120,7 @@ describe("kitchen command RPCs over MongoDB", () => {
     const menu = Menu.create({
       id: `m-${randomUUID()}`,
       restaurantId,
+      marketId: "berlin",
       createdAt: clock.now(),
     });
     menu.addItem({

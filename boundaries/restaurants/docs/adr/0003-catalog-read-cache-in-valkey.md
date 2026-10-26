@@ -25,7 +25,7 @@ Order и так читает каталог до своей транзакции
 | --- | --- | --- |
 | `GetRestaurant` (`RestaurantView`) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed` |
 | `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` |
-| `ListRestaurants` (страница) | `restaurants:list:<поколение>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed` (новое поколение) |
+| `ListRestaurants` (страница) | `restaurants:list:<поколение Market>:<marketId>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed` (новое поколение Market ресторана) |
 
 `ListOwnedRestaurants`, кухонные чтения и команды кеш не используют. Отсутствующий ресторан или
 меню (`NOT_FOUND`) не кешируется.
@@ -43,7 +43,10 @@ Outbox и Debezium: `RestaurantOpened`/`RestaurantClosed` (`restaurants.v1.resta
 своей consumer group `CACHE__REFRESH_GROUP` (`restaurants-cache`, новая группа начинает с конца
 стрима; `pkg/infrastructure/valkey/refresh.ts`), перечитывает ресторан или меню из MongoDB уже
 после commit и перезаписывает ключ обычным `SET` с TTL. Для ресторана ещё увеличивается
-поколение страниц списка (`INCR restaurants:list:generation:pages`): страницу, где ресторан
+поколение страниц списка его Market (`INCR restaurants:list:generation:pages:<marketId>`, Market — из
+сохранённого ресторана; [ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md):
+Market входит в ключ и в поколение, поэтому страницы разных Market не смешиваются, а изменение
+ресторана сбрасывает только страницы его Market): страницу, где ресторан
 лежит, по одному ключу не найти, а страницы старого поколения больше не читаются и истекают по
 TTL.
 

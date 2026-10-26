@@ -26,6 +26,7 @@ import { createTestDatabase, noKitchenChanges } from "./support/database.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 import {
   FixedClock,
+  market,
   SequentialIdGenerator,
   startOfDay,
 } from "./support/restaurants.ts";
@@ -159,6 +160,7 @@ describe("SpiceDB restaurant relationships", () => {
       subject: operator,
       name: "Pho",
       ownerId: owner.id,
+      marketId: market,
     });
 
     assert.ok(
@@ -179,6 +181,7 @@ describe("SpiceDB restaurant relationships", () => {
       subject: operator,
       name: "Pho",
       ownerId: owner.id,
+      marketId: market,
     });
     assert.equal(
       await adapter.canOperateKitchen(cookSubject, restaurantId),
@@ -227,6 +230,7 @@ describe("SpiceDB restaurant relationships", () => {
       subject: operator,
       name: "Pho",
       ownerId: owner.id,
+      marketId: market,
     });
     const writer = new SpiceDbRelationshipWriter({
       client: spicedb(),

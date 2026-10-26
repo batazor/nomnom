@@ -9,6 +9,7 @@ from infrastructure.messaging.events import events_pb2
 from infrastructure.repository import EVENT_ID_NAMESPACE, PAYMENT_EVENTS_TOPIC, outbox_event_id
 from pkg.application import AggregateRef
 from slices.payment.domains.payment import (
+    MarketId,
     Money,
     OperationId,
     OperationKind,
@@ -25,6 +26,7 @@ from slices.payment.domains.payment import (
 AGGREGATE = AggregateRef("Payment", "payment-1", 3)
 PAYMENT = PaymentId("payment-1")
 ORDER = OrderId("order-1")
+MARKET = MarketId("berlin")
 AMOUNT = Money.parse("25.50", "EUR")
 
 
@@ -35,13 +37,13 @@ class PaymentEventsMapperTest(unittest.TestCase):
 
     def test_amount_events_map_to_their_contracts(self) -> None:
         cases = [
-            (PaymentAuthorized(PAYMENT, ORDER, AMOUNT), events_pb2.PaymentAuthorized),
-            (PaymentCaptured(PAYMENT, ORDER, AMOUNT), events_pb2.PaymentCaptured),
+            (PaymentAuthorized(PAYMENT, ORDER, MARKET, AMOUNT), events_pb2.PaymentAuthorized),
+            (PaymentCaptured(PAYMENT, ORDER, MARKET, AMOUNT), events_pb2.PaymentCaptured),
             (
-                PaymentAuthorizationCancelled(PAYMENT, ORDER, AMOUNT),
+                PaymentAuthorizationCancelled(PAYMENT, ORDER, MARKET, AMOUNT),
                 events_pb2.PaymentAuthorizationCancelled,
             ),
-            (PaymentRefunded(PAYMENT, ORDER, AMOUNT), events_pb2.PaymentRefunded),
+            (PaymentRefunded(PAYMENT, ORDER, MARKET, AMOUNT), events_pb2.PaymentRefunded),
         ]
         for event, contract in cases:
             with self.subTest(contract=contract.DESCRIPTOR.full_name):
@@ -54,17 +56,18 @@ class PaymentEventsMapperTest(unittest.TestCase):
                 decoded = contract.FromString(message.payload)
                 self.assertEqual(decoded.payment_id, "payment-1")
                 self.assertEqual(decoded.order_id, "order-1")
+                self.assertEqual(decoded.market_id, "berlin")
                 self.assertEqual(decoded.amount.amount, "25.50")
                 self.assertEqual(decoded.amount.currency, "EUR")
 
     def test_failed_carries_reason(self) -> None:
-        message = self.mapper.map(AGGREGATE, PaymentFailed(PAYMENT, ORDER, "card_declined"))
+        message = self.mapper.map(AGGREGATE, PaymentFailed(PAYMENT, ORDER, MARKET, "card_declined"))
         assert message is not None
         self.assertEqual(message.event_type, "nomnom.payments.v1.PaymentFailed")
         decoded = events_pb2.PaymentFailed.FromString(message.payload)
         self.assertEqual(
-            (decoded.payment_id, decoded.order_id, decoded.reason),
-            ("payment-1", "order-1", "card_declined"),
+            (decoded.payment_id, decoded.order_id, decoded.market_id, decoded.reason),
+            ("payment-1", "order-1", "berlin", "card_declined"),
         )
 
     def test_operation_declined_is_not_published(self) -> None:

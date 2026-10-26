@@ -37,6 +37,8 @@ func setup(t *testing.T) (listcustomerorders.Handler, *fake.Authorizer) {
 		require.NoError(t, store.Add(ctx, ordertest.New(t, id, ordertest.WithPlacedAt(placedAt))))
 	}
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-x", ordertest.WithCustomer("customer-2"))))
+	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-h", ordertest.WithMarket("hamburg"),
+		ordertest.WithPlacedAt(ordertest.PlacedAt.Add(time.Hour+30*time.Minute)))))
 	authorizer := fake.NewAuthorizer()
 	policy, err := cancellationpolicy.NewFixed(window)
 	require.NoError(t, err)
@@ -55,10 +57,10 @@ func ids(page listcustomerorders.Page) []order.ID {
 func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 	handler, authorizer := setup(t)
 
-	first, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", Limit: 2})
+	first, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Limit: 2})
 	require.NoError(t, err)
 	second, err := handler.Handle(context.Background(), listcustomerorders.Query{
-		Subject: customer, CustomerID: "customer-1", Limit: 2, Cursor: first.NextCursor,
+		Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Limit: 2, Cursor: first.NextCursor,
 	})
 	require.NoError(t, err)
 
@@ -72,6 +74,7 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 		Details: orderdetails.Details{
 			OrderID:      "order-a",
 			CustomerID:   "customer-1",
+			MarketID:     ordertest.MarketID(t),
 			RestaurantID: "restaurant-1",
 			Items:        []orderdetails.Item{{MenuItemID: "menu-1", Name: "Margherita", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
 			Total:        ordertest.Money(t, "20"),
@@ -90,10 +93,10 @@ func TestListOtherCustomerOrdersRequiresPermission(t *testing.T) {
 	authorizer.Allow(support, listcustomerorders.PermissionViewOrders,
 		application.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"})
 
-	_, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: stranger, CustomerID: "customer-1"})
+	_, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: stranger, CustomerID: "customer-1", MarketID: ordertest.Market})
 	require.ErrorIs(t, err, application.ErrPermissionDenied)
 
-	page, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: support, CustomerID: "customer-1"})
+	page, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: support, CustomerID: "customer-1", MarketID: ordertest.Market})
 	require.NoError(t, err)
 	assert.Equal(t, []order.ID{"order-c", "order-b", "order-a"}, ids(page))
 }
@@ -104,10 +107,12 @@ func TestListCustomerOrdersValidatesQuery(t *testing.T) {
 		name  string
 		query listcustomerorders.Query
 	}{
-		{name: "no customer", query: listcustomerorders.Query{Subject: customer}},
-		{name: "negative limit", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", Limit: -1}},
-		{name: "limit above maximum", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", Limit: listcustomerorders.MaxLimit + 1}},
-		{name: "malformed cursor", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", Cursor: "?"}},
+		{name: "no customer", query: listcustomerorders.Query{Subject: customer, MarketID: ordertest.Market}},
+		{name: "no market", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1"}},
+		{name: "malformed market", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: "Berlin"}},
+		{name: "negative limit", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Limit: -1}},
+		{name: "limit above maximum", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Limit: listcustomerorders.MaxLimit + 1}},
+		{name: "malformed cursor", query: listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Cursor: "?"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -115,4 +120,23 @@ func TestListCustomerOrdersValidatesQuery(t *testing.T) {
 			require.ErrorIs(t, err, application.ErrInvalidInput)
 		})
 	}
+}
+
+// ADR 41: the history of a Customer is read per Market; Orders of another
+// Market are not on its pages.
+func TestListCustomerOrdersFiltersByMarket(t *testing.T) {
+	handler, _ := setup(t)
+
+	hamburg, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: "hamburg"})
+	require.NoError(t, err)
+	assert.Equal(t, []order.ID{"order-h"}, ids(hamburg))
+	assert.Equal(t, "hamburg", hamburg.Orders[0].MarketID.String())
+
+	first, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Limit: 2})
+	require.NoError(t, err)
+	assert.Equal(t, []order.ID{"order-c", "order-b"}, ids(first), "order-h sits between them by placed_at but is in another Market")
+
+	empty, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: "paris"})
+	require.NoError(t, err)
+	assert.Empty(t, empty.Orders)
 }

@@ -320,7 +320,7 @@ composition root
 
 ## Текущее состояние
 
-Charts `orders`, `restaurants`, `delivery` и `payments` соответствуют contract: технический порт `metrics`, `startupProbe`/`livenessProbe`/`readinessProbe` на `/health/*`, передача `MANAGEMENT__PORT` и `SHUTDOWN__*` в контейнер и `terminationGracePeriodSeconds`, который chart проверяет против суммы readiness delay и drain timeout. Модель NetworkPolicy из ADR 16 уже соответствует contract.
+Charts `orders`, `restaurants`, `delivery`, `payments` и `controlplane` соответствуют contract: технический порт `metrics`, `startupProbe`/`livenessProbe`/`readinessProbe` на `/health/*`, передача `MANAGEMENT__PORT` и `SHUTDOWN__*` в контейнер и `terminationGracePeriodSeconds`, который chart проверяет против суммы readiness delay и drain timeout. Модель NetworkPolicy из ADR 16 уже соответствует contract.
 
 BFF использует сторонний Cosmo Router, который сам управляет health endpoints, shutdown и процессом router plugin. Для BFF contract применяется в пределах конфигурации Cosmo Router; невозможность вынести health на технический порт или иное расхождение фиксируется как явное исключение в документации BFF.
 

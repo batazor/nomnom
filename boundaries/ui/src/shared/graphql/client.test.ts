@@ -70,4 +70,31 @@ describe("GraphQL client", () => {
       }),
     );
   });
+
+  it("routes by the Market of the viewer", async () => {
+    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: { bffInfo: { name: "BFF" } } }), {
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    let market: string | undefined;
+    const client = createGraphqlClient({
+      url: "https://public.example.test/graphql",
+      getMarket: () => market,
+    });
+
+    await client.query("query First { bffInfo { name } }", {}).toPromise();
+    market = "berlin";
+    await client.query("query Second { bffInfo { name } }", {}).toPromise();
+
+    const headersOf = (call: number) =>
+      fetchMock.mock.calls[call]?.[1]?.headers as Record<string, string>;
+    expect(headersOf(0)).not.toHaveProperty("x-nomnom-market");
+    expect(headersOf(1)).toEqual(
+      expect.objectContaining({ "x-nomnom-market": "berlin" }),
+    );
+  });
 });

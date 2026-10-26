@@ -6,7 +6,8 @@
 # Egress BFF ограничен базовыми политиками (DNS, internal gateway, telemetry). Access token
 # выпускает тестовый identity provider (ключ tests/identity/fixtures, только для kind), user
 # assertion — ключ BFF из Secret bff-assertion-key (tls.key, до cert-manager — key.pem); оба
-# подписывает scripts/mint-jwt.py.
+# подписывает scripts/mint-jwt.py. GraphQL несёт X-Nomnom-Market: berlin (ADR 41): без него BFF
+# не выбирает Cell и отклоняет запрос.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
@@ -77,7 +78,7 @@ spec:
               - name: BODY
                 value: "(to_string({query: '{ bffInfo { name version } }'}))"
             content: >-
-              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -d "$BODY"
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -d "$BODY"
             check:
               ($error): ~
               (to_string(json_parse($stdout))): '{"data":{"bffInfo":{"name":"nomnom-bff","version":"0.1.0"}}}'
@@ -88,7 +89,7 @@ spec:
               - name: BODY
                 value: "(to_string({query: join('', ['{ order(id: \"', $missing_order, '\") { id status } }'])}))"
             content: >-
-              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -d "$BODY"
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -d "$BODY"
             check:
               ($error): ~
               (json_parse($stdout).data.order): ~
@@ -110,7 +111,7 @@ spec:
               - name: BODY
                 value: "(to_string({query: join('', ['{ order(id: \"', $missing_order, '\") { id status } }'])}))"
             content: >-
-              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d "$BODY"
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -H "authorization: Bearer $TOKEN" -d "$BODY"
             check:
               ($error): ~
               (to_string(json_parse($stdout))): '{"data":{"order":null}}'

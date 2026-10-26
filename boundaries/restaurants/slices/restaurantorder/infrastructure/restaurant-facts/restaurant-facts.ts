@@ -1,15 +1,22 @@
 // Read adapters of the facts `restaurantorder` takes from the `restaurant` and
 // `menu` slices. They read the same collections through the owning slices'
 // repositories, so they join the active Unit of Work like any other read.
+import type { CookRestaurants } from "../../../cook/applications/cook-workload.ts";
 import type { MenuRepository } from "../../../menu/domains/menu/menu.ts";
-import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
+import type {
+  MarketId,
+  RestaurantRepository,
+} from "../../../restaurant/domains/restaurant/restaurant.ts";
 import type {
   AcceptanceFacts,
   AcceptanceFactsReader,
 } from "../../applications/accept-order/accept-order.ts";
-import type { RestaurantExistence } from "../../applications/receive-order-request/receive-order-request.ts";
+import type { RestaurantMarkets } from "../../applications/receive-order-request/receive-order-request.ts";
 
-export class RepositoryRestaurantExistence implements RestaurantExistence {
+/** Existence and Market of a restaurant, read from the Restaurant aggregate. */
+export class RepositoryRestaurantExistence
+  implements CookRestaurants, RestaurantMarkets
+{
   readonly #restaurants: Pick<RestaurantRepository, "get">;
 
   constructor(restaurants: Pick<RestaurantRepository, "get">) {
@@ -18,6 +25,10 @@ export class RepositoryRestaurantExistence implements RestaurantExistence {
 
   async exists(restaurantId: string): Promise<boolean> {
     return (await this.#restaurants.get(restaurantId)) !== undefined;
+  }
+
+  async marketOf(restaurantId: string): Promise<MarketId | undefined> {
+    return (await this.#restaurants.get(restaurantId))?.marketId;
   }
 }
 

@@ -13,7 +13,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{
-    Courier, CourierError, CourierId, CourierRepository, CourierStatus,
+    Courier, CourierError, CourierId, CourierRepository, CourierStatus, MarketId,
 };
 
 /// Error of the courier busyness port; causes are the ones the aggregate and
@@ -56,12 +56,22 @@ pub trait CourierAssignment {
     /// Reads the status of a registered courier without changing it.
     fn status(&self, courier_id: &CourierId) -> Result<CourierStatus, CourierAssignmentError>;
 
-    /// Checks that the courier may receive a new Delivery Offer or Assignment
-    /// without changing its state.
-    fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError>;
+    /// Checks without changing state that the courier works in `market_id`
+    /// (the Market of the Delivery, ADR 41) and may receive a new Delivery
+    /// Offer or Assignment.
+    fn ensure_available(
+        &self,
+        courier_id: &CourierId,
+        market_id: &MarketId,
+    ) -> Result<(), CourierAssignmentError>;
 
-    /// Makes an available courier busy with a Courier Assignment.
-    fn occupy(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError>;
+    /// Makes an available courier of `market_id` busy with a Courier
+    /// Assignment of a Delivery of that Market.
+    fn occupy(
+        &self,
+        courier_id: &CourierId,
+        market_id: &MarketId,
+    ) -> Result<(), CourierAssignmentError>;
 
     /// Returns a busy courier to the pool of new assignments.
     fn release(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError>;
@@ -74,12 +84,23 @@ impl<R: CourierRepository + ?Sized> CourierAssignment for R {
         Ok(load(self, courier_id)?.status())
     }
 
-    fn ensure_available(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
-        Ok(load(self, courier_id)?.ensure_available()?)
+    fn ensure_available(
+        &self,
+        courier_id: &CourierId,
+        market_id: &MarketId,
+    ) -> Result<(), CourierAssignmentError> {
+        let courier = load(self, courier_id)?;
+        courier.ensure_serves(market_id)?;
+        Ok(courier.ensure_available()?)
     }
 
-    fn occupy(&self, courier_id: &CourierId) -> Result<(), CourierAssignmentError> {
+    fn occupy(
+        &self,
+        courier_id: &CourierId,
+        market_id: &MarketId,
+    ) -> Result<(), CourierAssignmentError> {
         let mut courier = load(self, courier_id)?;
+        courier.ensure_serves(market_id)?;
         courier.mark_busy()?;
         Ok(self.save(&courier)?)
     }

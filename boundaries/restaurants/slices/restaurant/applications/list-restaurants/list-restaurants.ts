@@ -1,9 +1,12 @@
+import { MarketId } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantView } from "../restaurant-view.ts";
 
 export const DEFAULT_RESTAURANT_PAGE_SIZE = 50;
 export const MAX_RESTAURANT_PAGE_SIZE = 100;
 
 export type ListRestaurants = Readonly<{
+  /** Required (ADR 41): only restaurants of this Market are listed. */
+  marketId: string;
   /** Include closed restaurants; by default only open restaurants are listed. */
   includeClosed?: boolean;
   /** Page size, 1..100; defaults to 50. */
@@ -20,6 +23,7 @@ export type ListRestaurantsResult = Readonly<{
 /** Query model port. Returns restaurants ordered by a stable key after `after`. */
 export interface RestaurantCatalogReader {
   list(criteria: {
+    marketId: string;
     includeClosed: boolean;
     after: string | undefined;
     limit: number;
@@ -38,7 +42,7 @@ export class InvalidPageSizeError extends Error {
 }
 
 /**
- * Lists restaurants available for selection. The only availability criterion
+ * Lists restaurants of one Market available for selection. The only availability criterion
  * known today is the restaurant opening; hours, zones and capacity are not
  * considered until specified.
  */
@@ -50,6 +54,7 @@ export class ListRestaurantsHandler {
   }
 
   async execute(query: ListRestaurants): Promise<ListRestaurantsResult> {
+    const marketId = MarketId.of(query.marketId);
     const limit = query.limit ?? DEFAULT_RESTAURANT_PAGE_SIZE;
     if (
       !Number.isInteger(limit) ||
@@ -59,6 +64,7 @@ export class ListRestaurantsHandler {
       throw new InvalidPageSizeError(limit);
     }
     const page = await this.#reader.list({
+      marketId: marketId.value,
       includeClosed: query.includeClosed ?? false,
       after: query.cursor,
       limit: limit + 1,

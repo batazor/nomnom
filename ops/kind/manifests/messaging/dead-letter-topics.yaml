@@ -1,0 +1,81 @@
+# DLQ topics consumers (ADR 28, docs/dlq.md) объявляются явно, а не auto create: retention —
+# контракт разбора DLQ, он должен превышать окно разбора, а не наследовать retention брокера.
+# Job ставится before-hook'ом apps после Kafka и до charts consumers, поэтому consumer никогда
+# не создаёт DLQ сам. Topic, уже созданный раньше (auto create прошлого deploy), получает
+# объявленную конфигурацию через alter-config; число partitions существующего не меняется.
+# Одна partition: DLQ разбирается по порядку целиком, порядок по aggregate_id сохраняет ключ.
+#
+#   orders.v1.order-events.dlq               — группа restaurants
+#   restaurants.v1.restaurant-order-events.dlq — группа orders
+#   delivery.v1.delivery-events.dlq          — группа orders
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dead-letter-topics
+  namespace: nomnom-infra
+  labels:
+    app.kubernetes.io/name: dead-letter-topics
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dead-letter-topics
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: topics
+          # Тот же образ, что у Kafka (messaging/infrastructure.yaml): в нём rpk.
+          image: docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
+          env:
+            - name: HOME
+              value: /tmp
+            - name: BROKERS
+              value: kafka.nomnom-infra.svc.cluster.local:9092
+            - name: TOPICS
+              value: >-
+                orders.v1.order-events.dlq
+                restaurants.v1.restaurant-order-events.dlq
+                delivery.v1.delivery-events.dlq
+            # 30 дней: окно разбора DLQ (docs/dlq.md).
+            - name: RETENTION_MS
+              value: "2592000000"
+          command:
+            - sh
+            - -ec
+            - |
+              for topic in $TOPICS; do
+                if rpk topic create "$topic" -X brokers="$BROKERS" --partitions 1 --replicas 1 \
+                    --topic-config retention.ms="$RETENTION_MS" --topic-config cleanup.policy=delete; then
+                  echo "created $topic"
+                else
+                  rpk topic alter-config "$topic" -X brokers="$BROKERS" \
+                    --set retention.ms="$RETENTION_MS" --set cleanup.policy=delete
+                  echo "configured $topic"
+                fi
+                rpk topic describe "$topic" -X brokers="$BROKERS" --print-configs \
+                  | grep -E "^retention.ms[[:space:]]+$RETENTION_MS[[:space:]]"
+              done
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -8,6 +8,7 @@
 - [Restaurants](boundaries/restaurants/GLOSSARY.md): меню, принятие заказа рестораном и приготовление.
 - [Delivery](boundaries/delivery/GLOSSARY.md): доступность курьеров, назначение и выполнение доставки.
 - [Payments](boundaries/payments/GLOSSARY.md): авторизация, отмена авторизации, списание и возврат платежа.
+- [Control plane](boundaries/controlplane/GLOSSARY.md): реестр Cell, Market и Market Placement (ADR 41).
 
 ## Relationships
 

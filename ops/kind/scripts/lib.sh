@@ -14,7 +14,7 @@ BFF_HOST_PORT="${BFF_HOST_PORT:-18080}"
 WEBHOOKS_HOST_PORT="${WEBHOOKS_HOST_PORT:-18085}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${KIND_DIR}/.artifacts}"
 
-APP_NAMESPACES=(nomnom-orders nomnom-restaurants nomnom-delivery nomnom-payments nomnom-bff)
+APP_NAMESPACES=(nomnom-orders nomnom-restaurants nomnom-delivery nomnom-payments nomnom-controlplane nomnom-bff)
 GATEWAY_NAMESPACE=nomnom-gateway
 GATEWAY_SYSTEM_NAMESPACE=envoy-gateway-system
 INTERNAL_GATEWAY_ADDR="internal-gateway.${GATEWAY_SYSTEM_NAMESPACE}.svc.cluster.local:8080"

@@ -96,6 +96,7 @@ mod tests {
     };
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::application::UnitOfWorkError;
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{World, subject};
@@ -139,6 +140,7 @@ mod tests {
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
                 created_at_epoch_seconds: None,
+                market_id: MarketId::new("berlin").expect("market id"),
             })]
         );
     }

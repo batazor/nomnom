@@ -159,10 +159,12 @@ func (x *GetOrderResponse) GetOrder() *Order {
 }
 
 type ListCustomerOrdersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CustomerId    string                 `protobuf:"bytes,1,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	CustomerId string                 `protobuf:"bytes,1,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
+	PageSize   int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken  string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Required (ADR 41): only Orders of this Market.
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -214,6 +216,13 @@ func (x *ListCustomerOrdersRequest) GetPageSize() int32 {
 func (x *ListCustomerOrdersRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListCustomerOrdersRequest) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
 	}
 	return ""
 }
@@ -728,13 +737,14 @@ const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"\x0fGetOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\"A\n" +
 	"\x10GetOrderResponse\x12-\n" +
-	"\x05order\x18\x01 \x01(\v2\x17.nomnom.orders.v1.OrderR\x05order\"x\n" +
+	"\x05order\x18\x01 \x01(\v2\x17.nomnom.orders.v1.OrderR\x05order\"\x95\x01\n" +
 	"\x19ListCustomerOrdersRequest\x12\x1f\n" +
 	"\vcustomer_id\x18\x01 \x01(\tR\n" +
 	"customerId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"|\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"|\n" +
 	"\x1aListCustomerOrdersResponse\x126\n" +
 	"\x06orders\x18\x01 \x03(\v2\x1e.nomnom.orders.v1.OrderSummaryR\x06orders\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"N\n" +

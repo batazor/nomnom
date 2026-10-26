@@ -21,6 +21,16 @@ npm run dev
 
 С `VITE_OIDC_ISSUER` (в kind — `http://localhost:5556/dex`, port-forward `svc/dex` в `nomnom-data`) в каждой колонке доски есть кнопка «Войти: <роль>» ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)). `src/shared/auth/oidc.ts` выполняет authorization code + PKCE (public client `nomnom-ui`, scope `audience:server:client_id:nomnom-bff`, без `nonce`, `prompt=login`, чтобы в одном браузере войти несколькими пользователями); callback — route `/auth/callback`. Access token хранится только в памяти страницы и заменяет токен demo-пользователя этой роли (`AsRole`); он обновляется за минуту до истечения по refresh token (`offline_access`, ротация Dex), refresh token роли лежит в `sessionStorage`: перезагрузка восстанавливает вход, закрытие вкладки и «Выйти» его завершают. С `VITE_OIDC_DEMO_EMAIL_DOMAIN` и `VITE_OIDC_DEMO_PASSWORD` рядом с кнопкой показан демо-вход `<роль>@<домен> / <пароль>`. Redirect URI Dex разрешает для `localhost:4173` и `localhost:4180` (конфигурация `customer-ui-kind-login` в `.claude/launch.json`). Тестовые пользователи — `ops/kind/bootstrap/values.yaml` (`dex.users`).
 
+## Выбор Market
+
+Система разделена на ячейки по Market — городу доставки ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)). Доска (`/`) открывается только в выбранном Market:
+
+- `choose-market` (`src/features/choose-market/`): operation `ChooseMarket` (`markets`) — единственная, которой не нужен Market. Пока Market не выбран или выбранного больше нет в списке, вместо доски — пустое состояние со списком Market; первый Market не выбирается за пользователя, даже если он один. Загрузка и ошибка списка показаны явно, ошибка — с повтором.
+- В шапке — переключатель «Город» (`SelectField` из `shared/ui` поверх Headless UI `Select`); эмулятор виден только в выбранном Market: его operations идут в ячейку.
+- Выбор — `src/shared/market/market.tsx` (`MarketProvider`, `useMarketSelection`): id в `localStorage` (`nomnom.market.v1`), каждый доступ в `try/catch`, без storage выбор живёт в памяти страницы.
+- `AsRole` передаёт Market клиенту: каждый запрос и каждый поток SSE несут заголовок `X-Nomnom-Market`; смена Market создаёт новые clients и кеши. Без заголовка BFF отвечает `InvalidArgument`, неразмещённый Market — `NotFound`.
+- Моки отдают `markets` (`berlin`, `hamburg`) и заголовок не проверяют.
+
 ## Доска заказа
 
 - Доску ведёт один пользователь: в kind это `demo@nomnom.test` / `nomnom` через Dex (ADR 35), он покупатель, владелец, кухня и курьер. Без моков `VITE_OIDC_ISSUER` обязателен: без него приложение падает на старте. `AsRole` (`src/shared/session/roles.tsx`) всё равно даёт каждой колонке собственный urql client и кеш, но с токеном этого входа; на моках роли получают фиксированные токены.
@@ -127,6 +137,7 @@ src/
     config/            validated public runtime config
     graphql/           client, generated types и mocks
     i18n/              typed messages и Intl formatters
+    market/            выбранный пользователем Market
     tokens/            semantic CSS tokens
     ui/                Headless UI façade и nomnom wrappers
   test/                общий test setup

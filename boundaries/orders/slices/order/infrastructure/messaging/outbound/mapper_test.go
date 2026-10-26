@@ -21,7 +21,7 @@ import (
 // whenever the message is written.
 func TestMapperPublishesOrderCompletedAtCompletionMoment(t *testing.T) {
 	completedAt := ordertest.PlacedAt.Add(90 * time.Minute)
-	event := order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt}
+	event := order.OrderCompleted{OrderID: "order-1", MarketID: ordertest.MarketID(t), PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt}
 
 	first, err := outbound.IntegrationMapper{}.Map("order-1", 3, 0, event)
 	require.NoError(t, err)
@@ -41,6 +41,7 @@ func TestMapperPublishesOrderCompletedAtCompletionMoment(t *testing.T) {
 	var payload ordersv1.OrderCompleted
 	require.NoError(t, proto.Unmarshal(first.Payload, &payload))
 	assert.Equal(t, "order-1", payload.GetOrderId())
+	assert.Equal(t, ordertest.Market, payload.GetMarketId())
 }
 
 func TestMapperEventIDDependsOnChangeAndIndex(t *testing.T) {
@@ -78,8 +79,8 @@ func TestOutboxMapsEventsAndOnlyHandsThemToTheStore(t *testing.T) {
 
 	require.NoError(t, outbound.NewOutbox(store).Append(context.Background(), "order-1", 2, []order.DomainEvent{
 		order.OrderPlaced{OrderID: "order-1", CustomerID: placed.CustomerID(), RestaurantID: placed.RestaurantID(),
-			Total: placed.Total(), PlacedAt: placed.PlacedAt(), Items: placed.Items()},
-		order.OrderCancelled{OrderID: "order-1", RequestedAt: ordertest.PlacedAt.Add(time.Minute), Reason: cancelled},
+			MarketID: placed.MarketID(), Total: placed.Total(), PlacedAt: placed.PlacedAt(), Items: placed.Items()},
+		order.OrderCancelled{OrderID: "order-1", MarketID: placed.MarketID(), RequestedAt: ordertest.PlacedAt.Add(time.Minute), Reason: cancelled},
 	}))
 	require.NoError(t, outbound.NewOutbox(store).Append(context.Background(), "order-1", 3, nil))
 
@@ -88,4 +89,12 @@ func TestOutboxMapsEventsAndOnlyHandsThemToTheStore(t *testing.T) {
 	assert.Equal(t, outbound.EventID("order-1", 2, 0), store.messages[0].UUID)
 	assert.Equal(t, outbound.EventID("order-1", 2, 1), store.messages[1].UUID)
 	assert.Equal(t, "nomnom.orders.v1.OrderCancelled", store.messages[1].Metadata.Get(messaging.EventTypeMetadata))
+
+	// ADR 41: every Integration Event carries the Market of the Order.
+	var placedPayload ordersv1.OrderPlaced
+	require.NoError(t, proto.Unmarshal(store.messages[0].Payload, &placedPayload))
+	assert.Equal(t, ordertest.Market, placedPayload.GetMarketId())
+	var cancelledPayload ordersv1.OrderCancelled
+	require.NoError(t, proto.Unmarshal(store.messages[1].Payload, &cancelledPayload))
+	assert.Equal(t, ordertest.Market, cancelledPayload.GetMarketId())
 }

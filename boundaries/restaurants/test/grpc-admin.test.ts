@@ -76,6 +76,7 @@ const createWorld = async () => {
       create(RegisterRestaurantRequestSchema, {
         name: "Pho",
         ownerId: owner.id,
+        marketId: "berlin",
       }),
       context,
     );
@@ -96,6 +97,7 @@ test("FR-446 RegisterRestaurant returns the restaurant and version", async () =>
     create(RegisterRestaurantRequestSchema, {
       name: "Pho",
       ownerId: owner.id,
+      marketId: "berlin",
     }),
     context,
   );
@@ -103,6 +105,7 @@ test("FR-446 RegisterRestaurant returns the restaurant and version", async () =>
   assert.notEqual(response.restaurant?.restaurantId, "");
   assert.equal(response.restaurant?.name, "Pho");
   assert.equal(response.restaurant?.isOpen, false);
+  assert.equal(response.restaurant?.marketId, "berlin");
   assert.equal(response.version, 1n);
   assert.deepEqual(world.authorization.owners, [
     { restaurantId: response.restaurant?.restaurantId, ownerId: owner.id },
@@ -118,6 +121,7 @@ test("RegisterRestaurant without platform#register_restaurant is PERMISSION_DENI
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
+          marketId: "berlin",
         }),
         context,
       ),
@@ -130,8 +134,11 @@ test("RegisterRestaurant with missing fields is INVALID_ARGUMENT", async () => {
   const { world, as } = await createWorld();
 
   for (const request of [
-    { name: " ", ownerId: owner.id },
-    { name: "Pho", ownerId: "" },
+    { name: " ", ownerId: owner.id, marketId: "berlin" },
+    { name: "Pho", ownerId: "", marketId: "berlin" },
+    // ADR 41: the Market is required and a slug.
+    { name: "Pho", ownerId: owner.id, marketId: "" },
+    { name: "Pho", ownerId: owner.id, marketId: "Berlin" },
   ]) {
     await assert.rejects(
       async () =>
@@ -333,6 +340,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
+          marketId: "berlin",
         }),
         context,
       ),
@@ -392,6 +400,7 @@ test("admin RPCs are UNAUTHENTICATED for an unverified caller", async () => {
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
+          marketId: "berlin",
         }),
         context,
       ),

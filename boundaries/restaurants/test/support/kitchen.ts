@@ -209,8 +209,13 @@ export const createKitchenWorld = async (
   const givenKitchen = async (
     name = "Pho Bar",
     cooksOnLine: readonly string[] = ["Aigul", "Oleg", "Marat"],
+    /** Market of the restaurant; the launch Market of the tests by default. */
+    marketId?: string,
   ): Promise<{ restaurantId: string; phoId: string; cookIds: string[] }> => {
-    const restaurantId = await menuWorld.givenRestaurantWithMenu(name);
+    const restaurantId = await menuWorld.givenRestaurantWithMenu(
+      name,
+      marketId === undefined ? { open: true } : { open: true, marketId },
+    );
     const phoId = await menuWorld.givenMenuItem(restaurantId, "Pho");
     accessControl.grantStaff(cook, restaurantId);
     accessControl.grantFulfillment(ordersService, restaurantId);

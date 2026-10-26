@@ -198,6 +198,7 @@ impl Api {
                 RegisterCourierRequest {
                     courier_id: courier.to_owned(),
                     name: "Timur".to_owned(),
+                    market_id: "berlin".to_owned(),
                 },
             ))
             .await
@@ -235,6 +236,7 @@ impl Api {
             .client
             .create_delivery(as_orders_worker(CreateDeliveryRequest {
                 order_id: order.to_owned(),
+                market_id: "berlin".to_owned(),
             }))
             .await
             .expect("created")
@@ -347,6 +349,7 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
                 order_id: "order-1".to_owned(),
                 courier_id: "courier-1".to_owned(),
                 state: DeliveryState::Assigned as i32,
+                market_id: "berlin".to_owned(),
             }),
             courier_status: CourierStatus::Busy as i32,
         }
@@ -508,6 +511,7 @@ async fn operator_registers_a_courier_for_the_user() {
             RegisterCourierRequest {
                 courier_id: "user-7".to_owned(),
                 name: "Timur".to_owned(),
+                market_id: "berlin".to_owned(),
             },
         ))
         .await
@@ -534,6 +538,7 @@ async fn operator_registers_a_courier_for_the_user() {
             RegisterCourierRequest {
                 courier_id: "user-7".to_owned(),
                 name: "Timur".to_owned(),
+                market_id: "berlin".to_owned(),
             },
         ))
         .await
@@ -554,6 +559,7 @@ async fn non_operator_cannot_register_a_courier() {
             RegisterCourierRequest {
                 courier_id: "user-7".to_owned(),
                 name: "Timur".to_owned(),
+                market_id: "berlin".to_owned(),
             },
         ))
         .await

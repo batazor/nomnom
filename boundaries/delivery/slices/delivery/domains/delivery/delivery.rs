@@ -5,7 +5,7 @@ use super::{
     TransitionResult, Trigger,
 };
 use crate::pkg::persistence::AuthorizationRevision;
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::{CourierId, MarketId};
 
 /// Actor reporting a Delivery Failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -20,6 +20,9 @@ pub enum FailureReporter {
 pub struct Delivery {
     id: DeliveryId,
     order_id: OrderId,
+    /// Market of the Order; set on creation, immutable (ADR 41). Only a
+    /// courier of this Market is offered or assigned the delivery.
+    market_id: MarketId,
     courier_id: Option<CourierId>,
     state: State,
     failure_reason: Option<DeliveryFailureReason>,
@@ -39,10 +42,11 @@ pub struct Delivery {
 
 impl Delivery {
     #[must_use]
-    pub fn new(id: DeliveryId, order_id: OrderId) -> Self {
+    pub fn new(id: DeliveryId, order_id: OrderId, market_id: MarketId) -> Self {
         Self {
             id,
             order_id,
+            market_id,
             courier_id: None,
             state: State::Waiting,
             failure_reason: None,
@@ -58,11 +62,18 @@ impl Delivery {
     /// Creates a waiting Delivery at `created_at_epoch_seconds` and records
     /// [`DomainEvent::DeliveryCreated`].
     #[must_use]
-    pub fn create(id: DeliveryId, order_id: OrderId, created_at_epoch_seconds: i64) -> Self {
-        let mut delivery = Self::new(id, order_id).with_created_at(Some(created_at_epoch_seconds));
+    pub fn create(
+        id: DeliveryId,
+        order_id: OrderId,
+        market_id: MarketId,
+        created_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut delivery =
+            Self::new(id, order_id, market_id).with_created_at(Some(created_at_epoch_seconds));
         delivery.events.push(DomainEvent::DeliveryCreated {
             delivery_id: delivery.id.clone(),
             order_id: delivery.order_id.clone(),
+            market_id: delivery.market_id.clone(),
             created_at_epoch_seconds,
         });
         delivery
@@ -71,6 +82,7 @@ impl Delivery {
     pub fn restore(
         id: DeliveryId,
         order_id: OrderId,
+        market_id: MarketId,
         courier_id: Option<CourierId>,
         state: State,
         failure_reason: Option<DeliveryFailureReason>,
@@ -93,6 +105,7 @@ impl Delivery {
         Ok(Self {
             id,
             order_id,
+            market_id,
             courier_id,
             state,
             failure_reason,
@@ -187,6 +200,7 @@ impl Delivery {
         self.events.push(DomainEvent::CourierAssignedToDelivery {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
+            market_id: self.market_id.clone(),
             courier_id: courier_id.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             expected_pickup_at_epoch_seconds: expected_pickup_at.map(ExpectedTime::epoch_seconds),
@@ -208,6 +222,7 @@ impl Delivery {
                 .push(DomainEvent::CourierUnassignedFromDelivery {
                     delivery_id: self.id.clone(),
                     order_id: self.order_id.clone(),
+                    market_id: self.market_id.clone(),
                     courier_id,
                 });
         }
@@ -228,6 +243,7 @@ impl Delivery {
         self.events.push(DomainEvent::DeliveryPickedUp {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
+            market_id: self.market_id.clone(),
             courier_id: courier_id.clone(),
             expected_delivered_at_epoch_seconds: expected_delivered_at
                 .map(ExpectedTime::epoch_seconds),
@@ -241,6 +257,7 @@ impl Delivery {
         self.events.push(DomainEvent::DeliveryCompleted {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
+            market_id: self.market_id.clone(),
             courier_id: courier_id.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
         });
@@ -268,6 +285,7 @@ impl Delivery {
         self.events.push(DomainEvent::DeliveryFailed {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
+            market_id: self.market_id.clone(),
             courier_id,
             reason,
         });
@@ -288,6 +306,7 @@ impl Delivery {
         self.events.push(DomainEvent::DeliveryCancelled {
             delivery_id: self.id.clone(),
             order_id: self.order_id.clone(),
+            market_id: self.market_id.clone(),
             released_courier_id: released_courier_id.clone(),
             reason,
         });
@@ -341,6 +360,11 @@ impl Delivery {
     #[must_use]
     pub fn order_id(&self) -> &OrderId {
         &self.order_id
+    }
+
+    #[must_use]
+    pub fn market_id(&self) -> &MarketId {
+        &self.market_id
     }
 
     #[must_use]

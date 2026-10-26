@@ -30,6 +30,7 @@ buf-generate: ## сгенерировать stubs владельцев для в
 	@cd boundaries/restaurants/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/delivery/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/payments/infrastructure/grpc && buf generate --template buf.gen.yaml
+	@cd boundaries/controlplane/infrastructure/grpc && buf generate --template buf.gen.yaml
 kind-cluster: ## создать single-node кластер kind из ops/kind/cluster.yaml (существующий переиспользуется)
 	@test "$$(kind version | cut -d' ' -f2)" = "$(KIND_VERSION)" || { echo "kind $(KIND_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
 	@test "$$(skaffold version)" = "$(SKAFFOLD_VERSION)" || { echo "skaffold $(SKAFFOLD_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }

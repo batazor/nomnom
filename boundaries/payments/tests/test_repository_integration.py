@@ -13,7 +13,7 @@ from typing import Any, override
 import psycopg
 import pytest
 from opentelemetry import trace
-from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
+from payment_fakes import MARKET, NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 
 from infrastructure.observability import FsmMetrics
 from infrastructure.repository import (
@@ -109,7 +109,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
         self.inbox = DatabaseProviderMessageInbox(self.database)
 
     def _payment(self, payment_id: str = "payment-1", order_id: str = "order-1") -> Payment:
-        payment = Payment(PaymentId(payment_id), OrderId(order_id), AMOUNT)
+        payment = Payment(PaymentId(payment_id), OrderId(order_id), MARKET, AMOUNT)
         self.payments.add(payment)
         stored = self.payments.get(payment.id)
         assert stored is not None
@@ -138,6 +138,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
         payment = self._payment()
         self.assertEqual(payment.version, 1)
         self.assertEqual(payment.amount, AMOUNT)
+        self.assertEqual(payment.market_id, MARKET)
         self.assertEqual(str(payment.amount.amount), "25.00")
         self.assertEqual(payment.state, PaymentState.PENDING)
         by_order = self.payments.get_by_order(OrderId("order-1"))
@@ -147,7 +148,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
     def test_second_payment_for_order_is_duplicate(self) -> None:
         self._payment()
         with self.assertRaises(DuplicatePaymentError):
-            self.payments.add(Payment(PaymentId("payment-2"), OrderId("order-1"), AMOUNT))
+            self.payments.add(Payment(PaymentId("payment-2"), OrderId("order-1"), MARKET, AMOUNT))
 
     def test_save_with_stale_version_is_concurrency_conflict(self) -> None:
         first = self._payment()
@@ -201,7 +202,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
 
     def test_unit_of_work_rolls_back_every_repository(self) -> None:
         def work() -> None:
-            payment = Payment(PaymentId("payment-1"), OrderId("order-1"), AMOUNT)
+            payment = Payment(PaymentId("payment-1"), OrderId("order-1"), MARKET, AMOUNT)
             self.payments.add(payment)
             self.operations.add(self._operation("operation-1", "key-1"))
             self.outbox.add(AggregateRef("Payment", payment.id, 1), [])

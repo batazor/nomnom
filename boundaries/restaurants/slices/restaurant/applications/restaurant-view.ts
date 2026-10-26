@@ -4,6 +4,8 @@ import type { Restaurant } from "../domains/restaurant/restaurant.ts";
 export type RestaurantView = Readonly<{
   restaurantId: string;
   name: string;
+  /** Market of the restaurant (ADR 41). */
+  marketId: string;
   isOpen: boolean;
 }>;
 
@@ -17,5 +19,6 @@ export type RestaurantChangeResult = RestaurantView &
 export const toRestaurantView = (restaurant: Restaurant): RestaurantView => ({
   restaurantId: restaurant.id,
   name: restaurant.name,
+  marketId: restaurant.marketId.value,
   isOpen: restaurant.isOpen,
 });

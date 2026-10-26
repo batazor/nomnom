@@ -36,6 +36,7 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             DomainEvent::CourierAssignedToDelivery {
                 delivery_id,
                 order_id,
+                market_id,
                 courier_id,
                 expected_pickup_at_epoch_seconds,
                 ..
@@ -43,6 +44,7 @@ impl OutboxMapper for DeliveryIntegrationEvents {
                 COURIER_ASSIGNED_TO_DELIVERY,
                 v1::CourierAssignedToDelivery {
                     order_id: order_id.as_str().to_owned(),
+                    market_id: market_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     courier_id: courier_id.as_str().to_owned(),
                     expected_pickup_at: expected_pickup_at_epoch_seconds.map(timestamp),
@@ -52,12 +54,14 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             DomainEvent::DeliveryPickedUp {
                 delivery_id,
                 order_id,
+                market_id,
                 expected_delivered_at_epoch_seconds,
                 ..
             } => (
                 DELIVERY_PICKED_UP,
                 v1::DeliveryPickedUp {
                     order_id: order_id.as_str().to_owned(),
+                    market_id: market_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     expected_delivered_at: expected_delivered_at_epoch_seconds.map(timestamp),
                 }
@@ -66,11 +70,13 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             DomainEvent::DeliveryCompleted {
                 delivery_id,
                 order_id,
+                market_id,
                 ..
             } => (
                 DELIVERY_COMPLETED,
                 v1::DeliveryCompleted {
                     order_id: order_id.as_str().to_owned(),
+                    market_id: market_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                 }
                 .encode_to_vec(),
@@ -78,12 +84,14 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             DomainEvent::DeliveryFailed {
                 delivery_id,
                 order_id,
+                market_id,
                 reason,
                 ..
             } => (
                 DELIVERY_FAILED,
                 v1::DeliveryFailed {
                     order_id: order_id.as_str().to_owned(),
+                    market_id: market_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     reason: reason.as_str().to_owned(),
                     detail: reason.detail().unwrap_or_default().to_owned(),
@@ -93,11 +101,13 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             DomainEvent::CourierUnassignedFromDelivery {
                 delivery_id,
                 order_id,
+                market_id,
                 courier_id,
             } => (
                 COURIER_UNASSIGNED_FROM_DELIVERY,
                 v1::CourierUnassignedFromDelivery {
                     order_id: order_id.as_str().to_owned(),
+                    market_id: market_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     courier_id: courier_id.as_str().to_owned(),
                 }
@@ -106,12 +116,14 @@ impl OutboxMapper for DeliveryIntegrationEvents {
             DomainEvent::DeliveryCancelled {
                 delivery_id,
                 order_id,
+                market_id,
                 reason,
                 ..
             } => (
                 DELIVERY_CANCELLED,
                 v1::DeliveryCancelled {
                     order_id: order_id.as_str().to_owned(),
+                    market_id: market_id.as_str().to_owned(),
                     delivery_id: delivery_id.as_str().to_owned(),
                     reason: reason
                         .as_ref()

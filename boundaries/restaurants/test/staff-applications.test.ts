@@ -232,6 +232,7 @@ test("staff is part of the snapshot; legacy snapshots restore without staff", ()
     id: "r-1",
     name: "Pho",
     ownerId: owner.id,
+    marketId: "berlin",
     registeredAt: startOfDay,
   });
   assert.equal(restaurant.assignStaff("b"), true);
@@ -250,7 +251,13 @@ test("staff is part of the snapshot; legacy snapshots restore without staff", ()
   );
 
   const legacy = Restaurant.restore(
-    { id: "r-0", name: "Old", ownerId: owner.id, isOpen: false },
+    {
+      id: "r-0",
+      name: "Old",
+      ownerId: owner.id,
+      marketId: "berlin",
+      isOpen: false,
+    },
     3,
   );
   assert.deepEqual(legacy.staff, []);

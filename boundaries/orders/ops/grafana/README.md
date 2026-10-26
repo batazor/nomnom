@@ -182,6 +182,7 @@ Rule group `orders` в folder `nomnom` ([`alerts/rules.json`](alerts/rules.json)
 | Orders: neighbour calls failing | warning | активно | — |
 | Orders: use case errors | warning | активно | — |
 | Orders: messages sent to DLQ | warning | активно | — |
+| Orders: unresolved dead letters | warning | ждёт метрик | [`kafka_consumergroup_current_offset`](../../../../docs/observability/metric-inventory.md#messaging), [`kafka_topic_partition_current_offset`](../../../../docs/observability/metric-inventory.md#messaging), [`kafka_topic_partition_oldest_offset`](../../../../docs/observability/metric-inventory.md#messaging) |
 | Orders: postgresql pool saturated | warning | ждёт метрик | [`db_client_connection_max`](../../../../docs/observability/metric-inventory.md#db) |
 | Orders: postgresql pool checkouts queued | warning | ждёт метрик | [`db_client_connection_pending_requests`](../../../../docs/observability/metric-inventory.md#db) |
 | Orders: postgresql pool wait p95 | warning | ждёт метрик | [`db_client_connection_wait_time_seconds`](../../../../docs/observability/metric-inventory.md#db) |

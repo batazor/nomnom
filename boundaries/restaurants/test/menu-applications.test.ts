@@ -244,6 +244,7 @@ test("AC-230 set availability changes only availability and publishes the fact",
     menuId: "menu-1",
     restaurantId,
     menuItemId,
+    marketId: "berlin",
     isAvailable: false,
     occurredAt: world.clock.now(),
   });

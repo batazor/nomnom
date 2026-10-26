@@ -92,10 +92,12 @@ const restaurantSource = () => {
         reads += 1;
         return stored.get(id);
       },
-      list: async (criteria: { includeClosed: boolean }) => {
+      list: async (criteria: { marketId: string; includeClosed: boolean }) => {
         reads += 1;
         return [...stored.values()].filter(
-          (view) => criteria.includeClosed || view.isOpen,
+          (view) =>
+            view.marketId === criteria.marketId &&
+            (criteria.includeClosed || view.isOpen),
         );
       },
     },
@@ -184,10 +186,16 @@ describe("refresh by Integration Events (ADR 40)", () => {
     world.stored.set(id, {
       restaurantId: id,
       name: "Pho",
+      marketId: "berlin",
       isOpen: true,
     });
     const catalog = new CachedRestaurantCatalog(world.source, options());
-    const page = { includeClosed: false, after: undefined, limit: 1000 };
+    const page = {
+      marketId: "berlin",
+      includeClosed: false,
+      after: undefined,
+      limit: 1000,
+    };
 
     assert.equal((await catalog.get(id))?.isOpen, true);
     await stored(client, `restaurants:restaurant:${id}`);
@@ -200,6 +208,7 @@ describe("refresh by Integration Events (ADR 40)", () => {
     world.stored.set(id, {
       restaurantId: id,
       name: "Pho",
+      marketId: "berlin",
       isOpen: false,
     });
     const handler = new CacheRefreshHandler({
@@ -209,7 +218,7 @@ describe("refresh by Integration Events (ADR 40)", () => {
     });
     const closed = toBinary(
       RestaurantClosedSchema,
-      create(RestaurantClosedSchema, { restaurantId: id }),
+      create(RestaurantClosedSchema, { restaurantId: id, marketId: "berlin" }),
     );
     assert.equal(
       await handler.process(
@@ -233,12 +242,95 @@ describe("refresh by Integration Events (ADR 40)", () => {
     );
   });
 
+  test("ADR 41 list pages are keyed per Market and refreshed only in the restaurant's Market", async () => {
+    // Markets unique to this run: generations are shared through Valkey.
+    const berlin = `berlin-${randomUUID().slice(0, 8)}`;
+    const hamburg = `hamburg-${randomUUID().slice(0, 8)}`;
+    const berlinId = `r-${randomUUID()}`;
+    const hamburgId = `r-${randomUUID()}`;
+    const world = restaurantSource();
+    world.stored.set(berlinId, {
+      restaurantId: berlinId,
+      name: "Berlin Pho",
+      marketId: berlin,
+      isOpen: true,
+    });
+    world.stored.set(hamburgId, {
+      restaurantId: hamburgId,
+      name: "Hamburg Pho",
+      marketId: hamburg,
+      isOpen: true,
+    });
+    const catalog = new CachedRestaurantCatalog(world.source, options());
+    const pageOf = (marketId: string) => ({
+      marketId,
+      includeClosed: false,
+      after: undefined,
+      limit: 1000,
+    });
+    const ids = async (marketId: string) =>
+      (await catalog.list(pageOf(marketId))).map((view) => view.restaurantId);
+
+    assert.deepEqual(await ids(berlin), [berlinId]);
+    assert.deepEqual(await ids(hamburg), [hamburgId]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(await ids(berlin), [berlinId], "cached, not mixed");
+    assert.deepEqual(await ids(hamburg), [hamburgId], "cached, not mixed");
+
+    // Close Restaurant of the Berlin restaurant committed.
+    world.stored.set(berlinId, {
+      restaurantId: berlinId,
+      name: "Berlin Pho",
+      marketId: berlin,
+      isOpen: false,
+    });
+    await catalog.refresh(berlinId);
+    const reads = world.reads();
+
+    assert.deepEqual(await ids(hamburg), [hamburgId]);
+    assert.equal(world.reads(), reads, "Hamburg pages are kept");
+    assert.deepEqual(await ids(berlin), []);
+    assert.equal(world.reads(), reads + 1, "Berlin pages are dropped");
+  });
+
+  test("ADR 41 a cached restaurant without a valid marketId is a miss and is overwritten", async () => {
+    const world = restaurantSource();
+    const catalog = new CachedRestaurantCatalog(world.source, options());
+    for (const legacy of [
+      { name: "Pho", isOpen: true },
+      { name: "Pho", isOpen: true, marketId: "" },
+    ]) {
+      const id = `r-${randomUUID()}`;
+      const key = `restaurants:restaurant:${id}`;
+      world.stored.set(id, {
+        restaurantId: id,
+        name: "Pho",
+        marketId: "berlin",
+        isOpen: true,
+      });
+      // Written by a release before Markets.
+      await client.set(key, JSON.stringify({ restaurantId: id, ...legacy }));
+      const reads = world.reads();
+
+      assert.equal((await catalog.get(id))?.marketId, "berlin");
+      assert.equal(world.reads(), reads + 1, "read from MongoDB");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const cached = JSON.parse(
+        (await client.get(key)) ?? "null",
+      ) as RestaurantView | null;
+      assert.equal(cached?.marketId, "berlin", "entry overwritten");
+      assert.equal((await catalog.get(id))?.marketId, "berlin");
+      assert.equal(world.reads(), reads + 1, "served from the cache again");
+    }
+  });
+
   test("a read that started before the change does not overwrite the refresh", async () => {
     const id = `r-${randomUUID()}`;
     const world = restaurantSource();
     world.stored.set(id, {
       restaurantId: id,
       name: "Pho",
+      marketId: "berlin",
       isOpen: true,
     });
     let staleReadDone = false;
@@ -254,6 +346,7 @@ describe("refresh by Integration Events (ADR 40)", () => {
             world.stored.set(id, {
               restaurantId: id,
               name: "Pho",
+              marketId: "berlin",
               isOpen: false,
             });
             await catalog.refresh(id);
@@ -386,6 +479,7 @@ test("the cached menu reader serves the MongoDB menu", async () => {
     Menu.create({
       id: `m-${randomUUID()}`,
       restaurantId,
+      marketId: "berlin",
       createdAt: new Date(),
     }),
   );

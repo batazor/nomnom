@@ -4,6 +4,7 @@ use crate::infrastructure::memory::{
 };
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::domains::courier::CourierStatus;
+use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{World, new_delivery, service};
@@ -60,6 +61,7 @@ fn assigned_delivery_is_cancelled_and_courier_released_repeat_succeeds() {
             order_id: OrderId::new("order-of-delivery-1"),
             released_courier_id: Some(CourierId::new("courier-1")),
             reason: DeliveryCancellationReason::new("order cancelled"),
+            market_id: MarketId::new("berlin").expect("market id"),
         })]
     );
 
@@ -136,6 +138,7 @@ fn waiting_delivery_is_cancelled_without_courier() {
             order_id: OrderId::new("order-of-delivery-1"),
             released_courier_id: None,
             reason: None,
+            market_id: MarketId::new("berlin").expect("market id"),
         })]
     );
     assert!(world.relationships.writes().is_empty());

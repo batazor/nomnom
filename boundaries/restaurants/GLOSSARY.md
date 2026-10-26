@@ -8,6 +8,10 @@
 Участник системы, который предлагает меню и готовит принятые заказы.
 _Avoid_: Vendor, kitchen
 
+**Market**:
+Город, в котором работает доставка; ресторан принадлежит одному неизменяемому Market, его меню и Restaurant Order — Market ресторана ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)).
+_Avoid_: Region, tenant, city как идентификатор
+
 **Menu Item**:
 Доступное для заказа блюдо с названием и текущей ценой в меню ресторана.
 _Avoid_: Product, order item

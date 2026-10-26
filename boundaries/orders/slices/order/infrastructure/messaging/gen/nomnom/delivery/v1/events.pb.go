@@ -30,8 +30,10 @@ type CourierAssignedToDelivery struct {
 	CourierId  string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
 	// Срок Pickup, названный курьером при принятии оффера; пусто — не назван (FR-610).
 	ExpectedPickupAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expected_pickup_at,json=expectedPickupAt,proto3" json:"expected_pickup_at,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CourierAssignedToDelivery) Reset() {
@@ -92,6 +94,13 @@ func (x *CourierAssignedToDelivery) GetExpectedPickupAt() *timestamppb.Timestamp
 	return nil
 }
 
+func (x *CourierAssignedToDelivery) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Курьер забрал заказ (Pickup).
 type DeliveryPickedUp struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -99,8 +108,10 @@ type DeliveryPickedUp struct {
 	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
 	// Срок вручения, названный курьером при Pickup; пусто — не назван (FR-610).
 	ExpectedDeliveredAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expected_delivered_at,json=expectedDeliveredAt,proto3" json:"expected_delivered_at,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeliveryPickedUp) Reset() {
@@ -154,11 +165,20 @@ func (x *DeliveryPickedUp) GetExpectedDeliveredAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *DeliveryPickedUp) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Delivery завершена (Delivery Completion).
 type DeliveryCompleted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrderId    string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -207,6 +227,13 @@ func (x *DeliveryCompleted) GetDeliveryId() string {
 	return ""
 }
 
+func (x *DeliveryCompleted) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Delivery не удалась по бизнес-причине.
 type DeliveryFailed struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -221,7 +248,9 @@ type DeliveryFailed struct {
 	// Необязательное пояснение в свободной форме (нормализованные пробелы, не
 	// длиннее 500 символов); пусто, если не указано. Не метка метрик и не
 	// основание для бизнес-решений.
-	Detail        string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	Detail string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -284,13 +313,22 @@ func (x *DeliveryFailed) GetDetail() string {
 	return ""
 }
 
+func (x *DeliveryFailed) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Курьер снят с Delivery без замены (Courier Reassignment); Delivery вернулась
 // в поиск курьера. Доменной причины снятия нет.
 type CourierUnassignedFromDelivery struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	CourierId     string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrderId    string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	CourierId  string                 `protobuf:"bytes,3,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -346,13 +384,22 @@ func (x *CourierUnassignedFromDelivery) GetCourierId() string {
 	return ""
 }
 
+func (x *CourierUnassignedFromDelivery) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Delivery отменена до Pickup (Cancel Delivery); назначенный курьер, если был,
 // освобождён. reason пуст, если причина не указана.
 type DeliveryCancelled struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	DeliveryId    string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrderId    string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	DeliveryId string                 `protobuf:"bytes,2,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
+	Reason     string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -408,44 +455,57 @@ func (x *DeliveryCancelled) GetReason() string {
 	return ""
 }
 
+func (x *DeliveryCancelled) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 var File_nomnom_delivery_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1fnomnom/delivery/v1/events.proto\x12\x12nomnom.delivery.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x01\n" +
+	"\x1fnomnom/delivery/v1/events.proto\x12\x12nomnom.delivery.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x01\n" +
 	"\x19CourierAssignedToDelivery\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x1d\n" +
 	"\n" +
 	"courier_id\x18\x03 \x01(\tR\tcourierId\x12H\n" +
-	"\x12expected_pickup_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\"\x9e\x01\n" +
+	"\x12expected_pickup_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\x12\x1b\n" +
+	"\tmarket_id\x18\x05 \x01(\tR\bmarketId\"\xbb\x01\n" +
 	"\x10DeliveryPickedUp\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12N\n" +
-	"\x15expected_delivered_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAt\"O\n" +
+	"\x15expected_delivered_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAt\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"l\n" +
 	"\x11DeliveryCompleted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
-	"deliveryId\"|\n" +
+	"deliveryId\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"\x99\x01\n" +
 	"\x0eDeliveryFailed\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x16\n" +
-	"\x06detail\x18\x04 \x01(\tR\x06detail\"z\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\x12\x1b\n" +
+	"\tmarket_id\x18\x05 \x01(\tR\bmarketId\"\x97\x01\n" +
 	"\x1dCourierUnassignedFromDelivery\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x1d\n" +
 	"\n" +
-	"courier_id\x18\x03 \x01(\tR\tcourierId\"g\n" +
+	"courier_id\x18\x03 \x01(\tR\tcourierId\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"\x84\x01\n" +
 	"\x11DeliveryCancelled\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vdelivery_id\x18\x02 \x01(\tR\n" +
 	"deliveryId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reasonB\xe6\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1b\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketIdB\xe6\x01\n" +
 	"\x16com.nomnom.delivery.v1B\vEventsProtoP\x01ZUnomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1;deliveryv1\xa2\x02\x03NDX\xaa\x02\x12Nomnom.Delivery.V1\xca\x02\x12Nomnom\\Delivery\\V1\xe2\x02\x1eNomnom\\Delivery\\V1\\GPBMetadata\xea\x02\x14Nomnom::Delivery::V1b\x06proto3"
 
 var (

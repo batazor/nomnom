@@ -3,6 +3,7 @@
 from slices.payment.applications.get_payment_status import GetPaymentStatusResult
 from slices.payment.applications.list_payment_operations import PaymentOperationView
 from slices.payment.domains.payment import (
+    MarketId,
     OperationId,
     OperationKind,
     OperationState,
@@ -40,15 +41,16 @@ class DatabasePaymentStatusReader:
         """Return the view of the Payment, or ``None`` when it does not exist."""
         with self._db.connection() as conn:
             row = conn.execute(
-                "SELECT order_id, amount, currency, state FROM payments WHERE id = %s",
+                "SELECT order_id, market_id, amount, currency, state FROM payments WHERE id = %s",
                 (payment_id,),
             ).fetchone()
         if row is None:
             return None
-        order_id, amount, currency, state = row
+        order_id, market_id, amount, currency, state = row
         return GetPaymentStatusResult(
             payment_id=payment_id,
             order_id=OrderId(order_id),
+            market_id=MarketId(market_id),
             amount=amount,
             currency=currency,
             state=PaymentState(state),

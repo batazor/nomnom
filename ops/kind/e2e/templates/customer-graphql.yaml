@@ -9,7 +9,9 @@
 #   until — jq над ответом: запрос повторяется, пока результат не true (по умолчанию —
 #           ответ без errors);
 #   wait  — сколько секунд повторять; 0 — одна попытка;
-#   save  — jq над ответом: объект новых ключей состояния (по умолчанию {}).
+#   save  — jq над ответом: объект новых ключей состояния (по умолчанию {});
+#   market — Market запроса (ADR 41): заголовок X-Nomnom-Market, по которому BFF выбирает Cell;
+#            без значения по умолчанию — тест задаёт его явно (berlin из ops/kind/demo/files/seed.json).
 # Access token живёт 120 s, поэтому выпускается на каждую попытку.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: StepTemplate
@@ -41,6 +43,8 @@ spec:
             value: ($save)
           - name: BFF
             value: ($bff)
+          - name: MARKET
+            value: ($market)
         content: |
           set -eu
           root="$(git rev-parse --show-toplevel)"
@@ -55,7 +59,7 @@ spec:
             ok=true
             response="$(kubectl -n nomnom-bff exec deploy/e2e-driver -- \
               curl -sS --fail-with-body --max-time 10 "$BFF" -H 'content-type: application/json' \
-                -H "authorization: Bearer $token" -d "$body" 2>&1)" || ok=false
+                -H "authorization: Bearer $token" -H "x-nomnom-market: $MARKET" -d "$body" 2>&1)" || ok=false
             if $ok && printf '%s' "$response" | jq -e --argjson s "$state" "$UNTIL" >/dev/null 2>&1; then
               break
             fi

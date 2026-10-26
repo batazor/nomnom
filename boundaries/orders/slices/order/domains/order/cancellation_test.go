@@ -102,7 +102,7 @@ func TestCancelRequiresExplicitTimeAndRecordsOneDomainEvent(t *testing.T) {
 
 	events := order.PullEvents()
 	require.Len(t, events, 1)
-	assert.Equal(t, OrderCancelled{OrderID: "order-1", RequestedAt: requestedAt, Reason: reason}, events[0])
+	assert.Equal(t, OrderCancelled{OrderID: "order-1", MarketID: testMarket(t), RequestedAt: requestedAt, Reason: reason}, events[0])
 	assert.Empty(t, order.PullEvents())
 	assert.Equal(t, reason, order.CancellationReason())
 	assert.Equal(t, requestedAt, order.CancelledAt())

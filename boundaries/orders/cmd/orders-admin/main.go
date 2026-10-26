@@ -1,5 +1,6 @@
 // Command orders-admin — операторские действия orders, запускается разово в pod
-// orders-consumer (kubectl exec), где уже есть конфигурация Kafka и PostgreSQL:
+// orders-consumer (kubectl exec), где уже есть конфигурация Kafka и PostgreSQL, а
+// projections catch-up — ещё и hook Job chart после каждого install/upgrade:
 //
 //	orders-admin dlq list --stream <topic>
 //	orders-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/telemetry"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
@@ -56,14 +58,20 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) < 2 {
 		return errors.New(usage)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
+	// Each command reads only the section it uses: the hook Job of the chart
+	// runs projections with the database configuration alone.
 	switch args[0] {
 	case "dlq":
-		return deadLetters(ctx, cfg.Kafka, args[1], args[2:], out)
+		cfg, err := config.LoadKafka()
+		if err != nil {
+			return fmt.Errorf("load kafka config: %w", err)
+		}
+		return deadLetters(ctx, cfg, args[1], args[2:], out)
 	case "projections":
+		cfg, err := config.LoadDatabase()
+		if err != nil {
+			return fmt.Errorf("load postgres config: %w", err)
+		}
 		return projections(ctx, cfg, args[1:])
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
@@ -167,7 +175,7 @@ func describe(letter messaging.DeadLetter) deadLetterView {
 	}
 }
 
-func projections(ctx context.Context, cfg config.Config, args []string) error {
+func projections(ctx context.Context, cfg database.Config, args []string) error {
 	if len(args) != 2 || args[1] != "order-details" {
 		return errors.New(usage)
 	}
@@ -182,7 +190,7 @@ func projections(ctx context.Context, cfg config.Config, args []string) error {
 	}
 	// The schema is migrated by the running processes; a missing table fails
 	// the command.
-	store, err := repository.Open(ctx, cfg.Database)
+	store, err := repository.Open(ctx, cfg)
 	if err != nil {
 		return err
 	}

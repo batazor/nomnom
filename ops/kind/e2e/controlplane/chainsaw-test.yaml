@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Control plane через internal gateway (ADR 41): Placement Map и Markets читает service identity
+# BFF, записи — только оператор (platform#manage_markets).
+#
+# Projected token BFF (ServiceAccount nomnom-bff/bff, audience nomnom.controlplane) тест выпускает
+# на хосте TokenRequest'ом (kubectl create token) и предъявляет из pod grpc-caller в nomnom-bff —
+# под NetworkPolicy неймспейса BFF. cell-1 и berlin регистрирует Job chart ops/kind/demo
+# (ops/kind/demo/files/seed.json), поэтому чтение повторяется, пока Job их не создаст.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: controlplane-placement-map
+spec:
+  description: >
+    BFF получает Placement Map (berlin → cell-1 и gateway cell-1) и Market berlin (EUR); BFF без
+    оператора не регистрирует Cell (PERMISSION_DENIED); workload вне allowlist control plane
+    получает UNAUTHENTICATED.
+  bindings:
+    - name: gateway
+      value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  steps:
+    - name: policies applied
+      use:
+        template: ../templates/netpol-applied.yaml
+    - name: controlplane Available
+      try:
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: controlplane
+                namespace: nomnom-controlplane
+              status:
+                (conditions[?type == 'Available'].status): ['True']
+    - name: BFF reads topology
+      try:
+        - script:
+            timeout: 5m
+            env:
+              - name: GATEWAY
+                value: ($gateway)
+            content: |
+              set -eu
+              call() {
+                token="$(kubectl -n nomnom-bff create token bff --audience nomnom.controlplane --duration 10m)"
+                kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
+                  grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \
+                    -H "authorization: Bearer $0" -d "{}" "$1" "nomnom.controlplane.v1.ControlPlaneService/$2" 2>&1
+                ' "$token" "$GATEWAY" "$1"
+              }
+              deadline=$(($(date +%s) + 240))
+              until map="$(call GetPlacementMap)" && printf '%s' "$map" |
+                jq -e --arg gw "$GATEWAY" '[.placements[]? | select(.marketId == "berlin" and .cellId == "cell-1" and .gatewayAddress == $gw)] | length == 1' >/dev/null; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "placement map without berlin → cell-1: $map" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+              markets="$(call ListMarkets)"
+              printf '%s\n%s\n' "$map" "$markets"
+              printf '%s' "$markets" | jq -e '[.markets[] | select(.marketId == "berlin" and .name == "Berlin" and .currency == "EUR" and .cellId == "cell-1")] | length == 1' >/dev/null
+            check:
+              ($error): ~
+    - name: BFF without operator does not register cells
+      try:
+        - script:
+            env:
+              - name: GATEWAY
+                value: ($gateway)
+            content: |
+              set -eu
+              token="$(kubectl -n nomnom-bff create token bff --audience nomnom.controlplane --duration 10m)"
+              kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
+                grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb -protoset /protos/googleapis.binpb \
+                  -H "authorization: Bearer $0" -d "{\"cellId\":\"cell-e2e\",\"gatewayAddress\":\"$1\"}" \
+                  "$1" nomnom.controlplane.v1.ControlPlaneService/RegisterCell 2>&1 || true
+              ' "$token" "$GATEWAY"
+            check:
+              ($error): ~
+              (json_parse($stdout).code): 7
+              (contains(json_parse($stdout).details[].reason, 'OPERATION_NOT_ALLOWED')): true
+    # grpc-caller не входит в allowlist control plane (и его token выпущен для nomnom.orders).
+    - name: workload outside the allowlist is unauthenticated
+      use:
+        template: ../templates/grpc-call.yaml
+        with:
+          bindings:
+            - {name: method, value: nomnom.controlplane.v1.ControlPlaneService/GetPlacementMap}
+            - {name: authorize, value: true}
+            - {name: code, value: 16}
+            - {name: message, value: caller identity is not authenticated}
+            - {name: reason, value: AUTHENTICATION_REQUIRED}
+  catch:
+    - podLogs:
+        namespace: nomnom-controlplane
+        selector: app.kubernetes.io/name=controlplane
+        tail: 30
+    - podLogs:
+        namespace: nomnom-bff
+        selector: app.kubernetes.io/name=demo-seed
+        tail: 30

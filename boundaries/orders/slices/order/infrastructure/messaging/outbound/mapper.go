@@ -92,6 +92,7 @@ func orderPlaced(e order.OrderPlaced) (proto.Message, time.Time) {
 		OrderId:      string(e.OrderID),
 		CustomerId:   string(e.CustomerID),
 		RestaurantId: string(e.RestaurantID),
+		MarketId:     e.MarketID.String(),
 		Total:        &ordersv1.Money{Amount: e.Total.Amount().String(), Currency: e.Total.Currency()},
 		PlacedAt:     timestamppb.New(e.PlacedAt),
 		Items:        items,
@@ -101,12 +102,13 @@ func orderPlaced(e order.OrderPlaced) (proto.Message, time.Time) {
 // orderCompleted publishes the completion moment of the domain as the event
 // time: a repeated write after a failure keeps it (FR-544).
 func orderCompleted(e order.OrderCompleted) (proto.Message, time.Time) {
-	return &ordersv1.OrderCompleted{OrderId: string(e.OrderID)}, e.CompletedAt
+	return &ordersv1.OrderCompleted{OrderId: string(e.OrderID), MarketId: e.MarketID.String()}, e.CompletedAt
 }
 
 func orderCancelled(e order.OrderCancelled) (proto.Message, time.Time) {
 	return &ordersv1.OrderCancelled{
-		OrderId: string(e.OrderID),
+		OrderId:  string(e.OrderID),
+		MarketId: e.MarketID.String(),
 		Cancellation: &ordersv1.Cancellation{
 			Outcome:     string(e.Reason.Outcome()),
 			ReasonCode:  e.Reason.Code(),

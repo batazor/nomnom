@@ -100,6 +100,7 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
           orderId,
           customerId: "customer-1",
           restaurantId,
+          marketId: "berlin",
           total: { amount: "19.00", currency: "EUR" },
           items: items.map((item) => ({
             ...item,
@@ -148,6 +149,7 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
         id: restaurantId,
         name: "Pho House",
         ownerId: "owner",
+        marketId: "berlin",
         registeredAt: new Date(),
       }),
     );
@@ -184,6 +186,7 @@ describe("OrderPlaced consumer with MongoDB and Kafka", () => {
       assert.equal(stored.length, 1);
       assert.equal(stored[0]?.state, RestaurantOrderState.Received);
       assert.equal(stored[0]?.restaurantId, restaurantId);
+      assert.equal(stored[0]?.marketId, "berlin");
       assert.deepEqual(
         await inbox
           .find({ eventId }, { projection: { _id: 0, consumer: 1 } })

@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import override
 
 import pytest
-from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
 from pkg.application import PermissionDeniedError
@@ -34,6 +34,7 @@ class GetPaymentStatusTest(unittest.TestCase):
 
         self.assertEqual(result.payment_id, payment_id)
         self.assertEqual(result.order_id, OrderId("order-1"))
+        self.assertEqual(result.market_id, MARKET)
         self.assertEqual((result.amount, result.currency), (Decimal("25.00"), "EUR"))
         self.assertEqual(result.state, PaymentState.AUTHORIZED)
         fields = {field.name for field in dataclasses.fields(result)}

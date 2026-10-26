@@ -35,31 +35,46 @@ def _money(amount: Money) -> payments_pb2.Money:
 
 def _authorized(event: PaymentAuthorized) -> Message:
     return events_pb2.PaymentAuthorized(
-        payment_id=str(event.payment_id), order_id=str(event.order_id), amount=_money(event.amount)
+        payment_id=str(event.payment_id),
+        order_id=str(event.order_id),
+        market_id=str(event.market_id),
+        amount=_money(event.amount),
     )
 
 
 def _captured(event: PaymentCaptured) -> Message:
     return events_pb2.PaymentCaptured(
-        payment_id=str(event.payment_id), order_id=str(event.order_id), amount=_money(event.amount)
+        payment_id=str(event.payment_id),
+        order_id=str(event.order_id),
+        market_id=str(event.market_id),
+        amount=_money(event.amount),
     )
 
 
 def _cancelled(event: PaymentAuthorizationCancelled) -> Message:
     return events_pb2.PaymentAuthorizationCancelled(
-        payment_id=str(event.payment_id), order_id=str(event.order_id), amount=_money(event.amount)
+        payment_id=str(event.payment_id),
+        order_id=str(event.order_id),
+        market_id=str(event.market_id),
+        amount=_money(event.amount),
     )
 
 
 def _refunded(event: PaymentRefunded) -> Message:
     return events_pb2.PaymentRefunded(
-        payment_id=str(event.payment_id), order_id=str(event.order_id), amount=_money(event.amount)
+        payment_id=str(event.payment_id),
+        order_id=str(event.order_id),
+        market_id=str(event.market_id),
+        amount=_money(event.amount),
     )
 
 
 def _failed(event: PaymentFailed) -> Message:
     return events_pb2.PaymentFailed(
-        payment_id=str(event.payment_id), order_id=str(event.order_id), reason=event.reason
+        payment_id=str(event.payment_id),
+        order_id=str(event.order_id),
+        market_id=str(event.market_id),
+        reason=event.reason,
     )
 
 

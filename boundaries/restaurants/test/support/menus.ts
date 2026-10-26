@@ -68,7 +68,7 @@ export const createMenuWorld = async (
   /** Registers an open restaurant managed by {@link owner} with an empty menu. */
   const givenRestaurantWithMenu = async (
     name = "Pho Bar",
-    state: { open: boolean } = { open: true },
+    state: { open: boolean; marketId?: string } = { open: true },
   ): Promise<string> => {
     const restaurantId = await restaurantWorld.givenRestaurant(name, state);
     accessControl.grantManager(owner, restaurantId);

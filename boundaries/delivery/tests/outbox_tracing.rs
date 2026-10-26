@@ -75,6 +75,7 @@ async fn command_with_traceparent_writes_it_to_the_outbox_row() {
     let created = client
         .create_delivery(traced(CreateDeliveryRequest {
             order_id: order_id.clone(),
+            market_id: "berlin".to_owned(),
         }))
         .await
         .expect("create")

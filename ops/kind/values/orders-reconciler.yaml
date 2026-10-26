@@ -1,0 +1,31 @@
+# Values тестового kind-окружения для release orders-reconciler chart boundaries/orders/ops/helm
+# поверх values-reconciler.yaml. image задаёт Skaffold (setValueTemplates).
+image:
+  pullPolicy: Never
+
+env:
+  # Config orders требует адрес gateway при fulfillment neighbours "grpc" (по умолчанию):
+  # без него процесс не стартует, хотя reconciler сам gateway не вызывает.
+  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  # Сверка SpiceDB и catch-up OrderDetails: интервал короче production, чтобы отставание
+  # проекции после rolling update в kind закрывалось за минуту. Grace сверки — по умолчанию.
+  RECONCILER__INTERVAL: 1m
+
+# ADR 8: заказы — в PostgreSQL orders (Secret создаёт chart ops/kind/bootstrap).
+postgres:
+  dsnSecret:
+    name: orders-postgres
+
+# ADR 18: relations order сверяются в SpiceDB тестового окружения.
+spicedb:
+  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+  insecure: true
+  presharedKeySecret:
+    name: spicedb-preshared-key
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 24Mi
+  limits:
+    memory: 128Mi

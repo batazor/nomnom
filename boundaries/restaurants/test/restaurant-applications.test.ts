@@ -14,11 +14,16 @@ import {
 } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { UpdateRestaurantHandler } from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
-import { InvalidRestaurantError } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import {
+  InvalidMarketIdError,
+  InvalidRestaurantError,
+} from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   createInfrastructure,
   createRestaurantWorld,
+  market,
   operator,
+  otherMarket,
   owner,
   stranger,
 } from "./support/restaurants.ts";
@@ -48,11 +53,13 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
     subject: operator,
     name: "Pho Bar",
     ownerId: owner.id,
+    marketId: market,
   });
 
   assert.deepEqual(result, {
     restaurantId: "restaurant-1",
     name: "Pho Bar",
+    marketId: market,
     isOpen: false,
     version: 1,
   });
@@ -62,6 +69,7 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
   ]);
   const stored = await world.restaurants.get("restaurant-1");
   assert.equal(stored?.isOpen, false);
+  assert.equal(stored?.marketId.value, market);
   // FR-447: the owner TOUCH revision is saved with the new restaurant.
   assert.equal(stored?.authorizationRevision, "zed-owner");
   assert.deepEqual(await world.outbox.records(), []);
@@ -75,6 +83,7 @@ test("register restaurant requires the registration permission", async () => {
       subject: stranger,
       name: "Pho",
       ownerId: owner.id,
+      marketId: market,
     }),
     PermissionDeniedError,
   );
@@ -90,10 +99,29 @@ test("AC-203 register restaurant rejects a blank name", async () => {
       subject: operator,
       name: "  ",
       ownerId: owner.id,
+      marketId: market,
     }),
     InvalidRestaurantError,
   );
   assert.deepEqual(await world.store.find({}), []);
+});
+
+test("register restaurant requires a valid Market (ADR 41)", async () => {
+  const world = await createRestaurantWorld();
+
+  for (const marketId of ["", "Berlin", "b", "berlin_1", "9berlin"]) {
+    await assert.rejects(
+      world.register.execute({
+        subject: operator,
+        name: "Pho",
+        ownerId: owner.id,
+        marketId,
+      }),
+      InvalidMarketIdError,
+    );
+  }
+  assert.deepEqual(await world.store.find({}), []);
+  assert.deepEqual(world.authorization.owners, []);
 });
 
 test("AC-204 restaurant is not stored when the owner relationship write fails", async () => {
@@ -115,6 +143,7 @@ test("AC-204 restaurant is not stored when the owner relationship write fails", 
       subject: operator,
       name: "Pho",
       ownerId: owner.id,
+      marketId: market,
     }),
     /spicedb unavailable/,
   );
@@ -145,6 +174,7 @@ test("AC-205 update restaurant renames without touching the opening", async () =
   assert.deepEqual(result, {
     restaurantId,
     name: "Ramen Bar",
+    marketId: market,
     isOpen: true,
     version: 3,
     changed: true,
@@ -231,6 +261,7 @@ test("AC-207 open restaurant publishes RestaurantOpened in the same unit of work
       event: {
         type: "RestaurantOpened",
         restaurantId,
+        marketId: market,
         occurredAt: world.clock.now(),
       },
     },
@@ -290,6 +321,7 @@ test("AC-211 get restaurant returns the public representation", async () => {
   assert.deepEqual(await get.execute({ restaurantId }), {
     restaurantId,
     name: "Pho Bar",
+    marketId: market,
     isOpen: true,
   });
 });
@@ -307,8 +339,8 @@ test("AC-213 list restaurants returns only open restaurants by default", async (
   const closed = await world.givenRestaurant("Closed", { open: false });
   const list = new ListRestaurantsHandler({ reader: world.catalog });
 
-  const defaultPage = await list.execute({});
-  const allPage = await list.execute({ includeClosed: true });
+  const defaultPage = await list.execute({ marketId: market });
+  const allPage = await list.execute({ marketId: market, includeClosed: true });
 
   assert.deepEqual(
     defaultPage.restaurants.map((restaurant) => restaurant.restaurantId),
@@ -329,8 +361,12 @@ test("AC-214 list restaurants pages with a cursor without repeats", async () => 
   ];
   const list = new ListRestaurantsHandler({ reader: world.catalog });
 
-  const first = await list.execute({ limit: 2 });
-  const second = await list.execute({ limit: 2, cursor: first.nextCursor });
+  const first = await list.execute({ marketId: market, limit: 2 });
+  const second = await list.execute({
+    marketId: market,
+    limit: 2,
+    cursor: first.nextCursor,
+  });
 
   assert.deepEqual(
     first.restaurants.map((restaurant) => restaurant.restaurantId),
@@ -342,29 +378,82 @@ test("AC-214 list restaurants pages with a cursor without repeats", async () => 
     ids.slice(2),
   );
   assert.equal(second.nextCursor, undefined);
-  await assert.rejects(list.execute({ limit: 0 }), InvalidPageSizeError);
-  await assert.rejects(list.execute({ limit: 101 }), InvalidPageSizeError);
+  await assert.rejects(
+    list.execute({ marketId: market, limit: 0 }),
+    InvalidPageSizeError,
+  );
+  await assert.rejects(
+    list.execute({ marketId: market, limit: 101 }),
+    InvalidPageSizeError,
+  );
+});
+
+test("list restaurants returns only restaurants of the requested Market (ADR 41)", async () => {
+  const world = await createRestaurantWorld();
+  const berlin = await world.givenRestaurant("Berlin Pho");
+  const hamburg = await world.givenRestaurant("Hamburg Pho", {
+    open: true,
+    marketId: otherMarket,
+  });
+  const list = new ListRestaurantsHandler({ reader: world.catalog });
+
+  const berlinPage = await list.execute({ marketId: market });
+  const hamburgPage = await list.execute({
+    marketId: otherMarket,
+    includeClosed: true,
+  });
+  const emptyPage = await list.execute({ marketId: "munich" });
+
+  assert.deepEqual(
+    berlinPage.restaurants.map((restaurant) => [
+      restaurant.restaurantId,
+      restaurant.marketId,
+    ]),
+    [[berlin, market]],
+  );
+  assert.deepEqual(
+    hamburgPage.restaurants.map((restaurant) => [
+      restaurant.restaurantId,
+      restaurant.marketId,
+    ]),
+    [[hamburg, otherMarket]],
+  );
+  assert.deepEqual(emptyPage.restaurants, []);
+  for (const marketId of ["", "BERLIN", "berlin/1"]) {
+    await assert.rejects(list.execute({ marketId }), InvalidMarketIdError);
+  }
 });
 
 test("list owned restaurants returns open and closed restaurants of the owner only", async () => {
   const world = await createRestaurantWorld();
   const open = await world.givenRestaurant("Open");
   const closed = await world.givenRestaurant("Closed", { open: false });
+  await world.givenRestaurant("Other Market", {
+    open: true,
+    marketId: otherMarket,
+  });
   await world.register.execute({
     subject: operator,
     name: "Foreign",
     ownerId: stranger.id,
+    marketId: market,
   });
   const list = new ListOwnedRestaurantsHandler({ reader: world.catalog });
 
-  const first = await list.execute({ subject: owner, limit: 1 });
+  const first = await list.execute({
+    subject: owner,
+    marketId: market,
+    limit: 1,
+  });
   const second = await list.execute({
     subject: owner,
+    marketId: market,
     limit: 1,
     cursor: first.nextCursor,
   });
   const strangers = await list.execute({
     subject: { type: "user", id: "nobody" },
+    marketId: market,
   });
 
   assert.deepEqual(
@@ -376,11 +465,18 @@ test("list owned restaurants returns open and closed restaurants of the owner on
   assert.equal(second.nextCursor, undefined);
   assert.deepEqual(strangers.restaurants, []);
   await assert.rejects(
-    list.execute({ subject: { type: "service", id: "orders" } }),
+    list.execute({
+      subject: { type: "service", id: "orders" },
+      marketId: market,
+    }),
     PermissionDeniedError,
   );
   await assert.rejects(
-    list.execute({ subject: owner, limit: 101 }),
+    list.execute({ subject: owner, marketId: market, limit: 101 }),
     InvalidPageSizeError,
+  );
+  await assert.rejects(
+    list.execute({ subject: owner, marketId: "" }),
+    InvalidMarketIdError,
   );
 });

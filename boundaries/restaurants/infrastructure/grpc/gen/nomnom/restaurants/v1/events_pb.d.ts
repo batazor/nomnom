@@ -27,6 +27,13 @@ export declare type RestaurantOrderAccepted = Message<"nomnom.restaurants.v1.Res
    * @generated from field: google.protobuf.Timestamp expected_ready_at = 2;
    */
   expectedReadyAt?: Timestamp | undefined;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 3;
+   */
+  marketId: string;
 };
 
 /**
@@ -50,6 +57,13 @@ export declare type RestaurantOrderRejected = Message<"nomnom.restaurants.v1.Res
    * @generated from field: string reason = 2;
    */
   reason: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 3;
+   */
+  marketId: string;
 };
 
 /**
@@ -68,6 +82,13 @@ export declare type PreparationStarted = Message<"nomnom.restaurants.v1.Preparat
    * @generated from field: string order_id = 1;
    */
   orderId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 2;
+   */
+  marketId: string;
 };
 
 /**
@@ -91,6 +112,13 @@ export declare type PreparationDelayed = Message<"nomnom.restaurants.v1.Preparat
    * @generated from field: google.protobuf.Timestamp expected_ready_at = 2;
    */
   expectedReadyAt?: Timestamp | undefined;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 3;
+   */
+  marketId: string;
 };
 
 /**
@@ -114,6 +142,13 @@ export declare type PreparationFailed = Message<"nomnom.restaurants.v1.Preparati
    * @generated from field: string reason = 2;
    */
   reason: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 3;
+   */
+  marketId: string;
 };
 
 /**
@@ -132,6 +167,13 @@ export declare type RestaurantOrderReady = Message<"nomnom.restaurants.v1.Restau
    * @generated from field: string order_id = 1;
    */
   orderId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 2;
+   */
+  marketId: string;
 };
 
 /**
@@ -161,6 +203,13 @@ export declare type RestaurantOrderCancelled = Message<"nomnom.restaurants.v1.Re
    * @generated from field: bool preparation_started = 3;
    */
   preparationStarted: boolean;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 4;
+   */
+  marketId: string;
 };
 
 /**
@@ -179,6 +228,13 @@ export declare type RestaurantOpened = Message<"nomnom.restaurants.v1.Restaurant
    * @generated from field: string restaurant_id = 1;
    */
   restaurantId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 2;
+   */
+  marketId: string;
 };
 
 /**
@@ -198,6 +254,13 @@ export declare type RestaurantClosed = Message<"nomnom.restaurants.v1.Restaurant
    * @generated from field: string restaurant_id = 1;
    */
   restaurantId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 2;
+   */
+  marketId: string;
 };
 
 /**
@@ -227,6 +290,13 @@ export declare type MenuItemAdded = Message<"nomnom.restaurants.v1.MenuItemAdded
    * @generated from field: string menu_item_id = 3;
    */
   menuItemId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 4;
+   */
+  marketId: string;
 };
 
 /**
@@ -257,6 +327,13 @@ export declare type MenuItemUpdated = Message<"nomnom.restaurants.v1.MenuItemUpd
    * @generated from field: string menu_item_id = 3;
    */
   menuItemId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 4;
+   */
+  marketId: string;
 };
 
 /**
@@ -291,6 +368,13 @@ export declare type MenuItemAvailabilityChanged = Message<"nomnom.restaurants.v1
    * @generated from field: bool available = 4;
    */
   available: boolean;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 5;
+   */
+  marketId: string;
 };
 
 /**

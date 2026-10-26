@@ -102,6 +102,7 @@ func newHarness(t *testing.T) harness {
 	store := repositorytest.Open(t)
 	placementCatalog := fake.NewCatalog()
 	placementCatalog.Put("restaurant-1", placeorder.CatalogSnapshot{
+		MarketID: ordertest.MarketID(t),
 		Currency: "EUR",
 		Items: map[order.MenuItemID]placeorder.CatalogItem{
 			"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},

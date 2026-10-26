@@ -1,5 +1,6 @@
 import { InvalidRestaurantError, InvalidRestaurantReason } from "./errors.ts";
 import type { RestaurantEvent } from "./events.ts";
+import { MarketId } from "./vo/market-id.ts";
 
 export * from "./acceptance.ts";
 export * from "./errors.ts";
@@ -10,11 +11,14 @@ export type {
   RestaurantRegistered,
   RestaurantRenamed,
 } from "./events.ts";
+export { InvalidMarketIdError, MarketId } from "./vo/market-id.ts";
 
 export type RestaurantSnapshot = Readonly<{
   id: string;
   name: string;
   ownerId: string;
+  /** Market of the restaurant (ADR 41), immutable. */
+  marketId: string;
   isOpen: boolean;
   /** User ids of the restaurant staff, sorted; source of `restaurant#staff`. */
   staff: readonly string[];
@@ -57,6 +61,7 @@ const staffMember = (userId: string): string => {
 export class Restaurant {
   readonly #id: string;
   readonly #ownerId: string;
+  readonly #marketId: MarketId;
   readonly #version: number;
   #name: string;
   #isOpen: boolean;
@@ -68,6 +73,7 @@ export class Restaurant {
     this.#id = snapshot.id;
     this.#name = snapshot.name;
     this.#ownerId = snapshot.ownerId;
+    this.#marketId = MarketId.of(snapshot.marketId);
     this.#isOpen = snapshot.isOpen;
     this.#staff = new Set(snapshot.staff ?? []);
     this.#authorizationRevision = snapshot.authorizationRevision;
@@ -78,6 +84,8 @@ export class Restaurant {
     id: string;
     name: string;
     ownerId: string;
+    /** Market the restaurant serves; set once at registration (ADR 41). */
+    marketId: string;
     registeredAt: Date;
   }): Restaurant {
     const ownerId = input.ownerId.trim();
@@ -89,6 +97,7 @@ export class Restaurant {
         id: input.id,
         name: restaurantName(input.name),
         ownerId,
+        marketId: MarketId.of(input.marketId).value,
         isOpen: false,
         staff: [],
       },
@@ -97,6 +106,7 @@ export class Restaurant {
     restaurant.#events.push({
       type: "RestaurantRegistered",
       restaurantId: restaurant.#id,
+      marketId: restaurant.#marketId.value,
       name: restaurant.#name,
       ownerId,
       occurredAt: input.registeredAt,
@@ -121,6 +131,10 @@ export class Restaurant {
 
   get ownerId(): string {
     return this.#ownerId;
+  }
+
+  get marketId(): MarketId {
+    return this.#marketId;
   }
 
   get isOpen(): boolean {
@@ -163,6 +177,7 @@ export class Restaurant {
     this.#events.push({
       type: "RestaurantRenamed",
       restaurantId: this.#id,
+      marketId: this.#marketId.value,
       name: normalized,
       occurredAt: renamedAt,
     });
@@ -178,6 +193,7 @@ export class Restaurant {
     this.#events.push({
       type: "RestaurantOpened",
       restaurantId: this.#id,
+      marketId: this.#marketId.value,
       occurredAt: openedAt,
     });
     return true;
@@ -195,6 +211,7 @@ export class Restaurant {
     this.#events.push({
       type: "RestaurantClosed",
       restaurantId: this.#id,
+      marketId: this.#marketId.value,
       occurredAt: closedAt,
     });
     return true;
@@ -223,6 +240,7 @@ export class Restaurant {
       id: this.#id,
       name: this.#name,
       ownerId: this.#ownerId,
+      marketId: this.#marketId.value,
       isOpen: this.#isOpen,
       staff: this.staff,
       ...(this.#authorizationRevision === undefined

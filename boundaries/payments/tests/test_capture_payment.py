@@ -2,7 +2,7 @@ import unittest
 from typing import override
 
 import pytest
-from payment_fakes import ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
 from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
@@ -45,7 +45,7 @@ class CapturePaymentTest(unittest.TestCase):
         self.assertEqual(request.authorization_reference, "auth-ref")
         self.assertEqual(
             self.kit.published(),
-            [PaymentCaptured(payment_id, OrderId("order-1"), Money.parse("25.00", "EUR"))],
+            [PaymentCaptured(payment_id, OrderId("order-1"), MARKET, Money.parse("25.00", "EUR"))],
         )
 
     def test_ac_413_declined_capture_keeps_authorization(self) -> None:

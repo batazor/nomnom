@@ -68,7 +68,7 @@ func (f *fakeMenu) GetRestaurant(ctx context.Context, r *restaurantsv1.GetRestau
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: f.open}}, nil
+	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: f.open, MarketId: "berlin"}}, nil
 }
 
 func (f *fakeMenu) GetMenu(context.Context, *restaurantsv1.GetMenuRequest) (*restaurantsv1.GetMenuResponse, error) {
@@ -169,6 +169,7 @@ func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
 	snapshot, ok := env.store.Snapshot("order-1")
 	require.True(t, ok)
 	assert.Equal(t, order.CustomerID(env.vectors.ExpectedSubject), snapshot.CustomerID)
+	assert.Equal(t, "berlin", snapshot.MarketID.String(), "the Order takes the Market of the Restaurant")
 	require.Len(t, snapshot.Items, 1)
 	assert.Equal(t, order.MenuItemID("pizza"), snapshot.Items[0].MenuItemID())
 	assert.True(t, snapshot.Items[0].UnitPrice().Equal(ordertest.Money(t, "12.50")), "unit price comes from the restaurants menu")

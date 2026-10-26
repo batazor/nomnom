@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from .ids import OperationId, OperationKind, OrderId, PaymentId
+from .vo.market import MarketId
 from .vo.money import Money
 
 
@@ -12,6 +13,7 @@ class PaymentAuthorized:
 
     payment_id: PaymentId
     order_id: OrderId
+    market_id: MarketId
     amount: Money
 
 
@@ -21,6 +23,7 @@ class PaymentCaptured:
 
     payment_id: PaymentId
     order_id: OrderId
+    market_id: MarketId
     amount: Money
 
 
@@ -30,6 +33,7 @@ class PaymentAuthorizationCancelled:
 
     payment_id: PaymentId
     order_id: OrderId
+    market_id: MarketId
     amount: Money
 
 
@@ -39,6 +43,7 @@ class PaymentRefunded:
 
     payment_id: PaymentId
     order_id: OrderId
+    market_id: MarketId
     amount: Money
 
 
@@ -48,6 +53,7 @@ class PaymentFailed:
 
     payment_id: PaymentId
     order_id: OrderId
+    market_id: MarketId
     reason: str
 
 

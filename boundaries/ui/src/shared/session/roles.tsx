@@ -7,6 +7,7 @@ import {
   type GraphqlErrorReport,
   type SubscriptionTransport,
 } from "../graphql/client";
+import { useMarketSelection } from "../market/market";
 
 // Roles of the flow board; each column has its own client and cache.
 export const roles = ["customer", "owner", "kitchen", "courier"] as const;
@@ -58,8 +59,9 @@ export function RoleClientSettings({
   );
 }
 
-// Everything inside calls BFF as the user of role. Each role has its own
-// client, so cached data of one user never shows up in another column.
+// Everything inside calls BFF as the user of role, in the chosen Market. Each
+// role has its own client, so cached data of one user never shows up in
+// another column.
 export function AsRole({
   as: role,
   children,
@@ -72,7 +74,10 @@ export function AsRole({
   const mocks = useContext(MocksContext);
   const signedIn = useSignedInToken(boardUser);
   const token = mocks ? `mock-${role}` : signedIn;
+  const { marketId } = useMarketSelection();
 
+  // A new Market gets a new client: cached data of one Market never shows
+  // up in another.
   const client = useMemo(
     () =>
       createGraphqlClient({
@@ -80,8 +85,9 @@ export function AsRole({
         reportError: settings.reportError,
         subscriptions: settings.subscriptions,
         getAccessToken: () => token,
+        getMarket: () => marketId,
       }),
-    [settings, token],
+    [settings, token, marketId],
   );
 
   return <UrqlProvider value={client}>{children}</UrqlProvider>;

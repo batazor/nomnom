@@ -1,3 +1,4 @@
+import { MarketId } from "../../../restaurant/domains/restaurant/vo/market-id.ts";
 import {
   type CancellationDecision,
   CancellationRejectionReason,
@@ -35,6 +36,7 @@ export {
   DuplicateOrderIdError,
   InvalidRestaurantOrderError,
   InvalidRestaurantOrderReason,
+  MarketMismatchError,
   NoCookAvailableError,
 } from "./errors.ts";
 export type * from "./events.ts";
@@ -65,6 +67,8 @@ export type RestaurantOrderSnapshot = Readonly<{
   id: string;
   orderId: string;
   restaurantId: string;
+  /** Market of the restaurant that received the order (ADR 41), immutable. */
+  marketId: string;
   items: readonly Readonly<{
     menuItemId: string;
     quantity: number;
@@ -89,6 +93,7 @@ export class RestaurantOrder {
   readonly #id: string;
   readonly #orderId: string;
   readonly #restaurantId: string;
+  readonly #marketId: MarketId;
   readonly #items: readonly PreparationItem[];
   readonly #version: number;
   #state: RestaurantOrderState;
@@ -107,6 +112,7 @@ export class RestaurantOrder {
     this.#id = snapshot.id;
     this.#orderId = snapshot.orderId;
     this.#restaurantId = snapshot.restaurantId;
+    this.#marketId = MarketId.of(snapshot.marketId);
     this.#items = items;
     this.#state = snapshot.state;
     this.#timeline = { ...snapshot.timeline };
@@ -127,6 +133,10 @@ export class RestaurantOrder {
 
   get restaurantId(): string {
     return this.#restaurantId;
+  }
+
+  get marketId(): MarketId {
+    return this.#marketId;
   }
 
   get items(): readonly PreparationItem[] {
@@ -168,6 +178,7 @@ export class RestaurantOrder {
       id: this.#id,
       orderId: this.#orderId,
       restaurantId: this.#restaurantId,
+      marketId: this.#marketId.value,
       items: this.#items.map((item) => ({
         menuItemId: item.menuItemId,
         quantity: item.quantity.value,
@@ -234,15 +245,20 @@ export class RestaurantOrder {
       restaurantOrderId: this.#id,
       orderId: this.#orderId,
       restaurantId: this.#restaurantId,
+      marketId: this.#marketId.value,
       occurredAt,
     } as RestaurantOrderEvent);
   }
 
-  /** Creates the order in `RECEIVED` from the composition sent by `orders`. */
+  /**
+   * Creates the order in `RECEIVED` from the composition sent by `orders`, in
+   * the Market of the restaurant that received it (ADR 41).
+   */
   static receive(input: {
     id: string;
     orderId: string;
     restaurantId: string;
+    marketId: string;
     items: readonly PreparationItemInput[];
     receivedAt: Date;
   }): RestaurantOrder {
@@ -251,6 +267,7 @@ export class RestaurantOrder {
         id: input.id,
         orderId: input.orderId,
         restaurantId: input.restaurantId,
+        marketId: input.marketId,
         state: RestaurantOrderState.Received,
         timeline: { receivedAt: input.receivedAt },
       },

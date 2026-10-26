@@ -1,7 +1,7 @@
 use super::*;
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::slices::courier::domains::courier::CourierStatus;
-use crate::slices::delivery::applications::test_support::{World, candidate, service};
+use crate::slices::delivery::applications::test_support::{World, candidate, hamburg, service};
 use crate::slices::delivery::domains::delivery::{DeliveryError, State, TransitionError};
 
 fn handler(world: &World) -> Handler<'_> {
@@ -112,6 +112,53 @@ fn reports_no_candidate_with_reason_per_courier() {
             ),
             rejection("offered", CandidateRejectionReason::AlreadyOffered),
             rejection("ghost", CandidateRejectionReason::CourierNotRegistered),
+        ]
+    );
+}
+
+/// ADR 41: a courier of another Market than the Delivery is never selected,
+/// however near: the `CourierEligibleForDelivery` specification rejects the
+/// candidate, and the courier port rejects a registered courier of another
+/// Market even when the locator reports it with the Delivery's Market.
+#[test]
+fn courier_of_another_market_is_never_selected() {
+    let world = World::new();
+    world.waiting_delivery("delivery-1");
+    world.courier("berlin-far", CourierStatus::Available);
+    world.courier_in("hamburg-near", CourierStatus::Available, &hamburg());
+    world.courier_in("hamburg-mislabelled", CourierStatus::Available, &hamburg());
+    let mut near = candidate("hamburg-near", 10);
+    near.market_id = hamburg();
+    world.locator.set_candidates(vec![
+        near,
+        candidate("hamburg-mislabelled", 10),
+        candidate("berlin-far", 4_000),
+    ]);
+
+    let output = handler(&world)
+        .execute(&service(), input())
+        .expect("search");
+
+    assert_eq!(
+        output.outcome,
+        Outcome::CandidateFound {
+            courier_id: CourierId::new("berlin-far"),
+            distance_to_pickup_meters: 4_000,
+        }
+    );
+    assert_eq!(
+        output.rejections,
+        vec![
+            CandidateRejection {
+                courier_id: CourierId::new("hamburg-near"),
+                reason: CandidateRejectionReason::Ineligible(vec![
+                    CourierEligibilityReason::OtherMarket
+                ]),
+            },
+            CandidateRejection {
+                courier_id: CourierId::new("hamburg-mislabelled"),
+                reason: CandidateRejectionReason::NotAvailable(CourierError::OtherMarket),
+            },
         ]
     );
 }

@@ -59,12 +59,35 @@ func TestOrderComputesTotalAndRejectsDuplicateItems(t *testing.T) {
 	require.NoError(t, err)
 	item := NewItem("menu-1", "Margherita", quantity, price)
 
-	order, err := New("order-1", "customer-1", "restaurant-1", []Item{item})
+	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{item})
 	require.NoError(t, err)
 	assert.Equal(t, "5 EUR", order.Total().String())
 
-	_, err = New("order-2", "customer-1", "restaurant-1", []Item{item, item})
+	_, err = New("order-2", "customer-1", "restaurant-1", testMarket(t), []Item{item, item})
 	require.ErrorIs(t, err, ErrDuplicateMenuItem)
+}
+
+// ADR 41: the Market is required; there is no Market by default.
+func TestOrderRequiresMarket(t *testing.T) {
+	price, err := vo.ParseMoney("2.50", "EUR")
+	require.NoError(t, err)
+	quantity, err := vo.NewQuantity(1)
+	require.NoError(t, err)
+
+	_, err = New("order-1", "customer-1", "restaurant-1", vo.MarketID{}, []Item{NewItem("menu-1", "Margherita", quantity, price)})
+	require.ErrorIs(t, err, ErrMarketRequired)
+	require.ErrorIs(t, err, vo.ErrInvalidValue)
+
+	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{NewItem("menu-1", "Margherita", quantity, price)})
+	require.NoError(t, err)
+	assert.Equal(t, "berlin", order.MarketID().String())
+}
+
+func testMarket(t testing.TB) vo.MarketID {
+	t.Helper()
+	market, err := vo.NewMarketID("berlin")
+	require.NoError(t, err)
+	return market
 }
 
 func newTestOrder(t *testing.T) *Order {
@@ -77,6 +100,7 @@ func newTestOrder(t *testing.T) *Order {
 		"order-1",
 		"customer-1",
 		"restaurant-1",
+		testMarket(t),
 		[]Item{NewItem("menu-1", "Margherita", quantity, price)},
 	)
 	require.NoError(t, err)

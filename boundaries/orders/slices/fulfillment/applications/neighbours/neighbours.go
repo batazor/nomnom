@@ -16,9 +16,14 @@ type Orders interface {
 	Get(ctx context.Context, id order.ID) (*order.Order, error)
 }
 
+// MarketID of PaymentRequest and DeliveryRequest is the Market of the Order
+// (ADR 41). It is read from the stored Order on every Activity attempt, never
+// carried in workflow input or state: workflows started before Markets get it
+// the same way as new ones, and their Event History replays unchanged.
 type PaymentRequest struct {
 	OrderID        string
 	CustomerID     string
+	MarketID       string
 	Amount         string
 	Currency       string
 	IdempotencyKey string
@@ -61,6 +66,7 @@ type Restaurants interface {
 
 type DeliveryRequest struct {
 	OrderID        string
+	MarketID       string
 	IdempotencyKey string
 }
 
@@ -77,6 +83,7 @@ func NewPaymentRequest(current *order.Order, idempotencyKey string) PaymentReque
 	return PaymentRequest{
 		OrderID:        string(current.ID()),
 		CustomerID:     string(current.CustomerID()),
+		MarketID:       current.MarketID().String(),
 		Amount:         current.Total().Amount().String(),
 		Currency:       current.Total().Currency(),
 		IdempotencyKey: idempotencyKey,
@@ -101,6 +108,7 @@ func NewRestaurantOrderRequest(current *order.Order, idempotencyKey string) Rest
 func NewDeliveryRequest(current *order.Order, idempotencyKey string) DeliveryRequest {
 	return DeliveryRequest{
 		OrderID:        string(current.ID()),
+		MarketID:       current.MarketID().String(),
 		IdempotencyKey: idempotencyKey,
 	}
 }

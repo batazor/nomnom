@@ -72,6 +72,6 @@ func (o *Order) Cancel(requestedAt time.Time, reason CancellationReason) (Transi
 	}
 	o.cancellation = reason
 	o.cancelledAt = requestedAt
-	o.events = append(o.events, OrderCancelled{OrderID: o.id, RequestedAt: requestedAt, Reason: reason})
+	o.events = append(o.events, OrderCancelled{OrderID: o.id, MarketID: o.marketID, RequestedAt: requestedAt, Reason: reason})
 	return result, nil
 }

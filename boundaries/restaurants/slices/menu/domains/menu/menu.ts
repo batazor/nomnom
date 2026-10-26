@@ -1,3 +1,4 @@
+import { MarketId } from "../../../restaurant/domains/restaurant/vo/market-id.ts";
 import { InvalidMenuError, InvalidMenuReason } from "./errors.ts";
 import type {
   MenuCreated,
@@ -39,6 +40,8 @@ export type MenuItemSnapshot = Readonly<{
 export type MenuSnapshot = Readonly<{
   id: string;
   restaurantId: string;
+  /** Market of the restaurant (ADR 41), immutable. */
+  marketId: string;
   items: readonly MenuItemSnapshot[];
 }>;
 
@@ -75,6 +78,7 @@ const itemDescription = (
 export class Menu {
   readonly #id: string;
   readonly #restaurantId: string;
+  readonly #marketId: MarketId;
   readonly #version: number;
   #items: MenuItem[];
   #events: MenuEvent[] = [];
@@ -82,11 +86,13 @@ export class Menu {
   private constructor(
     id: string,
     restaurantId: string,
+    marketId: MarketId,
     items: MenuItem[],
     version: number,
   ) {
     this.#id = id;
     this.#restaurantId = restaurantId;
+    this.#marketId = marketId;
     this.#items = items;
     this.#version = version;
   }
@@ -94,9 +100,17 @@ export class Menu {
   static create(input: {
     id: string;
     restaurantId: string;
+    /** Market of the restaurant the menu belongs to (ADR 41). */
+    marketId: string;
     createdAt: Date;
   }): Menu {
-    const menu = new Menu(input.id, input.restaurantId, [], 0);
+    const menu = new Menu(
+      input.id,
+      input.restaurantId,
+      MarketId.of(input.marketId),
+      [],
+      0,
+    );
     menu.#record({ type: "MenuCreated" }, input.createdAt);
     return menu;
   }
@@ -105,6 +119,7 @@ export class Menu {
     return new Menu(
       snapshot.id,
       snapshot.restaurantId,
+      MarketId.of(snapshot.marketId),
       snapshot.items.map((item) => ({
         ...item,
         price: Money.from(item.price),
@@ -119,6 +134,10 @@ export class Menu {
 
   get restaurantId(): string {
     return this.#restaurantId;
+  }
+
+  get marketId(): MarketId {
+    return this.#marketId;
   }
 
   get version(): number {
@@ -214,6 +233,7 @@ export class Menu {
     return {
       id: this.#id,
       restaurantId: this.#restaurantId,
+      marketId: this.#marketId.value,
       items: this.#items.map((item) => ({
         ...item,
         price: item.price.toValue(),
@@ -264,6 +284,7 @@ export class Menu {
       ...event,
       menuId: this.#id,
       restaurantId: this.#restaurantId,
+      marketId: this.#marketId.value,
       occurredAt,
     } as MenuEvent);
   }

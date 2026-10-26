@@ -5,6 +5,8 @@ export type EventBase = Readonly<{
   restaurantOrderId: string;
   orderId: string;
   restaurantId: string;
+  /** Market of the restaurant that received the order (ADR 41). */
+  marketId: string;
   occurredAt: Date;
 }>;
 

@@ -112,12 +112,6 @@ a,
   gap: var(--space-4);
 }
 
-.location-label {
-  display: none;
-  color: var(--color-muted);
-  font-size: var(--font-size-sm);
-}
-
 .app-sheet {
   min-height: calc(100vh - 4rem - var(--space-2));
   margin: 0 var(--space-2) var(--space-2);
@@ -312,15 +306,30 @@ a,
   font-size: var(--font-size-sm);
 }
 
+.nomnom-select-field {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nomnom-select {
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
 @container style(--viewport: md) or style(--viewport: lg) or style(
   --viewport: xl
 ) {
   .app-topbar {
     padding-inline: var(--space-8);
-  }
-
-  .location-label {
-    display: block;
   }
 
   .app-content {

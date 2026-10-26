@@ -115,6 +115,7 @@ mod tests {
     };
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierStatus;
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{World, subject};
@@ -179,6 +180,7 @@ mod tests {
                 order_id: OrderId::new("order-of-delivery-1"),
                 courier_id: CourierId::new("courier-1"),
                 reason: expected,
+                market_id: MarketId::new("berlin").expect("market id"),
             })]
         );
         assert_eq!(

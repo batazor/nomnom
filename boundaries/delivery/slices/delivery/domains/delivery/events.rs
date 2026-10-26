@@ -1,7 +1,7 @@
 use super::{
     DeliveryCancellationReason, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
 };
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::{CourierId, MarketId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DomainEvent {
@@ -9,11 +9,15 @@ pub enum DomainEvent {
     DeliveryCreated {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         created_at_epoch_seconds: i64,
     },
     CourierAssignedToDelivery {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         courier_id: CourierId,
         /// Creation time of the Delivery; `None` for a Delivery stored
         /// before the creation time was recorded.
@@ -25,11 +29,15 @@ pub enum DomainEvent {
     CourierUnassignedFromDelivery {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         courier_id: CourierId,
     },
     DeliveryPickedUp {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         courier_id: CourierId,
         /// Handover time named by the courier on Pickup; `None` — not named
         /// (FR-610).
@@ -38,6 +46,8 @@ pub enum DomainEvent {
     DeliveryCompleted {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         courier_id: CourierId,
         /// Creation time of the Delivery; `None` for a Delivery stored
         /// before the creation time was recorded.
@@ -46,6 +56,8 @@ pub enum DomainEvent {
     DeliveryFailed {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         courier_id: CourierId,
         reason: DeliveryFailureReason,
     },
@@ -54,6 +66,8 @@ pub enum DomainEvent {
     DeliveryCancelled {
         delivery_id: DeliveryId,
         order_id: OrderId,
+        /// Market of the Delivery (ADR 41).
+        market_id: MarketId,
         released_courier_id: Option<CourierId>,
         reason: Option<DeliveryCancellationReason>,
     },

@@ -32,18 +32,26 @@ func WithFacts(facts ...order.RecordedFact) Option {
 	return func(snapshot *order.Snapshot) { snapshot.Facts = facts }
 }
 
+func WithMarket(marketID string) Option {
+	return func(snapshot *order.Snapshot) { snapshot.MarketID = mustMarket(marketID) }
+}
+
 func WithExpectedTimes(expected order.ExpectedTimes) Option {
 	return func(snapshot *order.Snapshot) { snapshot.Expected = expected }
 }
 
+// Market is the Market of fixtures unless WithMarket names another.
+const Market = "berlin"
+
 // New returns a standard Order with one item "menu-1" × 2 at 10 EUR for
-// customer-1 in restaurant-1, not yet persisted (version 0).
+// customer-1 in restaurant-1 of Market berlin, not yet persisted (version 0).
 func New(t testing.TB, id order.ID, options ...Option) *order.Order {
 	t.Helper()
 	snapshot := order.Snapshot{
 		ID:           id,
 		CustomerID:   "customer-1",
 		RestaurantID: "restaurant-1",
+		MarketID:     MarketID(t),
 		Items:        []order.Item{order.NewItem("menu-1", "Margherita", Quantity(t, 2), Money(t, "10"))},
 		PlacedAt:     PlacedAt,
 		State:        order.StatePlaced,
@@ -74,4 +82,20 @@ func Quantity(t testing.TB, value int) vo.Quantity {
 	quantity, err := vo.NewQuantity(value)
 	require.NoError(t, err)
 	return quantity
+}
+
+// MarketID is the fixture Market as a value object.
+func MarketID(t testing.TB) vo.MarketID {
+	t.Helper()
+	market, err := vo.NewMarketID(Market)
+	require.NoError(t, err)
+	return market
+}
+
+func mustMarket(value string) vo.MarketID {
+	market, err := vo.NewMarketID(value)
+	if err != nil {
+		panic(err)
+	}
+	return market
 }

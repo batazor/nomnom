@@ -35,6 +35,7 @@ type fakeRestaurants struct {
 
 	mu            sync.Mutex
 	open          bool
+	market        string
 	items         []*restaurantsv1.MenuItem
 	restaurantErr error
 	menuErr       error
@@ -47,7 +48,7 @@ func (f *fakeRestaurants) GetRestaurant(ctx context.Context, r *restaurantsv1.Ge
 	f.mu.Lock()
 	md, _ := metadata.FromIncomingContext(ctx)
 	f.authorization = md.Get("authorization")
-	block, err, open := f.block, f.restaurantErr, f.open
+	block, err, open, market := f.block, f.restaurantErr, f.open, f.market
 	f.mu.Unlock()
 	if block {
 		<-ctx.Done()
@@ -56,7 +57,7 @@ func (f *fakeRestaurants) GetRestaurant(ctx context.Context, r *restaurantsv1.Ge
 	if err != nil {
 		return nil, err
 	}
-	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: open}}, nil
+	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: open, MarketId: market}}, nil
 }
 
 func (f *fakeRestaurants) GetMenu(context.Context, *restaurantsv1.GetMenuRequest) (*restaurantsv1.GetMenuResponse, error) {
@@ -104,7 +105,7 @@ func newCatalog(t *testing.T, server *fakeRestaurants) *catalog.Catalog {
 }
 
 func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
-	server := &fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{
+	server := &fakeRestaurants{market: ordertest.Market, open: true, items: []*restaurantsv1.MenuItem{
 		item("pizza", "12.50", "EUR", true),
 		item("gyoza", "6", "EUR", false),
 		item("soup", "4", "EUR", true),
@@ -114,6 +115,7 @@ func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "EUR", snapshot.Currency)
+	assert.Equal(t, ordertest.MarketID(t), snapshot.MarketID, "the Order is placed in the Market of the Restaurant")
 	assert.Equal(t, map[order.MenuItemID]placeorder.CatalogItem{
 		"pizza": {Name: "pizza", UnitPrice: ordertest.Money(t, "12.50"), Available: true},
 		"gyoza": {Name: "gyoza", UnitPrice: ordertest.Money(t, "6"), Available: false},
@@ -127,15 +129,32 @@ func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 func TestSnapshotRefusesItemWithoutName(t *testing.T) {
 	nameless := item("pizza", "12.50", "EUR", true)
 	nameless.Name = ""
-	server := &fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{nameless}}
+	server := &fakeRestaurants{market: ordertest.Market, open: true, items: []*restaurantsv1.MenuItem{nameless}}
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 	require.ErrorContains(t, err, "has no name")
 }
 
+// ADR 41: restaurants always publishes the Market of a Restaurant; a missing or
+// malformed market_id breaks its contract and is never replaced by a Market of
+// orders. It is not invalid input of the Customer.
+func TestSnapshotRefusesRestaurantWithoutMarket(t *testing.T) {
+	for name, market := range map[string]string{"missing": "", "malformed": "Berlin"} {
+		t.Run(name, func(t *testing.T) {
+			server := &fakeRestaurants{market: market, open: true, items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}
+
+			_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
+			require.ErrorIs(t, err, catalog.ErrInvalidRestaurant)
+			assert.NotErrorIs(t, err, application.ErrInvalidInput)
+			assert.NotErrorIs(t, err, vo.ErrInvalidValue)
+			assert.Zero(t, server.menuCalls, "the menu is not read")
+		})
+	}
+}
+
 // AC-566: a closed restaurant is refused before the menu is read.
 func TestSnapshotRefusesClosedRestaurant(t *testing.T) {
-	server := &fakeRestaurants{open: false, items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}
+	server := &fakeRestaurants{market: ordertest.Market, open: false, items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 	require.ErrorIs(t, err, placeorder.ErrRestaurantNotAcceptingOrders)
@@ -147,17 +166,17 @@ func TestSnapshotMapsErrors(t *testing.T) {
 		server *fakeRestaurants
 		want   error
 	}{
-		"restaurant not found": {&fakeRestaurants{restaurantErr: status.Error(codes.NotFound, "no restaurant")}, placeorder.ErrUnknownRestaurant},
-		"menu not found":       {&fakeRestaurants{open: true, menuErr: status.Error(codes.NotFound, "no menu")}, placeorder.ErrUnknownRestaurant},
-		"empty menu":           {&fakeRestaurants{open: true}, placeorder.ErrUnknownRestaurant},
-		"invalid argument":     {&fakeRestaurants{restaurantErr: status.Error(codes.InvalidArgument, "bad id")}, application.ErrInvalidInput},
-		"unavailable":          {&fakeRestaurants{restaurantErr: status.Error(codes.Unavailable, "down")}, application.ErrDependencyUnavailable},
-		"unauthenticated":      {&fakeRestaurants{restaurantErr: status.Error(codes.Unauthenticated, "who")}, application.ErrDependencyUnavailable},
-		"route not registered": {&fakeRestaurants{open: true, menuErr: status.Error(codes.Unimplemented, "404")}, application.ErrDependencyUnavailable},
-		"mixed currencies": {&fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{
+		"restaurant not found": {&fakeRestaurants{market: ordertest.Market, restaurantErr: status.Error(codes.NotFound, "no restaurant")}, placeorder.ErrUnknownRestaurant},
+		"menu not found":       {&fakeRestaurants{market: ordertest.Market, open: true, menuErr: status.Error(codes.NotFound, "no menu")}, placeorder.ErrUnknownRestaurant},
+		"empty menu":           {&fakeRestaurants{market: ordertest.Market, open: true}, placeorder.ErrUnknownRestaurant},
+		"invalid argument":     {&fakeRestaurants{market: ordertest.Market, restaurantErr: status.Error(codes.InvalidArgument, "bad id")}, application.ErrInvalidInput},
+		"unavailable":          {&fakeRestaurants{market: ordertest.Market, restaurantErr: status.Error(codes.Unavailable, "down")}, application.ErrDependencyUnavailable},
+		"unauthenticated":      {&fakeRestaurants{market: ordertest.Market, restaurantErr: status.Error(codes.Unauthenticated, "who")}, application.ErrDependencyUnavailable},
+		"route not registered": {&fakeRestaurants{market: ordertest.Market, open: true, menuErr: status.Error(codes.Unimplemented, "404")}, application.ErrDependencyUnavailable},
+		"mixed currencies": {&fakeRestaurants{market: ordertest.Market, open: true, items: []*restaurantsv1.MenuItem{
 			item("pizza", "12.50", "EUR", true), item("soup", "4", "USD", true),
 		}}, vo.ErrInvalidValue},
-		"invalid price": {&fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{item("pizza", "twelve", "EUR", true)}}, vo.ErrInvalidValue},
+		"invalid price": {&fakeRestaurants{market: ordertest.Market, open: true, items: []*restaurantsv1.MenuItem{item("pizza", "twelve", "EUR", true)}}, vo.ErrInvalidValue},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := newCatalog(t, tc.server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
@@ -167,7 +186,7 @@ func TestSnapshotMapsErrors(t *testing.T) {
 }
 
 func TestSnapshotTimeoutIsUnavailable(t *testing.T) {
-	server := &fakeRestaurants{block: true}
+	server := &fakeRestaurants{market: ordertest.Market, block: true}
 	adapter := catalog.New(dial(t, server), limits, 50*time.Millisecond)
 
 	_, err := adapter.Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
@@ -178,7 +197,7 @@ func TestSnapshotTimeoutIsUnavailable(t *testing.T) {
 func TestSnapshotCallsCarryServiceToken(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "nomnom.restaurants"), []byte("token-1\n"), 0o600))
-	server := &fakeRestaurants{open: true, items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}
+	server := &fakeRestaurants{market: ordertest.Market, open: true, items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}
 	adapter := catalog.New(dial(t, server, grpc.WithUnaryInterceptor(gateway.ServiceToken(dir))), limits, time.Second)
 
 	_, err := adapter.Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})

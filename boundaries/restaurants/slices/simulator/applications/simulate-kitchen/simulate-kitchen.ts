@@ -23,10 +23,15 @@ import {
   shiftPlan,
 } from "../../domains/simulator/simulator.ts";
 
-/** Restaurant Order waiting for an action of its restaurant. */
+/**
+ * Restaurant Order waiting for an action of its restaurant. `marketId` is the
+ * stored Market of the order (ADR 41): the Simulator never names a Market of
+ * its own, it only drives existing orders through the kitchen commands.
+ */
 export type PendingKitchenOrder = Readonly<{
   restaurantOrderId: string;
   restaurantId: string;
+  marketId: string;
   state: SimulatedState;
   expectedReadyAt?: Date;
 }>;
@@ -208,6 +213,7 @@ export class KitchenSimulator {
       this.#log("simulated kitchen action failed", {
         restaurant_order_id: order.restaurantOrderId,
         restaurant_id: order.restaurantId,
+        market_id: order.marketId,
         action,
         error,
       });

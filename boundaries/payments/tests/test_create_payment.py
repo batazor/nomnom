@@ -3,6 +3,7 @@ from typing import override
 
 import pytest
 from payment_fakes import (
+    MARKET,
     ORCHESTRATOR,
     PaymentsTestKit,
 )
@@ -34,9 +35,13 @@ class CreatePaymentTest(unittest.TestCase):
         self.handler = CreatePaymentHandler(self.kit.payments, self.kit.permissions, self.kit.ids)
 
     def create(
-        self, order_id: str = "order-1", amount: str = "25.00", currency: str = "EUR"
+        self,
+        order_id: str = "order-1",
+        amount: str = "25.00",
+        currency: str = "EUR",
+        market_id: str = MARKET.value,
     ) -> CreatePaymentInput:
-        return CreatePaymentInput(ORCHESTRATOR, order_id, amount, currency)
+        return CreatePaymentInput(ORCHESTRATOR, order_id, market_id, amount, currency)
 
     def test_ac_400_creates_pending_payment_for_order(self) -> None:
         result = self.handler.handle(self.create())
@@ -45,6 +50,7 @@ class CreatePaymentTest(unittest.TestCase):
         self.assertEqual(result.state, PaymentState.PENDING)
         stored = self.kit.payment(result.payment_id)
         self.assertEqual(stored.order_id, OrderId("order-1"))
+        self.assertEqual(stored.market_id, MARKET)
         self.assertEqual(stored.amount, Money.parse("25.00", "EUR"))
         self.assertEqual(
             self.kit.permissions.checks[0][1:],
@@ -73,6 +79,24 @@ class CreatePaymentTest(unittest.TestCase):
                 self.handler.handle(self.create(amount=amount, currency=currency))
         self.assertEqual(self.kit.payment_ids(), [first.payment_id])
         self.assertEqual(self.kit.payment(first.payment_id).version, 1)
+
+    def test_repeated_create_in_another_market_is_rejected(self) -> None:
+        first = self.handler.handle(self.create())
+
+        with self.assertRaises(PaymentAlreadyExistsError):
+            self.handler.handle(self.create(market_id="hamburg"))
+
+        self.assertEqual(self.kit.payment(first.payment_id).market_id, MARKET)
+
+    def test_empty_or_malformed_market_is_rejected(self) -> None:
+        for market_id in ("", " ", "b", "Berlin", "1berlin", "berlin_city", "b" * 33):
+            with (
+                self.subTest(market_id=market_id),
+                self.assertRaises(InvalidPaymentRequestError),
+            ):
+                self.handler.handle(self.create(market_id=market_id))
+        self.assertEqual(self.kit.payment_ids(), [])
+        self.assertEqual(self.kit.permissions.checks, [])
 
     def test_ac_403_invalid_amount_or_request_is_rejected(self) -> None:
         cases = [
@@ -109,7 +133,9 @@ class CreatePaymentTest(unittest.TestCase):
         self.assertEqual(self.kit.payment_ids(), [])
 
     def test_concurrent_create_returns_payment_of_the_winner(self) -> None:
-        winner = Payment(PaymentId("payment-winner"), OrderId("order-1"), Money.parse("25", "EUR"))
+        winner = Payment(
+            PaymentId("payment-winner"), OrderId("order-1"), MARKET, Money.parse("25", "EUR")
+        )
         payments = RacingPaymentRepository(self.database, winner)
         handler = CreatePaymentHandler(payments, self.kit.permissions, self.kit.ids)
 

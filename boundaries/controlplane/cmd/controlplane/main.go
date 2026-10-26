@@ -1,0 +1,45 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+
+	// GOMEMLIMIT = 90% memory limit cgroup контейнера; явная переменная GOMEMLIMIT имеет приоритет,
+	// без limit — no-op. GOMAXPROCS Go 1.25+ выводит из CPU limit сам.
+	_ "github.com/KimMachineGun/automemlimit"
+
+	"github.com/batazor/nomnom/boundaries/controlplane/di"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/lifecycle"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/telemetry"
+)
+
+func main() {
+	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов.
+	telemetry.SetupLogging(di.AppServiceName)
+	if err := run(); err != nil {
+		slog.Error("controlplane stopped", telemetry.LogErrorKey, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	app, cleanup, err := di.InitializeApp(cfg)
+	if err != nil {
+		return fmt.Errorf("initialize app: %w", err)
+	}
+	defer cleanup()
+
+	return lifecycle.New(lifecycle.Config{
+		ManagementAddr: fmt.Sprintf(":%d", cfg.Management.Port),
+		ReadinessDelay: cfg.Shutdown.ReadinessDelay,
+		DrainTimeout:   cfg.Shutdown.DrainTimeout,
+	}).Run(context.Background(), app)
+}

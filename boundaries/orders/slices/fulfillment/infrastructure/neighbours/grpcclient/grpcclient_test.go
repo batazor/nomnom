@@ -126,7 +126,7 @@ func serve(t *testing.T) *fakes {
 }
 
 var payment = neighbours.PaymentRequest{
-	OrderID: "order-1", Amount: "20", Currency: "EUR", IdempotencyKey: "order:order-1:authorize_payment",
+	OrderID: "order-1", MarketID: "berlin", Amount: "20", Currency: "EUR", IdempotencyKey: "order:order-1:authorize_payment",
 }
 
 func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
@@ -139,6 +139,7 @@ func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
 	require.Len(t, f.payments.created, 1)
 	assert.Equal(t, "order-1", f.payments.created[0].GetOrderId())
 	assert.Equal(t, "20", f.payments.created[0].GetAmount().GetAmount())
+	assert.Equal(t, "berlin", f.payments.created[0].GetMarketId(), "the Payment is in the Market of the Order")
 	require.Len(t, f.payments.authorize, 1)
 	assert.Equal(t, "payment-1", f.payments.authorize[0].GetPaymentId())
 	assert.Equal(t, payment.IdempotencyKey, f.payments.authorize[0].GetIdempotencyKey())
@@ -221,11 +222,12 @@ func TestDeliveryCreateSendsTheOrder(t *testing.T) {
 	f := serve(t)
 	d := grpcclient.NewDelivery(f.conn)
 
-	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
-	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
+	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", MarketID: "berlin"}))
+	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", MarketID: "berlin"}))
 
 	require.Len(t, f.delivery.created, 1)
 	assert.Equal(t, "order-1", f.delivery.created[0].GetOrderId())
+	assert.Equal(t, "berlin", f.delivery.created[0].GetMarketId(), "the Delivery is in the Market of the Order")
 }
 
 func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {

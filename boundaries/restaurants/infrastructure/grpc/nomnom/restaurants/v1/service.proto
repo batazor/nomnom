@@ -125,6 +125,8 @@ message ListRestaurantsRequest {
   // next_page_token of the previous page; empty for the first page.
   string page_token = 2;
   bool include_closed = 3;
+  // Required (ADR 41): only Restaurants of this Market.
+  string market_id = 4;
 }
 
 message ListRestaurantsResponse {
@@ -138,6 +140,8 @@ message ListOwnedRestaurantsRequest {
   int32 page_size = 1;
   // next_page_token of the previous page; empty for the first page.
   string page_token = 2;
+  // Required (ADR 41): only Restaurants of this Market.
+  string market_id = 3;
 }
 
 message ListOwnedRestaurantsResponse {
@@ -344,6 +348,8 @@ message RegisterRestaurantRequest {
   // The pickup address is dropped from the project.
   reserved 3;
   reserved "address";
+  // Required (ADR 41): Market of the new Restaurant.
+  string market_id = 4;
 }
 
 message RegisterRestaurantResponse {

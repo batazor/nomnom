@@ -14,6 +14,7 @@ import (
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
+	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
@@ -33,6 +34,7 @@ func TestOrderDetailsReads(t *testing.T) {
 	details, err := store.OrderDetails(ctx, ids[0])
 	require.NoError(t, err)
 	assert.Equal(t, customer, details.CustomerID)
+	assert.Equal(t, ordertest.MarketID(t), details.MarketID)
 	require.Len(t, details.Items, 1)
 	assert.Equal(t, "Margherita", details.Items[0].Name)
 	assert.Nil(t, details.Cancellation)
@@ -40,25 +42,53 @@ func TestOrderDetailsReads(t *testing.T) {
 	_, err = store.OrderDetails(ctx, "missing")
 	require.ErrorIs(t, err, order.ErrOrderNotFound)
 
-	first, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, Limit: 2})
+	first, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2})
 	require.NoError(t, err)
 	require.Len(t, first.Rows, 2)
 	assert.Equal(t, []order.ID{ids[2], ids[1]}, []order.ID{first.Rows[0].Details.OrderID, first.Rows[1].Details.OrderID})
 	require.NotEmpty(t, first.NextCursor)
 	assert.Equal(t, first.NextCursor, first.Rows[1].Cursor, "the last order continues the page")
 
-	resumed, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, Limit: 2, Cursor: first.Rows[0].Cursor})
+	resumed, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: first.Rows[0].Cursor})
 	require.NoError(t, err)
 	assert.Equal(t, []order.ID{ids[1], ids[0]}, []order.ID{resumed.Rows[0].Details.OrderID, resumed.Rows[1].Details.OrderID}, "any order cursor resumes after it")
 
-	second, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, Limit: 2, Cursor: first.NextCursor})
+	second, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: first.NextCursor})
 	require.NoError(t, err)
 	require.Len(t, second.Rows, 1)
 	assert.Equal(t, ids[0], second.Rows[0].Details.OrderID)
 	assert.Empty(t, second.NextCursor)
 
-	_, err = store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, Limit: 2, Cursor: "%%%"})
+	_, err = store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: "%%%"})
 	require.ErrorIs(t, err, application.ErrInvalidInput)
+}
+
+// ADR 41: the history is filtered by Market in SQL, with the keyset cursor.
+func TestListCustomerOrdersFiltersByMarket(t *testing.T) {
+	store := open(t)
+	ctx := context.Background()
+	customer := order.CustomerID(uniqueID("markets"))
+	berlin, hamburg := uniqueID("berlin"), uniqueID("hamburg")
+	require.NoError(t, store.Add(ctx, ordertest.New(t, berlin, ordertest.WithCustomer(customer))))
+	require.NoError(t, store.Add(ctx, ordertest.New(t, hamburg, ordertest.WithCustomer(customer), ordertest.WithMarket("hamburg"),
+		ordertest.WithPlacedAt(ordertest.PlacedAt.Add(time.Minute)))))
+	hamburgMarket, err := vo.NewMarketID("hamburg")
+	require.NoError(t, err)
+
+	page, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: hamburgMarket, Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, page.Rows, 1)
+	assert.Equal(t, hamburg, page.Rows[0].Details.OrderID)
+	assert.Equal(t, hamburgMarket, page.Rows[0].Details.MarketID)
+
+	page, err = store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, page.Rows, 1)
+	assert.Equal(t, berlin, page.Rows[0].Details.OrderID)
+
+	restored, err := store.Get(ctx, hamburg)
+	require.NoError(t, err)
+	assert.Equal(t, hamburgMarket, restored.MarketID(), "the Order keeps its Market in storage")
 }
 
 // Every change of the Order rewrites its row in the same transaction.

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::{CourierId, MarketId};
 use crate::slices::delivery::applications::courier_locator::{
     CourierCandidate, CourierLocator, LocatorError,
 };
@@ -46,7 +46,9 @@ impl StaticCourierLocator {
 }
 
 impl CourierLocator for StaticCourierLocator {
-    fn candidates(&self) -> Result<Vec<CourierCandidate>, LocatorError> {
+    /// Every configured candidate, whatever its Market: tests prove that
+    /// the assignment rule itself rejects couriers of another Market.
+    fn candidates(&self, _market_id: &MarketId) -> Result<Vec<CourierCandidate>, LocatorError> {
         self.configured()
     }
 

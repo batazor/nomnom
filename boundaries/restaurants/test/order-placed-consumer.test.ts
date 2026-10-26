@@ -33,7 +33,13 @@ import {
 type Item = { menuItemId: string; quantity: number };
 
 const orderPlaced = (
-  fields: { orderId?: string; restaurantId: string; items: Item[] },
+  fields: {
+    orderId?: string;
+    restaurantId: string;
+    items: Item[];
+    /** Market of the order; empty as a publisher before ADR 41. */
+    marketId?: string;
+  },
   eventId = "event-1",
 ): InboundMessage => {
   const orderId = fields.orderId ?? "order-1";
@@ -48,6 +54,7 @@ const orderPlaced = (
         orderId,
         customerId: "customer-1",
         restaurantId: fields.restaurantId,
+        marketId: fields.marketId ?? "berlin",
         total: { amount: "19.00", currency: "EUR" },
         items: fields.items.map((item) => ({
           ...item,
@@ -112,10 +119,66 @@ test("OrderPlaced creates a RECEIVED Restaurant Order with the placed items", as
   const snapshot = order.toSnapshot();
   assert.equal(snapshot.state, RestaurantOrderState.Received);
   assert.equal(snapshot.restaurantId, kitchen.restaurantId);
+  assert.equal(snapshot.marketId, "berlin");
   assert.deepEqual(
     snapshot.items.map((item) => [item.menuItemId, item.quantity]),
     [[kitchen.phoId, 2]],
   );
+});
+
+test("ADR 41 OrderPlaced without market_id takes the Market of the restaurant", async () => {
+  const { world, kitchen, processor } = await setup();
+
+  const outcome = await processor.process(
+    orderPlaced({
+      restaurantId: kitchen.restaurantId,
+      items: [{ menuItemId: kitchen.phoId, quantity: 1 }],
+      marketId: "",
+    }),
+  );
+
+  assert.equal(outcome, "processed");
+  assert.equal(
+    (await world.restaurantOrders.findByOrderId("order-1"))?.marketId.value,
+    "berlin",
+  );
+});
+
+test("ADR 41 OrderPlaced of another Market than the restaurant's is dead-lettered", async () => {
+  const { world, kitchen, processor, deadLetters } = await setup();
+
+  const outcome = await processor.process(
+    orderPlaced({
+      restaurantId: kitchen.restaurantId,
+      items: [{ menuItemId: kitchen.phoId, quantity: 1 }],
+      marketId: "hamburg",
+    }),
+  );
+
+  assert.equal(outcome, "dead-lettered");
+  assert.equal(deadLetters[0]?.topic, `${ORDER_EVENTS_TOPIC}.dlq`);
+  assert.match(
+    deadLetters[0]?.headers.reason_poisoned ?? "",
+    /market hamburg.*market berlin/,
+  );
+  assert.equal((await world.orderStore.find({})).length, 0);
+  assert.equal(await world.db.collection(INBOX_COLLECTION).countDocuments(), 0);
+});
+
+test("ADR 41 OrderPlaced with a malformed market_id is dead-lettered", async () => {
+  const { world, kitchen, processor, deadLetters } = await setup();
+
+  const outcome = await processor.process(
+    orderPlaced({
+      restaurantId: kitchen.restaurantId,
+      items: [{ menuItemId: kitchen.phoId, quantity: 1 }],
+      marketId: "Berlin",
+    }),
+  );
+
+  assert.equal(outcome, "dead-lettered");
+  assert.equal(deadLetters.length, 1);
+  assert.equal((await world.orderStore.find({})).length, 0);
 });
 
 test("a redelivered OrderPlaced creates the Restaurant Order once", async () => {

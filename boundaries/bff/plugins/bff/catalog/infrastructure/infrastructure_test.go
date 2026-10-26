@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/cellrouter"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 )
 
@@ -81,8 +83,11 @@ func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 }
 
 // A customer in the context never reaches the public reads.
+// customerContext is a request of customer-1 in Market berlin, as the Cosmo
+// Router forwards it.
 func customerContext() context.Context {
-	return identity.WithUser(context.Background(), identity.User{ID: "customer-1"})
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(cellrouter.MarketMetadata, "berlin"))
+	return identity.WithUser(ctx, identity.User{ID: "customer-1"})
 }
 
 func TestListAsksForOpenRestaurantsWithoutUser(t *testing.T) {
@@ -98,8 +103,20 @@ func TestListAsksForOpenRestaurantsWithoutUser(t *testing.T) {
 	assert.Equal(t, int32(1), server.listed.GetPageSize())
 	assert.Equal(t, "restaurant-0", server.listed.GetPageToken())
 	assert.False(t, server.listed.GetIncludeClosed())
+	assert.Equal(t, "berlin", server.listed.GetMarketId(), "the list is of the request Market")
 	assert.Equal(t, []string{"Bearer token-nomnom.restaurants"}, server.seenMD.Get("authorization"))
 	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
+}
+
+// ADR 41: without a Market the list is refused before restaurants is called.
+func TestListNeedsTheMarketOfTheRequest(t *testing.T) {
+	server := &restaurantsServer{}
+	_, err := connect(t, server).List(identity.WithUser(context.Background(), identity.User{ID: "customer-1"}), applications.PageRequest{Size: 1})
+
+	refusal, ok := errors.AsType[*cellrouter.Refusal](err)
+	require.True(t, ok, "%v", err)
+	assert.Equal(t, codes.InvalidArgument, refusal.Code)
+	assert.Nil(t, server.listed)
 }
 
 func TestRestaurantAndMenuMapPublicData(t *testing.T) {

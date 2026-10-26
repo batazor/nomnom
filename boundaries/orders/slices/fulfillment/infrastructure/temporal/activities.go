@@ -136,6 +136,11 @@ func (a *Activities) FailOrCancelOrder(ctx context.Context, in FinalizeInput) er
 
 // request loads the Order of a step and builds the request to a neighbour
 // from its snapshot: Activities load → build the request → call → classify.
+// Data of the Order, such as its market_id (ADR 41), is read here on every
+// attempt and never added to Input, StepInput or workflow state: workflows
+// started before a field existed have no such input in their Event History,
+// while the stored Order always has it, so running and replayed workflows stay
+// deterministic and need no versioning.
 func request[R any](ctx context.Context, orders neighbours.Orders, in StepInput, build func(*order.Order, string) R) (R, error) {
 	var zero R
 	if in.OrderID == "" || in.IdempotencyKey == "" {

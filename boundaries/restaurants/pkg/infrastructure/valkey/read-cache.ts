@@ -59,6 +59,7 @@ export class ReadCache<T> {
   readonly #prefix: string;
   readonly #ttlMs: number;
   readonly #metrics: CacheMetrics;
+  readonly #isCurrent: ((value: T) => boolean) | undefined;
 
   constructor(options: {
     client: Valkey;
@@ -68,12 +69,19 @@ export class ReadCache<T> {
     prefix: string;
     ttlMs: number;
     metrics: CacheMetrics;
+    /**
+     * Whether a cached value has the current shape. A value that does not
+     * (written by an older release) is a miss: it is deleted and replaced by
+     * the source value.
+     */
+    isCurrent?: (value: T) => boolean;
   }) {
     this.#client = options.client;
     this.#name = options.name;
     this.#prefix = options.prefix;
     this.#ttlMs = options.ttlMs;
     this.#metrics = options.metrics;
+    this.#isCurrent = options.isCurrent;
   }
 
   /**
@@ -98,8 +106,20 @@ export class ReadCache<T> {
       return load();
     }
     if (cached !== null) {
-      this.#metrics.lookup(this.#name, "hit");
-      return JSON.parse(cached) as T;
+      const value = JSON.parse(cached) as T;
+      if (this.#isCurrent === undefined || this.#isCurrent(value)) {
+        this.#metrics.lookup(this.#name, "hit");
+        return value;
+      }
+      // Outdated shape: drop it so the NX store below replaces it; a refresh
+      // that writes in between still wins.
+      try {
+        await this.#client.del(fullKey);
+      } catch {
+        this.#metrics.error(this.#name, "set");
+        this.#metrics.lookup(this.#name, "bypass");
+        return load();
+      }
     }
     this.#metrics.lookup(this.#name, "miss");
     const loaded = await load();

@@ -60,6 +60,7 @@ test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted"
         restaurantOrderId: received.restaurantOrderId,
         orderId: received.orderId,
         restaurantId,
+        marketId: "berlin",
         occurredAt: now,
       },
     },

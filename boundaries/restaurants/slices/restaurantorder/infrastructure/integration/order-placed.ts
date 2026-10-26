@@ -1,7 +1,8 @@
 // Consumer Integration Event `nomnom.orders.v1.OrderPlaced` (ADR 11, ADR 28):
 // Transport DTO → Command Receive Order Request. Тот же use case вызывает RPC
 // ReceiveOrderRequest Temporal Activity orders; оба пути идемпотентны по
-// order_id и сходятся к одному Restaurant Order.
+// order_id и сходятся к одному Restaurant Order. Market Restaurant Order —
+// Market ресторана (ADR 41); `market_id` события сверяется с ним.
 import { fromBinary } from "@bufbuild/protobuf";
 
 import { OrderPlacedSchema } from "../../../../infrastructure/grpc/gen/nomnom/orders/v1/events_pb.js";
@@ -50,10 +51,17 @@ export class OrdersEventSourceAccessControl
   }
 }
 
-/** Ошибки Receive Order Request, которые повтор того же события не исправит. */
+/**
+ * Ошибки Receive Order Request, которые повтор того же события не исправит.
+ * `market_mismatch` — событие называет другой Market, чем у ресторана: заказ
+ * не пересекает границу Market (ADR 41), а молча выбрать один из них нельзя,
+ * поэтому событие уходит в DLQ для разбора оператором, а не подтверждается.
+ */
 const PERMANENT_CODES = new Set([
   "invalid_restaurant_order",
   "invalid_quantity",
+  "invalid_market_id",
+  "market_mismatch",
   "permission_denied",
 ]);
 /** Бизнес-исход: событие подтверждается без Restaurant Order, причина в log. */
@@ -93,6 +101,8 @@ export const createOrderPlacedHandler = (dependencies: {
         menuItemId: item.menuItemId,
         quantity: item.quantity,
       })),
+      // Empty — издатель до ADR 41: Market берётся только из ресторана.
+      ...(event.marketId === "" ? {} : { marketId: event.marketId }),
     });
   },
 

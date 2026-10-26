@@ -32,6 +32,15 @@ metadata:
     nomnom.dev/tier: app
     nomnom.dev/app: payments
 ---
+# Control plane (ADR 41): глобальный реестр Cell и Market, вне ячеек.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomnom-controlplane
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: controlplane
+---
 apiVersion: v1
 kind: Namespace
 metadata:

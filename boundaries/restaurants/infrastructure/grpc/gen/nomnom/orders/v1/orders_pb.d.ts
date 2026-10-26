@@ -50,6 +50,14 @@ export declare type OrderItem = Message<"nomnom.orders.v1.OrderItem"> & {
    * @generated from field: nomnom.orders.v1.Money unit_price = 3;
    */
   unitPrice?: Money | undefined;
+
+  /**
+   * Menu Item name at Place Order, like unit_price; empty for Orders placed
+   * before the name was kept.
+   *
+   * @generated from field: string name = 4;
+   */
+  name: string;
 };
 
 /**
@@ -206,6 +214,13 @@ export declare type Order = Message<"nomnom.orders.v1.Order"> & {
    * @generated from field: google.protobuf.Timestamp expected_delivered_at = 14;
    */
   expectedDeliveredAt?: Timestamp | undefined;
+
+  /**
+   * Market of the Restaurant at Place Order (ADR 41); immutable.
+   *
+   * @generated from field: string market_id = 15;
+   */
+  marketId: string;
 };
 
 /**
@@ -249,6 +264,14 @@ export declare type OrderSummary = Message<"nomnom.orders.v1.OrderSummary"> & {
    * @generated from field: string cursor = 6;
    */
   cursor: string;
+
+  /**
+   * Full card of the Order, the same as GetOrder returns: a reader of the
+   * history needs no GetOrder per Order.
+   *
+   * @generated from field: nomnom.orders.v1.Order order = 7;
+   */
+  order?: Order | undefined;
 };
 
 /**

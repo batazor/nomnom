@@ -5,6 +5,7 @@ import {
   Navigate,
   RouterProvider,
 } from "react-router-dom";
+import { MarketGate } from "../features/choose-market";
 import { FlowBoard } from "../features/flow-board";
 import { SignInCallback } from "../shared/auth/sign-in";
 import { AppLayout } from "./layout";
@@ -15,7 +16,15 @@ export const routes = [
     path: "/",
     element: <AppLayout />,
     children: [
-      { index: true, element: <FlowBoard /> },
+      // The board is market-scoped (ADR 41): first the viewer picks a Market.
+      {
+        index: true,
+        element: (
+          <MarketGate>
+            <FlowBoard />
+          </MarketGate>
+        ),
+      },
       // Redirect URI of the browser login (ADR 35).
       { path: "auth/callback", element: <SignInCallback /> },
       { path: "*", element: <Navigate replace to="/" /> },

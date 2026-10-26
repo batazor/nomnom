@@ -51,7 +51,7 @@ func TestFailOrCancelOrderRecordsOutcome(t *testing.T) {
 			assert.Equal(t, reason, snapshot.CancellationReason)
 			assert.Equal(t, decidedAt, snapshot.CancelledAt)
 			assert.Equal(t, repositorytest.ExpectedOutbox(t, "order-1", 2,
-				order.OrderCancelled{OrderID: "order-1", RequestedAt: decidedAt, Reason: reason},
+				order.OrderCancelled{OrderID: "order-1", MarketID: ordertest.MarketID(t), RequestedAt: decidedAt, Reason: reason},
 			), store.OutboxRecords())
 		})
 	}

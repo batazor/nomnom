@@ -23,6 +23,7 @@ contexts:
   - restaurants
   - delivery
   - payments
+  - controlplane
 
 # ADR 18: schema.zed и bootstrap.yaml из authorization/ (--set-file).
 authz:
@@ -39,6 +40,7 @@ postgres:
     - orders
     - payments
     - delivery
+    - controlplane
 
 identity:
   # ADR 27: issuer projected ServiceAccount tokens, ожидаемый values контекстов.

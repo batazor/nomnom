@@ -31,7 +31,9 @@ type OrderPlaced struct {
 	Total        *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
 	PlacedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
 	// Состав заказа по ценам catalog snapshot; restaurants создаёт по нему Restaurant Order.
-	Items         []*OrderItem `protobuf:"bytes,6,rep,name=items,proto3" json:"items,omitempty"`
+	Items []*OrderItem `protobuf:"bytes,6,rep,name=items,proto3" json:"items,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,7,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,10 +110,19 @@ func (x *OrderPlaced) GetItems() []*OrderItem {
 	return nil
 }
 
+func (x *OrderPlaced) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Заказ успешно завершён.
 type OrderCompleted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -153,11 +164,20 @@ func (x *OrderCompleted) GetOrderId() string {
 	return ""
 }
 
+func (x *OrderCompleted) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 // Заказ завершён отрицательным итогом: отменой или неудачей.
 type OrderCancelled struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Cancellation  *Cancellation          `protobuf:"bytes,2,opt,name=cancellation,proto3" json:"cancellation,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	OrderId      string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Cancellation *Cancellation          `protobuf:"bytes,2,opt,name=cancellation,proto3" json:"cancellation,omitempty"`
+	// Market of the aggregate (ADR 41).
+	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -206,11 +226,18 @@ func (x *OrderCancelled) GetCancellation() *Cancellation {
 	return nil
 }
 
+func (x *OrderCancelled) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
 var File_nomnom_orders_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\x89\x02\n" +
+	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\xa6\x02\n" +
 	"\vOrderPlaced\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -218,12 +245,15 @@ const file_nomnom_orders_v1_events_proto_rawDesc = "" +
 	"\rrestaurant_id\x18\x03 \x01(\tR\frestaurantId\x12-\n" +
 	"\x05total\x18\x04 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x127\n" +
 	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x121\n" +
-	"\x05items\x18\x06 \x03(\v2\x1b.nomnom.orders.v1.OrderItemR\x05items\"+\n" +
+	"\x05items\x18\x06 \x03(\v2\x1b.nomnom.orders.v1.OrderItemR\x05items\x12\x1b\n" +
+	"\tmarket_id\x18\a \x01(\tR\bmarketId\"H\n" +
 	"\x0eOrderCompleted\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"o\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x8c\x01\n" +
 	"\x0eOrderCancelled\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12B\n" +
-	"\fcancellation\x18\x02 \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellationB\xc6\x01\n" +
+	"\fcancellation\x18\x02 \x01(\v2\x1e.nomnom.orders.v1.CancellationR\fcancellation\x12\x1b\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketIdB\xc6\x01\n" +
 	"\x14com.nomnom.orders.v1B\vEventsProtoP\x01Z?nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1;ordersv1\xa2\x02\x03NOX\xaa\x02\x10Nomnom.Orders.V1\xca\x02\x10Nomnom\\Orders\\V1\xe2\x02\x1cNomnom\\Orders\\V1\\GPBMetadata\xea\x02\x12Nomnom::Orders::V1b\x06proto3"
 
 var (

@@ -20,34 +20,46 @@ import "google/protobuf/timestamp.proto";
 message RestaurantOrderAccepted {
   string order_id = 1;
   google.protobuf.Timestamp expected_ready_at = 2;
+  // Market of the aggregate (ADR 41).
+  string market_id = 3;
 }
 
 // Ресторан отказался принять Kitchen Order.
 message RestaurantOrderRejected {
   string order_id = 1;
   string reason = 2;
+  // Market of the aggregate (ADR 41).
+  string market_id = 3;
 }
 
 // Начато Preparation.
 message PreparationStarted {
   string order_id = 1;
+  // Market of the aggregate (ADR 41).
+  string market_id = 2;
 }
 
 // Preparation задерживается; expected_ready_at — новая ожидаемая готовность.
 message PreparationDelayed {
   string order_id = 1;
   google.protobuf.Timestamp expected_ready_at = 2;
+  // Market of the aggregate (ADR 41).
+  string market_id = 3;
 }
 
 // Preparation не может быть завершено.
 message PreparationFailed {
   string order_id = 1;
   string reason = 2;
+  // Market of the aggregate (ADR 41).
+  string market_id = 3;
 }
 
 // Kitchen Order готов к Pickup.
 message RestaurantOrderReady {
   string order_id = 1;
+  // Market of the aggregate (ADR 41).
+  string market_id = 2;
 }
 
 // Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
@@ -56,6 +68,8 @@ message RestaurantOrderCancelled {
   string order_id = 1;
   string reason = 2;
   bool preparation_started = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // --- restaurants.v1.restaurant-events (aggregate_type Restaurant, aggregate_id —
@@ -64,12 +78,16 @@ message RestaurantOrderCancelled {
 // Ресторан открыт для новых Restaurant Order (Open Restaurant).
 message RestaurantOpened {
   string restaurant_id = 1;
+  // Market of the aggregate (ADR 41).
+  string market_id = 2;
 }
 
 // Ресторан закрыт для новых Restaurant Order (Close Restaurant); уже полученные
 // и принятые заказы не отменяются.
 message RestaurantClosed {
   string restaurant_id = 1;
+  // Market of the aggregate (ADR 41).
+  string market_id = 2;
 }
 
 // --- restaurants.v1.menu-events (aggregate_type Menu, aggregate_id — menu_id) ---
@@ -80,6 +98,8 @@ message MenuItemAdded {
   string menu_id = 1;
   string restaurant_id = 2;
   string menu_item_id = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // Изменились название, описание или цена Menu Item (Update Menu Item). Новые
@@ -89,6 +109,8 @@ message MenuItemUpdated {
   string menu_id = 1;
   string restaurant_id = 2;
   string menu_item_id = 3;
+  // Market of the aggregate (ADR 41).
+  string market_id = 4;
 }
 
 // Изменилась доступность Menu Item (Set Menu Item Availability или Update Menu
@@ -98,4 +120,6 @@ message MenuItemAvailabilityChanged {
   string restaurant_id = 2;
   string menu_item_id = 3;
   bool available = 4;
+  // Market of the aggregate (ADR 41).
+  string market_id = 5;
 }

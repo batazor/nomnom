@@ -8,6 +8,7 @@ from slices.payment.domains.payment import (
     GuardFailedError,
     InvalidOperationTransitionError,
     InvalidTransitionError,
+    MarketId,
     Money,
     OperationAlreadyCompletedError,
     OperationId,
@@ -40,7 +41,13 @@ PAYMENT_ID = PaymentId("payment-1")
 def make_payment(state: PaymentState = PaymentState.PENDING) -> Payment:
     reference = None if state in {PaymentState.PENDING, PaymentState.FAILED} else "auth-1"
     return Payment.restore(
-        PaymentId("payment-1"), OrderId("order-1"), AMOUNT, state, reference, version=1
+        PaymentId("payment-1"),
+        OrderId("order-1"),
+        MarketId("berlin"),
+        AMOUNT,
+        state,
+        reference,
+        version=1,
     )
 
 
@@ -166,7 +173,7 @@ class CompleteOperationTest(unittest.TestCase):
                 PaymentOperationDeclined(
                     operation.id, payment.id, OperationKind.AUTHORIZE, "card_declined"
                 ),
-                PaymentFailed(payment.id, payment.order_id, "card_declined"),
+                PaymentFailed(payment.id, payment.order_id, payment.market_id, "card_declined"),
             ],
         )
 

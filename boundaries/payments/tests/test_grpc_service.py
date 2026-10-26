@@ -69,10 +69,14 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
         self.channel.close()
         self.worker.shutdown(time.monotonic() + 1)
 
-    def _create(self, order_id: str = "order-1", amount: str = "25.00") -> str:
+    def _create(
+        self, order_id: str = "order-1", amount: str = "25.00", market_id: str = "berlin"
+    ) -> str:
         response = self.client.CreatePayment(
             service_pb2.CreatePaymentRequest(
-                order_id=order_id, amount=payments_pb2.Money(amount=amount, currency="EUR")
+                order_id=order_id,
+                market_id=market_id,
+                amount=payments_pb2.Money(amount=amount, currency="EUR"),
             )
         )
         return str(response.payment_id)
@@ -93,6 +97,7 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
 
         self.assertEqual(response.payment.payment_id, "payment-1")
         self.assertEqual(response.payment.order_id, "order-1")
+        self.assertEqual(response.payment.market_id, "berlin")
         self.assertEqual(response.payment.amount.amount, "25.00")
         self.assertEqual(response.payment.amount.currency, "EUR")
         self.assertEqual(response.payment.state, payments_pb2.PAYMENT_STATE_AUTHORIZED)
@@ -105,7 +110,9 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
     def test_create_then_authorize_succeeds(self) -> None:
         created = self.client.CreatePayment(
             service_pb2.CreatePaymentRequest(
-                order_id="order-1", amount=payments_pb2.Money(amount="25.00", currency="EUR")
+                order_id="order-1",
+                market_id="berlin",
+                amount=payments_pb2.Money(amount="25.00", currency="EUR"),
             )
         )
         self.assertTrue(created.created)
@@ -127,7 +134,9 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
         first = self._create()
         repeated = self.client.CreatePayment(
             service_pb2.CreatePaymentRequest(
-                order_id="order-1", amount=payments_pb2.Money(amount="25.00", currency="EUR")
+                order_id="order-1",
+                market_id="berlin",
+                amount=payments_pb2.Money(amount="25.00", currency="EUR"),
             )
         )
 
@@ -138,6 +147,12 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
         self._create(amount="25.00")
         with self.assertRaises(grpc.RpcError) as raised:
             self._create(amount="30.00")
+        self.assertEqual(_code(raised.exception), grpc.StatusCode.ALREADY_EXISTS)
+
+    def test_create_payment_in_another_market_already_exists(self) -> None:
+        self._create(market_id="berlin")
+        with self.assertRaises(grpc.RpcError) as raised:
+            self._create(market_id="hamburg")
         self.assertEqual(_code(raised.exception), grpc.StatusCode.ALREADY_EXISTS)
 
     def test_repeated_authorize_with_same_key_is_replayed(self) -> None:
@@ -204,6 +219,13 @@ class PaymentsGrpcServiceTest(unittest.TestCase):
             with self.subTest(order_id=order_id, amount=amount):
                 with self.assertRaises(grpc.RpcError) as raised:
                     self._create(order_id, amount)
+                self.assertEqual(_code(raised.exception), grpc.StatusCode.INVALID_ARGUMENT)
+
+    def test_empty_or_malformed_market_is_invalid_argument(self) -> None:
+        for market_id in ("", "Berlin", "berlin city"):
+            with self.subTest(market_id=market_id):
+                with self.assertRaises(grpc.RpcError) as raised:
+                    self._create(market_id=market_id)
                 self.assertEqual(_code(raised.exception), grpc.StatusCode.INVALID_ARGUMENT)
 
     def test_operation_without_idempotency_key_is_invalid_argument(self) -> None:

@@ -6,6 +6,11 @@ the operator and the demo user (owner, kitchen staff and courier at once): the J
 token plus a user assertion signed with the BFF key (mint_jwt.py), through the internal gateway.
 Data: /etc/demo/seed.json (ops/kind/demo/files/seed.json).
 
+The topology comes first (ADR 41): Cells and Markets of seed.json are registered in the control
+plane as the operator; RegisterCell and CreateMarket repeat idempotently (created = false) and
+refuse other values for a known id, so a changed seed.json fails the Job instead of drifting.
+Restaurants and couriers are then created in Market seed["market"].
+
 Re-running changes nothing that already exists: restaurants are matched by name among
 ListOwnedRestaurants of the owner, menu items by name among GetMenu, cooks by name among
 GetCookPool, staff/open/line/availability calls are idempotent, and RegisterCourier of a known
@@ -27,6 +32,7 @@ KEY_DIR = "/var/run/secrets/nomnom/assertion-key"
 GATEWAY = "internal-gateway.envoy-gateway-system.svc.cluster.local:8080"
 RESTAURANTS = "nomnom.restaurants.v1.RestaurantsService/"
 DELIVERY = "nomnom.delivery.v1.DeliveryService/"
+CONTROLPLANE = "nomnom.controlplane.v1.ControlPlaneService/"
 
 
 # gRPC status codes printed by grpcurl -format-error.
@@ -71,11 +77,24 @@ class Driver:
         raise AssertionError("unreachable")
 
 
-def owned_restaurants(driver: Driver, owner: str) -> dict:
+def seed_topology(driver: Driver, seed: dict) -> None:
+    """Cells и Markets control plane (ADR 41) от имени оператора; повтор идемпотентен."""
+    for cell in seed["cells"]:
+        response = driver.call("nomnom.controlplane", seed["operator"], CONTROLPLANE + "RegisterCell",
+                               {"cellId": cell["id"], "gatewayAddress": cell["gatewayAddress"]})
+        print(f"cell {cell['id']}: {'registered' if response.get('created') else 'already registered'}")
+    for market in seed["markets"]:
+        response = driver.call("nomnom.controlplane", seed["operator"], CONTROLPLANE + "CreateMarket",
+                               {"marketId": market["id"], "name": market["name"],
+                                "currency": market["currency"], "cellId": market["cellId"]})
+        print(f"market {market['id']}: {'created' if response.get('created') else 'already created'}")
+
+
+def owned_restaurants(driver: Driver, owner: str, market: str) -> dict:
     found, token = {}, ""
     while True:
         page = driver.call("nomnom.restaurants", owner, RESTAURANTS + "ListOwnedRestaurants",
-                           {"pageSize": 100, "pageToken": token})
+                           {"marketId": market, "pageSize": 100, "pageToken": token})
         for restaurant in page.get("restaurants", []):
             found[restaurant["name"]] = restaurant
         token = page.get("nextPageToken", "")
@@ -88,7 +107,7 @@ def seed_restaurant(driver: Driver, seed: dict, spec: dict, existing: dict) -> d
     restaurant = existing.get(spec["name"])
     if restaurant is None:
         restaurant = driver.call("nomnom.restaurants", seed["operator"], RESTAURANTS + "RegisterRestaurant",
-                                 {"name": spec["name"], "ownerId": owner})["restaurant"]
+                                 {"name": spec["name"], "ownerId": owner, "marketId": seed["market"]})["restaurant"]
         print(f"registered {spec['name']} ({restaurant['restaurantId']})")
     restaurant_id = restaurant["restaurantId"]
     driver.call("nomnom.restaurants", owner, RESTAURANTS + "AssignStaff",
@@ -138,7 +157,7 @@ def seed_courier(driver: Driver, seed: dict, courier: dict) -> None:
     остальные действуют только через Simulator."""
     try:
         driver.call("nomnom.delivery", seed["operator"], DELIVERY + "RegisterCourier",
-                    {"courierId": courier["id"], "name": courier["name"]})
+                    {"courierId": courier["id"], "name": courier["name"], "marketId": seed["market"]})
         print(f"registered courier {courier['name']} ({courier['id']})")
     except CallError as error:
         if error.code != ALREADY_EXISTS:
@@ -160,11 +179,12 @@ def main() -> None:
     key_file = next(os.path.join(KEY_DIR, name) for name in ("tls.key", "key.pem")
                     if os.path.exists(os.path.join(KEY_DIR, name)))
     driver = Driver(key_file, os.environ["ASSERTION_KEY_ID"])
-    existing = owned_restaurants(driver, seed["owner"])
+    seed_topology(driver, seed)
+    existing = owned_restaurants(driver, seed["owner"], seed["market"])
     restaurants = [seed_restaurant(driver, seed, spec, existing) for spec in seed["restaurants"]]
     for courier in seed["couriers"]:
         seed_courier(driver, seed, courier)
-    print(f"demo seed: {len(restaurants)} restaurants, {len(seed['couriers'])} couriers")
+    print(f"demo seed: {len(seed['markets'])} markets, {len(restaurants)} restaurants, {len(seed['couriers'])} couriers")
 
 
 if __name__ == "__main__":

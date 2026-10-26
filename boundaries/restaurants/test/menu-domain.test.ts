@@ -58,7 +58,12 @@ test("Money rejects negative, inexact and malformed amounts and currencies", () 
 });
 
 const menuWithPho = () => {
-  const menu = Menu.create({ id: "m-1", restaurantId: "r-1", createdAt: at });
+  const menu = Menu.create({
+    id: "m-1",
+    restaurantId: "r-1",
+    marketId: "berlin",
+    createdAt: at,
+  });
   menu.addItem({
     id: "i-1",
     name: " Pho ",
@@ -146,6 +151,7 @@ test("Menu availability change is a no-op for the current value", () => {
       menuId: "m-1",
       restaurantId: "r-1",
       menuItemId: "i-1",
+      marketId: "berlin",
       isAvailable: false,
       occurredAt: at,
     },

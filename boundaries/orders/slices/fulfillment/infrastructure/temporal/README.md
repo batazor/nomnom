@@ -40,7 +40,7 @@ Update `CancellationRequested` принимается до Pickup; позже и
 
 ## Activities
 
-Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`. Отказ платежа — `PaymentDecision`, а не ошибка. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
+Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`, прочитанного Activity на каждой попытке: так `market_id` Order ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) попадает в `payments.CreatePayment` и `delivery.CreateDelivery`. Данные `Order` не добавляются во вход (`Input`, `StepInput`) и состояние workflow: в Event History уже начатых workflow таких полей нет, а сохранённый `Order` их имеет, поэтому replay детерминирован без versioning. Отказ платежа — `PaymentDecision`, а не ошибка. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
 
 ## Worker
 

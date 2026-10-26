@@ -20,9 +20,9 @@ Use cases уже работают через порты `RestaurantRepository`, 
 
 | Коллекция | Документ | Вложено | Ссылки |
 | --- | --- | --- | --- |
-| `restaurants` | aggregate `Restaurant` | профиль, `staff` (множество user id, ограничено командой ресторана), `authorizationRevision` (ZedToken) | — |
-| `menus` | aggregate `Menu` | `items` — Menu Item с ценой `{ amount: decimal string, currency }` | `restaurantId` |
-| `restaurant_orders` | aggregate `RestaurantOrder` | Preparation Items, `timeline`, причины отказа/сбоя/отмены | `restaurantId`, `orderId` (Order контекста `orders`), `cookId` — Cook, назначенный при Start Preparation; обязателен в `PREPARING` и `ASSEMBLED`, остаётся после завершения |
+| `restaurants` | aggregate `Restaurant` | профиль, `marketId` (Market, [ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md), неизменяем), `staff` (множество user id, ограничено командой ресторана), `authorizationRevision` (ZedToken) | — |
+| `menus` | aggregate `Menu` | `marketId` (Market ресторана), `items` — Menu Item с ценой `{ amount: decimal string, currency }` | `restaurantId` |
+| `restaurant_orders` | aggregate `RestaurantOrder` | `marketId` (Market ресторана, получившего заказ), Preparation Items, `timeline`, причины отказа/сбоя/отмены | `restaurantId`, `orderId` (Order контекста `orders`), `cookId` — Cook, назначенный при Start Preparation; обязателен в `PREPARING` и `ASSEMBLED`, остаётся после завершения |
 | `cooks` | aggregate `Cook` — повар Cook Pool ресторана (change `add-cook-and-courier-pools`) | `name`, `onLine`, `lastAssignedAt`, `retiredAt` | `restaurantId` |
 | `outbox` | одно Integration Event или Change Notification ([ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md), контракт CDC — [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)) | `payload` — байты контракта (BinData), `traceparent` (`""` без trace context) | `aggregateType`, `aggregateId`, `aggregateVersion` (Long) |
 | `inbox` | факт обработки Integration Event consumer'ом ([ADR 11](../../../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md)), `_id` — `{consumer}:{eventId}` | — | `eventId`, `aggregateId`, `topic` |
@@ -42,8 +42,9 @@ Restaurant вместе с меню и заказами не объединяе�
 
 | Коллекция | Индекс | Назначение |
 | --- | --- | --- |
-| `restaurants` | `{ isOpen: 1, _id: 1 }` | каталог открытых ресторанов, пагинация по id |
-| `restaurants` | `{ ownerId: 1 }` | выборка ресторанов владельца |
+| `restaurants` | `{ marketId: 1, isOpen: 1, _id: 1 }` | каталог открытых ресторанов одного Market, пагинация по id |
+| `restaurants` | `{ marketId: 1, _id: 1 }` | каталог Market с закрытыми (`include_closed`), пагинация по id |
+| `restaurants` | `{ ownerId: 1, marketId: 1, _id: 1 }` | рестораны владельца в Market, пагинация по id |
 | `menus` | `{ restaurantId: 1 }` unique | одно меню на ресторан → `AlreadyExistsError` |
 | `restaurant_orders` | `{ orderId: 1 }` unique | идемпотентный Receive → `DuplicateOrderIdError` |
 | `restaurant_orders` | `{ restaurantId: 1, state: 1, "timeline.preparationStartedAt": 1 }` | очередь и активные приготовления |
@@ -79,6 +80,8 @@ Restaurant вместе с меню и заказами не объединяе�
 API и consumer стартуют одновременно. Lock migrate-mongo — документ в `migrations_lock` с TTL-индексом по `createdAt` (30 с), но `up` при занятом lock отказывает, а не ждёт, и проверяет и вставляет lock двумя шагами. Поэтому обёртка перед `up` создаёт unique index по полю, которого у документов lock нет (unique index допускает один документ без поля), — вставка lock становится атомарной, а занятый lock повторяется каждые 500 мс, пока держатель его не снимет или TTL не удалит lock упавшего процесса (TTL monitor MongoDB работает раз в 60 с, то есть до ~90 с — дольше бюджета `startupProbe` в 60 с, pod перезапустится и продолжит ждать). Коллекция lock одна на все наборы, но lock держится на время одного набора: `up` сам захватывает и снимает его, а lock на все наборы сразу потребовал бы второго, собственного lock. Процессы мигрируют по одному набору за раз, каждый — в порядке списка, так что в процессе `messaging` всегда предшествует слайсам; наборы независимы, поэтому чередование наборов разных процессов безопасно. `up` читает changelog до захвата lock: процесс, прочитавший его перед тем, как держатель закончил, повторит его миграции, а lock не продлевается — поэтому каждая миграция обязана быть идемпотентной. Конфигурация migrate-mongo — одна переменная модуля, которую `up` читает между await, поэтому запуски внутри одного процесса выполняются по очереди.
 
 Изменение формата документа: новый `schemaVersion`, читатель принимает предыдущую версию (как `StoredRestaurantSnapshot` принимает документы без `address` и `staff`), validator расширяется до перехода новой миграцией (`ensureCollection` с новым validator), миграция документов — тоже новым файлом в конце набора слайса-владельца; применённый файл никогда не редактируется: validator и индексы в нём — снимок на момент миграции, а не ссылка на код слайса.
+
+Market (ADR 41) введён так: миграции `restaurants/0003-market`, `menus/0002-market` и `restaurant_orders/0003-market` сначала явно проставляют `marketId: "berlin"` документам без поля (данные до Market принадлежат стартовому Market), затем validator требует `marketId` (slug `^[a-z][a-z0-9-]{1,31}$`); `schemaVersion` — 2, 2 и 3. Читатель документа без `marketId` не допускает: после миграции таких нет, а подстановка Market в коде была бы скрытым выбором. `restaurants/0003-market` заменяет индексы `restaurants_open_by_id` и `restaurants_owner` индексами с ведущим `marketId`. Индексы `menus` и `restaurant_orders` не меняются: они читаются по ресторану или состоянию, а у ресторана один Market.
 
 ### Атомарность
 

@@ -41,7 +41,7 @@ func TestCompleteOrderOnceWithOutboxRecord(t *testing.T) {
 	assert.Equal(t, order.StateCompleted, snapshot.State)
 	assert.Equal(t, uint64(2), snapshot.Version)
 	assert.Equal(t, repositorytest.ExpectedOutbox(t, "order-1", 2,
-		order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt},
+		order.OrderCompleted{OrderID: "order-1", MarketID: ordertest.MarketID(t), PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt},
 	), store.OutboxRecords())
 }
 

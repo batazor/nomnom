@@ -32,10 +32,7 @@ import { ListActiveRestaurantOrdersHandler } from "../applications/list-active-r
 import { ListIncomingOrdersHandler } from "../applications/list-incoming-orders/list-incoming-orders.ts";
 import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import {
-  ReceiveOrderRequestHandler,
-  type RestaurantExistence,
-} from "../applications/receive-order-request/receive-order-request.ts";
+import { ReceiveOrderRequestHandler } from "../applications/receive-order-request/receive-order-request.ts";
 import { RejectOrderHandler } from "../applications/reject-order/reject-order.ts";
 import { ReportPreparationDelayHandler } from "../applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../applications/report-preparation-failure/report-preparation-failure.ts";
@@ -106,7 +103,7 @@ export interface RestaurantOrderCradle {
   readonly restaurantOrderOutboxEventMapper: OutboxEventMapper;
   readonly restaurantOrders: RestaurantOrderRepository;
   /** Facts of the `restaurant` and `menu` slices read by Restaurant Orders. */
-  readonly restaurantExistence: RestaurantExistence;
+  readonly restaurantExistence: RepositoryRestaurantExistence;
   readonly acceptanceFacts: AcceptanceFactsReader;
   readonly acceptanceConditions: AcceptanceConditionsProvider;
   readonly readyTimeEstimator: ReadyTimeEstimator;

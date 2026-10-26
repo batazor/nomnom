@@ -20,6 +20,7 @@ COPY boundaries/orders/infrastructure/grpc/nomnom boundaries/orders/infrastructu
 COPY boundaries/restaurants/infrastructure/grpc/nomnom boundaries/restaurants/infrastructure/grpc/nomnom
 COPY boundaries/delivery/infrastructure/grpc/nomnom boundaries/delivery/infrastructure/grpc/nomnom
 COPY boundaries/payments/infrastructure/grpc/nomnom boundaries/payments/infrastructure/grpc/nomnom
+COPY boundaries/controlplane/infrastructure/grpc/nomnom boundaries/controlplane/infrastructure/grpc/nomnom
 COPY ops/kind/e2e/probe/proto /fixtures
 # Buf image совместим с FileDescriptorSet и уже содержит импорты (well-known types).
 # google/rpc из googleapis (закреплённый commit BSR) — чтобы grpcurl декодировал детали

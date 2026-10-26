@@ -52,8 +52,10 @@ type CatalogItem struct {
 }
 
 // CatalogSnapshot is read from restaurants before the transaction. Menu Items
-// missing from Items are treated as unavailable.
+// missing from Items are treated as unavailable. MarketID is the Market of the
+// Restaurant (ADR 41); the Order is placed in it.
 type CatalogSnapshot struct {
+	MarketID     vo.MarketID
 	Currency     string
 	Items        map[order.MenuItemID]CatalogItem
 	MinimumTotal vo.Money
@@ -138,6 +140,11 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("read catalog snapshot: %w", err)
 	}
+	if snapshot.MarketID.IsZero() {
+		// The Catalog adapter verifies market_id of the Restaurant; a snapshot
+		// without it is a defect, not invalid input of the Customer.
+		return Result{}, fmt.Errorf("catalog snapshot of restaurant %q has no market_id", in.RestaurantID)
+	}
 	items, orderability, err := request.priced(snapshot)
 	if err != nil {
 		return Result{}, err
@@ -147,7 +154,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("generate order id: %w", err)
 	}
-	placed, err := order.Place(orderID, customerID, in.RestaurantID, items, h.deps.Clock.Now(), orderability)
+	placed, err := order.Place(orderID, customerID, in.RestaurantID, snapshot.MarketID, items, h.deps.Clock.Now(), orderability)
 	if err != nil {
 		return Result{}, err
 	}

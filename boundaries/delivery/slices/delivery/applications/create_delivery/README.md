@@ -5,7 +5,7 @@
 - **Тип:** Command.
 - **Actor:** Fulfillment process `orders`.
 - **Намерение:** Запросить доставку оформленного заказа.
-- **Результат:** Идемпотентно создана `Delivery` для заказа.
+- **Результат:** Идемпотентно создана `Delivery` для заказа в Market заказа (`market_id`, обязательный и неизменяемый, ADR 41).
 
 ## Границы
 
@@ -34,7 +34,7 @@ sequenceDiagram
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-306.
 - **Порты:** `DeliveryAuthorization` (`CreateDelivery` над `Platform`), `DeliveryRepository`, `IdGenerator`.
-- **Транзакция:** Без UoW: ключ идемпотентности — `OrderId` (уникальность в репозитории); повтор для того же заказа возвращает существующую `Delivery` (`created = false`).
+- **Транзакция:** Без UoW: ключ идемпотентности — `OrderId` (уникальность в репозитории); повтор для того же заказа и Market возвращает существующую `Delivery` (`created = false`); повтор с другим Market — `DeliveryForOrderInOtherMarket` (`ALREADY_EXISTS`), Market доставки не меняется.
 - **Допущение:** Find Courier здесь не запускается: поиск курьера начинает следующий проход Dispatch Deliveries (FR-582).
 
 ## Acceptance

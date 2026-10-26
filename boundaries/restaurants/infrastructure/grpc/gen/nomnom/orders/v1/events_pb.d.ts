@@ -49,6 +49,13 @@ export declare type OrderPlaced = Message<"nomnom.orders.v1.OrderPlaced"> & {
    * @generated from field: repeated nomnom.orders.v1.OrderItem items = 6;
    */
   items: OrderItem[];
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 7;
+   */
+  marketId: string;
 };
 
 /**
@@ -67,6 +74,13 @@ export declare type OrderCompleted = Message<"nomnom.orders.v1.OrderCompleted"> 
    * @generated from field: string order_id = 1;
    */
   orderId: string;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 2;
+   */
+  marketId: string;
 };
 
 /**
@@ -90,6 +104,13 @@ export declare type OrderCancelled = Message<"nomnom.orders.v1.OrderCancelled"> 
    * @generated from field: nomnom.orders.v1.Cancellation cancellation = 2;
    */
   cancellation?: Cancellation | undefined;
+
+  /**
+   * Market of the aggregate (ADR 41).
+   *
+   * @generated from field: string market_id = 3;
+   */
+  marketId: string;
 };
 
 /**

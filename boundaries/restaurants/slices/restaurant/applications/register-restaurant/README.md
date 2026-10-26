@@ -5,7 +5,7 @@
 - **Тип:** Command.
 - **Actor:** Оператор платформы или владелец ресторана.
 - **Намерение:** Создать ресторан как управляемый ресурс.
-- **Результат:** Создан `Restaurant`; onboarding, verification и billing остаются вне сценария.
+- **Результат:** Создан `Restaurant` в обязательном неизменяемом Market (`market_id`, slug, ADR 41); onboarding, verification и billing остаются вне сценария.
 
 ## Границы
 

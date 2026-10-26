@@ -30,10 +30,10 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 	snap := created.Snapshot()
 	outcome, code := cancellation(snap.CancellationReason)
 	_, err := s.exec(ctx, psql.Insert("orders").
-		Columns("id", "customer_id", "restaurant_id", "total_amount", "total_currency",
+		Columns("id", "customer_id", "restaurant_id", "market_id", "total_amount", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
 			"expected_ready_at", "expected_pickup_at", "expected_delivered_at").
-		Values(snap.ID, snap.CustomerID, snap.RestaurantID,
+		Values(snap.ID, snap.CustomerID, snap.RestaurantID, snap.MarketID.String(),
 			created.Total().Amount().String(), created.Total().Currency(),
 			snap.State, snap.PlacedAt, nullTime(snap.CancelledAt), outcome, code, snap.Version+1,
 			nullTime(snap.Expected.ReadyAt), nullTime(snap.Expected.PickupAt), nullTime(snap.Expected.DeliveredAt)))
@@ -110,6 +110,7 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	var (
 		snap             order.Snapshot
 		amount, currency string
+		marketID         string
 		cancelledAt      *time.Time
 		outcome, code    *string
 		readyAt          *time.Time
@@ -117,11 +118,11 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 		deliveredAt      *time.Time
 	)
 	err := s.queryRow(ctx, psql.
-		Select("customer_id", "restaurant_id", "total_amount::text", "total_currency",
+		Select("customer_id", "restaurant_id", "market_id", "total_amount::text", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
 			"expected_ready_at", "expected_pickup_at", "expected_delivered_at").
 		From("orders").Where(sq.Eq{"id": id}),
-		&snap.CustomerID, &snap.RestaurantID, &amount, &currency,
+		&snap.CustomerID, &snap.RestaurantID, &marketID, &amount, &currency,
 		&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version,
 		&readyAt, &pickupAt, &deliveredAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -131,6 +132,9 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 		return order.Snapshot{}, fmt.Errorf("load order %s: %w", id, err)
 	}
 	snap.ID = id
+	if snap.MarketID, err = vo.NewMarketID(marketID); err != nil {
+		return order.Snapshot{}, fmt.Errorf("order %s market: %w", id, err)
+	}
 	snap.PlacedAt = snap.PlacedAt.UTC()
 	snap.CancelledAt = utcTime(cancelledAt)
 	snap.Expected = order.ExpectedTimes{ReadyAt: utcTime(readyAt), PickupAt: utcTime(pickupAt), DeliveredAt: utcTime(deliveredAt)}

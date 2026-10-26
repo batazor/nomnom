@@ -9,7 +9,7 @@ use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
-use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
+use crate::slices::courier::domains::courier::{CourierId, CourierStatus, MarketId};
 use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId, State};
 
 use super::courier_id;
@@ -20,6 +20,8 @@ use super::error::DeliveryApplicationError;
 pub struct CurrentDeliveryView {
     pub delivery_id: DeliveryId,
     pub order_id: OrderId,
+    /// Market of the Delivery (ADR 41).
+    pub market_id: MarketId,
     pub state: State,
 }
 
@@ -91,8 +93,12 @@ mod tests {
         }
     }
 
+    fn berlin() -> MarketId {
+        MarketId::new("berlin").expect("market id")
+    }
+
     fn delivery(id: &str, order: &str) -> Delivery {
-        Delivery::new(DeliveryId::new(id), OrderId::new(order))
+        Delivery::new(DeliveryId::new(id), OrderId::new(order), berlin())
     }
 
     fn store_with_courier() -> TestStore {
@@ -102,6 +108,7 @@ mod tests {
             &Courier::restore(
                 CourierId::new("courier-1"),
                 CourierName::new("Timur").expect("courier name"),
+                berlin(),
                 CourierStatus::Busy,
             ),
         )
@@ -134,6 +141,7 @@ mod tests {
             Some(CurrentDeliveryView {
                 delivery_id: DeliveryId::new("delivery-1"),
                 order_id: OrderId::new("order-1"),
+                market_id: berlin(),
                 state: State::Assigned,
             })
         );

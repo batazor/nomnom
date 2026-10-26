@@ -128,6 +128,12 @@ build:
       docker:
         dockerfile: ops/kind/e2e/probe/Dockerfile
         target: demo-seed
+    # Control plane (ADR 41): реестр Cell и Market. Последний artifact: индексы в patches
+    # профилей (1, 3, 5) не меняются.
+    - image: nomnom/controlplane
+      context: ../../../boundaries/controlplane
+      docker:
+        target: runtime
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
   # before-hook: rawYaml и releases Skaffold получают pod template label skaffold.dev/run-id, и
@@ -180,7 +186,7 @@ deploy:
         # Skaffold применяет rawYaml после helm, поэтому всё, что charts читают при старте,
         # создаётся здесь (ADR 34): namespaces и chart ../bootstrap — локальный CA и ключ BFF
         # (cert-manager), SpiceDB с bootstrap и preshared key (ADR 18), PostgreSQL orders,
-        # payments, delivery, MongoDB и Valkey restaurants со случайными паролями, сохраняемыми между
+        # payments, delivery, controlplane, MongoDB и Valkey restaurants со случайными паролями, сохраняемыми между
         # deploy (ADR 8, ADR 31), JWKS кластера, BFF и тестового identity provider (ADR 27,
         # ADR 32). --wait ждёт readiness хранилищ, затем hook Jobs инициализируют replica set
         # MongoDB и публикуют JWKS. --take-ownership принимает ресурсы, созданные до chart.
@@ -202,7 +208,9 @@ deploy:
                   --set-file authz.kindBootstrap=../authz/bootstrap-kind.yaml \
                   --set-file identity.idpJwks=../../../tests/identity/fixtures/idp-jwks.json
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
-        # consumer подключается к ним при startup.
+        # consumer подключается к ним при startup. DLQ topics consumers объявляются здесь же,
+        # до charts: retention — контракт разбора DLQ, а не дефолт auto create (docs/dlq.md).
+        # Spec Job неизменяем, поэтому прошлый Job удаляется перед apply.
         - host:
             command:
               - sh
@@ -212,6 +220,9 @@ deploy:
                 k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
                 k apply -f ../manifests/messaging/infrastructure.yaml
                 k -n nomnom-infra wait deployment/kafka deployment/temporal --for=condition=Available --timeout=300s
+                k -n nomnom-infra delete job dead-letter-topics --ignore-not-found --wait
+                k apply -f ../manifests/messaging/dead-letter-topics.yaml
+                k -n nomnom-infra wait job/dead-letter-topics --for=condition=Complete --timeout=180s
     releases:
       - name: orders
         chartPath: ../../../boundaries/orders/ops/helm
@@ -313,7 +324,7 @@ deploy:
         chartPath: ../demo
         namespace: nomnom-bff
         createNamespace: true
-        dependsOn: [orders, restaurants, delivery, payments, bff]
+        dependsOn: [orders, restaurants, delivery, payments, bff, controlplane]
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_demo_seed}}"
           image.tag: "{{.IMAGE_TAG_nomnom_demo_seed}}"
@@ -327,6 +338,33 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_kafka_connect}}"
           image.tag: "{{.IMAGE_TAG_nomnom_kafka_connect}}"
+      # Control plane (ADR 41): глобальный реестр Cell, Market и Market Placement; БД и SpiceDB
+      # готовит chart ../bootstrap. Cell cell-1 и Market berlin регистрирует Job chart ../demo.
+      # Индекс 11.
+      - name: controlplane
+        chartPath: ../../../boundaries/controlplane/ops/helm
+        namespace: nomnom-controlplane
+        createNamespace: true
+        valuesFiles: [../values/controlplane.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_controlplane}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_controlplane}}"
+      # Reconciler orders: сверка relations order SpiceDB ↔ PostgreSQL и catch-up проекции
+      # OrderDetails каждые RECONCILER__INTERVAL — строки, изменённые старыми pods во время
+      # rolling update, догоняются без перезапуска (ADR orders 4). Тот же образ и chart,
+      # command /orders-reconciler. Последний release (индекс 12): индексы в patches профилей
+      # не меняются.
+      - name: orders-reconciler
+        chartPath: ../../../boundaries/orders/ops/helm
+        namespace: nomnom-orders
+        createNamespace: true
+        dependsOn: [orders]
+        valuesFiles:
+          - ../../../boundaries/orders/ops/helm/values-reconciler.yaml
+          - ../values/orders-reconciler.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
   # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.
@@ -345,8 +383,8 @@ profiles:
           host:
             command: [sh, -c, 'helm uninstall e2e --kube-context "$SKAFFOLD_KUBE_CONTEXT" -n nomnom-bff --ignore-not-found']
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
-  # Индексы releases 0–6 — все процессы orders, restaurants, delivery, payments (BFF — Cosmo,
-  # своя telemetry); при изменении порядка releases поправить patches.
+  # Индексы releases 0–6 и 11 — все процессы orders, restaurants, delivery, payments и
+  # controlplane (BFF — Cosmo, своя telemetry); при изменении порядка releases поправить patches.
   - name: grafana-cloud
     patches:
       # Alloy и Secret grafana-cloud-otlp из ops/grafana-cloud/.env.grafana-cloud (kustomize
@@ -376,6 +414,10 @@ profiles:
         value: ../values/grafana-cloud.yaml
       - op: add
         path: /deploy/helm/releases/6/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      # controlplane (индекс 11).
+      - op: add
+        path: /deploy/helm/releases/11/valuesFiles/-
         value: ../values/grafana-cloud.yaml
       # BFF (Cosmo Router): свои переменные telemetry, не OTEL_* charts сервисов.
       - op: add

@@ -48,3 +48,29 @@ export class NoCookAvailableError extends Error {
     this.restaurantId = restaurantId;
   }
 }
+
+/**
+ * The Market a Receive Order Request names differs from the Market of the
+ * restaurant (or of the already received order): a Restaurant Order never
+ * crosses a Market boundary (ADR 41), and neither Market is picked silently.
+ */
+export class MarketMismatchError extends Error {
+  readonly code = "market_mismatch";
+  readonly orderId: string;
+  readonly expectedMarketId: string;
+  readonly requestedMarketId: string;
+
+  constructor(input: {
+    orderId: string;
+    expectedMarketId: string;
+    requestedMarketId: string;
+  }) {
+    super(
+      `order ${input.orderId} names market ${input.requestedMarketId}, but its restaurant is in market ${input.expectedMarketId}`,
+    );
+    this.name = "MarketMismatchError";
+    this.orderId = input.orderId;
+    this.expectedMarketId = input.expectedMarketId;
+    this.requestedMarketId = input.requestedMarketId;
+  }
+}

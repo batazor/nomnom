@@ -72,7 +72,7 @@ func TestOutboxStoresOrderPlacedWithEnvelope(t *testing.T) {
 			return err
 		}
 		return outbound.NewOutbox(store).Append(ctx, id, 1, []order.DomainEvent{order.OrderPlaced{
-			OrderID: id, CustomerID: placed.CustomerID(), RestaurantID: placed.RestaurantID(),
+			OrderID: id, CustomerID: placed.CustomerID(), RestaurantID: placed.RestaurantID(), MarketID: placed.MarketID(),
 			Total: placed.Total(), PlacedAt: placed.PlacedAt(), Items: placed.Items(),
 		}})
 	}))
@@ -92,6 +92,7 @@ func TestOutboxStoresOrderPlacedWithEnvelope(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(row.Payload, &event))
 	assert.Equal(t, string(id), event.GetOrderId())
 	assert.Equal(t, "20", event.GetTotal().GetAmount())
+	assert.Equal(t, ordertest.Market, event.GetMarketId())
 	// restaurants creates its Restaurant Order from the composition.
 	require.Len(t, event.GetItems(), len(placed.Items()))
 	for index, item := range placed.Items() {

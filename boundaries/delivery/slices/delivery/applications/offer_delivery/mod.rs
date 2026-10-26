@@ -103,7 +103,9 @@ pub fn make_offer(
     ports: &OfferPorts<'_>,
 ) -> Result<Output, DeliveryApplicationError> {
     delivery.ensure_assignable()?;
-    ports.couriers.ensure_available(&courier_id)?;
+    ports
+        .couriers
+        .ensure_available(&courier_id, delivery.market_id())?;
 
     let now = ports.clock.now_epoch_seconds();
     let existing = load_offers_of(ports.offers_of, ports.offers, delivery.id())?;
@@ -143,7 +145,9 @@ mod tests {
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::{CourierError, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;
-    use crate::slices::delivery::applications::test_support::{NOW, OFFER_TTL, World, service};
+    use crate::slices::delivery::applications::test_support::{
+        NOW, OFFER_TTL, World, hamburg, service,
+    };
     use crate::slices::delivery::domains::delivery::{
         DeliveryError, DomainEvent, OfferState, State, TransitionError,
     };
@@ -264,6 +268,23 @@ mod tests {
             ))
         );
         assert!(world.offers_of("delivery-1").expect("read").is_empty());
+    }
+
+    /// ADR 41: a Delivery is offered only to a courier of its Market.
+    #[test]
+    fn courier_of_another_market_gets_no_offer() {
+        let world = World::new();
+        world.waiting_delivery("delivery-1");
+        world.courier_in("courier-h", CourierStatus::Available, &hamburg());
+
+        assert_eq!(
+            handler(&world).execute(&service(), input("courier-h")),
+            Err(DeliveryApplicationError::CourierPrecondition(
+                CourierError::OtherMarket
+            ))
+        );
+        assert!(world.offers_of("delivery-1").expect("read").is_empty());
+        assert!(world.store.outbox_messages().is_empty());
     }
 
     #[test]

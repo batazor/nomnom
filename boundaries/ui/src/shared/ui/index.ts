@@ -15,3 +15,5 @@ export type { DishIconProps } from "./dish-icon";
 export { DishIcon } from "./dish-icon";
 export type { HelpTipProps } from "./help-tip";
 export { HelpTip } from "./help-tip";
+export type { SelectFieldOption, SelectFieldProps } from "./select-field";
+export { SelectField } from "./select-field";

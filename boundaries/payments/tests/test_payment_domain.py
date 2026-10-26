@@ -26,6 +26,7 @@ from slices.payment.domains.payment.fsm import (
 )
 from slices.payment.domains.payment.ids import OrderId, PaymentId
 from slices.payment.domains.payment.payment import Payment
+from slices.payment.domains.payment.vo.market import InvalidMarketIdError, MarketId
 from slices.payment.domains.payment.vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 _S = PaymentState
@@ -148,12 +149,13 @@ class PaymentDomainTest(unittest.TestCase):
         self.assertEqual(payment.capture().to_state, PaymentState.CAPTURED)
         self.assertEqual(payment.refund().to_state, PaymentState.REFUNDED)
         payment_id, order_id, amount = PaymentId("payment-1"), OrderId("order-1"), payment.amount
+        market_id = MarketId("berlin")
         self.assertEqual(
             payment.pull_events(),
             [
-                PaymentAuthorized(payment_id, order_id, amount),
-                PaymentCaptured(payment_id, order_id, amount),
-                PaymentRefunded(payment_id, order_id, amount),
+                PaymentAuthorized(payment_id, order_id, market_id, amount),
+                PaymentCaptured(payment_id, order_id, market_id, amount),
+                PaymentRefunded(payment_id, order_id, market_id, amount),
             ],
         )
         self.assertEqual(payment.pull_events(), [])
@@ -179,7 +181,9 @@ class PaymentDomainTest(unittest.TestCase):
         self.assertIsNone(payment.provider_reference)
         self.assertEqual(
             payment.pull_events()[-1],
-            PaymentAuthorizationCancelled(payment.id, payment.order_id, payment.amount),
+            PaymentAuthorizationCancelled(
+                payment.id, payment.order_id, payment.market_id, payment.amount
+            ),
         )
         with self.assertRaises(AlreadyInStateError):
             payment.cancel_authorization()
@@ -208,7 +212,8 @@ class PaymentDomainTest(unittest.TestCase):
 
         self.assertEqual(payment.fail(" card_declined ").to_state, PaymentState.FAILED)
         self.assertEqual(
-            payment.pull_events(), [PaymentFailed(payment.id, payment.order_id, "card_declined")]
+            payment.pull_events(),
+            [PaymentFailed(payment.id, payment.order_id, payment.market_id, "card_declined")],
         )
         with self.assertRaises(ValueError):
             self.payment().fail(" ")
@@ -227,13 +232,35 @@ class PaymentDomainTest(unittest.TestCase):
         with self.assertRaises(CurrencyMismatchError):
             first.add(Money.parse("1", "USD"))
         with self.assertRaises(ValueError):
-            Payment(PaymentId("payment-2"), OrderId("order-1"), Money.parse("0", "EUR"))
+            Payment(
+                PaymentId("payment-2"),
+                OrderId("order-1"),
+                MarketId("berlin"),
+                Money.parse("0", "EUR"),
+            )
+
+    def test_market_id_is_a_slug(self) -> None:
+        for valid in ("berlin", "new-york", "b2", "a" + "b" * 31):
+            with self.subTest(market_id=valid):
+                self.assertEqual(str(MarketId(valid)), valid)
+        for invalid in ("", "b", "Berlin", "1berlin", "-berlin", "berlin city", "a" + "b" * 32):
+            with self.subTest(market_id=invalid), self.assertRaises(InvalidMarketIdError):
+                MarketId(invalid)
+
+    def test_market_is_kept_from_creation(self) -> None:
+        payment = self.payment()
+
+        payment.authorize("provider-1")
+
+        self.assertEqual(payment.market_id, MarketId("berlin"))
+        self.assertEqual(payment.pull_events()[0].market_id, MarketId("berlin"))
 
     @staticmethod
     def payment() -> Payment:
         return Payment(
             PaymentId("payment-1"),
             OrderId("order-1"),
+            MarketId("berlin"),
             Money.parse("10.00", "EUR"),
         )
 

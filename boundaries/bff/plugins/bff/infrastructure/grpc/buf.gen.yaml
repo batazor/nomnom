@@ -1,6 +1,6 @@
-# Go-клиенты API контекстов, которые вызывают слайсы BFF. До публикации модулей в
-# BSR код генерируется из workspace, как в orders (ADR 7; после публикации —
-# закреплённый BSR commit). Integration Events BFF не нужны.
+# Go-клиенты API контекстов, которые вызывают слайсы BFF, и control plane (Placement Map
+# и список Market, ADR 41). До публикации модулей в BSR код генерируется из workspace, как
+# в orders (ADR 7; после публикации — закреплённый BSR commit). Integration Events BFF не нужны.
 # Запуск: make proto-generate в boundaries/bff.
 version: v2
 managed:
@@ -27,3 +27,4 @@ inputs:
   - directory: ../../../../../delivery/infrastructure/grpc
     exclude_paths:
       - ../../../../../delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto
+  - directory: ../../../../../controlplane/infrastructure/grpc

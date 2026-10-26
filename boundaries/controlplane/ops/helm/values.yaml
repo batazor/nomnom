@@ -1,0 +1,168 @@
+# Default values for controlplane.
+# Базовый chart не содержит значений конкретного окружения: registry, tag, ресурсы, адреса
+# внешних систем и kind-specific настройки задаются values окружения или --set.
+
+replicaCount: 1
+
+image:
+  # Registry задаётся окружением или global.imageRegistry.
+  registry: ""
+  repository: nomnom/controlplane
+  # Tag образа задаёт окружение; без него chart не рендерится (service.version telemetry).
+  tag: ""
+  pullPolicy: IfNotPresent
+  # Digest имеет приоритет над tag.
+  digest: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+# Labels, добавляемые ко всем ресурсам chart.
+commonLabels: {}
+
+# Глобальные параметры library chart bitnami/common.
+global: {}
+
+# Label app.kubernetes.io/component.
+component: api
+
+serviceAccount:
+  create: true
+  # Имя ServiceAccount. Пустое значение — <fullname>.
+  name: ""
+  annotations: {}
+  # Доступ к Kubernetes API приложению не нужен.
+  automount: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  # Runtime-образ: gcr.io/distroless/static-debian12:nonroot (65532).
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: true
+
+service:
+  type: ClusterIP
+  # Приложение слушает 8086 (SERVER__PORT); targetPort — порт процесса.
+  port: 8086
+  targetPort: 8086
+  # Бизнес-порт обслуживает nomnom.controlplane.v1 по gRPC/HTTP2.
+  portName: grpc
+  appProtocol: kubernetes.io/h2c
+  annotations: {}
+
+# Requests/limits задаёт окружение. GOMAXPROCS и GOMEMLIMIT (automemlimit) следуют limits.
+resources:
+  requests: {}
+  limits: {}
+
+# Несекретная конфигурация: ConfigMap, подключаемый через envFrom.
+env: {}
+envFrom: []
+extraEnv: []
+
+# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/*. Имя metrics
+# задано моделью NetworkPolicy (ADR 16).
+management:
+  port: 9086
+
+# Бюджет graceful shutdown (SHUTDOWN__READINESS_DELAY, SHUTDOWN__DRAIN_TIMEOUT).
+shutdown:
+  readinessDelaySeconds: 5
+  drainTimeoutSeconds: 20
+
+# Больше readinessDelaySeconds + drainTimeoutSeconds; chart проверяет.
+terminationGracePeriodSeconds: 30
+
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /health/startup
+    port: metrics
+  periodSeconds: 2
+  timeoutSeconds: 1
+  failureThreshold: 30
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health/live
+    port: metrics
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health/ready
+    port: metrics
+  periodSeconds: 2
+  timeoutSeconds: 1
+  failureThreshold: 1
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Service identity (ADR 27) и user assertions BFF (ADR 32). Все поля обязательны: без них chart
+# не рендерится. serviceAccounts — allowlist "namespace/serviceaccount=service-name,…";
+# userDelegates — services, передающие user assertion оператора; placementReaders — services,
+# читающие ListMarkets и GetPlacementMap (ADR 41: service identity BFF).
+identity:
+  issuer: ""
+  audience: nomnom.controlplane
+  serviceAccounts: ""
+  jwksConfigMap: ""
+  userJwksConfigMap: ""
+  userIssuer: ""
+  userDelegates: ""
+  placementReaders: ""
+
+# SpiceDB (ADR 18): endpoint и Secret preshared key обязательны.
+spicedb:
+  endpoint: ""
+  insecure: false
+  timeout: 2s
+  presharedKeySecret:
+    name: ""
+    key: preshared-key
+
+# PostgreSQL (ADR 8): DSN из внешнего Secret обязателен. Миграции встроены в образ и
+# применяются при старте под advisory lock (ADR 38).
+postgres:
+  dsnSecret:
+    name: ""
+    key: dsn
+  maxConns: 5
+  minConns: 0
+  maxConnLifetime: 30m
+  maxConnLifetimeJitter: 5m
+  maxConnIdleTime: 5m
+  connectTimeout: 5s
+  healthCheckPeriod: 1m
+
+# ADR 9: OTel resource attributes процесса.
+telemetry:
+  serviceName: controlplane
+  resourceAttributes: {}
+  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT); пусто — задаётся env окружения.
+  otlpEndpoint: ""
+  # LOG__LEVEL: debug | info | warn | error; пусто — info.
+  logLevel: ""

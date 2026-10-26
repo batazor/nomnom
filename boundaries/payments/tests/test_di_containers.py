@@ -17,12 +17,14 @@ import psycopg
 import pytest
 from dependency_injector import providers
 from payment_fakes import (
+    MARKET,
     NOW,
     PaymentsTestKit,
     close_container,
     payments_container,
 )
 from psycopg import sql
+from yoyo.migrations import MigrationList
 
 from di.payments import PaymentsContainer, SpiceDBConfigurationError
 from di.resources import MIGRATIONS, ProcessResource, TelemetryResource, migrated_database
@@ -131,7 +133,13 @@ class PaymentsContainerTest(unittest.TestCase):
             getattr(container, name).override(providers.Object(fake))
 
         result = container.handlers().create_payment.handle(
-            CreatePaymentInput(subject=WORKER, order_id="order-1", amount="25.00", currency="EUR")
+            CreatePaymentInput(
+                subject=WORKER,
+                order_id="order-1",
+                market_id=MARKET.value,
+                amount="25.00",
+                currency="EUR",
+            )
         )
 
         self.assertTrue(result.created)
@@ -282,6 +290,42 @@ class StartupMigrationTest(unittest.TestCase):
         waiting.join()
         self.assertEqual(results, [_ids()])
 
+    def test_payments_before_markets_are_backfilled_with_the_launch_market(self) -> None:
+        uri = self._empty_database()
+        settings = database.Config(DATABASE__URI=uri)
+        messaging, payments = MIGRATIONS
+        migrate(
+            settings, [messaging, _PaymentsBeforeMarkets(payments.storage_id, payments.package)]
+        )
+        with psycopg.connect(uri) as conn:
+            conn.execute(
+                "INSERT INTO payments (id, order_id, amount, currency, state, version) "
+                "VALUES ('payment-old', 'order-old', 25, 'EUR', 'pending', 1)"
+            )
+
+        migrate(settings, MIGRATIONS)
+
+        with psycopg.connect(uri) as conn:
+            market = conn.execute("SELECT market_id FROM payments WHERE id = 'payment-old'")
+            self.assertEqual(market.fetchone(), ("berlin",))
+            nullable = conn.execute(
+                "SELECT is_nullable, column_default FROM information_schema.columns"
+                " WHERE table_name = 'payments' AND column_name = 'market_id'"
+            )
+            self.assertEqual(nullable.fetchone(), ("NO", None))
+            for market_id in (None, "", "Berlin"):
+                with (
+                    self.subTest(market_id=market_id),
+                    self.assertRaises(psycopg.errors.IntegrityError),
+                    conn.transaction(),
+                ):
+                    conn.execute(
+                        "INSERT INTO payments (id, order_id, market_id, amount, currency, "
+                        "state, version) VALUES ('payment-new', 'order-new', %s, 25, 'EUR', "
+                        "'pending', 1)",
+                        (market_id,),
+                    )
+
     def test_migration_gives_up_on_a_locked_table(self) -> None:
         uri = self._empty_database()
         settings = database.Config(DATABASE__URI=uri)
@@ -324,6 +368,14 @@ def _applied(conn: psycopg.Connection) -> dict[str, list[tuple[object, ...]]]:
         ).fetchall()
         for migration_set in MIGRATIONS
     }
+
+
+class _PaymentsBeforeMarkets(MigrationSet):
+    """The payments set as deployed before Markets (ADR 41): only its first migration."""
+
+    @override
+    def migrations(self) -> MigrationList:
+        return MigrationList([MigrationSet.migrations(self)[0]])
 
 
 # A set of the test fixtures that needs an exclusive lock on ``payments``.

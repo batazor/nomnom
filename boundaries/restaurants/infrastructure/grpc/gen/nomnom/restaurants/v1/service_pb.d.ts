@@ -98,6 +98,13 @@ export declare type ListRestaurantsRequest = Message<"nomnom.restaurants.v1.List
    * @generated from field: bool include_closed = 3;
    */
   includeClosed: boolean;
+
+  /**
+   * Required (ADR 41): only Restaurants of this Market.
+   *
+   * @generated from field: string market_id = 4;
+   */
+  marketId: string;
 };
 
 /**
@@ -146,6 +153,13 @@ export declare type ListOwnedRestaurantsRequest = Message<"nomnom.restaurants.v1
    * @generated from field: string page_token = 2;
    */
   pageToken: string;
+
+  /**
+   * Required (ADR 41): only Restaurants of this Market.
+   *
+   * @generated from field: string market_id = 3;
+   */
+  marketId: string;
 };
 
 /**
@@ -890,6 +904,13 @@ export declare type RegisterRestaurantRequest = Message<"nomnom.restaurants.v1.R
    * @generated from field: string owner_id = 2;
    */
   ownerId: string;
+
+  /**
+   * Required (ADR 41): Market of the new Restaurant.
+   *
+   * @generated from field: string market_id = 4;
+   */
+  marketId: string;
 };
 
 /**

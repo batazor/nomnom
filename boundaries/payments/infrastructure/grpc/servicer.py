@@ -78,6 +78,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
             payment=payments_pb2.Payment(
                 payment_id=str(result.payment_id),
                 order_id=str(result.order_id),
+                market_id=str(result.market_id),
                 amount=payments_pb2.Money(
                     amount=str(result.amount),
                     currency=result.currency,
@@ -98,6 +99,7 @@ class PaymentsService(service_pb2_grpc.PaymentsServiceServicer):  # type: ignore
                 CreatePaymentInput(
                     subject=subject,
                     order_id=request.order_id,
+                    market_id=request.market_id,
                     amount=request.amount.amount,
                     currency=request.amount.currency,
                 )

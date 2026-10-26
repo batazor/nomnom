@@ -12,6 +12,7 @@ use crate::infrastructure::memory::StaticCourierLocator;
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::applications::{register_courier, set_courier_availability};
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
@@ -85,6 +86,7 @@ async fn start_with_courier(courier: &str) -> Running {
         &Arc::new(TestStore::new()),
         StaticCourierLocator::new(vec![CourierCandidate {
             courier_id: CourierId::new(courier),
+            market_id: MarketId::new("berlin").expect("market id"),
             within_delivery_zone: true,
             distance_to_pickup_meters: 500,
             active_assignments: 0,
@@ -97,6 +99,7 @@ async fn start_with_courier(courier: &str) -> Running {
             register_courier::Input {
                 courier_id: courier.to_owned(),
                 name: "Timur".to_owned(),
+                market_id: "berlin".to_owned(),
             },
         )
         .expect("courier registered");
@@ -124,6 +127,7 @@ async fn start_with_courier(courier: &str) -> Running {
 fn create_request(order: &str) -> CreateDeliveryRequest {
     CreateDeliveryRequest {
         order_id: order.to_owned(),
+        market_id: "berlin".to_owned(),
     }
 }
 
@@ -205,6 +209,42 @@ async fn create_delivery_is_idempotent_by_order_id() {
         .await
         .expect_err("empty order id");
     assert_eq!(invalid.code(), tonic::Code::InvalidArgument);
+
+    // ADR 41: the Market is required and a Delivery keeps its Market.
+    for (market, code) in [
+        ("hamburg", tonic::Code::AlreadyExists),
+        ("", tonic::Code::InvalidArgument),
+        ("Berlin", tonic::Code::InvalidArgument),
+    ] {
+        let rejected = running
+            .client
+            .create_delivery(CreateDeliveryRequest {
+                market_id: market.to_owned(),
+                ..create_request("order-1")
+            })
+            .await
+            .expect_err("rejected market");
+        assert_eq!(rejected.code(), code, "{market:?}");
+    }
+
+    running.stop().await;
+}
+
+/// ADR 41: the Courier Pool is read per Market; the Market is required.
+#[tokio::test]
+async fn courier_pool_requires_a_market() {
+    let mut running = start_with_courier("courier-1").await;
+
+    for market in ["", "Berlin"] {
+        let invalid = running
+            .client
+            .get_courier_pool(GetCourierPoolRequest {
+                market_id: market.to_owned(),
+            })
+            .await
+            .expect_err("invalid market");
+        assert_eq!(invalid.code(), tonic::Code::InvalidArgument, "{market:?}");
+    }
 
     running.stop().await;
 }

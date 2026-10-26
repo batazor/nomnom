@@ -27,6 +27,7 @@ export const toRestaurantMessage = (view: RestaurantView) =>
     restaurantId: view.restaurantId,
     name: view.name,
     isOpen: view.isOpen,
+    marketId: view.marketId,
   });
 
 export const toMenuItemMessage = (item: MenuItemView) =>

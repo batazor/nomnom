@@ -22,6 +22,8 @@ message Payment {
   string order_id = 2;
   Money amount = 3;
   PaymentState state = 4;
+  // Market of the Order (ADR 41); immutable.
+  string market_id = 5;
 }
 
 enum PaymentOperationStatus {

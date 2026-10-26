@@ -23,6 +23,9 @@ spec:
       value: (join('-', ['order-lifecycle', $run]))
     - name: courier
       value: (join('-', ['kind-e2e-courier', $run]))
+    # ADR 41: Market прогона — berlin, который chart ops/kind/demo создаёт в control plane.
+    - name: market
+      value: berlin
   steps:
     - name: prepare run state
       try:
@@ -48,6 +51,7 @@ spec:
                 staff: (join('-', ['kind-e2e-staff', $run]))
                 courier: ($courier)
                 customer: (join('-', ['kind-e2e-customer', $run]))
+                market: ($market)
       # В конце теста, в том числе после провала, курьер прогона уходит с линии (если успел
       # выйти; ответ лишь пишется в log): свободный курьер прошлого прогона получал бы предложения следующих прогонов
       # до истечения каждого.
@@ -62,6 +66,8 @@ spec:
                 value: (join('-', ['kind-e2e-owner', $run]))
               - name: STAFF
                 value: (join('-', ['kind-e2e-staff', $run]))
+              - name: MARKET
+                value: ($market)
             content: |
               set -eu
               root="$(git rev-parse --show-toplevel)"
@@ -78,7 +84,7 @@ spec:
                     "nomnom.restaurants.v1.RestaurantsService/$2" 2>&1
                 ' "$assertion" "$2" "$1"
               }
-              ids="$(call ListOwnedRestaurants '{}' | jq -r '.restaurants[]?.restaurantId')" ||
+              ids="$(call ListOwnedRestaurants "{\"marketId\":\"$MARKET\"}" | jq -r '.restaurants[]?.restaurantId')" ||
                 { echo "owner $OWNER has no restaurants"; exit 0; }
               for id in $ids; do
                 call RevokeStaff "{\"restaurantId\":\"$id\",\"userId\":\"$STAFF\"}" || echo "staff $STAFF of $id stays"
@@ -114,7 +120,7 @@ spec:
             - {name: subject, value: $s.operator}
             - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant}
             - name: request
-              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner}'
+              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner, marketId: $s.market}'
             - {name: save, value: '{restaurant_id: .restaurant.restaurantId}'}
     - name: operator registers courier
       use:
@@ -124,7 +130,7 @@ spec:
             - {name: audience, value: nomnom.delivery}
             - {name: subject, value: $s.operator}
             - {name: method, value: nomnom.delivery.v1.DeliveryService/RegisterCourier}
-            - {name: request, value: '{courierId: $s.courier, name: "Kind e2e courier"}'}
+            - {name: request, value: '{courierId: $s.courier, name: "Kind e2e courier", marketId: $s.market}'}
 
     # 2. Владелец: персонал, меню, открытие.
     - name: owner assigns staff

@@ -31,12 +31,14 @@ const MAPPERS: EventAllowlist<MenuEvent> = {
       menuId: event.menuId,
       restaurantId: event.restaurantId,
       menuItemId: event.menuItemId,
+      marketId: event.marketId,
     }),
   MenuItemUpdated: (event) =>
     integration(MenuItemUpdatedSchema, {
       menuId: event.menuId,
       restaurantId: event.restaurantId,
       menuItemId: event.menuItemId,
+      marketId: event.marketId,
     }),
   MenuItemAvailabilityChanged: (event) =>
     integration(MenuItemAvailabilityChangedSchema, {
@@ -44,6 +46,7 @@ const MAPPERS: EventAllowlist<MenuEvent> = {
       restaurantId: event.restaurantId,
       menuItemId: event.menuItemId,
       available: event.isAvailable,
+      marketId: event.marketId,
     }),
 };
 

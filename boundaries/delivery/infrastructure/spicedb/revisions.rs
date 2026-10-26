@@ -51,6 +51,7 @@ where
 mod tests {
     use super::*;
     use crate::infrastructure::repository::test_support::TestStore;
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{Courier, CourierName};
     use crate::slices::delivery::domains::delivery::{Delivery, OrderId};
 
@@ -60,10 +61,15 @@ mod tests {
         let mut courier = Courier::new(
             CourierId::new("courier-1"),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         );
         courier.record_authorization_revision(AuthorizationRevision::new("zed-c"));
         CourierRepository::add(&*store, &courier).expect("courier");
-        let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), OrderId::new("order-1"));
+        let mut delivery = Delivery::new(
+            DeliveryId::new("delivery-1"),
+            OrderId::new("order-1"),
+            MarketId::new("berlin").expect("market id"),
+        );
         delivery.record_authorization_revision(AuthorizationRevision::new("zed-d"));
         DeliveryRepository::add(&*store, &delivery).expect("delivery");
         let revisions = RepositoryRevisions(Arc::clone(&store));

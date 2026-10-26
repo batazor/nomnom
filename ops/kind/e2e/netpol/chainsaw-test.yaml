@@ -52,6 +52,7 @@ spec:
             - {name: from_namespace, value: nomnom-restaurants}
             - {name: from, value: net-probe}
             - {name: method, value: nomnom.orders.v1.OrdersService/ListCustomerOrders}
+            - {name: request, value: '{"marketId":"berlin"}'}
             - {name: authorize, value: false}
             - {name: code, value: 16}
             - {name: message, value: caller identity is not authenticated}

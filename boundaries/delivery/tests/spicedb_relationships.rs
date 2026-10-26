@@ -10,6 +10,7 @@
 
 mod support;
 
+use delivery::slices::courier::domains::courier::MarketId;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -170,6 +171,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
         &Courier::new(
             CourierId::new(courier.as_str()),
             CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("seed courier");
@@ -178,6 +180,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
         &Delivery::new(
             DeliveryId::new(delivery.as_str()),
             OrderId::new(order.as_str()),
+            MarketId::new("berlin").expect("market id"),
         ),
     )
     .expect("seed delivery");
@@ -195,6 +198,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
     .expect("seed offer");
     let locator = StaticCourierLocator::new(vec![CourierCandidate {
         courier_id: CourierId::new(courier.as_str()),
+        market_id: MarketId::new("berlin").expect("market id"),
         within_delivery_zone: true,
         distance_to_pickup_meters: 100,
         active_assignments: 0,
@@ -253,6 +257,7 @@ fn registered_courier_acts_for_itself() {
         register_courier::Input {
             courier_id: courier.clone(),
             name: "Timur".to_owned(),
+            market_id: "berlin".to_owned(),
         },
     )
     .expect("courier registered");

@@ -65,10 +65,7 @@ import {
   DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import type { FulfillmentCoordinatorAccess } from "../slices/restaurantorder/applications/access-control.ts";
-import {
-  ReceiveOrderRequestHandler,
-  type RestaurantExistence,
-} from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import type { RestaurantOrderRepository } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   type KitchenChangeNotifier,
@@ -131,7 +128,7 @@ export interface ConsumerCradle {
   readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: DatabaseUnitOfWork;
   readonly restaurants: RestaurantRepository;
-  readonly restaurantExistence: RestaurantExistence;
+  readonly restaurantExistence: RepositoryRestaurantExistence;
   readonly restaurantOrders: RestaurantOrderRepository;
   /** Allows only Receive Order Request from the orders event stream. */
   readonly fulfillmentAccess: FulfillmentCoordinatorAccess;

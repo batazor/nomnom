@@ -23,11 +23,13 @@ import type {
 } from "../reconcile/reconcile.ts";
 
 export const RESTAURANTS_COLLECTION = "restaurants";
-export const RESTAURANT_SCHEMA_VERSION = 1;
+export const RESTAURANT_SCHEMA_VERSION = 2;
 
 /**
- * One document per Restaurant aggregate: profile, staff (bounded by the
- * restaurant team) and the ZedToken of its last relationship write. Menus and
+ * One document per Restaurant aggregate: profile, Market (ADR 41; required
+ * since schemaVersion 2, documents written before are migrated to `berlin`),
+ * staff (bounded by the restaurant team) and the ZedToken of its last
+ * relationship write. Menus and
  * Restaurant Orders are separate collections referencing `restaurantId`.
  * `staff` may be absent in documents written before it existed (see
  * {@link StoredRestaurantSnapshot}).
@@ -35,6 +37,7 @@ export const RESTAURANT_SCHEMA_VERSION = 1;
 export type RestaurantDocument = VersionedDocument & {
   name: string;
   ownerId: string;
+  marketId: string;
   isOpen: boolean;
   staff?: string[];
   authorizationRevision?: string;
@@ -46,6 +49,7 @@ const toSnapshot = (
   id: document._id,
   name: document.name,
   ownerId: document.ownerId,
+  marketId: document.marketId,
   isOpen: document.isOpen,
   staff: document.staff,
   authorizationRevision: document.authorizationRevision,
@@ -57,6 +61,7 @@ const toData = (restaurant: Restaurant) => {
     schemaVersion: RESTAURANT_SCHEMA_VERSION,
     name: snapshot.name,
     ownerId: snapshot.ownerId,
+    marketId: snapshot.marketId,
     isOpen: snapshot.isOpen,
     staff: [...snapshot.staff],
     authorizationRevision: snapshot.authorizationRevision,
@@ -208,10 +213,15 @@ export class DatabaseRestaurantMemberships implements RestaurantMemberships {
 const toView = (document: RestaurantDocument): RestaurantView => ({
   restaurantId: document._id,
   name: document.name,
+  marketId: document.marketId,
   isOpen: document.isOpen,
 });
 
-/** Query model over the restaurant documents, ordered by restaurant id. */
+/**
+ * Query model over the restaurant documents, ordered by restaurant id. Lists
+ * are filtered by Market through the `(marketId, isOpen, _id)`,
+ * `(marketId, _id)` and `(ownerId, marketId, _id)` indexes.
+ */
 export class DatabaseRestaurantCatalog
   implements
     RestaurantPublicReader,
@@ -230,12 +240,14 @@ export class DatabaseRestaurantCatalog
   }
 
   async list(criteria: {
+    marketId: string;
     includeClosed: boolean;
     after: string | undefined;
     limit: number;
   }): Promise<readonly RestaurantView[]> {
     const documents = await this.#collection.find(
       {
+        marketId: criteria.marketId,
         ...(criteria.includeClosed ? {} : { isOpen: true }),
         ...(criteria.after === undefined
           ? {}
@@ -248,12 +260,14 @@ export class DatabaseRestaurantCatalog
 
   async listOwned(criteria: {
     ownerId: string;
+    marketId: string;
     after: string | undefined;
     limit: number;
   }): Promise<readonly RestaurantView[]> {
     const documents = await this.#collection.find(
       {
         ownerId: criteria.ownerId,
+        marketId: criteria.marketId,
         ...(criteria.after === undefined
           ? {}
           : { _id: { $gt: criteria.after } }),

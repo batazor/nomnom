@@ -68,7 +68,7 @@ Kafka естественно входит только во входные use c
 | --- | --- |
 | `order` | Агрегат `Order`, его use cases (включая `completeorder` и `failorcancelorder`, которые вызывают Activities), порт Order Fulfillment Workflow `applications/fulfillment`, persistence, SpiceDB, Kafka и catalog |
 | [`fulfillment`](slices/fulfillment/README.md) | Процесс Order Fulfillment: доменная модель `domains/fulfillment` (маршрут, факты, сроки, replan и эскалация, отмена, компенсации), Temporal-адаптер `infrastructure/temporal`, client-адаптеры соседей `infrastructure/neighbours`, provider set worker'а `di` |
-| `simulator` | Демо-Simulator (FR-604..FR-606): switch `applications/switchsimulator` (`GetSimulator`/`SetSimulatorEnabled` требуют `platform#operate_simulator`, иначе `PERMISSION_DENIED`; состояние — однострочная таблица `simulator_state`, нет строки — выключен) и покупатель `applications/customersimulator`: пока включён, через случайную задержку в `[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` оформляет заказ настоящим Place Order от user `SIMULATOR__CUSTOMER_ID` в случайном открытом ресторане (ListRestaurants и GetMenu через internal gateway; 1–3 доступные позиции, количество 1–2) и в 10% случаев после следующей задержки запрашивает отмену, пока заказ `placed`. Тики каждые `SIMULATOR__INTERVAL` выполняет `SimulatorRunner` процесса `cmd/orders` (им владеет `App`); ошибки use cases пишутся в лог. Все четыре переменные обязательны для `cmd/orders`. Каждая реплика API ведёт своего покупателя |
+| `simulator` | Демо-Simulator (FR-604..FR-606): switch `applications/switchsimulator` (`GetSimulator`/`SetSimulatorEnabled` требуют `platform#operate_simulator`, иначе `PERMISSION_DENIED`; состояние — однострочная таблица `simulator_state`, нет строки — выключен) и покупатель `applications/customersimulator`: пока включён, через случайную задержку в `[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` оформляет заказ настоящим Place Order от user `SIMULATOR__CUSTOMER_ID` в случайном открытом ресторане (ListRestaurants по каждому Market из `SIMULATOR__MARKET_IDS` и GetMenu через internal gateway; 1–3 доступные позиции, количество 1–2; Market заказа берёт Place Order из выбранного ресторана) и в 10% случаев после следующей задержки запрашивает отмену, пока заказ `placed`. Тики каждые `SIMULATOR__INTERVAL` выполняет `SimulatorRunner` процесса `cmd/orders` (им владеет `App`); ошибки use cases пишутся в лог. Все пять переменных обязательны для `cmd/orders`. Каждая реплика API ведёт своего покупателя |
 
 Зависимости направлены от `fulfillment` к `order`: адаптер реализует порт `order/applications/fulfillment` и вызывает use cases `order` из Activities; `order` не импортирует `fulfillment`, а доменная модель `fulfillment` — ничего, кроме стандартной библиотеки.
 
@@ -117,6 +117,16 @@ Temporal Activities и телеметрия переводят вид своим
 `ErrorInfo`. Остальные Commands в API не публикуются: Confirm/Reject Order, Record … и Relay
 Preparation Issue вызывает Kafka consumer, Complete Order и Fail or Cancel Order — только
 fulfillment workflow.
+
+### Market (ADR 41)
+
+`Order` несёт обязательный неизменяемый `market_id` ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) —
+Market ресторана из catalog snapshot Place Order (`restaurants.Restaurant.market_id`; пустой — ошибка,
+Market по умолчанию нет). `GetOrder` и каждый `OrderSummary.order` отдают `Order.market_id`;
+`ListCustomerOrdersRequest.market_id` обязателен (пустой или не slug `^[a-z][a-z0-9-]{1,31}$` —
+`INVALID_ARGUMENT`) и ограничивает историю этим Market. `OrderPlaced`, `OrderCompleted` и
+`OrderCancelled` несут `market_id`; Activities workflow передают его в `payments.CreatePayment` и
+`delivery.CreateDelivery`, читая из `Order`, а не из входа workflow.
 
 `PlaceOrder` оформляет заказ для verified subject: поля customer в запросе нет. Customer — user
 subject из user assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)):
@@ -257,7 +267,7 @@ Temporal Activity retries не заменяют Inbox Pattern. Kafka-событ�
 
 Публикация интеграционных событий `orders` использует Transactional Outbox по общесистемному [ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md). Изменение `Order` и строка Outbox (`orders_outbox`) записываются в одной транзакции PostgreSQL; в Kafka их доставляет Debezium из WAL ([ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): топик — колонка `topic`, value — `payload`, заголовки Event Envelope — колонки строки. Отдельного процесса публикации нет. `event_id` строки передаётся в Kafka headers `event_id` и `_watermill_message_uuid` (UUID сообщения Watermill у consumers). Kafka key — колонка `aggregate_id` (`order_id`): события одного заказа идут в одну партицию в порядке commit. Activity, изменяющая `Order` и Outbox, идемпотентна по ключу, производному от Workflow ID и шага процесса, или по ожидаемой `aggregate_version`; workflow-код не публикует события.
 
-Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; `OrderPlaced` несёт состав заказа `items` — по нему `restaurants-consumer` создаёт Restaurant Order; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`), `occurred_at` берётся из Domain Event (для `OrderCompleted` — момент завершения). Перевод делает `IntegrationMapper` в `slices/order/infrastructure/messaging/outbound` (таблица Domain Event → контракт); PostgreSQL Outbox только сохраняет готовые сообщения; Debezium переносит их из WAL в Kafka `orders.v1.order-events` с ключом `order_id` (ADR 37). Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; каждое событие несёт `market_id` Order ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)); `OrderPlaced` несёт состав заказа `items` — по нему `restaurants-consumer` создаёт Restaurant Order; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`), `occurred_at` берётся из Domain Event (для `OrderCompleted` — момент завершения). Перевод делает `IntegrationMapper` в `slices/order/infrastructure/messaging/outbound` (таблица Domain Event → контракт); PostgreSQL Outbox только сохраняет готовые сообщения; Debezium переносит их из WAL в Kafka `orders.v1.order-events` с ключом `order_id` (ADR 37). Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 Архитектурные решения контекста хранятся в [локальном журнале ADR](docs/adr/). Выбор Temporal зафиксирован в [ADR 2](docs/adr/0002-use-temporal-to-orchestrate-orders.md), контракт orchestration — в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md).
 
@@ -418,9 +428,13 @@ OpenSpec change `add-orders-postgresql` перевёл API, worker и consumer �
 ([`slices/order/infrastructure/repository`](slices/order/infrastructure/repository)): Unit of Work,
 repository с optimistic concurrency, Inbox, idempotency keys, read models, authorization revision
 и Transactional Outbox (доставляет Debezium, ADR 37); миграции каждый процесс применяет при старте.
+Market заказа (ADR 41) хранится в обязательной колонке `orders.market_id` (CHECK по формату slug) и
+колонке `order_details.market_id`; миграция `00008_market` один раз проставила существующим строкам
+стартовый Market `berlin` и сделала колонки `NOT NULL`, значения по умолчанию нет. История клиента
+читается по индексу `order_details_customer_market_history (customer_id, market_id, placed_at DESC, order_id DESC)`.
 Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, после
 миграций процесс догоняет устаревшие строки (catch-up), полное перестроение —
-`orders-admin projections rebuild order-details` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
+`orders-admin projections rebuild order-details`; строки, изменённые старыми pods во время rolling update, догоняет `cmd/orders-reconciler` каждые `RECONCILER__INTERVAL` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
 
 Операторская команда `cmd/orders-admin` входит в образ и запускается разово в pod `orders-consumer`
 (`kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin …`): `dlq list|redrive|discard`

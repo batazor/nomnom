@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package nomnom.controlplane.v1;
+
+// Cell: a complete isolated instance of the data plane (ADR 41).
+message Cell {
+  // Slug ^[a-z][a-z0-9-]{1,31}$, immutable.
+  string cell_id = 1;
+  // host:port of the internal gateway of the Cell (ADR 15).
+  string gateway_address = 2;
+}
+
+// Market: a city served by one Cell (ADR 41).
+message Market {
+  // Slug ^[a-z][a-z0-9-]{1,31}$, immutable.
+  string market_id = 1;
+  string name = 2;
+  // ISO 4217.
+  string currency = 3;
+  // Market Placement: the Cell that serves the Market.
+  string cell_id = 4;
+}
+
+// Market Placement with the address the router needs.
+message Placement {
+  string market_id = 1;
+  string cell_id = 2;
+  string gateway_address = 3;
+}

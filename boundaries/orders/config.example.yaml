@@ -89,3 +89,5 @@ simulator:
   max_delay: 2m
   # user, от имени которого Simulator оформляет и отменяет заказы.
   customer_id: ""
+  # Markets (ADR 41) через запятую, рестораны которых видит Simulator, например "berlin".
+  market_ids: ""

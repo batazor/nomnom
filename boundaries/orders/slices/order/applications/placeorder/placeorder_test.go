@@ -41,6 +41,7 @@ func newEnv(t *testing.T) env {
 		workflow:   fake.NewWorkflow(),
 	}
 	e.catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
+		MarketID: ordertest.MarketID(t),
 		Currency: "EUR",
 		Items: map[order.MenuItemID]placeorder.CatalogItem{
 			"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
@@ -87,6 +88,7 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 	assert.Equal(t, order.StatePlaced, placed.State)
 	assert.Equal(t, order.CustomerID("customer-1"), placed.CustomerID)
 	assert.Equal(t, now, placed.PlacedAt)
+	assert.Equal(t, ordertest.MarketID(t), placed.MarketID, "the Order takes the Market of the Restaurant")
 
 	records := e.store.OutboxRecords()
 	require.Len(t, records, 1)
@@ -94,6 +96,7 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 		OrderID:      "order-1",
 		CustomerID:   "customer-1",
 		RestaurantID: "restaurant-1",
+		MarketID:     ordertest.MarketID(t),
 		Total:        ordertest.Money(t, "29.00"),
 		PlacedAt:     now,
 		Items:        placed.Items,
@@ -106,6 +109,29 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 		Permission: getorder.PermissionView,
 		Resource:   application.Resource{Type: getorder.ResourceOrder, ID: "order-1"},
 	}))
+}
+
+// ADR 41: the Market comes only from the Restaurant of the catalog snapshot; a
+// snapshot without one places nothing and is not invalid input of the Customer.
+func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
+	e := newEnv(t)
+	e.catalog.Put("restaurant-2", placeorder.CatalogSnapshot{
+		Currency:     "EUR",
+		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+		MinimumTotal: ordertest.Money(t, "10"),
+		MaximumTotal: ordertest.Money(t, "100"),
+	})
+	input := validInput()
+	input.RestaurantID = "restaurant-2"
+	input.Items = []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}}
+
+	_, err := e.handler.Handle(context.Background(), input)
+
+	require.ErrorContains(t, err, "no market_id")
+	assert.NotErrorIs(t, err, application.ErrInvalidInput)
+	assert.NotErrorIs(t, err, vo.ErrInvalidValue)
+	assert.Empty(t, e.store.OutboxRecords())
+	assert.Empty(t, e.workflow.Starts())
 }
 
 // AC-101: unavailable items or limits reject placement without effects.

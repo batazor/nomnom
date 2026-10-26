@@ -1,6 +1,8 @@
 export type MenuEventBase = Readonly<{
   menuId: string;
   restaurantId: string;
+  /** Market of the restaurant (ADR 41). */
+  marketId: string;
   occurredAt: Date;
 }>;
 

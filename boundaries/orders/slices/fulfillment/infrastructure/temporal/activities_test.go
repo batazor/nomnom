@@ -108,6 +108,7 @@ func TestPaymentActivitiesUseOrderSnapshotAndStableKey(t *testing.T) {
 	assert.Equal(t, []ports.PaymentRequest{{
 		OrderID:        orderID,
 		CustomerID:     "customer-1",
+		MarketID:       ordertest.Market,
 		Amount:         "20",
 		Currency:       "EUR",
 		IdempotencyKey: "order:order-1:authorize_payment",
@@ -129,6 +130,7 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 	}}, neighbours.restaurants)
 	assert.Equal(t, []ports.DeliveryRequest{{
 		OrderID:        orderID,
+		MarketID:       ordertest.Market,
 		IdempotencyKey: step.IdempotencyKey,
 	}}, neighbours.deliveries)
 }

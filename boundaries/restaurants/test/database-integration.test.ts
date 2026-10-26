@@ -42,7 +42,9 @@ import {
   DatabaseMenuReader,
   DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
+import { up as menusMarket } from "../slices/menu/infrastructure/repository/migrations/0002-market.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { up as restaurantsMarket } from "../slices/restaurant/infrastructure/repository/migrations/0003-market.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,
@@ -54,6 +56,7 @@ import {
   RestaurantOrder,
   RestaurantOrderState,
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import { up as restaurantOrdersMarket } from "../slices/restaurantorder/infrastructure/repository/migrations/0003-market.ts";
 import {
   createRestaurantOrderCollection,
   DatabaseKitchenBoard,
@@ -250,6 +253,113 @@ describe("startup migration", () => {
     );
   });
 
+  test("ADR 41 documents stored before Markets belong to berlin and Market lists are indexed", async (t) => {
+    const db = freshDatabase(t);
+    await migrateRestaurantsDatabase(db);
+    // Documents of the schema before ADR 41, written past the validator.
+    const legacy = { bypassDocumentValidation: true } as const;
+    await db.collection<{ _id: string }>("restaurants").insertOne(
+      {
+        _id: "r-legacy",
+        version: 1,
+        schemaVersion: 1,
+        name: "Pho",
+        ownerId: "owner",
+        isOpen: true,
+      } as never,
+      legacy,
+    );
+    await db.collection<{ _id: string }>("restaurants").insertOne(
+      {
+        _id: "r-hamburg",
+        version: 1,
+        schemaVersion: 2,
+        name: "Fischbude",
+        ownerId: "owner",
+        marketId: "hamburg",
+        isOpen: true,
+      } as never,
+      legacy,
+    );
+    await db.collection<{ _id: string }>("menus").insertOne(
+      {
+        _id: "m-legacy",
+        version: 1,
+        schemaVersion: 1,
+        restaurantId: "r-legacy",
+        items: [],
+      } as never,
+      legacy,
+    );
+    await db.collection<{ _id: string }>("restaurant_orders").insertOne(
+      {
+        _id: "ro-legacy",
+        version: 1,
+        schemaVersion: 2,
+        orderId: "o-legacy",
+        restaurantId: "r-legacy",
+        items: [{ menuItemId: "pho", quantity: 1, options: [] }],
+        state: "RECEIVED",
+        timeline: { receivedAt: now },
+      } as never,
+      legacy,
+    );
+
+    // Idempotent: the startup run applied them already, a repeat migrates.
+    for (let run = 0; run < 2; run += 1) {
+      await restaurantsMarket(db);
+      await menusMarket(db);
+      await restaurantOrdersMarket(db);
+    }
+
+    const marketOf = async (collection: string, id: string) =>
+      (
+        await db
+          .collection<{ _id: string; marketId?: string }>(collection)
+          .findOne({ _id: id })
+      )?.marketId;
+    assert.equal(await marketOf("restaurants", "r-legacy"), "berlin");
+    assert.equal(await marketOf("restaurants", "r-hamburg"), "hamburg");
+    assert.equal(await marketOf("menus", "m-legacy"), "berlin");
+    assert.equal(await marketOf("restaurant_orders", "ro-legacy"), "berlin");
+    // The migrated documents load as aggregates of the launch Market.
+    const restaurants = new DatabaseRestaurantRepository(
+      createRestaurantCollection(db, new DatabaseUnitOfWork(database.client)),
+      noKitchenChanges,
+    );
+    assert.equal((await restaurants.get("r-legacy"))?.marketId.value, "berlin");
+    // The Market is required and a slug from now on.
+    for (const collection of ["restaurants", "menus", "restaurant_orders"]) {
+      for (const marketId of [undefined, "Berlin"]) {
+        await assert.rejects(
+          db
+            .collection<{ _id: string }>(collection)
+            .updateOne(
+              { _id: { $exists: true } },
+              marketId === undefined
+                ? { $unset: { marketId: "" } }
+                : { $set: { marketId } },
+            ),
+          (error) => error instanceof MongoServerError && error.code === 121,
+          `${collection} ${marketId}`,
+        );
+      }
+    }
+    const indexes = (await db.collection("restaurants").indexes()).map(
+      (index) => index.name,
+    );
+    for (const name of [
+      "restaurants_market_open_by_id",
+      "restaurants_market_by_id",
+      "restaurants_owner_market_by_id",
+    ]) {
+      assert.ok(indexes.includes(name), name);
+    }
+    for (const name of ["restaurants_open_by_id", "restaurants_owner"]) {
+      assert.equal(indexes.includes(name), false, name);
+    }
+  });
+
   test("runs of one process are queued", async (t) => {
     const db = freshDatabase(t);
     const runs = await Promise.all(
@@ -363,6 +473,7 @@ describe("MongoDB storage", () => {
       id: randomUUID(),
       orderId,
       restaurantId,
+      marketId: "berlin",
       items: [{ menuItemId: "pho", quantity: 2, options: ["extra-herbs"] }],
       receivedAt: now,
     });
@@ -446,6 +557,7 @@ describe("MongoDB storage", () => {
       id: "r-1",
       name: "Pho House",
       ownerId: "owner",
+      marketId: "berlin",
       registeredAt: now,
     });
     restaurant.assignStaff("cook");
@@ -467,6 +579,7 @@ describe("MongoDB storage", () => {
       id: "r-1",
       name: "Copy",
       ownerId: "owner",
+      marketId: "berlin",
       registeredAt: now,
     });
     await assert.rejects(repository.save(duplicate), ConcurrencyConflictError);
@@ -474,6 +587,7 @@ describe("MongoDB storage", () => {
     assert.deepEqual(
       (
         await catalog.list({
+          marketId: "berlin",
           includeClosed: false,
           after: undefined,
           limit: 10,
@@ -501,6 +615,7 @@ describe("MongoDB storage", () => {
     const menu = Menu.create({
       id: "m-1",
       restaurantId: "r-1",
+      marketId: "berlin",
       createdAt: now,
     });
     menu.addItem({
@@ -520,6 +635,7 @@ describe("MongoDB storage", () => {
     const second = Menu.create({
       id: "m-2",
       restaurantId: "r-1",
+      marketId: "berlin",
       createdAt: now,
     });
     await assert.rejects(menus.save(second), AlreadyExistsError);

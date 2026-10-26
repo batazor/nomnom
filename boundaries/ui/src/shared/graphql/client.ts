@@ -40,6 +40,9 @@ type ClientOptions = Readonly<{
   getTraceparent?: () => string | undefined;
   // Access token of the user BFF acts for; without it only public reads work.
   getAccessToken?: () => string | undefined;
+  // Market of the viewer (ADR 41): BFF routes every operation except
+  // `markets` to the Cell of this Market and refuses one without it.
+  getMarket?: () => string | undefined;
   reportError?: (report: GraphqlErrorReport) => void;
 }>;
 
@@ -47,6 +50,7 @@ export function createGraphqlClient({
   url,
   getTraceparent,
   getAccessToken,
+  getMarket,
   reportError,
   subscriptions,
 }: ClientOptions) {
@@ -56,6 +60,8 @@ export function createGraphqlClient({
     if (traceparent) result.traceparent = traceparent;
     const token = getAccessToken?.();
     if (token) result.authorization = `Bearer ${token}`;
+    const market = getMarket?.();
+    if (market) result["x-nomnom-market"] = market;
     return result;
   }
 
@@ -76,7 +82,8 @@ export function createGraphqlClient({
   }
 
   // One SSE request per subscription (distinct connections mode): the
-  // Router verifies Authorization like any other request, no WebSocket state.
+  // Router verifies Authorization and routes by X-Nomnom-Market like any
+  // other request, no WebSocket state.
   const transport =
     subscriptions ??
     ((): SubscriptionTransport => {

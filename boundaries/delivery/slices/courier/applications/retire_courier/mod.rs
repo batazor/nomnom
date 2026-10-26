@@ -64,6 +64,7 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::{ManualClock, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
+    use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{Courier, CourierName, CourierStatus};
 
     fn dispatcher() -> Subject {
@@ -76,6 +77,7 @@ mod tests {
             .add(&Courier::restore(
                 CourierId::new("courier-1"),
                 CourierName::new("Anna").expect("courier name"),
+                MarketId::new("berlin").expect("market id"),
                 status,
             ))
             .expect("seed courier");

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from nomnom.payments.v1 import payments_pb2 as nomnom_dot_payments_dot_v1_dot_payments__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fnomnom/payments/v1/events.proto\x12\x12nomnom.payments.v1\x1a!nomnom/payments/v1/payments.proto\"\x80\x01\n\x11PaymentAuthorized\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\"~\n\x0fPaymentCaptured\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\"\x8c\x01\n\x1dPaymentAuthorizationCancelled\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\"~\n\x0fPaymentRefunded\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\"a\n\rPaymentFailed\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x16\n\x06reason\x18\x03 \x01(\tR\x06reasonB\x8f\x01\n\x16\x63om.nomnom.payments.v1B\x0b\x45ventsProtoP\x01\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fnomnom/payments/v1/events.proto\x12\x12nomnom.payments.v1\x1a!nomnom/payments/v1/payments.proto\"\x9d\x01\n\x11PaymentAuthorized\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\x12\x1b\n\tmarket_id\x18\x04 \x01(\tR\x08marketId\"\x9b\x01\n\x0fPaymentCaptured\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\x12\x1b\n\tmarket_id\x18\x04 \x01(\tR\x08marketId\"\xa9\x01\n\x1dPaymentAuthorizationCancelled\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\x12\x1b\n\tmarket_id\x18\x04 \x01(\tR\x08marketId\"\x9b\x01\n\x0fPaymentRefunded\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x31\n\x06\x61mount\x18\x03 \x01(\x0b\x32\x19.nomnom.payments.v1.MoneyR\x06\x61mount\x12\x1b\n\tmarket_id\x18\x04 \x01(\tR\x08marketId\"~\n\rPaymentFailed\x12\x1d\n\npayment_id\x18\x01 \x01(\tR\tpaymentId\x12\x19\n\x08order_id\x18\x02 \x01(\tR\x07orderId\x12\x16\n\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1b\n\tmarket_id\x18\x04 \x01(\tR\x08marketIdB\x8f\x01\n\x16\x63om.nomnom.payments.v1B\x0b\x45ventsProtoP\x01\xa2\x02\x03NPX\xaa\x02\x12Nomnom.Payments.V1\xca\x02\x12Nomnom\\Payments\\V1\xe2\x02\x1eNomnom\\Payments\\V1\\GPBMetadata\xea\x02\x14Nomnom::Payments::V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,13 +34,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n\026com.nomnom.payments.v1B\013EventsProtoP\001\242\002\003NPX\252\002\022Nomnom.Payments.V1\312\002\022Nomnom\\Payments\\V1\342\002\036Nomnom\\Payments\\V1\\GPBMetadata\352\002\024Nomnom::Payments::V1'
   _globals['_PAYMENTAUTHORIZED']._serialized_start=91
-  _globals['_PAYMENTAUTHORIZED']._serialized_end=219
-  _globals['_PAYMENTCAPTURED']._serialized_start=221
-  _globals['_PAYMENTCAPTURED']._serialized_end=347
-  _globals['_PAYMENTAUTHORIZATIONCANCELLED']._serialized_start=350
-  _globals['_PAYMENTAUTHORIZATIONCANCELLED']._serialized_end=490
-  _globals['_PAYMENTREFUNDED']._serialized_start=492
-  _globals['_PAYMENTREFUNDED']._serialized_end=618
-  _globals['_PAYMENTFAILED']._serialized_start=620
-  _globals['_PAYMENTFAILED']._serialized_end=717
+  _globals['_PAYMENTAUTHORIZED']._serialized_end=248
+  _globals['_PAYMENTCAPTURED']._serialized_start=251
+  _globals['_PAYMENTCAPTURED']._serialized_end=406
+  _globals['_PAYMENTAUTHORIZATIONCANCELLED']._serialized_start=409
+  _globals['_PAYMENTAUTHORIZATIONCANCELLED']._serialized_end=578
+  _globals['_PAYMENTREFUNDED']._serialized_start=581
+  _globals['_PAYMENTREFUNDED']._serialized_end=736
+  _globals['_PAYMENTFAILED']._serialized_start=738
+  _globals['_PAYMENTFAILED']._serialized_end=864
 # @@protoc_insertion_point(module_scope)

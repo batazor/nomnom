@@ -1,3 +1,4 @@
+use crate::slices::courier::domains::courier::MarketId;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use opentelemetry::metrics::MeterProvider;
@@ -137,6 +138,7 @@ fn created() -> DomainEvent {
         delivery_id: delivery_id(),
         order_id: OrderId::new("order-1"),
         created_at_epoch_seconds: NOW,
+        market_id: MarketId::new("berlin").expect("market id"),
     }
 }
 
@@ -147,6 +149,7 @@ fn assigned(created_at: Option<i64>) -> DomainEvent {
         courier_id: courier_id(),
         created_at_epoch_seconds: created_at,
         expected_pickup_at_epoch_seconds: None,
+        market_id: MarketId::new("berlin").expect("market id"),
     }
 }
 
@@ -156,6 +159,7 @@ fn completed(created_at: Option<i64>) -> DomainEvent {
         order_id: OrderId::new("order-1"),
         courier_id: courier_id(),
         created_at_epoch_seconds: created_at,
+        market_id: MarketId::new("berlin").expect("market id"),
     }
 }
 
@@ -165,6 +169,7 @@ fn failed(reason: &str) -> DomainEvent {
         order_id: OrderId::new("order-1"),
         courier_id: courier_id(),
         reason: DeliveryFailureReason::new(reason, Some("free text detail")).expect("reason"),
+        market_id: MarketId::new("berlin").expect("market id"),
     }
 }
 
@@ -205,6 +210,7 @@ fn committed_events_are_counted_by_metric() {
             delivery_id: delivery_id(),
             order_id: OrderId::new("order-1"),
             courier_id: courier_id(),
+            market_id: MarketId::new("berlin").expect("market id"),
         },
         offer(true),
         offer(false),
@@ -214,6 +220,7 @@ fn committed_events_are_counted_by_metric() {
             order_id: OrderId::new("order-1"),
             courier_id: courier_id(),
             expected_delivered_at_epoch_seconds: None,
+            market_id: MarketId::new("berlin").expect("market id"),
         },
         completed(Some(NOW - 1_800)),
         failed("no_access"),
@@ -222,6 +229,7 @@ fn committed_events_are_counted_by_metric() {
             order_id: OrderId::new("order-1"),
             released_courier_id: None,
             reason: None,
+            market_id: MarketId::new("berlin").expect("market id"),
         },
     ];
 
@@ -256,7 +264,11 @@ fn committed_events_are_counted_by_metric() {
 
 /// A waiting Delivery stored outside any Unit of Work.
 fn stored_delivery(store: &TestStore) -> Delivery {
-    let delivery = Delivery::new(delivery_id(), OrderId::new("order-1"));
+    let delivery = Delivery::new(
+        delivery_id(),
+        OrderId::new("order-1"),
+        MarketId::new("berlin").expect("market id"),
+    );
     DeliveryRepository::add(store, &delivery).expect("add");
     delivery
 }
@@ -447,6 +459,7 @@ fn idempotent_repeat_is_recorded_once() {
     };
     let input = || create_delivery::Input {
         order_id: "order-1".to_owned(),
+        market_id: "berlin".to_owned(),
     };
     let subject = Subject::Service("fulfillment".to_owned());
 

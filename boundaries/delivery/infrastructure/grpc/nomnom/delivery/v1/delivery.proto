@@ -20,6 +20,8 @@ message Delivery {
   // Pickup and dropoff addresses are dropped from the project.
   reserved 5, 6;
   reserved "pickup_address", "dropoff_address";
+  // Market of the Order (ADR 41); immutable.
+  string market_id = 7;
 }
 
 enum CourierStatus {

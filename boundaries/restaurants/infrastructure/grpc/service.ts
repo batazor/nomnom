@@ -138,8 +138,11 @@ export const createRestaurantsService = (
 
     async listRestaurants(request) {
       try {
-        // Zero values of proto3 mean "not set": default page size, first page.
+        // Market is required (ADR 41). Zero values of proto3 mean "not set":
+        // default page size, first page.
+        requireField("market_id", request.marketId);
         const result = await dependencies.listRestaurants.execute({
+          marketId: request.marketId,
           includeClosed: request.includeClosed,
           limit: request.pageSize === 0 ? undefined : request.pageSize,
           cursor: request.pageToken === "" ? undefined : request.pageToken,
@@ -155,8 +158,10 @@ export const createRestaurantsService = (
 
     async listOwnedRestaurants(request, context) {
       try {
+        requireField("market_id", request.marketId);
         const result = await dependencies.listOwnedRestaurants.execute({
           subject: await subjects.resolve(context),
+          marketId: request.marketId,
           limit: request.pageSize === 0 ? undefined : request.pageSize,
           cursor: request.pageToken === "" ? undefined : request.pageToken,
         });
@@ -236,10 +241,12 @@ export const createRestaurantsService = (
         );
         requireField("name", request.name);
         requireField("owner_id", request.ownerId);
+        requireField("market_id", request.marketId);
         const result = await dependencies.registerRestaurant.execute({
           subject,
           name: request.name,
           ownerId: request.ownerId,
+          marketId: request.marketId,
         });
         return create(RegisterRestaurantResponseSchema, {
           restaurant: toRestaurantMessage(result),

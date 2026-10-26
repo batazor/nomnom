@@ -41,6 +41,9 @@
 | Payment | Денежная операция на сумму, связанная с одним Order. | `payments` | Authorization, Capture, Refund | Order, произвольная transaction | Payments glossary/domain | Не решает lifecycle Order. |
 | Order ID | Стабильный типизированный строковый identifier Order в Published Language. | `orders` публикует | Order, Partition Key | Импорт Order model | Proto/events/code (`OrderId`/`OrderID`) | Spelling следует языку; семантика ID общая. |
 | Money | Точная decimal-сумма и currency; арифметика только в одной валюте. | Owner операции; обмен — Published Language | Payment, Order Item | `float`, shared domain object | Orders/Payments domain; `google.type.Money` planned | На boundary переводится в local value object. |
+| Market | Город, в котором работает доставка: его Restaurant, Courier, Order, Delivery и Payment обслуживаются вместе и не пересекают его границу. | `controlplane` (реестр); `market_id` — атрибут агрегатов контекстов | Cell, Market Placement | tenant, регион облака | [ADR 41](adr/0041-cell-based-architecture-with-control-plane.md), proto всех контекстов, заголовок `X-Nomnom-Market` | `market_id` — slug, задаётся при создании агрегата и не меняется. |
+| Cell | Полный изолированный экземпляр data plane (контексты, их хранилища, Kafka, internal gateway), обслуживающий один или несколько Market. | `controlplane` | Market, Market Placement | Kubernetes namespace, bounded context | [ADR 41](adr/0041-cell-based-architecture-with-control-plane.md) | Контексты Cell не знают о других Cell и не вызывают control plane. |
+| Market Placement | Размещение Market ровно в одной Cell; по нему BFF выбирает gateway Cell для запроса. | `controlplane` | Market, Cell, Placement Map | Партиция Kafka | [ADR 41](adr/0041-cell-based-architecture-with-control-plane.md), `GetPlacementMap` | Placement Map — все Market Placement с адресами gateway. |
 
 ## Orders
 

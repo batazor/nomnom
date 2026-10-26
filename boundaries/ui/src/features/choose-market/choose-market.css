@@ -1,0 +1,36 @@
+.choose-market {
+  display: grid;
+  max-width: 28rem;
+  gap: var(--space-4);
+  margin: var(--space-8) auto;
+}
+
+.choose-market-title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.choose-market-detail {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.choose-market-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choose-market-message {
+  display: grid;
+  max-width: 28rem;
+  gap: var(--space-3);
+  justify-items: start;
+  margin: var(--space-8) auto;
+}
+
+.market-switcher .nomnom-label {
+  white-space: nowrap;
+}

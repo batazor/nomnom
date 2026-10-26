@@ -7,7 +7,7 @@ from typing import cast, override
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
-from payment_fakes import ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 from psycopg import errors
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
@@ -42,7 +42,9 @@ AUTHORIZATIONS = "nomnom.payments.authorizations"
 CAPTURES = "nomnom.payments.captures"
 REFUNDS = "nomnom.payments.refunds"
 AGGREGATE = AggregateRef("Payment", "payment-0", 2)
-AUTHORIZED = PaymentAuthorized(PaymentId("payment-0"), OrderId("order-1"), Money.parse("1", "EUR"))
+AUTHORIZED = PaymentAuthorized(
+    PaymentId("payment-0"), OrderId("order-1"), MARKET, Money.parse("1", "EUR")
+)
 
 
 @pytest.mark.usefixtures("database")
@@ -166,8 +168,8 @@ class DomainMetricsTest(unittest.TestCase):
     def test_unknown_values_create_no_series(self) -> None:
         payment, order = PaymentId("payment-0"), OrderId("order-1")
         events: Sequence[PaymentDomainEvent] = [
-            PaymentFailed(payment, order, "card_declined"),
-            PaymentAuthorizationCancelled(payment, order, Money.parse("1", "EUR")),
+            PaymentFailed(payment, order, MARKET, "card_declined"),
+            PaymentAuthorizationCancelled(payment, order, MARKET, Money.parse("1", "EUR")),
             PaymentOperationDeclined(
                 OperationId("op-1"), payment, OperationKind.CANCEL_AUTHORIZATION, "x"
             ),

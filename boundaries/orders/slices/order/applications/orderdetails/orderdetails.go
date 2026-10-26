@@ -16,6 +16,7 @@ import (
 type Details struct {
 	OrderID      order.ID
 	CustomerID   order.CustomerID
+	MarketID     vo.MarketID
 	RestaurantID order.RestaurantID
 	Items        []Item
 	Total        vo.Money

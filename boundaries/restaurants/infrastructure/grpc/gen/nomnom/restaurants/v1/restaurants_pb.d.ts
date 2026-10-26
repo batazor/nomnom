@@ -28,6 +28,13 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
    * @generated from field: bool is_open = 3;
    */
   isOpen: boolean;
+
+  /**
+   * Market of the Restaurant (ADR 41); immutable.
+   *
+   * @generated from field: string market_id = 5;
+   */
+  marketId: string;
 };
 
 /**

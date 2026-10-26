@@ -202,7 +202,9 @@ class GrpcPropagationTest(unittest.TestCase):
         with tracer.start_as_current_span("caller", kind=SpanKind.INTERNAL) as caller:
             self.client.CreatePayment(
                 service_pb2.CreatePaymentRequest(
-                    order_id="order-1", amount=payments_pb2.Money(amount="25.00", currency="EUR")
+                    order_id="order-1",
+                    market_id="berlin",
+                    amount=payments_pb2.Money(amount="25.00", currency="EUR"),
                 )
             )
         method = "nomnom.payments.v1.PaymentsService/CreatePayment"

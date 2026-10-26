@@ -19,12 +19,14 @@ class GetPaymentStatusResponse(_message.Message):
     def __init__(self, payment: _Optional[_Union[_payments_pb2.Payment, _Mapping]] = ...) -> None: ...
 
 class CreatePaymentRequest(_message.Message):
-    __slots__ = ("order_id", "amount")
+    __slots__ = ("order_id", "amount", "market_id")
     ORDER_ID_FIELD_NUMBER: _ClassVar[int]
     AMOUNT_FIELD_NUMBER: _ClassVar[int]
+    MARKET_ID_FIELD_NUMBER: _ClassVar[int]
     order_id: str
     amount: _payments_pb2.Money
-    def __init__(self, order_id: _Optional[str] = ..., amount: _Optional[_Union[_payments_pb2.Money, _Mapping]] = ...) -> None: ...
+    market_id: str
+    def __init__(self, order_id: _Optional[str] = ..., amount: _Optional[_Union[_payments_pb2.Money, _Mapping]] = ..., market_id: _Optional[str] = ...) -> None: ...
 
 class CreatePaymentResponse(_message.Message):
     __slots__ = ("payment_id", "state", "created")

@@ -20,7 +20,7 @@ from infrastructure.repository import (
 )
 from infrastructure.repository.statements import Statement, StatementTelemetry, summarize
 from pkg.config import database
-from slices.payment.domains.payment import Money, OrderId, Payment, PaymentId
+from slices.payment.domains.payment import MarketId, Money, OrderId, Payment, PaymentId
 
 
 class SummaryTest(unittest.TestCase):
@@ -90,7 +90,9 @@ class StatementTelemetryTest(unittest.TestCase):
         return result
 
     def test_statements_inside_a_trace_get_client_spans_and_durations(self) -> None:
-        payment = Payment(PaymentId("payment-1"), OrderId("order-1"), Money.parse("1", "EUR"))
+        payment = Payment(
+            PaymentId("payment-1"), OrderId("order-1"), MarketId("berlin"), Money.parse("1", "EUR")
+        )
         tracer = self.tracer_provider.get_tracer("test")
         with tracer.start_as_current_span("usecase create_payment"):
             DatabaseUnitOfWork(self.observed).run(lambda: self.payments.add(payment))

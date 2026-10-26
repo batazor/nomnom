@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::persistence::AuthorizationRevision;
 
-use super::CourierName;
+use super::{CourierName, MarketId};
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CourierId(String);
@@ -46,6 +46,8 @@ pub enum CourierError {
     /// The courier left the Courier Pool and takes no work any more.
     Retired,
     AlreadyRetired,
+    /// The work belongs to another Market than the courier's (ADR 41).
+    OtherMarket,
 }
 
 impl Display for CourierError {
@@ -60,6 +62,7 @@ impl Display for CourierError {
             Self::OnLine => formatter.write_str("courier is on line"),
             Self::Retired => formatter.write_str("courier is retired"),
             Self::AlreadyRetired => formatter.write_str("courier is already retired"),
+            Self::OtherMarket => formatter.write_str("courier works in another market"),
         }
     }
 }
@@ -70,6 +73,8 @@ impl Error for CourierError {}
 pub struct Courier {
     id: CourierId,
     name: CourierName,
+    /// Market the courier works in; set on registration, immutable (ADR 41).
+    market_id: MarketId,
     status: CourierStatus,
     /// Set once the courier left the Courier Pool; the courier stays
     /// unavailable for good.
@@ -82,10 +87,11 @@ pub struct Courier {
 
 impl Courier {
     #[must_use]
-    pub fn new(id: CourierId, name: CourierName) -> Self {
+    pub fn new(id: CourierId, name: CourierName, market_id: MarketId) -> Self {
         Self {
             id,
             name,
+            market_id,
             status: CourierStatus::Available,
             retired_at_epoch_seconds: None,
             authorization_revision: None,
@@ -96,10 +102,16 @@ impl Courier {
     /// Restores a courier from a snapshot; old snapshots carry no
     /// authorization revision (see [`Self::with_authorization_revision`]).
     #[must_use]
-    pub fn restore(id: CourierId, name: CourierName, status: CourierStatus) -> Self {
+    pub fn restore(
+        id: CourierId,
+        name: CourierName,
+        market_id: MarketId,
+        status: CourierStatus,
+    ) -> Self {
         Self {
             id,
             name,
+            market_id,
             status,
             retired_at_epoch_seconds: None,
             authorization_revision: None,
@@ -142,6 +154,16 @@ impl Courier {
     #[must_use]
     pub fn authorization_revision(&self) -> Option<&AuthorizationRevision> {
         self.authorization_revision.as_ref()
+    }
+
+    /// Courier Assignment rule of ADR 41: a courier takes Delivery Offers and
+    /// Courier Assignments of its own Market only.
+    pub fn ensure_serves(&self, market_id: &MarketId) -> Result<(), CourierError> {
+        if &self.market_id == market_id {
+            Ok(())
+        } else {
+            Err(CourierError::OtherMarket)
+        }
     }
 
     /// Checks that the courier may receive a new Delivery Offer or Assignment
@@ -223,6 +245,11 @@ impl Courier {
     }
 
     #[must_use]
+    pub fn market_id(&self) -> &MarketId {
+        &self.market_id
+    }
+
+    #[must_use]
     pub const fn retired_at_epoch_seconds(&self) -> Option<i64> {
         self.retired_at_epoch_seconds
     }
@@ -246,9 +273,13 @@ mod tests {
         CourierName::new("Timur").expect("courier name")
     }
 
+    fn berlin() -> MarketId {
+        MarketId::new("berlin").expect("market id")
+    }
+
     #[test]
     fn courier_availability_changes_strictly() {
-        let mut courier = Courier::new(CourierId::new("courier-1"), name());
+        let mut courier = Courier::new(CourierId::new("courier-1"), name(), berlin());
 
         courier.mark_busy().expect("available courier becomes busy");
         assert_eq!(courier.status(), CourierStatus::Busy);
@@ -261,7 +292,7 @@ mod tests {
 
     #[test]
     fn courier_goes_off_and_on_shift_strictly() {
-        let mut courier = Courier::new(CourierId::new("courier-1"), name());
+        let mut courier = Courier::new(CourierId::new("courier-1"), name(), berlin());
 
         assert_eq!(
             courier.mark_available(),
@@ -287,8 +318,12 @@ mod tests {
 
     #[test]
     fn busy_courier_availability_cannot_change() {
-        let mut courier =
-            Courier::restore(CourierId::new("courier-1"), name(), CourierStatus::Busy);
+        let mut courier = Courier::restore(
+            CourierId::new("courier-1"),
+            name(),
+            berlin(),
+            CourierStatus::Busy,
+        );
 
         assert_eq!(courier.mark_unavailable(), Err(CourierError::Busy));
         assert_eq!(courier.mark_available(), Err(CourierError::Busy));
@@ -299,7 +334,7 @@ mod tests {
     /// AC-788, AC-789
     #[test]
     fn only_a_courier_off_line_retires_for_good() {
-        let mut courier = Courier::new(CourierId::new("courier-1"), name());
+        let mut courier = Courier::new(CourierId::new("courier-1"), name(), berlin());
 
         assert_eq!(courier.retire(10), Err(CourierError::OnLine));
         courier.mark_busy().expect("assigned");
@@ -313,5 +348,18 @@ mod tests {
         assert_eq!(courier.retire(20), Err(CourierError::AlreadyRetired));
         assert_eq!(courier.mark_available(), Err(CourierError::Retired));
         assert_eq!(courier.ensure_available(), Err(CourierError::Unavailable));
+    }
+
+    /// ADR 41: a courier serves only its own Market.
+    #[test]
+    fn courier_serves_only_its_market() {
+        let courier = Courier::new(CourierId::new("courier-1"), name(), berlin());
+
+        assert_eq!(courier.market_id(), &berlin());
+        assert_eq!(courier.ensure_serves(&berlin()), Ok(()));
+        assert_eq!(
+            courier.ensure_serves(&MarketId::new("hamburg").expect("market id")),
+            Err(CourierError::OtherMarket)
+        );
     }
 }

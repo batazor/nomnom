@@ -228,6 +228,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
         create(RegisterRestaurantRequestSchema, {
           name: "Pho",
           ownerId: owner.id,
+          marketId: "berlin",
         }),
         context,
       );
@@ -296,6 +297,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
           create(RegisterRestaurantRequestSchema, {
             name: "Pho",
             ownerId: stranger.id,
+            marketId: "berlin",
           }),
           context,
         ),

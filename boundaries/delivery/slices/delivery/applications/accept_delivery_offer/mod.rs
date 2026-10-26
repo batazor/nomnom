@@ -113,7 +113,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         delivery.assign(courier_id.clone(), expected_pickup_at)?;
         // The courier becomes busy through the `courier` slice port in this
         // Unit of Work (FR-310, FR-485).
-        self.couriers.occupy(courier_id)?;
+        self.couriers.occupy(courier_id, delivery.market_id())?;
         // The Courier Assignment is valid; grant access before commit and
         // check the delivery at least as fresh as this write (FR-447).
         let revision = self
