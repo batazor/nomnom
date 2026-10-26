@@ -6,8 +6,6 @@ Date: 2026-10-24
 
 Accepted
 
-Дополнен [41. Statecharts для lifecycle агрегатов](0041-statecharts-for-aggregate-lifecycle.md): transition table получает иерархию состояний; правила этого ADR сохраняются.
-
 Связан с [6. DDD Structure Inside Vertical Slices](0006-ddd-structure-inside-vertical-slices.md), [11. Transactional Inbox and Idempotent Event Processing](0011-transactional-inbox-and-idempotent-event-processing.md), [13. Transactional Outbox for Integration Event Publishing](0013-transactional-outbox-for-integration-event-publishing.md) и [20. Unit of Work for Local Transactions](0020-unit-of-work-for-local-transactions.md).
 
 Для `orders` связан с [локальным ADR 2: Использовать Temporal для оркестрации заказов](../../boundaries/orders/docs/adr/0002-use-temporal-to-orchestrate-orders.md).
@@ -37,6 +35,18 @@ state + trigger + domain inputs = next state | typed domain error
 Переходы выражаются единой transition table как данные. Эта таблица служит одним источником для transition engine, table-driven тестов и генерации диаграмм или документации. Правила переходов не дублируются условными ветками в handlers и adapters.
 
 Библиотека допустима только как чистый transition engine. `OnEnter`, `OnLeave`, `BeforeTransition`, `AfterTransition`, hooks, callbacks и встроенный event bus не используются для orchestration или внешних действий. Если библиотека провоцирует effectful переходы или скрывает таблицу, используется простая собственная реализация.
+
+### Иерархия состояний
+
+Transition table может иметь иерархию состояний — подмножество statecharts. Это способ записать ту же таблицу без повторов, а не другой механизм; формула перехода не меняется. Плоские таблицы иначе повторяют одно правило для группы состояний (`Cancel` пять раз в `RestaurantOrder`), а группы дублируются руками (`TERMINAL_STATES`, `WITH_ACTIVE_ASSIGNMENT`, `IsFinal()`, списки `$in` в адаптерах).
+
+- Состояния делятся на leaf и compound; родитель каждого узла задан данными, узлы верхнего уровня помечены явно. Aggregate всегда ровно в одном leaf state; persistence, Protobuf, integration events и метрики используют только leaf. Compound states — термины Ubiquitous Language контекста и наружу не попадают.
+- Переход объявляется на leaf или compound state. Target — leaf state либо targetless `stay` (aggregate остаётся в текущем leaf и меняет только данные).
+- Разрешение `(leaf, trigger)` — innermost-first: от leaf вверх по предкам, побеждает ближайшая строка; строка вложенного состояния переопределяет строку предка. Пара `(node, trigger)` уникальна. Повторы `AlreadyInState` объявляются только на leaf. Строк на корне нет.
+- Принадлежность к группе выражается функциями модели (`isIn`, `leavesOf`), а не ручными списками в domain, application и adapters.
+- Не используются: entry/exit actions, delayed (`after`) и eventless (`always`) transitions, history states, параллельные регионы. Независимое измерение агрегата — отдельное поле или entity со своей таблицей.
+
+Рассмотренные statechart-библиотеки (2026-10-26) не подходят как engine: XState 5 (`transition()` чистая, но guard=false и необработанное событие неразличимы и без причины — проверено прогоном; compound state обязан иметь `initial`), qmuntal/stateless (guard — `bool`, unhandled trigger — panic, мутирующий `Fire`), statig (переходы в макросах, нет интроспекции, неявный `Top`), python-statemachine 3.x (экземпляр с callbacks, guard — `bool`), Sismic (интерпретатор, LGPL-3.0). Ни одна не даёт `GuardFailed{reasons}` и `AlreadyInState` без обёртки, повторяющей разрешение перехода, поэтому engine — собственный в каждом языке.
 
 ### Граница aggregate и Temporal
 
@@ -76,7 +86,7 @@ FSM не читает system clock и random source и не генерирует
 
 ### Testing и observability
 
-FSM тестируется полностью in-memory таблицей `from, trigger, inputs → to | typed error`, без Docker, Testcontainers, databases, Kafka, Temporal и mocks внешних систем. Guards имеют отдельные boundary tests. Тест полноты обязан доказать, что каждая пара `state × trigger` имеет определённый исход, включая `InvalidTransition` и `AlreadyInState`.
+FSM тестируется полностью in-memory таблицей `from, trigger, inputs → to | typed error`, без Docker, Testcontainers, databases, Kafka, Temporal и mocks внешних систем. Guards имеют отдельные boundary tests. Тест полноты обязан доказать, что каждая пара leaf `state × trigger` имеет определённый исход, включая `InvalidTransition` и `AlreadyInState`; ожидаемая матрица пишется независимо от таблицы. Для иерархической таблицы структурные тесты проверяют отсутствие циклов, наличие потомков у compound state, уникальность `(node, trigger)` и объявление повторов только на leaf.
 
 BDD проверяет бизнес-смысл поведения, а не механизм библиотеки. Application/infrastructure может наблюдать переход с полями `aggregate_type`, `from_state`, `trigger`, `to_state` и результатом; FSM не зависит от observability SDK.
 

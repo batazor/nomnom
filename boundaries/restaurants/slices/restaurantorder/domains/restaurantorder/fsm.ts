@@ -4,7 +4,7 @@
  * transition declared on a compound state applies to every state inside it,
  * and the innermost declaration wins. The table and the hierarchy are data
  * and the single source of truth for allowed transitions; see
- * docs/fsm.md#kitchen--preparation and ADR 41. Item-level transitions
+ * docs/fsm.md#kitchen--preparation and ADR 21. Item-level transitions
  * (`ChangeItem`) are not part of the current model.
  */
 export const RestaurantOrderState = {

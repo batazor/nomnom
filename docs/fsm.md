@@ -8,7 +8,7 @@ state + trigger + domain inputs = next state | typed domain error
 
 При одинаковых значениях `state`, `trigger` и domain inputs результат всегда одинаков. FSM не выполняет побочных эффектов и не зависит от способа вызова, хранения или наблюдения агрегата.
 
-Архитектурное решение зафиксировано в [ADR 21: Pure FSM Transitions](adr/0021-pure-fsm-transitions.md); иерархия состояний (statecharts) — в [ADR 41](adr/0041-statecharts-for-aggregate-lifecycle.md). Оно согласуется с разделением domain/application/infrastructure из [ADR 6](adr/0006-ddd-structure-inside-vertical-slices.md), локальной транзакционной границей из [ADR 20](adr/0020-unit-of-work-for-local-transactions.md) и оркестрацией заказов из [локального Temporal ADR](../boundaries/orders/docs/adr/0002-use-temporal-to-orchestrate-orders.md).
+Архитектурное решение зафиксировано в [ADR 21: Pure FSM Transitions](adr/0021-pure-fsm-transitions.md). Оно согласуется с разделением domain/application/infrastructure из [ADR 6](adr/0006-ddd-structure-inside-vertical-slices.md), локальной транзакционной границей из [ADR 20](adr/0020-unit-of-work-for-local-transactions.md) и оркестрацией заказов из [локального Temporal ADR](../boundaries/orders/docs/adr/0002-use-temporal-to-orchestrate-orders.md).
 
 ## Ответственность FSM
 
@@ -78,7 +78,7 @@ FSM строгая: повторный trigger в целевом состоян�
 
 ## Statecharts: иерархия состояний
 
-Transition table может иметь иерархию состояний — подмножество statecharts, принятое в [ADR 41](adr/0041-statecharts-for-aggregate-lifecycle.md). Это не другой механизм, а способ записать ту же таблицу без повторов.
+Transition table может иметь иерархию состояний — подмножество statecharts, принятое в [ADR 21](adr/0021-pure-fsm-transitions.md#иерархия-состояний). Это не другой механизм, а способ записать ту же таблицу без повторов.
 
 - **Leaf state** — атомарное состояние, в котором aggregate находится, которое сохраняется, публикуется и попадает в метрики. Aggregate всегда ровно в одном leaf.
 - **Compound state** — именованная группа leaf states или других compound states. Это термин Ubiquitous Language (`IN_KITCHEN`, «заказ у кухни»), а не техническая группа; наружу и в хранилище не попадает.
