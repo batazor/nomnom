@@ -10,7 +10,7 @@ from pathlib import Path
 
 from google.protobuf.message import Message
 
-from infrastructure.postgres.outbox import PAYMENT_EVENTS_TOPIC, OutboxMessage
+from infrastructure.repository.outbox import PAYMENT_EVENTS_TOPIC, OutboxMessage
 from pkg.application import AggregateRef
 from slices.payment.domains.payment import (
     Money,

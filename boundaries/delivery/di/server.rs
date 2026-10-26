@@ -24,8 +24,8 @@ use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, m
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
-use crate::infrastructure::postgres::{PostgresStore, migrate};
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
+use crate::infrastructure::repository::{PostgresStore, migrate};
 use crate::infrastructure::spicedb::{
     CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
@@ -433,7 +433,7 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::RecordingRelationships;
-    use crate::infrastructure::postgres::test_support::TestStore;
+    use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::application::Subject;
     use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
     use crate::slices::courier::applications::{

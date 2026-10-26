@@ -13,10 +13,10 @@ import (
 	"nomnom/orders/pkg/config"
 	gatewayclient "nomnom/orders/pkg/gateway"
 	orderdi "nomnom/orders/slices/order/di"
-	"nomnom/orders/slices/order/infrastructure/postgres"
+	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
-	simulatorpostgres "nomnom/orders/slices/simulator/infrastructure/postgres"
+	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
 	"nomnom/orders/slices/simulator/infrastructure/restaurants"
 )
 
@@ -34,7 +34,7 @@ type Module struct {
 // NewModule проверяет секцию simulator (без неё cmd/orders не стартует,
 // AC-765) и открывает lazy connection к restaurants через internal gateway.
 func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig,
-	catalog config.CatalogConfig, store *postgres.Store, authorizer orderdi.Authorizer, order *orderdi.Module,
+	catalog config.CatalogConfig, store *repository.Store, authorizer orderdi.Authorizer, order *orderdi.Module,
 ) (*Module, func(), error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
@@ -43,7 +43,7 @@ func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig,
 	if err != nil {
 		return nil, nil, fmt.Errorf("simulator catalog: %w", err)
 	}
-	state := simulatorpostgres.NewState(store.Pool())
+	state := simulatorrepository.NewState(store.Pool())
 	customer := customersimulator.New(customersimulator.Dependencies{
 		Switch:              state,
 		Catalog:             restaurants.New(conn, catalog.Timeout),

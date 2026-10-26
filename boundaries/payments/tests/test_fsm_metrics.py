@@ -9,7 +9,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoi
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.observability import FsmMetrics, ObservedUnitOfWork
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,

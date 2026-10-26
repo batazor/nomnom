@@ -16,7 +16,7 @@ import {
   INBOX_COLLECTION,
   type InboxDocument,
   MongoInbox,
-} from "../pkg/infrastructure/mongodb/inbox.ts";
+} from "../pkg/infrastructure/repository/inbox.ts";
 import { createTestDatabase } from "./support/mongodb.ts";
 
 const TOPIC = "orders.v1.order-events";

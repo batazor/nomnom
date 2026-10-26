@@ -13,14 +13,15 @@ import {
   type ConsumerCradle,
   createConsumerContainer,
 } from "../../di/consumer.ts";
-import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
 import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
 import {
   type ConsumerClient,
   createConsumerClient,
 } from "../../pkg/infrastructure/kafka/consumer.ts";
 import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
-import { connectMongoDb } from "../../pkg/infrastructure/mongodb/client.ts";
+import { connectMongoDb } from "../../pkg/infrastructure/repository/client.ts";
+import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
@@ -45,11 +46,25 @@ if (!config.kafka.enabled) {
     "KAFKA__BROKERS is required: restaurants-consumer reads Integration Events from Kafka",
   );
 }
+// Valkey (ADR 40) is required: the consumer refreshes the catalog read cache
+// by restaurant-events and menu-events. While Valkey is down the refresh
+// waits and its offsets stay uncommitted.
+if (!config.valkey.enabled) {
+  throw new Error(
+    "VALKEY__URL is required: restaurants-consumer refreshes the catalog read cache in Valkey",
+  );
+}
+const valkeyConfig = config.valkey;
 
 const telemetry = startTelemetry(SERVICE_NAME);
 const mongo = await connectMongoDb(config.mongodb);
+const valkey = connectValkey(valkeyConfig, {
+  connectionName: SERVICE_NAME,
+  logger: logger.child({ operation: "valkey" }),
+});
 let deadLetters: KafkaPublisher | undefined;
 let kafkaConsumer: ConsumerClient | undefined;
+let cacheRefreshConsumer: ConsumerClient | undefined;
 let container: AwilixContainer<ConsumerCradle> | undefined;
 try {
   // Nothing to change on an already current database; a failed migration
@@ -67,10 +82,21 @@ try {
     groupId: config.consumer.groupId,
     fromBeginning: config.consumer.fromBeginning,
   });
+  // A new refresh group starts at the end of the streams: older changes are
+  // already in MongoDB, a miss reads them.
+  cacheRefreshConsumer = createConsumerClient({
+    brokers: config.kafka.brokers,
+    clientId: config.kafka.clientId,
+    groupId: valkeyConfig.refreshGroup,
+    fromBeginning: false,
+  });
   container = createConsumerContainer({
     consumer: config.consumer,
     mongo,
     kafkaConsumer,
+    cacheRefreshConsumer,
+    valkeyConfig,
+    valkey: valkey.client,
     deadLetters,
     logger,
   });
@@ -88,7 +114,9 @@ try {
   // The worker has disconnected the consumer (and committed offsets) on a
   // regular shutdown; a repeated disconnect is a no-op.
   await kafkaConsumer?.disconnect();
+  await cacheRefreshConsumer?.disconnect();
   await container?.dispose();
+  await valkey.close();
   await deadLetters?.close();
   await mongo.close();
   await telemetry.shutdown(config.shutdown.telemetryFlushTimeoutMs);

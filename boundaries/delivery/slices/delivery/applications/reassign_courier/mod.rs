@@ -99,7 +99,7 @@ mod tests {
     use crate::infrastructure::memory::{
         RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
-    use crate::infrastructure::postgres::test_support::TestStore;
+    use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierStatus;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{

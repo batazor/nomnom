@@ -11,7 +11,7 @@ use shaku::{HasComponent, module};
 use crate::infrastructure::memory::SequentialIdGenerator;
 use crate::infrastructure::memory::{RecordingRelationships, StaticCourierLocator};
 #[cfg(test)]
-use crate::infrastructure::postgres::test_support::TestStore;
+use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;

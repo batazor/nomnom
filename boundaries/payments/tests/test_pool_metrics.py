@@ -15,9 +15,9 @@ from opentelemetry.sdk.metrics.export import (
 )
 from psycopg_pool import ConnectionPool, PoolTimeout
 
-from infrastructure.postgres import create_database
-from infrastructure.postgres.database import connect_timeout_seconds
-from infrastructure.postgres.pool_metrics import PoolMetrics
+from infrastructure.repository import create_database
+from infrastructure.repository.database import connect_timeout_seconds
+from infrastructure.repository.pool_metrics import PoolMetrics
 from pkg.config import DatabaseSettings
 
 

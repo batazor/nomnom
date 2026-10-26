@@ -4,7 +4,7 @@ from typing import override
 import pytest
 from payment_fakes import PaymentsTestKit
 
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from slices.payment.applications.apply_provider_callback import (
     ApplyProviderCallbackHandler,
     ApplyProviderCallbackInput,

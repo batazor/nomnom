@@ -12,12 +12,12 @@ import (
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-func setup(t *testing.T, state order.State) (completeorder.Handler, *postgrestest.Store) {
+func setup(t *testing.T, state order.State) (completeorder.Handler, *repositorytest.Store) {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
 	return completeorder.NewHandler(store, store, store), store
 }
@@ -40,7 +40,7 @@ func TestCompleteOrderOnceWithOutboxRecord(t *testing.T) {
 	snapshot, _ := store.Snapshot("order-1")
 	assert.Equal(t, order.StateCompleted, snapshot.State)
 	assert.Equal(t, uint64(2), snapshot.Version)
-	assert.Equal(t, postgrestest.ExpectedOutbox(t, "order-1", 2,
+	assert.Equal(t, repositorytest.ExpectedOutbox(t, "order-1", 2,
 		order.OrderCompleted{OrderID: "order-1", PlacedAt: ordertest.PlacedAt, CompletedAt: completedAt},
 	), store.OutboxRecords())
 }

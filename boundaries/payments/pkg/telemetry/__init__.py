@@ -5,7 +5,7 @@
 * traces — ``TracerProvider`` with a bounded ``BatchSpanProcessor``, only when
   ``OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set
   (PostgreSQL statements are traced by the cursor of the pool,
-  ``infrastructure/postgres/statements.py``);
+  ``infrastructure/repository/statements.py``);
 * metrics — ``MeterProvider`` with a periodic OTLP reader and the CPython runtime
   metrics, only when ``OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`` or
   ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set.

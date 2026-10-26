@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ConcurrencyConflictError } from "../pkg/application/errors.ts";
-import { MongoOutboxOutsideUnitOfWorkError } from "../pkg/infrastructure/mongodb/outbox.ts";
+import { MongoOutboxOutsideUnitOfWorkError } from "../pkg/infrastructure/repository/outbox.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
-} from "../pkg/infrastructure/mongodb/versioned-collection.ts";
+} from "../pkg/infrastructure/repository/versioned-collection.ts";
 import { createTestDatabase, RecordedOutbox } from "./support/mongodb.ts";
 
 const aggregate = { type: "Restaurant", id: "r-1", version: 1 };

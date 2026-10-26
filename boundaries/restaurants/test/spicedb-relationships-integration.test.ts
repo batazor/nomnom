@@ -16,12 +16,12 @@ import type { RestaurantAccessControl } from "../slices/restaurant/applications/
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
-import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createTestDatabase, noKitchenChanges } from "./support/mongodb.ts";
 import {

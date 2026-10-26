@@ -9,7 +9,7 @@ import {
   createRestaurantsContainer,
   type RestaurantsResources,
 } from "../di/restaurants.ts";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import {
   type AppConfig,
   loadConfig,
@@ -18,7 +18,7 @@ import {
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
+} from "../pkg/infrastructure/repository/client.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { rejectingSubjects } from "./support/grpc.ts";
@@ -179,6 +179,14 @@ test("the consumer container resolves every registration", async () => {
       run: async () => {},
       disconnect: async () => {},
     },
+    cacheRefreshConsumer: {
+      connect: async () => {},
+      subscribe: async () => {},
+      run: async () => {},
+      disconnect: async () => {},
+    },
+    valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
+    valkey: offlineValkey(),
     deadLetters: { publish: async () => {} },
     logger: silentLogger,
   });

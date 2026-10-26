@@ -17,7 +17,7 @@ from dependency_injector import providers
 from di.payments import PaymentsContainer
 from di.resources import sections
 from infrastructure.observability import FsmMetrics
-from infrastructure.postgres import (
+from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
     OutboxMessage,
     PostgresDatabase,

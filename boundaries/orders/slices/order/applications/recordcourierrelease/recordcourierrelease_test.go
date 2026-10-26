@@ -16,7 +16,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var (
@@ -31,7 +31,7 @@ const assignedVersion = 2
 const assignedRevision = application.AuthorizationRevision("fake:order-1:delivery:1")
 
 type world struct {
-	store      *postgrestest.Store
+	store      *repositorytest.Store
 	authorizer *fake.Authorizer
 	workflow   *fake.Workflow
 	assign     recordcourierassignment.Handler
@@ -52,7 +52,7 @@ func newWorld(t *testing.T) world {
 // newUnassignedWorld has order-1 without a stored Courier Assignment.
 func newUnassignedWorld(t *testing.T) world {
 	t.Helper()
-	w := world{store: postgrestest.Open(t), authorizer: fake.NewAuthorizer(), workflow: fake.NewWorkflow()}
+	w := world{store: repositorytest.Open(t), authorizer: fake.NewAuthorizer(), workflow: fake.NewWorkflow()}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
 	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.authorizer)
 	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.authorizer)

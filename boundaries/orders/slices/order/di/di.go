@@ -37,7 +37,7 @@ var (
 	// PostgresSet — общий PostgreSQL store процесса (ADR 8) во всех ролях портов:
 	// ProcessStore — PostgreSQL с Outbox из messaging/outbound, Unit of Work и
 	// Outbox под декоратором бизнес-метрик (observability.ObservedStore).
-	// *postgres.Store на мигрированной схеме даёт composition root: он применяет
+	// *repository.Store на мигрированной схеме даёт composition root: он применяет
 	// наборы миграций всех слайсов (di/schema).
 	PostgresSet = wire.NewSet(observability.NewDomainMetrics, NewProcessStore,
 		wire.Bind(new(PlacementStore), new(*ProcessStore)),

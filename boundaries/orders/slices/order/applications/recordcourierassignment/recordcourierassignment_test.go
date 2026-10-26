@@ -15,7 +15,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
@@ -51,7 +51,7 @@ func TestHandleByOrderState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := postgrestest.Open(t)
+			store := repositorytest.Open(t)
 			workflow := fake.NewWorkflow()
 			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", tt.options...)))
 			handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, fake.NewAuthorizer())
@@ -89,7 +89,7 @@ func linkedDelivery(t *testing.T, authorizer *fake.Authorizer) string {
 	return deliveryID
 }
 
-func revisionOf(t *testing.T, store *postgrestest.Store) application.AuthorizationRevision {
+func revisionOf(t *testing.T, store *repositorytest.Store) application.AuthorizationRevision {
 	t.Helper()
 	revision, _, err := store.Revision(context.Background(), "order-1")
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func revisionOf(t *testing.T, store *postgrestest.Store) application.Authorizati
 // AC-518: the assignment writes only order#delivery before commit and stores
 // the assignment; the courier sees the Order through delivery#courier.
 func TestHandleLinksDelivery(t *testing.T) {
-	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
+	store, authorizer := repositorytest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, authorizer)
 
@@ -119,7 +119,7 @@ func TestHandleLinksDelivery(t *testing.T) {
 // without a SpiceDB request and keeps the revision; another Delivery replaces
 // the link in one request.
 func TestHandleReassignment(t *testing.T) {
-	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
+	store, authorizer := repositorytest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, authorizer)
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
@@ -147,7 +147,7 @@ func TestHandleReassignment(t *testing.T) {
 // assignment changes nothing, even if its occurred_at (the start of the
 // delivery transaction) is later.
 func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
-	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
+	store, authorizer := repositorytest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, authorizer)
 
@@ -166,7 +166,7 @@ func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 // AC-521: a failed relationship write rolls the Inbox record back, so
 // redelivery repeats the event.
 func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
-	store, authorizer := postgrestest.Open(t), fake.NewAuthorizer()
+	store, authorizer := repositorytest.Open(t), fake.NewAuthorizer()
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	authorizer.FailWrites(errors.New("spicedb unavailable"))
 	workflow := fake.NewWorkflow()
@@ -189,7 +189,7 @@ func TestHandleRollsBackOnRelationshipFailure(t *testing.T) {
 // FR-611: the assignment stores the pickup time named by the courier; a newer
 // reassignment replaces it and saves the Order, an out-of-order one does not.
 func TestHandleReplacesExpectedPickupTime(t *testing.T) {
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, fake.NewAuthorizer())
 	expecting := func(in recordcourierassignment.Input, pickupAt time.Time) recordcourierassignment.Input {

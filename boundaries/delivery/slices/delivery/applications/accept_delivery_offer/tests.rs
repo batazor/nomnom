@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use super::*;
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
-use crate::infrastructure::postgres::test_support::TestStore;
+use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::application::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::domains::courier::CourierStatus;

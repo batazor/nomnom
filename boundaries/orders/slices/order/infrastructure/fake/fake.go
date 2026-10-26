@@ -1,7 +1,7 @@
 // Package fake holds in-process stand-ins for the systems around the order
 // slice that are not its database: SpiceDB, the restaurants catalog, the
 // Temporal fulfillment workflow, the clock and the order id generator. State
-// of orders itself lives only in PostgreSQL (postgres/postgrestest).
+// of orders itself lives only in PostgreSQL (repository/repositorytest).
 package fake
 
 import (

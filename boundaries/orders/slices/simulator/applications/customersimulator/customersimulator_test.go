@@ -16,7 +16,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
 )
 
@@ -88,7 +88,7 @@ func (k *keys) NewKey() string {
 
 type harness struct {
 	customer *customersimulator.Customer
-	store    *postgrestest.Store
+	store    *repositorytest.Store
 	workflow *fake.Workflow
 	catalog  *catalogStub
 	random   *scriptedRandom
@@ -99,7 +99,7 @@ type harness struct {
 // PostgreSQL; the catalog of Place Order serves restaurant-1.
 func newHarness(t *testing.T) harness {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	placementCatalog := fake.NewCatalog()
 	placementCatalog.Put("restaurant-1", placeorder.CatalogSnapshot{
 		Currency: "EUR",

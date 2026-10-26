@@ -19,32 +19,32 @@ import (
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/infrastructure/postgres"
+	"nomnom/orders/slices/order/infrastructure/repository"
 )
 
 const resourceOrder = "order"
 
 // Relation is one reconciled relation of order and the object type of its subject.
 type Relation struct {
-	Name        postgres.Relation
+	Name        repository.Relation
 	SubjectType string
 }
 
 // Relations are the order relations written by orders, in reconciliation order.
 var Relations = []Relation{
-	{Name: postgres.RelationCustomer, SubjectType: "user"},
-	{Name: postgres.RelationRestaurant, SubjectType: "restaurant"},
-	{Name: postgres.RelationDelivery, SubjectType: "delivery"},
+	{Name: repository.RelationCustomer, SubjectType: "user"},
+	{Name: repository.RelationRestaurant, SubjectType: "restaurant"},
+	{Name: repository.RelationDelivery, SubjectType: "delivery"},
 }
 
 // Orders is the business side of the reconciliation.
 type Orders interface {
-	SubjectsOf(ctx context.Context, relation postgres.Relation, ids []string) (map[string]string, error)
-	RelationPage(ctx context.Context, relation postgres.Relation, afterID string, limit int) ([]postgres.RelationSubject, error)
+	SubjectsOf(ctx context.Context, relation repository.Relation, ids []string) (map[string]string, error)
+	RelationPage(ctx context.Context, relation repository.Relation, afterID string, limit int) ([]repository.RelationSubject, error)
 	// RestoreRelation runs restore and stores its revision only if the Order,
 	// re-read under a row lock that serializes with the courier writers, still
 	// names subject; false — it no longer does and nothing was written.
-	RestoreRelation(ctx context.Context, relation postgres.Relation, orderID, subject string,
+	RestoreRelation(ctx context.Context, relation repository.Relation, orderID, subject string,
 		restore func(context.Context) (application.AuthorizationRevision, error)) (bool, error)
 }
 

@@ -15,11 +15,11 @@ import (
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 // changedVersions are the Order versions announced on orders.v1.order-changes.
-func changedVersions(store *postgrestest.Store) []uint64 {
+func changedVersions(store *repositorytest.Store) []uint64 {
 	var versions []uint64
 	for _, record := range store.OutboxRecords() {
 		if record.Topic == outbound.OrderChangesTopic {
@@ -32,7 +32,7 @@ func changedVersions(store *postgrestest.Store) []uint64 {
 // FR-611, ADR 36: a new expected time saves the Order, so orderChanged gets a
 // change notification; a reassignment with a new pickup time too.
 func TestExpectedTimeChangesAreAnnounced(t *testing.T) {
-	db := postgrestest.Open(t)
+	db := repositorytest.Open(t)
 	store := NewProcessStore(db.Store, observability.NewDomainMetrics(nil))
 	ctx := context.Background()
 	at := ordertest.PlacedAt.Add(time.Minute)

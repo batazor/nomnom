@@ -8,11 +8,11 @@ import {
   RestaurantClosedSchema,
   RestaurantOpenedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
+import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
 import {
   type OutboxEventMapper,
   outboxEventId,
-} from "../pkg/infrastructure/mongodb/outbox.ts";
-import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+} from "../pkg/infrastructure/repository/outbox.ts";
 import {
   MENU_AGGREGATE_TYPE,
   MENU_EVENTS_TOPIC,

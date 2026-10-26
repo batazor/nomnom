@@ -15,7 +15,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var (
@@ -33,7 +33,7 @@ func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *fake.Author
 
 func setupWithPolicy(t *testing.T, policy getorder.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	authorizer := fake.NewAuthorizer()
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))

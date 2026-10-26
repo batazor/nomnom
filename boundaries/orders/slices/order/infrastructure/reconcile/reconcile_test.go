@@ -16,15 +16,15 @@ import (
 	"nomnom/orders/pkg/testfixture"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/postgres"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
 type env struct {
 	t           *testing.T
 	ctx         context.Context
-	store       *postgres.Store
+	store       *repository.Store
 	permissions v1.PermissionsServiceClient
 	reconciler  *Reconciler
 	now         time.Time
@@ -36,14 +36,14 @@ var authz *testfixture.SpiceDB
 func TestMain(m *testing.M) {
 	authz = testfixture.MustStartSpiceDB()
 	defer authz.Close()
-	postgrestest.Main(m)
+	repositorytest.Main(m)
 }
 
 // newEnv gives the test a fresh PostgreSQL database and the shared SpiceDB.
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	ctx := context.Background()
-	store := postgrestest.Open(t).Store
+	store := repositorytest.Open(t).Store
 	client, err := spicedb.Dial(config.SpiceDBConfig{Endpoint: authz.Endpoint, PresharedKey: testfixture.SpiceDBPresharedKey, Insecure: true, Timeout: 2 * time.Second})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })

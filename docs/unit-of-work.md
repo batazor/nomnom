@@ -36,8 +36,8 @@ UoW — application port. Он нужен нескольким слайсам о
 
 | Boundary | Port (shared application-уровень) | Реализация (shared infrastructure boundary) |
 | --- | --- | --- |
-| `orders` (Go) | `pkg/application` | `slices/<slice>/infrastructure/postgres` |
-| `restaurants` (TypeScript) | `pkg/application` | `slices/<slice>/infrastructure/mongodb` |
+| `orders` (Go) | `pkg/application` | `slices/<slice>/infrastructure/repository` |
+| `restaurants` (TypeScript) | `pkg/application` | `slices/<slice>/infrastructure/repository` |
 | `payments` (Python) | `pkg/application` | После выбора хранилища |
 | `delivery` (Rust) | `pkg/application` | После выбора хранилища |
 

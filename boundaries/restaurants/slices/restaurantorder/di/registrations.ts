@@ -10,8 +10,8 @@ import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type { KitchenConfig } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
-import type { OutboxEventMapper } from "../../../pkg/infrastructure/mongodb/outbox.ts";
-import type { MongoUnitOfWork } from "../../../pkg/infrastructure/mongodb/unit-of-work.ts";
+import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
+import type { MongoUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type { MenuRepository } from "../../menu/domains/menu/menu.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import {
@@ -49,11 +49,6 @@ import type { KitchenChangeNotifier } from "../infrastructure/integration/kitche
 import { restaurantOrderEventMapper } from "../infrastructure/integration/restaurant-order-events.ts";
 import { FifoKitchenQueueOrdering } from "../infrastructure/kitchen-queue/mvp.ts";
 import {
-  createRestaurantOrderCollection,
-  MongoKitchenBoard,
-  MongoRestaurantOrderRepository,
-} from "../infrastructure/mongodb/restaurant-orders.ts";
-import {
   cancellationRejection,
   ObservedRestaurantOrderRepository,
   observeReceiveOrderRequest,
@@ -61,6 +56,11 @@ import {
   type ReceiveOrderRequestPort,
   type RestaurantOrderDomainMetrics,
 } from "../infrastructure/observability/domain-metrics.ts";
+import {
+  createRestaurantOrderCollection,
+  MongoKitchenBoard,
+  MongoRestaurantOrderRepository,
+} from "../infrastructure/repository/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,

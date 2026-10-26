@@ -13,9 +13,9 @@ from opentelemetry.sdk.metrics.export import (
 )
 from psycopg import errors
 
-from infrastructure.postgres import PostgresDatabase, PostgresUnitOfWork
-from infrastructure.postgres.database import MAX_ATTEMPTS
-from infrastructure.postgres.transactions import TransactionMetrics
+from infrastructure.repository import PostgresDatabase, PostgresUnitOfWork
+from infrastructure.repository.database import MAX_ATTEMPTS
+from infrastructure.repository.transactions import TransactionMetrics
 from pkg.application import ConcurrencyConflictError
 
 TRANSACTIONS = "nomnom.uow.transactions"

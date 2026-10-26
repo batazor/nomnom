@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   OUTBOX_COLLECTION,
   type OutboxDocument,
-} from "../pkg/infrastructure/mongodb/outbox.ts";
+} from "../pkg/infrastructure/repository/outbox.ts";
 import {
   KITCHEN_CHANGES_TOPIC,
   kitchenChangeNotifier,

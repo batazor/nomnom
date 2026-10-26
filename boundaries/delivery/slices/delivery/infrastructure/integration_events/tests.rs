@@ -241,18 +241,32 @@ fn maps_cancellation_with_and_without_reason() {
 /// ADR 31 namespace `8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13`.
 #[test]
 fn event_id_is_uuid_v5_of_envelope_key() {
-    let id =
-        crate::infrastructure::postgres::event_id("delivery", "delivery-1", 3, DELIVERY_PICKED_UP);
+    let id = crate::infrastructure::repository::event_id(
+        "delivery",
+        "delivery-1",
+        3,
+        DELIVERY_PICKED_UP,
+    );
     assert_eq!(id.to_string(), "7bab3765-b089-5ab8-8bcd-eaf2ea654b5a");
     assert_eq!(id.get_version_num(), 5);
     // Every envelope component changes the id.
     assert_ne!(
         id,
-        crate::infrastructure::postgres::event_id("delivery", "delivery-1", 4, DELIVERY_PICKED_UP)
+        crate::infrastructure::repository::event_id(
+            "delivery",
+            "delivery-1",
+            4,
+            DELIVERY_PICKED_UP
+        )
     );
     assert_ne!(
         id,
-        crate::infrastructure::postgres::event_id("delivery", "delivery-1", 3, DELIVERY_COMPLETED)
+        crate::infrastructure::repository::event_id(
+            "delivery",
+            "delivery-1",
+            3,
+            DELIVERY_COMPLETED
+        )
     );
 }
 

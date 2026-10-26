@@ -12,14 +12,14 @@ import (
 	"nomnom/orders/slices/order/applications/failorcancelorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var decidedAt = time.Date(2026, time.October, 25, 14, 0, 0, 0, time.UTC)
 
-func setup(t *testing.T, state order.State) (failorcancelorder.Handler, *postgrestest.Store) {
+func setup(t *testing.T, state order.State) (failorcancelorder.Handler, *repositorytest.Store) {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
 	return failorcancelorder.NewHandler(store, store, store), store
 }
@@ -50,7 +50,7 @@ func TestFailOrCancelOrderRecordsOutcome(t *testing.T) {
 			assert.Equal(t, order.StateCancelled, snapshot.State)
 			assert.Equal(t, reason, snapshot.CancellationReason)
 			assert.Equal(t, decidedAt, snapshot.CancelledAt)
-			assert.Equal(t, postgrestest.ExpectedOutbox(t, "order-1", 2,
+			assert.Equal(t, repositorytest.ExpectedOutbox(t, "order-1", 2,
 				order.OrderCancelled{OrderID: "order-1", RequestedAt: decidedAt, Reason: reason},
 			), store.OutboxRecords())
 		})

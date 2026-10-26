@@ -54,7 +54,7 @@ postgres-dev-stop:
 
 # Контракт PostgreSQL-адаптеров; PostgreSQL поднимается testcontainers в TestMain.
 test-postgres:
-	$(GO) test -count=1 ./slices/order/infrastructure/postgres/...
+	$(GO) test -count=1 ./slices/order/infrastructure/repository/...
 
 generate:
 	$(MAKE) proto-generate

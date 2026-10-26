@@ -3,7 +3,7 @@ import { after } from "node:test";
 
 import { BSON, type Db } from "mongodb";
 
-import { migrateRestaurantsDatabase } from "../../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
 import type {
   AggregateRef,
   PublishableEvent,
@@ -11,14 +11,14 @@ import type {
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../../pkg/infrastructure/mongodb/client.ts";
+} from "../../pkg/infrastructure/repository/client.ts";
 import {
   MongoOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
   type OutboxEventMapper,
-} from "../../pkg/infrastructure/mongodb/outbox.ts";
-import { MongoUnitOfWork } from "../../pkg/infrastructure/mongodb/unit-of-work.ts";
+} from "../../pkg/infrastructure/repository/outbox.ts";
+import { MongoUnitOfWork } from "../../pkg/infrastructure/repository/unit-of-work.ts";
 
 /**
  * MONGODB_URI comes from the global setup of `npm test`

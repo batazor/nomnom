@@ -13,7 +13,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 
 func setup(t *testing.T) (listcustomerorders.Handler, *fake.Authorizer) {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	ctx := context.Background()
 	for i := range 3 {
 		placedAt := ordertest.PlacedAt.Add(time.Duration(i) * time.Hour)

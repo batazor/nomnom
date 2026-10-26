@@ -17,7 +17,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/observability"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 func transitionSet(from, to order.State, trigger order.Trigger, result string) attribute.Distinct {
@@ -48,9 +48,9 @@ func transitions(t *testing.T, data metricdata.Aggregation) map[attribute.Distin
 	return out
 }
 
-func observedStore(t *testing.T) (observability.ObservedStore, *postgrestest.Store) {
+func observedStore(t *testing.T) (observability.ObservedStore, *repositorytest.Store) {
 	t.Helper()
-	pg := postgrestest.Open(t)
+	pg := repositorytest.Open(t)
 	return observability.ObservedStore{UnitOfWork: pg, Orders: pg, Outbox: pg, Metrics: observability.NewDomainMetrics(nil)}, pg
 }
 

@@ -13,19 +13,19 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import type { Subject } from "../pkg/application/subject.ts";
+import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
+} from "../pkg/infrastructure/repository/client.ts";
 import {
   MongoOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
-} from "../pkg/infrastructure/mongodb/outbox.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
-import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+} from "../pkg/infrastructure/repository/outbox.ts";
+import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { startTracing, type Tracing } from "../pkg/telemetry/tracing.ts";
 import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
@@ -39,7 +39,7 @@ import {
 import {
   createMenuCollection,
   MongoMenuRepository,
-} from "../slices/menu/infrastructure/mongodb/menus.ts";
+} from "../slices/menu/infrastructure/repository/menus.ts";
 import { CloseRestaurantHandler } from "../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import { OpenRestaurantHandler } from "../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
@@ -51,7 +51,7 @@ import {
 import {
   createRestaurantCollection,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { TestMenuAccessControl } from "./support/menus.ts";
 import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 

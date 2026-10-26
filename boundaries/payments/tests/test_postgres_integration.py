@@ -16,7 +16,7 @@ from opentelemetry import trace
 from payment_fakes import NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 
 from infrastructure.observability import FsmMetrics
-from infrastructure.postgres import (
+from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
     NoPublishedContracts,
     OutboxMessage,

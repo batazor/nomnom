@@ -41,7 +41,7 @@ impl Handler<'_> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
-    use crate::infrastructure::postgres::test_support::TestStore;
+    use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::simulator::applications::get_simulator;
 
     fn operator() -> Subject {

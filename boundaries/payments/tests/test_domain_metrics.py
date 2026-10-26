@@ -11,7 +11,7 @@ from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 from psycopg import errors
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
-from infrastructure.postgres import PostgresDatabase
+from infrastructure.repository import PostgresDatabase
 from pkg.application import AggregateRef
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,

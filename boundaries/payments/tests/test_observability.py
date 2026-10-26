@@ -37,14 +37,14 @@ from infrastructure.grpc.service import (
 )
 from infrastructure.observability import ObservedProvider, classify_payment_error
 from infrastructure.observability import usecases as names
-from infrastructure.postgres import PostgresDatabase
-from infrastructure.postgres.outbox import outbox_traceparent
 from infrastructure.provider import (
     WEBHOOK_PATH,
     FakePaymentProvider,
     WebhookVerifier,
     create_webhook_handler,
 )
+from infrastructure.repository import PostgresDatabase
+from infrastructure.repository.outbox import outbox_traceparent
 from pkg import telemetry
 from pkg.lifecycle import HttpWorker
 from pkg.telemetry.propagation import create_propagator

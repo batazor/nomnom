@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use delivery::infrastructure::memory::{ManualClock, StaticAuthorization, StaticCourierLocator};
-use delivery::infrastructure::postgres::PostgresStore;
 use delivery::infrastructure::reconcile::Reconciler;
+use delivery::infrastructure::repository::PostgresStore;
 use delivery::infrastructure::spicedb::{
     CheckMetrics, Relationship, RelationshipGraph, RelationshipOperation, RelationshipPage,
     RepositoryRevisions, SpiceDbAuthorization, SpiceDbClient, SpiceDbRelationships, courier_self,

@@ -15,7 +15,7 @@ use delivery::infrastructure::memory::{
     ManualClock, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
     StaticCourierLocator,
 };
-use delivery::infrastructure::postgres::PostgresStore;
+use delivery::infrastructure::repository::PostgresStore;
 use delivery::pkg::application::Subject;
 use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{

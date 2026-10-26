@@ -6,7 +6,7 @@
 use prost::Message;
 
 use crate::infrastructure::grpc::v1;
-use crate::infrastructure::postgres::{OutboxMapper, OutboxRecord};
+use crate::infrastructure::repository::{OutboxMapper, OutboxRecord};
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::domains::delivery::DomainEvent;
 

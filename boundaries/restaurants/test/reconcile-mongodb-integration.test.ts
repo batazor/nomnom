@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { v1 } from "@authzed/authzed-node";
-import { migrateRestaurantsDatabase } from "../infrastructure/mongodb/migrate.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import {
   createSpiceDbClient,
   type SpiceDbClient,
@@ -11,16 +11,16 @@ import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationshi
 import {
   connectMongoDb,
   type MongoDbConnection,
-} from "../pkg/infrastructure/mongodb/client.ts";
-import { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
+} from "../pkg/infrastructure/repository/client.ts";
+import { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
   MongoRestaurantMemberships,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
-import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { mongoUri, noKitchenChanges } from "./support/mongodb.ts";
 import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";

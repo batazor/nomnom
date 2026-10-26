@@ -18,7 +18,7 @@ import (
 	"nomnom/orders/slices/order/applications/failorcancelorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 type fakeNeighbours struct {
@@ -74,9 +74,9 @@ func (f *fakeNeighbours) Cancel(_ context.Context, r ports.DeliveryRequest) erro
 	return f.err
 }
 
-func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNeighbours, *postgrestest.Store) {
+func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNeighbours, *repositorytest.Store) {
 	t.Helper()
-	store := postgrestest.Open(t)
+	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
 	neighbours := &fakeNeighbours{decision: ports.PaymentDecision{Approved: true}}
 	return &temporal.Activities{

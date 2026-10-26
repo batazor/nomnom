@@ -13,8 +13,8 @@ import (
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/order/infrastructure/postgres"
 	"nomnom/orders/slices/order/infrastructure/reconcile"
+	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
@@ -32,7 +32,7 @@ type RelationshipReconciler struct {
 	done       chan struct{}
 }
 
-func NewRelationshipReconciler(cfg config.Config, store *postgres.Store, client *authzed.Client) *RelationshipReconciler {
+func NewRelationshipReconciler(cfg config.Config, store *repository.Store, client *authzed.Client) *RelationshipReconciler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &RelationshipReconciler{
 		reconciler: reconcile.New(client, store, cfg.Reconciler.Grace, cfg.Reconciler.PageSize),

@@ -9,7 +9,7 @@ fn concurrent_modification_maps_to_aborted() {
 use super::super::v1::delivery_service_client::DeliveryServiceClient;
 use super::*;
 use crate::infrastructure::memory::StaticCourierLocator;
-use crate::infrastructure::postgres::test_support::TestStore;
+use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::applications::{register_courier, set_courier_availability};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;

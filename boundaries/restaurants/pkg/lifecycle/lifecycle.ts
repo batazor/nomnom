@@ -244,3 +244,28 @@ function stoppedUnexpectedly(outcome: Outcome): Error {
     cause: outcome.error ?? new Error("no error reported"),
   });
 }
+
+/**
+ * Workers of one process that serve side by side, e.g. two consumer groups:
+ * all start before the process is ready, a failure of one stops the process,
+ * and shutdown drains all of them within the same deadline.
+ */
+export class ParallelWorkers implements Worker {
+  readonly #workers: readonly Worker[];
+
+  constructor(workers: readonly Worker[]) {
+    this.#workers = workers;
+  }
+
+  async start(): Promise<void> {
+    for (const worker of this.#workers) await worker.start();
+  }
+
+  async run(): Promise<void> {
+    await Promise.all(this.#workers.map((worker) => worker.run()));
+  }
+
+  async shutdown(deadline: AbortSignal): Promise<void> {
+    await Promise.all(this.#workers.map((worker) => worker.shutdown(deadline)));
+  }
+}

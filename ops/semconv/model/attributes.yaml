@@ -29,7 +29,7 @@ groups:
         type: string
         stability: development
         brief: "Valkey operation of the read cache that failed."
-        examples: ["get", "set"]
+        examples: ["get", "set", "refresh"]
       - id: nomnom.cache.result
         type: string
         stability: development

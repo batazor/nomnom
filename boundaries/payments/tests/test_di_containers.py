@@ -31,20 +31,20 @@ from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
-from infrastructure.postgres import (
-    MigrationSet,
-    MissingMigrationsError,
-    PostgresDatabase,
-    PostgresPaymentOutbox,
-    migrate,
-)
-from infrastructure.postgres.migrate import _LOCK_KEY
 from infrastructure.provider import (
     SIGNATURE_HEADER,
     WEBHOOK_PATH,
     FakePaymentProvider,
     sign_payload,
 )
+from infrastructure.repository import (
+    MigrationSet,
+    MissingMigrationsError,
+    PostgresDatabase,
+    PostgresPaymentOutbox,
+    migrate,
+)
+from infrastructure.repository.migrate import _LOCK_KEY
 from pkg.application import Subject, SubjectKind
 from pkg.config import DatabaseSettings
 from pkg.lifecycle import HttpWorker, WorkerGroup
@@ -200,7 +200,9 @@ class StartupMigrationTest(unittest.TestCase):
     def test_empty_database_gets_every_migration_shared_tables_first(self) -> None:
         dsn = self._empty_database()
         logs = self.start(dsn)
-        self.assertEqual([migration_set.owner for migration_set in MIGRATIONS], ["pkg", "payment"])
+        self.assertEqual(
+            [migration_set.owner for migration_set in MIGRATIONS], ["infrastructure", "payment"]
+        )
         self.assertIn(f"payments migrations applied: {', '.join(_ids())}", logs[-1])
         with psycopg.connect(dsn) as conn:
             self.assertEqual(

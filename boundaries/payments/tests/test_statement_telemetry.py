@@ -12,13 +12,13 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import SpanKind, StatusCode
 from psycopg import errors
 
-from infrastructure.postgres import (
+from infrastructure.repository import (
     PostgresDatabase,
     PostgresPaymentRepository,
     PostgresUnitOfWork,
     create_database,
 )
-from infrastructure.postgres.statements import Statement, StatementTelemetry, summarize
+from infrastructure.repository.statements import Statement, StatementTelemetry, summarize
 from pkg.config import DatabaseSettings
 from slices.payment.domains.payment import Money, OrderId, Payment, PaymentId
 

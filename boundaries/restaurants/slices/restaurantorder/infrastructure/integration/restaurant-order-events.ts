@@ -13,12 +13,12 @@ import {
   RestaurantOrderReadySchema,
   RestaurantOrderRejectedSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import type { OutboxEventMapper } from "../../../../pkg/infrastructure/mongodb/outbox.ts";
 import {
   allowlistMapper,
   type EventAllowlist,
   protobufIntegrationEvents,
 } from "../../../../pkg/infrastructure/outbox/integration-event.ts";
+import type { OutboxEventMapper } from "../../../../pkg/infrastructure/repository/outbox.ts";
 import type { RestaurantOrderEvent } from "../../domains/restaurantorder/restaurantorder.ts";
 
 export const RESTAURANT_ORDER_EVENTS_TOPIC =

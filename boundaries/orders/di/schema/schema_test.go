@@ -67,7 +67,7 @@ func TestMigrateAppliesEverySetOnceAndThenChangesNothing(t *testing.T) {
 	defer func() { _ = conn.Close(ctx) }()
 	versions := func() map[string]int64 {
 		applied := map[string]int64{}
-		for _, table := range []string{"schema_migrations_pkg", "schema_migrations_order", "schema_migrations_simulator"} {
+		for _, table := range []string{"schema_migrations_order", "schema_migrations_simulator"} {
 			var (
 				v     int64
 				dirty bool

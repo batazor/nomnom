@@ -11,7 +11,10 @@ import {
   RestaurantOrderCancelledSchema,
   RestaurantOrderRejectedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import { outboxEventId, uuidV5 } from "../pkg/infrastructure/mongodb/outbox.ts";
+import {
+  outboxEventId,
+  uuidV5,
+} from "../pkg/infrastructure/repository/outbox.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   RESTAURANT_ORDER_EVENTS_TOPIC,

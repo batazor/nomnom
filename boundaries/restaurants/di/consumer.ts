@@ -9,11 +9,15 @@
 import { randomUUID } from "node:crypto";
 
 import { type AwilixContainer, asFunction, asValue } from "awilix";
+import type { Valkey } from "iovalkey";
 import type { Db, MongoClient } from "mongodb";
 
 import type { Clock } from "../pkg/application/clock.ts";
 import type { IdGenerator } from "../pkg/application/id-generator.ts";
-import type { ConsumerConfig } from "../pkg/config/config.ts";
+import type {
+  ConsumerConfig,
+  ValkeyEnabledConfig,
+} from "../pkg/config/config.ts";
 import {
   createProcessContainer,
   type Registrations,
@@ -30,19 +34,36 @@ import {
   type Inbox,
   MessageProcessor,
 } from "../pkg/infrastructure/messaging/processor.ts";
-import type { MongoDbConnection } from "../pkg/infrastructure/mongodb/client.ts";
-import { MongoInbox } from "../pkg/infrastructure/mongodb/inbox.ts";
-import { MongoOutbox } from "../pkg/infrastructure/mongodb/outbox.ts";
-import type { MongoUnitOfWork } from "../pkg/infrastructure/mongodb/unit-of-work.ts";
-import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
+import type { MongoDbConnection } from "../pkg/infrastructure/repository/client.ts";
+import { MongoInbox } from "../pkg/infrastructure/repository/inbox.ts";
+import { MongoOutbox } from "../pkg/infrastructure/repository/outbox.ts";
+import type { MongoUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
+import { CacheRefreshHandler } from "../pkg/infrastructure/valkey/refresh.ts";
+import { ParallelWorkers, type Worker } from "../pkg/lifecycle/lifecycle.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
+import {
+  CachedMenuReader,
+  menuCacheRefreshes,
+} from "../slices/menu/infrastructure/cache/menus.ts";
+import { MENU_EVENTS_TOPIC } from "../slices/menu/infrastructure/integration/menu-events.ts";
+import {
+  createMenuCollection,
+  MongoMenuReader,
+} from "../slices/menu/infrastructure/repository/menus.ts";
 import type { RestaurantRepository } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
+  CachedRestaurantCatalog,
+  restaurantCacheRefreshes,
+} from "../slices/restaurant/infrastructure/cache/restaurants.ts";
+import { RESTAURANT_EVENTS_TOPIC } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
+import {
   createRestaurantCollection,
+  MongoRestaurantCatalog,
   MongoRestaurantRepository,
-} from "../slices/restaurant/infrastructure/mongodb/restaurants.ts";
+} from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import type { FulfillmentCoordinatorAccess } from "../slices/restaurantorder/applications/access-control.ts";
 import {
   ReceiveOrderRequestHandler,
@@ -60,16 +81,16 @@ import {
   OrdersEventSourceAccessControl,
 } from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
 import {
-  createRestaurantOrderCollection,
-  MongoRestaurantOrderRepository,
-} from "../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
-import {
   ObservedMongoUnitOfWork,
   ObservedRestaurantOrderRepository,
   observeReceiveOrderRequest,
   type ReceiveOrderRequestPort,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
+import {
+  createRestaurantOrderCollection,
+  MongoRestaurantOrderRepository,
+} from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
 
@@ -79,6 +100,11 @@ export type ConsumerResources = Readonly<{
   mongo: MongoDbConnection;
   /** Not yet connected; the worker connects and disconnects it. */
   kafkaConsumer: ConsumerClient;
+  /** Consumer of the cache refresh group, not yet connected either. */
+  cacheRefreshConsumer: ConsumerClient;
+  valkeyConfig: ValkeyEnabledConfig;
+  /** Opened by cmd/restaurants-consumer. */
+  valkey: Valkey;
   /** Producer of `<stream>.dlq` dead letters. */
   deadLetters: MessagePublisher;
   logger: Logger;
@@ -89,6 +115,12 @@ export interface ConsumerCradle {
   readonly mongoClient: MongoClient;
   readonly db: Db;
   readonly kafkaConsumer: ConsumerClient;
+  readonly cacheRefreshConsumer: ConsumerClient;
+  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly valkey: Valkey;
+  readonly cacheMetrics: CacheMetrics;
+  /** ADR 40: opening and availability events rewrite the read cache keys. */
+  readonly cacheRefresh: CacheRefreshHandler;
   readonly deadLetters: MessagePublisher;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */
   readonly logger: Logger;
@@ -109,7 +141,11 @@ export interface ConsumerCradle {
   readonly consumerMetrics: ConsumerMetrics;
   readonly orderPlaced: EventHandler;
   readonly messageProcessor: MessageProcessor;
-  /** Consumer group of `orders.v1.order-events`, run by the Lifecycle. */
+  /**
+   * Consumer group of `orders.v1.order-events` and the cache refresh group of
+   * `restaurants.v1.restaurant-events` and `restaurants.v1.menu-events`, run
+   * by the Lifecycle.
+   */
   readonly worker: Worker;
 }
 
@@ -122,6 +158,10 @@ export const createConsumerContainer = (
     mongoClient: asValue(resources.mongo.client),
     db: asValue(resources.mongo.db),
     kafkaConsumer: asValue(resources.kafkaConsumer),
+    cacheRefreshConsumer: asValue(resources.cacheRefreshConsumer),
+    valkeyConfig: asValue(resources.valkeyConfig),
+    valkey: asValue(resources.valkey),
+    cacheMetrics: asFunction(() => new CacheMetrics()).singleton(),
     deadLetters: asValue(resources.deadLetters),
     logger: asValue(resources.logger),
     useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),
@@ -227,14 +267,72 @@ export const createConsumerContainer = (
         });
       },
     ).singleton(),
+    cacheRefresh: asFunction(
+      ({
+        db,
+        unitOfWork,
+        valkey,
+        valkeyConfig,
+        cacheMetrics,
+        consumerConfig,
+        logger,
+      }: ConsumerCradle) => {
+        const cache = {
+          client: valkey,
+          ttlMs: valkeyConfig.ttlMs,
+          metrics: cacheMetrics,
+        };
+        return new CacheRefreshHandler({
+          refreshes: {
+            ...restaurantCacheRefreshes(
+              new CachedRestaurantCatalog(
+                new MongoRestaurantCatalog(
+                  createRestaurantCollection(db, unitOfWork),
+                ),
+                cache,
+              ),
+            ),
+            ...menuCacheRefreshes(
+              new CachedMenuReader(
+                new MongoMenuReader(createMenuCollection(db, unitOfWork)),
+                cache,
+              ),
+            ),
+          },
+          retry: {
+            initialIntervalMs: consumerConfig.retryInitialIntervalMs,
+            maxIntervalMs: consumerConfig.retryMaxIntervalMs,
+          },
+          warn: logger.child({
+            operation: "cache.refresh",
+            "messaging.consumer.group.name": valkeyConfig.refreshGroup,
+          }).warn,
+        });
+      },
+    ).singleton(),
     worker: asFunction(
-      ({ kafkaConsumer, messageProcessor, consumerConfig }: ConsumerCradle) =>
-        new KafkaConsumerWorker({
-          client: kafkaConsumer,
-          topics: [ORDER_EVENTS_TOPIC],
-          handler: messageProcessor,
-          groupId: consumerConfig.groupId,
-        }),
+      ({
+        kafkaConsumer,
+        messageProcessor,
+        consumerConfig,
+        cacheRefreshConsumer,
+        cacheRefresh,
+        valkeyConfig,
+      }: ConsumerCradle) =>
+        new ParallelWorkers([
+          new KafkaConsumerWorker({
+            client: kafkaConsumer,
+            topics: [ORDER_EVENTS_TOPIC],
+            handler: messageProcessor,
+            groupId: consumerConfig.groupId,
+          }),
+          new KafkaConsumerWorker({
+            client: cacheRefreshConsumer,
+            topics: [RESTAURANT_EVENTS_TOPIC, MENU_EVENTS_TOPIC],
+            handler: cacheRefresh,
+            groupId: valkeyConfig.refreshGroup,
+          }),
+        ]),
     ).singleton(),
   };
   container.register(registrations);

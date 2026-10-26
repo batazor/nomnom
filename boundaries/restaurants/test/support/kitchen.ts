@@ -32,7 +32,7 @@ import {
   createRestaurantOrderCollection,
   MongoKitchenBoard,
   MongoRestaurantOrderRepository,
-} from "../../slices/restaurantorder/infrastructure/mongodb/restaurant-orders.ts";
+} from "../../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,

@@ -17,7 +17,7 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/postgres/postgrestest"
+	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
@@ -25,7 +25,7 @@ var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 type env struct {
-	store      *postgrestest.Store
+	store      *repositorytest.Store
 	catalog    *fake.Catalog
 	authorizer *fake.Authorizer
 	workflow   *fake.Workflow
@@ -35,7 +35,7 @@ type env struct {
 func newEnv(t *testing.T) env {
 	t.Helper()
 	e := env{
-		store:      postgrestest.Open(t),
+		store:      repositorytest.Open(t),
 		catalog:    fake.NewCatalog(),
 		authorizer: fake.NewAuthorizer(),
 		workflow:   fake.NewWorkflow(),
@@ -90,7 +90,7 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 
 	records := e.store.OutboxRecords()
 	require.Len(t, records, 1)
-	assert.Equal(t, postgrestest.ExpectedOutbox(t, "order-1", 1, order.OrderPlaced{
+	assert.Equal(t, repositorytest.ExpectedOutbox(t, "order-1", 1, order.OrderPlaced{
 		OrderID:      "order-1",
 		CustomerID:   "customer-1",
 		RestaurantID: "restaurant-1",
@@ -273,7 +273,7 @@ func assertNothingPlaced(t *testing.T, e env) {
 // racingKeys hides a key committed by a concurrent request from the first
 // hidden lookups (one by default).
 type racingKeys struct {
-	*postgrestest.Store
+	*repositorytest.Store
 	hidden  int
 	lookups int
 }
@@ -317,7 +317,7 @@ func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
 }
 
 // takenKeys reports the key as taken without a committed Order behind it.
-type takenKeys struct{ *postgrestest.Store }
+type takenKeys struct{ *repositorytest.Store }
 
 func (takenKeys) FindOrder(context.Context, order.CustomerID, string) (order.ID, bool, error) {
 	return "", false, nil

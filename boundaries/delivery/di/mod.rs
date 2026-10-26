@@ -8,10 +8,10 @@
 //!   процесс мигрирует сам при старте ([`server::postgres`]).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
-//! PostgreSQL (`infrastructure::postgres`, ADR 0001 контекста), идентификаторы —
+//! PostgreSQL (`infrastructure::repository`, ADR 0001 контекста), идентификаторы —
 //! UUIDv7 (`infrastructure::ids`), locator — сохранённые позиции курьеров
 //! (`infrastructure::locator`). Тестовые графы идут в тестовый PostgreSQL
-//! (`infrastructure::postgres::test_support`); статическая авторизация,
+//! (`infrastructure::repository::test_support`); статическая авторизация,
 //! locator и запись relationships для них — `infrastructure::memory`.
 
 mod dispatch_worker;

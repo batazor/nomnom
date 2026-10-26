@@ -35,13 +35,15 @@ ORM и ODM не используются. Запросы пишутся на SQL
 | `delivery` (Rust) | sqlx | `sqlx::query!` / `query_as!` / `query_scalar!`, проверка против схемы при компиляции; кеш `.sqlx/` в репозитории, сборка с `SQLX_OFFLINE=true` | `sqlx::migrate!` |
 | `restaurants` (TS) | официальный `mongodb` | BSON-запросы драйвера | [migrate-mongo](https://github.com/seppevs/migrate-mongo) (changelog и lock библиотеки) |
 
-- Миграциями владеет тот, чьи это таблицы или коллекции: у каждого vertical slice
-  ([ADR 3](0003-use-vertical-slice-architecture-as-the-top-level-architecture.md)) свой набор
-  `slices/<slice>/infrastructure/<postgres|mongodb>/migrations` со своей нумерацией и своей таблицей
-  или коллекцией версий; общие для слайсов таблицы (Outbox с publication CDC, Inbox) — набор `pkg`
-  контекста. Миграции слайса меняют только его таблицы, межслайсовых foreign keys нет, поэтому
-  наборы слайсов независимы друг от друга. Запуск один на процесс: явный упорядоченный список
-  наборов в composition root, `pkg` первым, без автопоиска.
+- Хранилище — деталь реализации: пакеты и каталоги называются `repository`, а не по СУБД
+  (`postgres`, `mongodb`). Миграция лежит рядом с репозиторием своей таблицы или коллекции, в
+  `<владелец>/infrastructure/repository/migrations`: у каждого vertical slice
+  ([ADR 3](0003-use-vertical-slice-architecture-as-the-top-level-architecture.md)) свой набор со своей
+  нумерацией и своей таблицей или коллекцией версий; таблицы, чьи репозитории общие для слайсов
+  (Outbox с publication CDC, Inbox), — набор того `infrastructure/repository` контекста, где лежит их
+  код. Миграции набора меняют только его таблицы, межслайсовых foreign keys нет, поэтому наборы
+  независимы друг от друга. Запуск один на процесс: явный упорядоченный список наборов в
+  composition root, общий набор первым, без автопоиска.
 - Одновременный старт нескольких pods ([ADR 38](0038-schema-migrations-at-process-startup.md))
   сериализует session `pg_advisory_lock`, который процесс PostgreSQL-контекста берёт сам на всё
   применение наборов: lock библиотеки (строка yoyo после убитого процесса требовала бы ручного
