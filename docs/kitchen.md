@@ -316,10 +316,10 @@ Domain Event записывает domain method явно; FSM не создаё�
 | `RestaurantOrderAccepted` | `RestaurantOrderAccepted` | Confirm Order | Завершает ожидание Acceptance |
 | `RestaurantOrderRejected` | `RestaurantOrderRejected` | Reject Order | До Acceptance — ветка отказа; после Acceptance и до Pickup — Saga, а не игнорирование |
 | `PreparationStarted` | `PreparationStarted` | Record Preparation Started | Фиксирует начало Preparation |
-| `PreparationDelayed` | `PreparationDelayed` | — (только workflow) | Продлевает бизнес-таймер ожидания Preparation; предел — продуктовое решение |
+| `PreparationDelayed` | `PreparationDelayed` | Record Preparation Delay (новый срок готовности в `Order`) | Продлевает бизнес-таймер ожидания Preparation; предел — продуктовое решение |
 | `RestaurantOrderReady` | `RestaurantOrderReady` | Record Order Ready | Завершает ожидание Preparation |
 | `RestaurantOrderCancelled` | Не используется для ветвления | — | Подтверждает синхронный результат compensation Activity `CancelRestaurantOrder`; Saga не перезапускает |
-| `PreparationFailed` | `PreparationFailed` | — (только workflow) | Saga |
+| `PreparationFailed` | `PreparationFailed` | Relay Preparation Issue (`Order` не меняется) | Saga |
 
 Открытым остаётся только продуктовое решение `restaurants`, допустим ли отказ после Acceptance; workflow `orders` готов его принять.
 
@@ -337,10 +337,11 @@ Kitchen board — projection, а не FSM один в один.
 
 ## Temporal и persistence
 
-Temporal находится в `orders`; кухонный процесс не является workflow. Ожидание Preparation — человеческая работа и state `RestaurantOrder`, а не открытая Activity.
+Temporal находится в `orders`; кухонный процесс не является workflow. Restaurant Order появляется только после одобренной оплаты: workflow запрашивает ресторан после Authorization и записи факта оплаты в `Order`, `OrderPlaced` кухня не читает ([ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md#saga)). Ожидание Preparation — человеческая работа и state `RestaurantOrder`, а не открытая Activity.
 
 ```text
-orders workflow → Activity → internal gateway → restaurants: Receive Order Request
+orders workflow: AuthorizePayment → RecordPaymentAuthorization
+  → Activity RequestRestaurantOrder → internal gateway → restaurants: Receive Order Request
 kitchen: Accept → Queue → Start Preparation → … → Mark Ready for Pickup
 restaurants Outbox → Kafka → orders consumer → Inbox → handler → Signal workflow
 ```
@@ -422,4 +423,4 @@ Feature: Order ready for pickup
 2. **Явный `RECEIVED` в FSM** до Acceptance — состояние ожидания решения уже описано use case Receive Order Request.
 3. **Use case Report Preparation Failure** как инициатор `FAILED` и `PreparationFailed`.
 4. **Политика повтора** Start Preparation и Mark Ready for Pickup — успешный no-op без нового события.
-5. **Для `orders`** — принято в [ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md): сигналы названы по Integration Events, `PreparationStarted`/`PreparationDelayed`/`PreparationFailed` и `RestaurantOrderRejected` после Acceptance обрабатываются workflow, `RestaurantOrderCancelled` — подтверждение синхронного результата. `PreparationDelayed` и `PreparationFailed` не отражаются в `Order` отдельными use cases: это входы orchestration, а не Fulfillment Facts.
+5. **Для `orders`** — принято в [ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md): сигналы названы по Integration Events, `PreparationStarted`/`PreparationDelayed`/`PreparationFailed` и `RestaurantOrderRejected` после Acceptance обрабатываются workflow, `RestaurantOrderCancelled` — подтверждение синхронного результата. `PreparationDelayed` отражается в `Order` новым сроком готовности (Record Preparation Delay), но не Fulfillment Fact; `PreparationFailed` передаётся workflow без изменения `Order` (Relay Preparation Issue).

@@ -34,7 +34,8 @@ Workflow относится к прикладному процессу. Доме
 
 | Use Case | Actor | Intent | Result | Ключевые зависимости и взаимодействия |
 | --- | --- | --- | --- | --- |
-| **Place Order** | Клиент | Оформить заказ из выбранных позиций одного ресторана | Создан `Order`, зафиксированы состав, цены и необходимые snapshot-данные, назначен `order_id`, запущен fulfillment process; заказ ещё не считается принятым рестораном или оплаченным | Читает необходимые сведения ресторана и меню через согласованный API; запускает Temporal fulfillment workflow |
+| **Place Order** | Клиент | Оформить заказ из выбранных позиций одного ресторана | Создан `Order`, зафиксированы состав, цены и необходимые snapshot-данные, назначен `order_id`, `OrderPlaced` записан в Outbox; заказ ещё не считается принятым рестораном или оплаченным | Читает необходимые сведения ресторана и меню через согласованный API; Temporal не вызывает — workflow стартует Start Fulfillment |
+| **Start Fulfillment** | Kafka consumer `orders` | Запустить fulfillment process по собственному `OrderPlaced` | У незавершённого `Order` есть workflow `order:<order_id>`; финальный `Order` не запускается заново | Integration event `OrderPlaced` из `orders.v1.order-events`, Transactional Inbox, `SignalWithStart` после commit (и на дубликате Inbox); ошибка Temporal — повторная доставка, не DLQ |
 | **Request Order Cancellation** | Клиент или другой авторизованный actor | Запросить прекращение незавершённого заказа | Проверены права и правила допустимости, запрос передан существующему fulfillment workflow; компенсации не выполняются самим use case | Authoritative authorization в `orders`; сигнал Temporal workflow |
 | **Confirm Order** | Kafka consumer `orders` | Отразить Order Acceptance ресторана | `Order` подтверждён один раз, fulfillment workflow может продолжиться | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
 | **Reject Order** | Kafka consumer `orders` | Отразить отказ ресторана принять `Kitchen Order` | Отказ сохранён один раз, fulfillment workflow получил бизнес-результат | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
@@ -46,6 +47,7 @@ Workflow относится к прикладному процессу. Доме
 | **Record Pickup** | Kafka consumer `orders` | Отразить Pickup | Получение заказа курьером отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Completion** | Kafka consumer `orders` | Отразить Delivery Completion | Завершение доставки отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Failure** | Kafka consumer `orders` | Отразить неудачу Delivery | Бизнес-неудача доставки и причина отражены один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
+| **Record Payment Authorization** | Temporal fulfillment workflow | Зафиксировать одобренную Authorization до запроса ресторана | В `Order` записан Fulfillment Fact `payment_authorized` (только в `placed`), клиент видит статус `PAID`; повтор — no-op | Вызывается Activity `RecordPaymentAuthorization` между `AuthorizePayment` и `RequestRestaurantOrder`; `order_details` и Change Notification, без Integration Event |
 | **Complete Order** | Temporal fulfillment workflow | Зафиксировать успешный итог после выполнения всех необходимых условий | `Order` переведён в окончательное успешное состояние | Вызывается orchestration после подтверждённых результатов участвующих контекстов |
 | **Fail or Cancel Order** | Temporal fulfillment workflow | Зафиксировать окончательный негативный итог после orchestration и необходимых компенсаций | `Order` переведён в соответствующее окончательное состояние с сохранением причины | Workflow координирует компенсации через Activities; use case не присваивает правила `restaurants`, `delivery` или `payments` |
 
@@ -56,7 +58,7 @@ Workflow относится к прикладному процессу. Доме
 | **Get Order** | Клиент или внутренний авторизованный actor | Получить текущее представление одного заказа | Возвращено доступное actor представление заказа без изменения состояния | Read model `orders`; проверка права просмотра |
 | **List Customer Orders** | Клиент или внутренний авторизованный actor | Получить историю заказов клиента | Возвращён доступный actor список заказов клиента без изменения состояния | Read model `orders`; проверка принадлежности и права просмотра |
 
-Основной Temporal Workflow — fulfillment одного заказа. `Place Order` запускает его; use cases `Confirm Order`, `Reject Order`, `Record …` и `Request Order Cancellation` передают ему конкретные бизнес-результаты или запросы; `Complete Order` и `Fail or Cancel Order` фиксируют выбранный workflow итог. Отдельный Workflow на каждый use case не создаётся. Результаты Authorization, Capture и Refund принадлежат `payments` и поступают непосредственно в состояние fulfillment workflow через Temporal adapter; отдельными состояниями или use cases агрегата `Order` они не являются. Вызовы платёжных операций, создание и отмена `Restaurant Order`, создание доставки и повторный поиск курьера выполняются workflow через Activities и публичные API контекстов-владельцев.
+Основной Temporal Workflow — fulfillment одного заказа. `Start Fulfillment` запускает его по собственному `OrderPlaced`, записанному Place Order; use cases `Confirm Order`, `Reject Order`, `Record …` и `Request Order Cancellation` передают ему конкретные бизнес-результаты или запросы; `Complete Order` и `Fail or Cancel Order` фиксируют выбранный workflow итог. Отдельный Workflow на каждый use case не создаётся. Результаты Authorization, Capture и Refund принадлежат `payments` и поступают непосредственно в состояние fulfillment workflow через Temporal adapter; отдельными состояниями агрегата `Order` они не являются. Одобренную Authorization workflow записывает в `Order` фактом `payment_authorized` (Record Payment Authorization) и только после этого запрашивает Restaurant Order. Вызовы платёжных операций, создание и отмена `Restaurant Order`, создание доставки и повторный поиск курьера выполняются workflow через Activities и публичные API контекстов-владельцев.
 
 Kafka естественно входит только во входные use cases, отражающие конкретный бизнес-факт: событие проходит Transactional Inbox до изменения `Order` и сигнала workflow. Исходящие бизнес-факты `orders` публикуются через существующую Outbox-модель; конкретные имена и payload событий здесь не определяются. Кроме того, каждая запись `Order` (`ProcessStore.Add`/`Save`) кладёт в тот же Outbox Order Change Notification — JSON `{"__typename":"Order","id":…}` в `orders.v1.order-changes`. Это не Integration Event: его читает только Cosmo Router BFF для GraphQL subscriptions ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md)).
 
@@ -140,9 +142,10 @@ deadline `CATALOG__TIMEOUT`. В snapshot попадают только запр�
 пустое меню — `RESTAURANT_NOT_FOUND`, цены в разных валютах — `INVALID_ORDER`, любая другая ошибка
 `restaurants` (transport, deadline, identity, отсутствующий route) — `UNAVAILABLE`. Валюта snapshot —
 валюта меню; минимум и максимум суммы — `CATALOG__MINIMUM_TOTAL`/`CATALOG__MAXIMUM_TOTAL` в этой
-валюте (placeholders, пока `restaurants` их не публикует). `order_id` — UUIDv7. Temporal client API lazy: процесс
-стартует без Temporal; если start workflow не удался после commit, ответ содержит
-`fulfillment_started=false`, а повтор с тем же `idempotency_key` повторяет start.
+валюте (placeholders, пока `restaurants` их не публикует). `order_id` — UUIDv7. `PlaceOrder` Temporal не вызывает:
+workflow запускает consumer собственного `OrderPlaced` (Start Fulfillment); поле
+`PlaceOrderResponse.fulfillment_started` удалено (`reserved 3`). Temporal client API lazy: процесс
+стартует без Temporal, а `RequestOrderCancellation` до старта workflow или без Temporal отвечает `UNAVAILABLE`.
 `RequestOrderCancellation` возвращает outcome `REQUESTED` или `ALREADY_CANCELLED` и использует тот
 же экземпляр cancellation policy, что `GetOrder`.
 
@@ -170,7 +173,7 @@ gateway не доверяет. Политика контрактов, генер
 
 Минимальные состояния `Order`: `placed`, `confirmed`, `cancelled`, `completed`; они сгруппированы в compound states `open` (`placed`, `confirmed`) и `closed` (`cancelled`, `completed`), см. [FSM](../../docs/fsm.md#order). На первом этапе агрегат поддерживает оформление, подтверждение, отмену и завершение заказа.
 
-Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`restaurant_accepted`, `restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт targetless строка FSM `record_fact` на compound state `open` (Open Order: `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. `restaurant_accepted` записывает Confirm Order вместе с переходом `placed → confirmed` и моментом события Order Acceptance; заказы, подтверждённые раньше, его не имеют. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted` (с моментом завершения `CompletedAt`, который передаёт `Complete`). Назначение курьера — value object `CourierAssignment` с правилами `Supersedes` (событие старше сохранённого устарело), `Displaced` (что вытесняет переназначение) и `Release` (снятие сохраняет своё время); контракт хранения `CourierAssignments` объявлен в домене. Сроки Fulfillment (FR-611) — value object `ExpectedTimes{ReadyAt, PickupAt, DeliveredAt}`, последние названные владельцами: готовность — из `RestaurantOrderAccepted` и каждого `PreparationDelayed`, Pickup — из последнего по Delivery version `CourierAssignedToDelivery` (новое назначение заменяет срок, в том числе на пустой), вручение — из `DeliveryPickedUp`; нулевое время — срок не назван, финальный `Order` сроки не принимает (строка FSM `record_fact`). Сроки хранятся в nullable-колонках `orders.expected_*`, отдаются в `GetOrder` (`Order.expected_ready_at`/`expected_pickup_at`/`expected_delivered_at`), а их изменение сохраняет `Order` и тем самым кладёт Order Change Notification для `orderChanged` (ADR 36).
+Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`payment_authorized`, `restaurant_accepted`, `restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт targetless строка FSM `record_fact` на compound state `open` (Open Order: `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. `payment_authorized` записывает Record Payment Authorization и только в `placed`. `restaurant_accepted` записывает Confirm Order вместе с переходом `placed → confirmed` и моментом события Order Acceptance; заказы, подтверждённые раньше, его не имеют. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted` (с моментом завершения `CompletedAt`, который передаёт `Complete`). Назначение курьера — value object `CourierAssignment` с правилами `Supersedes` (событие старше сохранённого устарело), `Displaced` (что вытесняет переназначение) и `Release` (снятие сохраняет своё время); контракт хранения `CourierAssignments` объявлен в домене. Сроки Fulfillment (FR-611) — value object `ExpectedTimes{ReadyAt, PickupAt, DeliveredAt}`, последние названные владельцами: готовность — из `RestaurantOrderAccepted` и каждого `PreparationDelayed`, Pickup — из последнего по Delivery version `CourierAssignedToDelivery` (новое назначение заменяет срок, в том числе на пустой), вручение — из `DeliveryPickedUp`; нулевое время — срок не назван, финальный `Order` сроки не принимает (строка FSM `record_fact`). Сроки хранятся в nullable-колонках `orders.expected_*`, отдаются в `GetOrder` (`Order.expected_ready_at`/`expected_pickup_at`/`expected_delivered_at`), а их изменение сохраняет `Order` и тем самым кладёт Order Change Notification для `orderChanged` (ADR 36).
 
 Инварианты:
 
@@ -266,7 +269,7 @@ Temporal Activity retries не заменяют Inbox Pattern. Kafka-событ�
 
 Публикация интеграционных событий `orders` использует Transactional Outbox по общесистемному [ADR 13](../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md). Изменение `Order` и строка Outbox (`orders_outbox`) записываются в одной транзакции PostgreSQL; в Kafka их доставляет Debezium из WAL ([ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): топик — колонка `topic`, value — `payload`, заголовки Event Envelope — колонки строки. Отдельного процесса публикации нет. `event_id` строки передаётся в Kafka headers `event_id` и `_watermill_message_uuid` (UUID сообщения Watermill у consumers). Kafka key — колонка `aggregate_id` (`order_id`): события одного заказа идут в одну партицию в порядке commit. Activity, изменяющая `Order` и Outbox, идемпотентна по ключу, производному от Workflow ID и шага процесса, или по ожидаемой `aggregate_version`; workflow-код не публикует события.
 
-Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; каждое событие несёт `market_id` Order ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)); `OrderPlaced` несёт состав заказа `items` — по нему `restaurants-consumer` создаёт Restaurant Order; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`), `occurred_at` берётся из Domain Event (для `OrderCompleted` — момент завершения). Перевод делает `IntegrationMapper` в `slices/order/infrastructure/messaging/outbound` (таблица Domain Event → контракт); PostgreSQL Outbox только сохраняет готовые сообщения; Debezium переносит их из WAL в Kafka `orders.v1.order-events` с ключом `order_id` (ADR 37). Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
+Domain Events переводятся в Integration Events `nomnom.orders.v1` (`OrderPlaced`, `OrderCompleted`, `OrderCancelled`, [`events.proto`](infrastructure/grpc/nomnom/orders/v1/events.proto)) в той же транзакции; каждое событие несёт `market_id` Order ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)); `OrderPlaced` несёт состав заказа `items`; его читает только `orders-consumer` (Start Fulfillment), а Restaurant Order создаёт workflow RPC `ReceiveOrderRequest` после оплаты; `event_id` детерминирован (UUIDv5 от `order:<id>:<version>:<index>`), `occurred_at` берётся из Domain Event (для `OrderCompleted` — момент завершения). Перевод делает `IntegrationMapper` в `slices/order/infrastructure/messaging/outbound` (таблица Domain Event → контракт); PostgreSQL Outbox только сохраняет готовые сообщения; Debezium переносит их из WAL в Kafka `orders.v1.order-events` с ключом `order_id` (ADR 37). Общие правила описаны в [документации событийного взаимодействия](../../docs/event-driven-architecture.md).
 
 Архитектурные решения контекста хранятся в [локальном журнале ADR](docs/adr/). Выбор Temporal зафиксирован в [ADR 2](docs/adr/0002-use-temporal-to-orchestrate-orders.md), контракт orchestration — в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md).
 
@@ -287,20 +290,21 @@ Temporal применяется к процессу, который одновр
 | Namespace | Отдельный на окружение |
 | Task queue | `orders` |
 
-Основной старт:
+Единственный старт:
 
 ```text
 Place Order: UoW { save Order; Outbox(OrderPlaced) }
-  → Kafka → orders consumer → Inbox
-  → SignalWithStart(order:<order_id>, OrderPlaced, USE_EXISTING)
+  → Kafka orders.v1.order-events → orders-consumer (группа orders.order-events)
+  → Start Fulfillment: UoW { Inbox(orders.startfulfillment); read Order }
+  → после commit: SignalWithStart(order:<order_id>, OrderPlaced, USE_EXISTING)
 ```
 
-Синхронный `fulfillment.Starter` после commit — допустимая альтернатива для latency: повторяется с тем же Workflow ID и не заменяет `OrderPlaced` в Outbox. Старт до commit запрещён: workflow увидел бы несуществующий `Order`.
+Place Order Temporal не вызывает. Дубликат Inbox тоже выполняет `SignalWithStart` — так лечится сбой между commit Inbox и стартом. `Order` в `completed`/`cancelled` (redrive DLQ, сброс offset) не запускается: история закрытого workflow могла уйти из namespace. Ошибка Temporal — transient, сообщение доставляется повторно и в DLQ не уходит. Собственные `OrderCompleted` и `OrderCancelled` группа подтверждает явным no-op.
 
 Базовая логическая схема — карта coordination points, а не утверждённая последовательность:
 
 ```text
-Order placed → Authorize payment → Request Acceptance
+Order placed → Authorize payment → Record payment in Order → Request Acceptance
 → wait (accepted | rejected | timer) → Create Delivery / wait Assignment
 → wait Preparation → wait Pickup → Capture payment
 → wait Delivery Completion → Complete Order
@@ -319,12 +323,12 @@ Kafka(event_id) → orders consumer → Transactional Inbox → application hand
 
 | Signal / Update | Источник | Use case `orders` |
 | --- | --- | --- |
-| `OrderPlaced` (`SignalWithStart`) | `orders` | Place Order |
+| `OrderPlaced` (`SignalWithStart`) | `orders` | Start Fulfillment |
 | `PaymentAuthorized`, `PaymentFailed` | `payments` | — |
 | `RestaurantOrderAccepted` / `RestaurantOrderRejected` | `restaurants` | Confirm Order / Reject Order |
 | `PreparationStarted` | `restaurants` | Record Preparation Started |
 | `PreparationDelayed` | `restaurants` | Record Preparation Delay (срок готовности в `Order`) |
-| `PreparationFailed` | `restaurants` | — (только workflow) |
+| `PreparationFailed` | `restaurants` | Relay Preparation Issue (`Order` не меняется) |
 | `RestaurantOrderReady` | `restaurants` | Record Order Ready |
 | `CourierAssignedToDelivery` | `delivery` | Record Courier Assignment |
 | `CourierUnassignedFromDelivery` / `DeliveryCancelled` | `delivery` | Record Courier Release (не сигнал workflow: снятие возвращает Delivery в поиск, отмену запрашивает сам workflow) |
@@ -356,7 +360,7 @@ Business cancellation — Update `CancellationRequested`: домен `Order` р�
 
 ### Saga
 
-Workflow ведёт журнал подтверждённых шагов и при отказе вызывает только применимые компенсации — `CancelRestaurantOrder`, `CancelPaymentAuthorization` или `RefundPayment` — каждая отдельной идемпотентной Activity со своим ключом, timeout, retry и telemetry. `RestaurantOrderCancelled`, `PaymentAuthorizationCancelled` и `PaymentRefunded` подтверждают уже полученный результат и Saga повторно не запускают.
+Workflow ведёт журнал подтверждённых шагов и при отказе вызывает только применимые компенсации — `CancelRestaurantOrder`, `CancelPaymentAuthorization` или `RefundPayment` — каждая отдельной идемпотентной Activity со своим ключом, timeout, retry и telemetry. `RestaurantOrderCancelled`, `PaymentAuthorizationCancelled` и `PaymentRefunded` подтверждают уже полученный результат и Saga повторно не запускают. Ресторан запрашивается только после одобренной Authorization и шага `RecordPaymentAuthorization` (у него компенсации нет — факт остаётся историей), поэтому при отказе оплаты Restaurant Order не существует и `CancelRestaurantOrder` не вызывается.
 
 ### Runtime
 
@@ -384,7 +388,7 @@ API, Kafka consumer и Temporal worker — отдельные процессы �
 
 Workflow Stage публикуется низкокардинальным Search Attribute для Temporal UI и не становится Order State.
 
-Отложенные продуктовые решения (таймауты, момент Authorization/Capture, параллельность Assignment, late-event policy, отказ ресторана после Acceptance, Continue-As-New) перечислены в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md#отложенные-продуктовые-решения).
+Отложенные продуктовые решения (таймауты, момент Capture, параллельность Assignment, late-event policy, отказ ресторана после Acceptance, Continue-As-New) перечислены в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md#отложенные-продуктовые-решения).
 
 ## Observability
 
@@ -394,7 +398,7 @@ Workflow Stage публикуется низкокардинальным Search 
 
 | Процесс | Traces | Metrics | Logs |
 | --- | --- | --- | --- |
-| `orders` (API) | gRPC server, use cases, PostgreSQL, SpiceDB, catalog через internal gateway, Temporal client (start/signal) | gRPC server/client, use cases, domain, `db.client.*`, runtime | JSON |
+| `orders` (API) | gRPC server, use cases, PostgreSQL, SpiceDB, catalog через internal gateway, Temporal client (Update отмены) | gRPC server/client, use cases, domain, `db.client.*`, runtime | JSON |
 | `orders-worker` | Temporal workflow task и Activity, use cases, PostgreSQL, вызовы соседей через gateway | Temporal SDK, use cases, domain, `db.client.*`, gRPC client, runtime | JSON, Temporal SDK |
 | `orders-consumer` | Kafka receive (otelsarama) → process (parent из headers), use cases, PostgreSQL, SpiceDB, Temporal client | Watermill consumer, `nomnom.messaging.*`, use cases, `db.client.*`, Temporal SDK, runtime | JSON, Watermill, Temporal SDK |
 

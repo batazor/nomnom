@@ -254,7 +254,7 @@ stateDiagram-v2
 | `cancelled` | `cancel` | `AlreadyInState{cancelled}` |
 | `completed` | `complete` | `AlreadyInState{completed}` |
 
-Все остальные пары `state × trigger` дают `InvalidTransition`: `placed × complete` (Completion только после подтверждения), любой trigger из `closed`, кроме повторов. `record_fact` для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). Failure пока завершается тем же `cancelled` с видом итога `failure`.
+Все остальные пары `state × trigger` дают `InvalidTransition`: `placed × complete` (Completion только после подтверждения), любой trigger из `closed`, кроме повторов. `record_fact` для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). Факт `payment_authorized` (Record Payment Authorization) допускается только в `placed`: ресторан запрашивается после него, поэтому `confirmed` Order оплату уже прошёл; в другом state — `InvalidTransition`. Отдельного state оплаты нет: клиентский статус `PAID` BFF вычисляет из факта, окно отмены не меняется. Failure пока завершается тем же `cancelled` с видом итога `failure`.
 
 `AcceptsCancellation()` и `IsFinal()` — принадлежность к `open` и `closed`, а не ручные списки states.
 

@@ -42,7 +42,7 @@ import (
 const serviceName = "orders-admin"
 
 // streams are the topics orders-consumer reads; only their DLQs are its own.
-var streams = []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic, outbound.OrderRelationshipsTopic}
+var streams = []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic, outbound.OrderRelationshipsTopic, outbound.OrderEventsTopic}
 
 const usage = `usage:
   orders-admin dlq list --stream <topic>

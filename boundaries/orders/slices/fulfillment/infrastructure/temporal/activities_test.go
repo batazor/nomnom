@@ -16,6 +16,7 @@ import (
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
+	"nomnom/orders/slices/order/applications/recordpaymentauthorization"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
@@ -80,12 +81,13 @@ func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNei
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
 	neighbours := &fakeNeighbours{decision: ports.PaymentDecision{Approved: true}}
 	return &temporal.Activities{
-		Orders:      store,
-		Payments:    neighbours,
-		Restaurants: neighbours,
-		Delivery:    neighbours,
-		Complete:    completeorder.NewHandler(store, store, store),
-		Finalize:    failorcancelorder.NewHandler(store, store, store),
+		Orders:        store,
+		Payments:      neighbours,
+		Restaurants:   neighbours,
+		Delivery:      neighbours,
+		RecordPayment: recordpaymentauthorization.NewHandler(store, store),
+		Complete:      completeorder.NewHandler(store, store, store),
+		Finalize:      failorcancelorder.NewHandler(store, store, store),
 	}, neighbours, store
 }
 
@@ -181,6 +183,35 @@ func TestActivitiesDoNotRetryPermanentErrors(t *testing.T) {
 			assert.True(t, application.NonRetryable())
 		})
 	}
+}
+
+// AC-825: a repeated payment Activity records the fact once with the workflow time.
+func TestRecordPaymentAuthorizationActivityIsIdempotent(t *testing.T) {
+	a, _, store := activities(t, order.StatePlaced)
+	paymentStep := temporal.StepInput{
+		OrderID:        orderID,
+		IdempotencyKey: "order:order-1:record_payment_authorization",
+		DecidedAt:      ordertest.PlacedAt.Add(time.Second),
+	}
+
+	require.NoError(t, a.RecordPaymentAuthorization(context.Background(), paymentStep))
+	require.NoError(t, a.RecordPaymentAuthorization(context.Background(), paymentStep))
+
+	snapshot, _ := store.Snapshot(orderID)
+	assert.Equal(t, []order.RecordedFact{{Fact: order.FactPaymentAuthorized, OccurredAt: paymentStep.DecidedAt}}, snapshot.Facts)
+	assert.Empty(t, store.OutboxRecords())
+}
+
+func TestRecordPaymentAuthorizationActivityRequiresDecidedAt(t *testing.T) {
+	a, _, store := activities(t, order.StatePlaced)
+	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(a.RecordPaymentAuthorization, activity.RegisterOptions{Name: temporal.ActivityRecordPaymentAuthorization})
+
+	_, err := env.ExecuteActivity(temporal.ActivityRecordPaymentAuthorization, temporal.StepInput{OrderID: orderID, IdempotencyKey: "k"})
+
+	require.Error(t, err)
+	snapshot, _ := store.Snapshot(orderID)
+	assert.Empty(t, snapshot.Facts)
 }
 
 func TestCompleteOrderActivityIsIdempotent(t *testing.T) {

@@ -55,7 +55,7 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   ApplyKitchenAction: {
     input: {
       restaurantId: kitchenEight.id,
-      kitchenOrderId: "kitchen-order-received",
+      kitchenOrderId: "kitchen-order-paid",
       action: "ACCEPT",
     },
   },

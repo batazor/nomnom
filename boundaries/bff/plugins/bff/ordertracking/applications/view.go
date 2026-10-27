@@ -14,6 +14,7 @@ type Status string
 
 const (
 	StatusReceived       Status = "RECEIVED"
+	StatusPaid           Status = "PAID"
 	StatusConfirmed      Status = "CONFIRMED"
 	StatusPreparing      Status = "PREPARING"
 	StatusReadyForPickup Status = "READY_FOR_PICKUP"
@@ -35,6 +36,7 @@ const (
 	EndCustomerCancelled  EndReason = "CUSTOMER_CANCELLED"
 	EndRestaurantRejected EndReason = "RESTAURANT_REJECTED"
 	EndDeliveryFailed     EndReason = "DELIVERY_FAILED"
+	EndPaymentDeclined    EndReason = "PAYMENT_DECLINED"
 	EndNotFulfilled       EndReason = "NOT_FULFILLED"
 )
 
@@ -43,6 +45,7 @@ type MilestoneKind string
 
 const (
 	MilestonePlaced             MilestoneKind = "PLACED"
+	MilestonePaid               MilestoneKind = "PAID"
 	MilestoneConfirmed          MilestoneKind = "CONFIRMED"
 	MilestonePreparationStarted MilestoneKind = "PREPARATION_STARTED"
 	MilestoneReadyForPickup     MilestoneKind = "READY_FOR_PICKUP"
@@ -91,6 +94,7 @@ type ItemView struct {
 }
 
 var milestoneOfFact = map[string]MilestoneKind{
+	"payment_authorized":  MilestonePaid,
 	"restaurant_accepted": MilestoneConfirmed,
 	"preparation_started": MilestonePreparationStarted,
 	"ready_for_pickup":    MilestoneReadyForPickup,
@@ -106,6 +110,8 @@ var endReasonOfCode = map[string]EndReason{
 	"delivery_failed":               EndDeliveryFailed,
 	"delivery_timeout":              EndDeliveryFailed,
 	"pickup_timeout":                EndDeliveryFailed,
+	"payment_declined":              EndPaymentDeclined,
+	"payment_capture_declined":      EndPaymentDeclined,
 }
 
 // status computes the customer status from the Order State and its facts;
@@ -116,6 +122,10 @@ func status(order OrderSnapshot) (Status, error) {
 	}
 	switch order.State {
 	case "placed":
+		// The workflow records the payment before it requests the restaurant.
+		if has("payment_authorized") {
+			return StatusPaid, nil
+		}
 		return StatusReceived, nil
 	case "completed":
 		return StatusDelivered, nil

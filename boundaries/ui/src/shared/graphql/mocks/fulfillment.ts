@@ -290,10 +290,25 @@ export function createFulfillment({
     if (stage !== "RECEIVED") createDelivery(kitchenOrder);
   }
 
+  // The payment is authorized before the restaurant gets the order: only a
+  // paid order reaches the kitchen (FR-636).
+  function paid(order: MockOrder) {
+    // Unlike advanceOrder, the payment keeps the cancellation window.
+    orders.set(order.id, {
+      ...order,
+      status: "PAID",
+      milestones: [
+        ...order.milestones,
+        { kind: "PAID", occurredAt: clock().toISOString() },
+      ],
+    });
+    received(order);
+  }
+
   // Fixed scenarios still in the kitchen start there, so the board has work
-  // before the first order is placed.
+  // before the first order is placed; an unpaid order is not there yet.
   for (const order of orders.values()) {
-    if (order.status === "RECEIVED") received(order);
+    if (order.status === "PAID") received(order);
     if (order.status === "PREPARING") received(order, "PREPARING");
   }
 
@@ -583,7 +598,7 @@ export function createFulfillment({
   }
 
   return {
-    received,
+    paid,
     kitchen,
     hireCook,
     setCookOnLine,

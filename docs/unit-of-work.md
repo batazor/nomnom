@@ -414,12 +414,14 @@ UoW всех четырёх boundaries реализован поверх их х
 
 | Use case | UoW | Состав транзакции |
 | --- | --- | --- |
-| `placeorder` | Да | `Order` + idempotency key + ZedToken + [Outbox]; SpiceDB owner relationship до, start workflow после commit |
+| `placeorder` | Да | `Order` + idempotency key + `RelationshipsChanged` + Outbox(`OrderPlaced`); Temporal не вызывает |
+| `startfulfillment` | Да | Inbox + чтение `Order`; `SignalWithStart` workflow после commit, в том числе на Inbox duplicate |
 | `requestordercancellation` | Если сохраняется запрос отмены вместе с Outbox | `Order` + [Outbox]; Signal workflow после commit. Реализован без UoW: запрос отмены не сохраняется локально и передаётся workflow после authorization и проверки `CheckCancellation` ([design.md change `implement-orders-application-layer`](../openspec/changes/archive/2026-10-25-implement-orders-application-layer/design.md)) |
 | `confirmorder`, `rejectorder` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordpreparationstarted`, `recordorderready` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierassignment`, `recordpickup`, `recorddeliverycompletion`, `recorddeliveryfailure` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierrelease` | Да | Inbox + назначение курьера в `orders` + DELETE relationships SpiceDB до commit; `Order` и workflow не меняются |
+| `recordpaymentauthorization` | Да | `Order` (факт `payment_authorized`) + `order_details` + Change Notification, без Integration Event; повтор Activity — `already_recorded` |
 | `completeorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `failorcancelorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `fulfillment` (Temporal-адаптер) | Нет | Workflow; Activities вызывают handlers |

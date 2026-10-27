@@ -20,6 +20,8 @@ const flowSteps: readonly {
   actor: MessageKey;
 }[] = [
   { status: "RECEIVED", label: "board.step.received", actor: "board.customer" },
+  // The payment is authorized by the system, not by a column of the board.
+  { status: "PAID", label: "board.step.paid", actor: "board.payment" },
   {
     status: "CONFIRMED",
     label: "board.step.confirmed",

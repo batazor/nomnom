@@ -120,6 +120,8 @@ export type OrderEndReason =
   | 'DELIVERY_FAILED'
   /** Order was not fulfilled for another reason */
   | 'NOT_FULFILLED'
+  /** Payment was declined */
+  | 'PAYMENT_DECLINED'
   /** Restaurant could not accept the order */
   | 'RESTAURANT_REJECTED';
 
@@ -140,6 +142,8 @@ export type OrderMilestoneKind =
   | 'DELIVERED'
   /** Order ended without delivery */
   | 'ENDED'
+  /** Payment is authorized */
+  | 'PAID'
   /** Courier picked the order up */
   | 'PICKED_UP'
   /** Order is placed */
@@ -159,6 +163,8 @@ export type OrderStatus =
   | 'DELIVERED'
   /** Order could not be fulfilled */
   | 'FAILED'
+  /** Payment is authorized and the order waits for the restaurant */
+  | 'PAID'
   /** Courier picked the order up and is on the way */
   | 'PICKED_UP'
   /** Kitchen is preparing the order */

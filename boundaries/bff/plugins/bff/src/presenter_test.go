@@ -35,14 +35,14 @@ func assertComplete[A ~string, G ~int32](t *testing.T, table map[A]G, values []A
 // AC-641: the tables cover every application constant and every GraphQL value.
 func TestEnumTablesAreComplete(t *testing.T) {
 	assertComplete(t, orderStatuses, []tracking.Status{
-		tracking.StatusReceived, tracking.StatusConfirmed, tracking.StatusPreparing, tracking.StatusReadyForPickup,
+		tracking.StatusReceived, tracking.StatusPaid, tracking.StatusConfirmed, tracking.StatusPreparing, tracking.StatusReadyForPickup,
 		tracking.StatusPickedUp, tracking.StatusDelivered, tracking.StatusCancelled, tracking.StatusFailed,
 	}, service.OrderStatus_name)
 	assertComplete(t, orderEndReasons, []tracking.EndReason{
-		tracking.EndCustomerCancelled, tracking.EndRestaurantRejected, tracking.EndDeliveryFailed, tracking.EndNotFulfilled,
+		tracking.EndCustomerCancelled, tracking.EndRestaurantRejected, tracking.EndDeliveryFailed, tracking.EndPaymentDeclined, tracking.EndNotFulfilled,
 	}, service.OrderEndReason_name)
 	assertComplete(t, orderMilestoneKinds, []tracking.MilestoneKind{
-		tracking.MilestonePlaced, tracking.MilestoneConfirmed, tracking.MilestonePreparationStarted, tracking.MilestoneReadyForPickup,
+		tracking.MilestonePlaced, tracking.MilestonePaid, tracking.MilestoneConfirmed, tracking.MilestonePreparationStarted, tracking.MilestoneReadyForPickup,
 		tracking.MilestoneCourierAssigned, tracking.MilestonePickedUp, tracking.MilestoneDelivered, tracking.MilestoneEnded,
 	}, service.OrderMilestoneKind_name)
 	assertComplete(t, cancellationOutcomes, []tracking.CancellationOutcome{

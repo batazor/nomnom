@@ -31,39 +31,40 @@ var wantStartOptions = client.StartWorkflowOptions{
 	WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 }
 
-func TestClientStartsWorkflowWithStableIdentity(t *testing.T) {
-	c, temporalClient := newClient(t)
-	temporalClient.On("ExecuteWorkflow", mock.Anything, wantStartOptions, temporal.WorkflowName,
-		temporal.Input{OrderID: orderID, Policy: policy()}).Return(mocks.NewWorkflowRun(t), nil)
+var placedAt = time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, c.Start(context.Background(), fulfillment.StartRequest{OrderID: orderID}))
+func startRequest() fulfillment.StartRequest {
+	return fulfillment.StartRequest{OrderID: orderID, EventID: "event-1", OccurredAt: placedAt}
+}
+
+// FR-638: OrderPlaced starts the workflow with a stable identity as its first Signal.
+func TestClientSignalsWithStartOnOrderPlaced(t *testing.T) {
+	c, temporalClient := newClient(t)
+	temporalClient.On("SignalWithStartWorkflow", mock.Anything, "order:order-1", temporal.SignalOrderPlaced,
+		temporal.Fact{EventID: "event-1", OccurredAt: placedAt},
+		wantStartOptions, temporal.WorkflowName, temporal.Input{OrderID: orderID, Policy: policy()}).
+		Return(mocks.NewWorkflowRun(t), nil)
+
+	require.NoError(t, c.Start(context.Background(), startRequest()))
 }
 
 // AC-445: a closed workflow is not started again and Start succeeds.
 func TestClientStartOfClosedWorkflowSucceeds(t *testing.T) {
 	c, temporalClient := newClient(t)
-	temporalClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("closed", "", "run-1"))
 
-	require.NoError(t, c.Start(context.Background(), fulfillment.StartRequest{OrderID: orderID}))
+	require.NoError(t, c.Start(context.Background(), startRequest()))
 }
 
 func TestClientStartFailureIsReturned(t *testing.T) {
 	c, temporalClient := newClient(t)
 	cause := serviceerror.NewUnavailable("temporal down")
-	temporalClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, cause)
+	temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything).Return(nil, cause)
 
-	require.ErrorIs(t, c.Start(context.Background(), fulfillment.StartRequest{OrderID: orderID}), cause)
-}
-
-func TestClientSignalsWithStartOnOrderPlaced(t *testing.T) {
-	c, temporalClient := newClient(t)
-	fact := temporal.Fact{EventID: "event-1"}
-	temporalClient.On("SignalWithStartWorkflow", mock.Anything, "order:order-1", temporal.SignalOrderPlaced, fact,
-		wantStartOptions, temporal.WorkflowName, temporal.Input{OrderID: orderID, Policy: policy()}).
-		Return(mocks.NewWorkflowRun(t), nil)
-
-	require.NoError(t, c.StartFromOrderPlaced(context.Background(), orderID, fact))
+	require.ErrorIs(t, c.Start(context.Background(), startRequest()), cause)
 }
 
 func TestClientNotifiesWithIntegrationEventName(t *testing.T) {

@@ -73,10 +73,10 @@ func NewCancellationPolicy(cfg config.CancellationConfig) (CancellationPolicy, e
 	return cancellationpolicy.Observe(policy, slog.Default()), nil
 }
 
-// Workflow — Order Fulfillment Workflow для command use cases API: Place Order
-// запускает его, Request Order Cancellation передаёт ему запрос.
+// Workflow — Order Fulfillment Workflow для command use cases API: Request
+// Order Cancellation передаёт ему запрос. Запускает workflow consumer
+// собственного OrderPlaced (startfulfillment).
 type Workflow interface {
-	fulfillment.Starter
 	fulfillment.CancellationRequester
 }
 

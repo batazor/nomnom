@@ -96,7 +96,7 @@ describe("place order", () => {
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
 
     expect(
-      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
     ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Подробнее о заказе" }),
@@ -150,7 +150,7 @@ describe("place order", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
     expect(
-      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
     ).toBeInTheDocument();
   });
 
@@ -201,7 +201,7 @@ describe("place order", () => {
     await user.click(screen.getByRole("button", { name: "Отправить ещё раз" }));
 
     expect(
-      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
     ).toBeInTheDocument();
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
@@ -229,7 +229,7 @@ describe("place order", () => {
     );
     await user.click(screen.getByRole("button", { name: "Отправить ещё раз" }));
 
-    await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
+    await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ });
     expect(keys).toHaveLength(2);
     expect(keys[1]).not.toBe(keys[0]);
   });

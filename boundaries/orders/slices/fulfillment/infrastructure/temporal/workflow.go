@@ -19,6 +19,7 @@ var activityByStep = map[fulfillment.StepKind]string{
 	fulfillment.StepCapturePayment:             ActivityCapturePayment,
 	fulfillment.StepCancelPaymentAuthorization: ActivityCancelPaymentAuthorization,
 	fulfillment.StepRefundPayment:              ActivityRefundPayment,
+	fulfillment.StepRecordPaymentAuthorization: ActivityRecordPaymentAuthorization,
 	fulfillment.StepRequestRestaurantOrder:     ActivityRequestRestaurantOrder,
 	fulfillment.StepCancelRestaurantOrder:      ActivityCancelRestaurantOrder,
 	fulfillment.StepCreateDelivery:             ActivityCreateDelivery,
@@ -164,7 +165,7 @@ func (r *run) compensate(ctx workflow.Context) (Result, error) {
 
 func (r *run) execute(ctx workflow.Context, activity, step string, result any) error {
 	input := StepInput{OrderID: r.in.OrderID, IdempotencyKey: WorkflowID(r.in.OrderID) + ":" + step}
-	if activity == ActivityCompleteOrder {
+	if activity == ActivityCompleteOrder || activity == ActivityRecordPaymentAuthorization {
 		input.DecidedAt = workflow.Now(ctx)
 	}
 	return workflow.ExecuteActivity(r.activityContext(ctx), activity, input).Get(ctx, result)

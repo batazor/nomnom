@@ -15,6 +15,7 @@ import (
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
+	"nomnom/orders/slices/order/applications/recordpaymentauthorization"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
@@ -59,11 +60,12 @@ func NewNeighbours(gateway config.InternalGatewayConfig, identity config.Identit
 // операции выполняются только этими Activities (ADR 5).
 func NewActivities(store Store, neighbours Neighbours, uc *telemetry.UseCases) *fulfillmenttemporal.Activities {
 	return &fulfillmenttemporal.Activities{
-		Orders:      store,
-		Payments:    neighbours.Payments,
-		Restaurants: neighbours.Restaurants,
-		Delivery:    neighbours.Delivery,
-		Complete:    telemetry.Instrument(uc, observability.CompleteOrder, completeorder.NewHandler(store, store, store).Handle),
-		Finalize:    telemetry.Instrument(uc, observability.FailOrCancelOrder, failorcancelorder.NewHandler(store, store, store).Handle),
+		Orders:        store,
+		Payments:      neighbours.Payments,
+		Restaurants:   neighbours.Restaurants,
+		Delivery:      neighbours.Delivery,
+		RecordPayment: telemetry.Instrument(uc, observability.RecordPaymentAuthorization, recordpaymentauthorization.NewHandler(store, store).Handle),
+		Complete:      telemetry.Instrument(uc, observability.CompleteOrder, completeorder.NewHandler(store, store, store).Handle),
+		Finalize:      telemetry.Instrument(uc, observability.FailOrCancelOrder, failorcancelorder.NewHandler(store, store, store).Handle),
 	}
 }

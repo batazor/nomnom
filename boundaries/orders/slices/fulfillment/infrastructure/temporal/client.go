@@ -45,21 +45,13 @@ func NewClient(temporal client.Client, policy Policy) *Client {
 	return &Client{temporal: temporal, policy: policy}
 }
 
-// Start is the post-commit start: the running workflow is reused, and a closed
-// one is not started again.
+// Start starts the workflow with OrderPlaced as its first Signal
+// (SignalWithStart): the running workflow is reused and deduplicates the
+// event_id, a closed one is not started again.
 func (c *Client) Start(ctx context.Context, request fulfillment.StartRequest) error {
-	_, err := c.temporal.ExecuteWorkflow(ctx, c.startOptions(request.OrderID), WorkflowName, c.input(request.OrderID))
-	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
-		return fmt.Errorf("start order fulfillment workflow: %w", err)
-	}
-	return nil
-}
-
-// StartFromOrderPlaced is the main start path used by the consumer of the own
-// OrderPlaced event after Inbox.
-func (c *Client) StartFromOrderPlaced(ctx context.Context, orderID order.ID, fact Fact) error {
-	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(string(orderID)), SignalOrderPlaced, fact,
-		c.startOptions(orderID), WorkflowName, c.input(orderID))
+	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(string(request.OrderID)), SignalOrderPlaced,
+		Fact{EventID: request.EventID, OccurredAt: request.OccurredAt},
+		c.startOptions(request.OrderID), WorkflowName, c.input(request.OrderID))
 	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 		return fmt.Errorf("signal-with-start order fulfillment workflow: %w", err)
 	}

@@ -41,11 +41,16 @@ const (
 	KindPreparationFailed  Kind = "preparation_failed"
 )
 
+// StartRequest carries OrderPlaced of the Order: the workflow is started with
+// it as the first fact and deduplicates it by EventID.
 type StartRequest struct {
-	OrderID order.ID
+	OrderID    order.ID
+	EventID    string
+	OccurredAt time.Time
 }
 
-// Starter starts the workflow of one Order; repeated calls address the same workflow.
+// Starter starts the workflow of one Order with its OrderPlaced; repeated calls
+// address the same workflow, a closed one is not started again.
 type Starter interface {
 	Start(ctx context.Context, request StartRequest) error
 }

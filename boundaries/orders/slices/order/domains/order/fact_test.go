@@ -23,9 +23,12 @@ func TestRecordFactFollowsStateAndRecordsOnce(t *testing.T) {
 		},
 	}
 	// restaurant_accepted is recorded by Confirm with its transition, not by
-	// TriggerRecordFact (TestConfirmRecordsRestaurantAcceptance).
-	require.Len(t, recorders, len(allFacts)-1)
+	// TriggerRecordFact (TestConfirmRecordsRestaurantAcceptance);
+	// payment_authorized is admitted only in placed
+	// (TestRecordPaymentAuthorizationOnlyInPlaced).
+	require.Len(t, recorders, len(allFacts)-2)
 	require.NotContains(t, recorders, FactRestaurantAccepted)
+	require.NotContains(t, recorders, FactPaymentAuthorized)
 
 	for fact, record := range recorders {
 		for _, state := range allStates {
@@ -52,6 +55,30 @@ func TestRecordFactFollowsStateAndRecordsOnce(t *testing.T) {
 				assert.Empty(t, order.PullEvents())
 			})
 		}
+	}
+}
+
+// FR-639: the payment is recorded once, and only before the restaurant accepted.
+func TestRecordPaymentAuthorizationOnlyInPlaced(t *testing.T) {
+	for _, state := range allStates {
+		t.Run(string(state), func(t *testing.T) {
+			order := orderInState(t, state)
+
+			result, err := order.RecordPaymentAuthorization(testNow)
+			if state != StatePlaced {
+				assert.Equal(t, InvalidTransition{From: state, Trigger: TriggerRecordFact}, err)
+				assert.Empty(t, order.Facts())
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, TransitionResult{From: state, Trigger: TriggerRecordFact, To: state}, result)
+			assert.True(t, order.HasFact(FactPaymentAuthorized))
+
+			_, err = order.RecordPaymentAuthorization(testNow.Add(time.Minute))
+			assert.Equal(t, FactAlreadyRecorded{Fact: FactPaymentAuthorized}, err)
+			assert.Len(t, order.Facts(), 1)
+			assert.Empty(t, order.PullEvents())
+		})
 	}
 }
 

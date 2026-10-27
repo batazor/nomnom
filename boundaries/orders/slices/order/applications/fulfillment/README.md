@@ -6,7 +6,7 @@ Package не является use case. Он объявляет единстве
 
 | Порт | Кто использует | Семантика |
 | --- | --- | --- |
-| `Starter` | `placeorder` | Старт workflow одного `Order` после commit; повтор адресует тот же workflow |
+| `Starter` | `startfulfillment` | Старт workflow одного `Order` с его `OrderPlaced` (`StartRequest{OrderID, EventID, OccurredAt}`) после commit Inbox; повтор адресует тот же workflow и дедуплицируется по `event_id`, закрытый workflow заново не стартует |
 | `Notifier` | `confirmorder`, `rejectorder`, `record…` | Передача бизнес-факта с исходным `event_id`; workflow дедуплицирует по нему; закрытый workflow — `ErrWorkflowNotFound` |
 | `CancellationRequester` | `requestordercancellation` | Передача Cancellation Request с `RequestID` и исходным subject; бизнес-отказ workflow — `ErrCancellationRefused` |
 

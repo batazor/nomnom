@@ -69,7 +69,6 @@ func NewModule(deps Dependencies) *Module {
 		Relationships:   store,
 		IDs:             deps.IDs,
 		Clock:           deps.Clock,
-		Workflow:        deps.Workflow,
 	})
 	requestCancellation := requestordercancellation.NewHandler(requestordercancellation.Dependencies{
 		Authorizer: authorizer,

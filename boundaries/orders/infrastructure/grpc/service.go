@@ -132,9 +132,8 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 		return nil, transportError(err)
 	}
 	return &ordersv1.PlaceOrderResponse{
-		OrderId:            string(result.OrderID),
-		Replayed:           result.Replayed,
-		FulfillmentStarted: result.FulfillmentStarted,
+		OrderId:  string(result.OrderID),
+		Replayed: result.Replayed,
 	}, nil
 }
 

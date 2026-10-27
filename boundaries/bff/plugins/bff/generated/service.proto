@@ -787,6 +787,8 @@ enum OrderStatus {
   ORDER_STATUS_CANCELLED = 7;
   // Order could not be fulfilled
   ORDER_STATUS_FAILED = 8;
+  // Payment is authorized and the order waits for the restaurant
+  ORDER_STATUS_PAID = 9;
 }
 
 // Why an order ended without delivery
@@ -800,6 +802,8 @@ enum OrderEndReason {
   ORDER_END_REASON_DELIVERY_FAILED = 3;
   // Order was not fulfilled for another reason
   ORDER_END_REASON_NOT_FULFILLED = 4;
+  // Payment was declined
+  ORDER_END_REASON_PAYMENT_DECLINED = 5;
 }
 
 // Notable moment in the progress of an order
@@ -821,6 +825,8 @@ enum OrderMilestoneKind {
   ORDER_MILESTONE_KIND_DELIVERED = 7;
   // Order ended without delivery
   ORDER_MILESTONE_KIND_ENDED = 8;
+  // Payment is authorized
+  ORDER_MILESTONE_KIND_PAID = 9;
 }
 
 message OrderMilestone {

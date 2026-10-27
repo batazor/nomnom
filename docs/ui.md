@@ -68,9 +68,9 @@ Mutations имеют состояния loading, disabled, success, business err
 
 Feature активного заказа владеет presentation mapping `backend state → UI status → localized label/icon/progress`. Несколько внутренних состояний могут схлопываться. Имена FSM и Temporal workflow не отображаются и не входят в публичный UI contract.
 
-Базовая пользовательская последовательность: `Order received → Restaurant confirmed → Preparing → Courier assigned → Picked up → Delivered`.
+Базовая пользовательская последовательность: `Order received → Paid → Restaurant confirmed → Preparing → Courier assigned → Picked up → Delivered`.
 
-Публичный контракт — `Order.status` (`OrderStatus`: `RECEIVED`, `CONFIRMED`, `PREPARING`, `READY_FOR_PICKUP`, `PICKED_UP`, `DELIVERED`, `CANCELLED`, `FAILED`), `Order.endReason` для неуспешного завершения и `milestones`. BFF вычисляет `OrderStatus` из состояния заказа и Fulfillment Facts `orders`; назначение курьера — milestone `COURIER_ASSIGNED`, а не статус. UI сопоставляет каждое значение enum с сообщением, icon и шагом прогресса и не показывает внутренние коды.
+Публичный контракт — `Order.status` (`OrderStatus`: `RECEIVED`, `PAID`, `CONFIRMED`, `PREPARING`, `READY_FOR_PICKUP`, `PICKED_UP`, `DELIVERED`, `CANCELLED`, `FAILED`), `Order.endReason` для неуспешного завершения и `milestones`. BFF вычисляет `OrderStatus` из состояния заказа и Fulfillment Facts `orders`; назначение курьера — milestone `COURIER_ASSIGNED`, а не статус. `PAID` — оплата одобрена (факт `payment_authorized`), ресторан заказ ещё не подтвердил; отказ оплаты — `endReason = PAYMENT_DECLINED`, сообщение без обещаний о возврате денег. UI сопоставляет каждое значение enum с сообщением, icon и шагом прогресса и не показывает внутренние коды.
 
 Обновления экрана заказа — GraphQL subscription `orderChanged` по SSE ([ADR 36](adr/0036-graphql-subscriptions-via-cosmo-streams.md)): `order(id)` загружает заказ, подписка присылает его после каждого изменения и закрывается на финальном статусе. При каждом (пере)подключении потока клиент перезапрашивает активные query, поэтому изменения между запросом и подпиской не теряются. Polling нет ни на одном экране: flow board так же следует за кухней (`kitchenChanged`), курьером (`courierChanged`) и чипами заказов (`orderChanged`). При ошибке остаётся ручное обновление. Смена статуса объявляется через `aria-live`.
 

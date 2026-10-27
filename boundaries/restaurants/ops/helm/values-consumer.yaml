@@ -1,7 +1,8 @@
 # Kafka consumer restaurants (ADR 11, ADR 28): отдельный release того же chart.
 #   helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml
-# Читает orders.v1.order-events и создаёт Restaurant Order по OrderPlaced через Inbox в
-# MongoDB. Brokers (KAFKA__BROKERS) и хранилище (mongodb.uriSecret) задаются values окружения;
+# Читает delivery.v1.delivery-events (Pickup Restaurant Order) через Inbox в MongoDB и
+# обновляет кеш каталога по собственным событиям. Restaurant Order создаёт только workflow
+# orders после оплаты (RPC ReceiveOrderRequest). Brokers (KAFKA__BROKERS) и хранилище (mongodb.uriSecret) задаются values окружения;
 # без них процесс не стартует.
 component: consumer
 

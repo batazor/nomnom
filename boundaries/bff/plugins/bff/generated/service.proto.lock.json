@@ -802,6 +802,7 @@
     "OrderStatus": {
       "fields": {
         "RECEIVED": 1,
+        "PAID": 9,
         "CONFIRMED": 2,
         "PREPARING": 3,
         "READY_FOR_PICKUP": 4,
@@ -816,12 +817,14 @@
         "CUSTOMER_CANCELLED": 1,
         "RESTAURANT_REJECTED": 2,
         "DELIVERY_FAILED": 3,
+        "PAYMENT_DECLINED": 5,
         "NOT_FULFILLED": 4
       }
     },
     "OrderMilestoneKind": {
       "fields": {
         "PLACED": 1,
+        "PAID": 9,
         "CONFIRMED": 2,
         "PREPARATION_STARTED": 3,
         "READY_FOR_PICKUP": 4,

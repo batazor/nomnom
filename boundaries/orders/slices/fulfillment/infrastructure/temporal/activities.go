@@ -10,11 +10,16 @@ import (
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
+	"nomnom/orders/slices/order/applications/recordpaymentauthorization"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 type CompleteOrder interface {
 	Handle(ctx context.Context, in completeorder.Input) (completeorder.Result, error)
+}
+
+type RecordPaymentAuthorization interface {
+	Handle(ctx context.Context, in recordpaymentauthorization.Input) (recordpaymentauthorization.Result, error)
 }
 
 type FailOrCancelOrder interface {
@@ -26,12 +31,13 @@ type FailOrCancelOrder interface {
 // Errors of invalid input, a missing Order or a forbidden transition are not
 // retried.
 type Activities struct {
-	Orders      neighbours.Orders
-	Payments    neighbours.Payments
-	Restaurants neighbours.Restaurants
-	Delivery    neighbours.Delivery
-	Complete    CompleteOrder
-	Finalize    FailOrCancelOrder
+	Orders        neighbours.Orders
+	Payments      neighbours.Payments
+	Restaurants   neighbours.Restaurants
+	Delivery      neighbours.Delivery
+	RecordPayment RecordPaymentAuthorization
+	Complete      CompleteOrder
+	Finalize      FailOrCancelOrder
 }
 
 func (a *Activities) AuthorizePayment(ctx context.Context, in StepInput) (PaymentDecision, error) {
@@ -106,6 +112,17 @@ func (a *Activities) CancelDelivery(ctx context.Context, in StepInput) error {
 		return err
 	}
 	return classify(a.Delivery.Cancel(ctx, request))
+}
+
+// RecordPaymentAuthorization runs the recordpaymentauthorization use case
+// after the approved Authorization; a repeat after commit is a no-op. The
+// decision moment is the workflow time in the input and is required.
+func (a *Activities) RecordPaymentAuthorization(ctx context.Context, in StepInput) error {
+	if in.DecidedAt.IsZero() {
+		return classify(application.InvalidInput("step", "decided_at is required"))
+	}
+	_, err := a.RecordPayment.Handle(ctx, recordpaymentauthorization.Input{OrderID: order.ID(in.OrderID), AuthorizedAt: in.DecidedAt})
+	return classify(err)
 }
 
 // CompleteOrder runs the completeorder use case; a repeat after commit is a

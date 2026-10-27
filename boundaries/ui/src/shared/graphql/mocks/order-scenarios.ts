@@ -77,6 +77,7 @@ const preparingDeadlines = { ready: 22, pickup: 24 } as const;
 const pickedUpDeadlines = { ...preparingDeadlines, delivered: 35 } as const;
 
 const preparing = [
+  ["PAID", 0],
   ["CONFIRMED", 1],
   ["PREPARATION_STARTED", 4],
   ["COURIER_ASSIGNED", 9],
@@ -90,6 +91,7 @@ const pickedUp = [
 
 // Cooking without a courier yet: the header heads to readiness.
 const cooking = [
+  ["PAID", 0],
   ["CONFIRMED", 1],
   ["PREPARATION_STARTED", 3],
 ] as const;
@@ -114,6 +116,14 @@ const scenarios: readonly ScenarioSpec[] = [
     id: "order-received",
     status: "RECEIVED",
     placedMinutesAgo: 1,
+    cancellableForMinutes: 4,
+  },
+  {
+    // Paid and waiting for the restaurant: the kitchen got it after payment.
+    id: "order-paid",
+    status: "PAID",
+    placedMinutesAgo: 1,
+    milestones: [["PAID", 0]],
     cancellableForMinutes: 4,
   },
   {
@@ -177,6 +187,13 @@ const scenarios: readonly ScenarioSpec[] = [
     milestones: [["ENDED", 3]],
   },
   {
+    id: "order-payment-declined",
+    status: "FAILED",
+    endReason: "PAYMENT_DECLINED",
+    placedMinutesAgo: 200,
+    milestones: [["ENDED", 0]],
+  },
+  {
     id: "order-delivery-failed",
     status: "FAILED",
     endReason: "DELIVERY_FAILED",
@@ -202,9 +219,16 @@ const liveSteps: readonly ScenarioSpec[] = [
   },
   {
     id: liveOrderId,
+    status: "PAID",
+    placedMinutesAgo: 0,
+    milestones: [["PAID", 0]],
+    cancellableForMinutes: 5,
+  },
+  {
+    id: liveOrderId,
     status: "CONFIRMED",
     placedMinutesAgo: 0,
-    milestones: preparing.slice(0, 1),
+    milestones: preparing.slice(0, 2),
     deadlines: { ready: preparingDeadlines.ready },
   },
   {
@@ -218,7 +242,7 @@ const liveSteps: readonly ScenarioSpec[] = [
     id: liveOrderId,
     status: "READY_FOR_PICKUP",
     placedMinutesAgo: 0,
-    milestones: pickedUp.slice(0, 4),
+    milestones: pickedUp.slice(0, 5),
     deadlines: preparingDeadlines,
   },
   {

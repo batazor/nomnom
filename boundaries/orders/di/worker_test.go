@@ -86,7 +86,7 @@ func TestTemporalWorkerStartsAndStops(t *testing.T) {
 	require.NoError(t, w.Start(context.Background()))
 	assert.True(t, runner.started)
 	assert.Equal(t, []string{"OrderFulfillment"}, runner.workflows)
-	assert.Equal(t, 11, runner.activities)
+	assert.Equal(t, 12, runner.activities)
 	assert.Equal(t, 3*time.Second, runner.options.WorkerStopTimeout)
 
 	runErr := make(chan error, 1)

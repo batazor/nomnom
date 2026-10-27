@@ -20,6 +20,7 @@ func Register(registry Registry, activities *Activities) {
 		ActivityCapturePayment:             activities.CapturePayment,
 		ActivityCancelPaymentAuthorization: activities.CancelPaymentAuthorization,
 		ActivityRefundPayment:              activities.RefundPayment,
+		ActivityRecordPaymentAuthorization: activities.RecordPaymentAuthorization,
 		ActivityRequestRestaurantOrder:     activities.RequestRestaurantOrder,
 		ActivityCancelRestaurantOrder:      activities.CancelRestaurantOrder,
 		ActivityCreateDelivery:             activities.CreateDelivery,

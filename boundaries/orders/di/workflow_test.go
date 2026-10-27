@@ -22,5 +22,5 @@ func TestFulfillmentWorkflowDoesNotDialAtStart(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	assert.Error(t, workflow.Start(ctx, fulfillment.StartRequest{OrderID: "order-1"}))
+	assert.Error(t, workflow.RequestCancellation(ctx, fulfillment.CancellationRequest{OrderID: "order-1", RequestID: "request-1"}))
 }

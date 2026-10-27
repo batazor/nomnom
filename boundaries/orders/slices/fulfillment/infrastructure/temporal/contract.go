@@ -49,6 +49,7 @@ const (
 	ActivityCapturePayment             = "CapturePayment"
 	ActivityCancelPaymentAuthorization = "CancelPaymentAuthorization"
 	ActivityRefundPayment              = "RefundPayment"
+	ActivityRecordPaymentAuthorization = "RecordPaymentAuthorization"
 	ActivityRequestRestaurantOrder     = "RequestRestaurantOrder"
 	ActivityCancelRestaurantOrder      = "CancelRestaurantOrder"
 	ActivityCreateDelivery             = "CreateDelivery"

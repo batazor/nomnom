@@ -92,8 +92,9 @@ make kind-down
   `values-consumer.yaml` и [`values/restaurants-consumer.yaml`](values/restaurants-consumer.yaml): тот же
   образ, `node dist/cmd/restaurants-consumer/main.js`, без Service и миграций (Inbox создаёт init
   container release `restaurants`, отсюда `dependsOn`). Группа `restaurants` читает
-  `orders.v1.order-events` с начала и по `OrderPlaced` создаёт Restaurant Order в MongoDB; poison —
-  в `orders.v1.order-events.dlq`. Egress к Kafka и MongoDB уже разрешён
+  `delivery.v1.delivery-events` с начала (Record Pickup) и обновляет кеш каталога; poison —
+  в `delivery.v1.delivery-events.dlq`. `OrderPlaced` не читает: Restaurant Order создаёт RPC
+  `ReceiveOrderRequest` из workflow `orders` после оплаты. Egress к Kafka и MongoDB уже разрешён
   `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-restaurants`.
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart

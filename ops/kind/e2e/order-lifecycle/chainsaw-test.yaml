@@ -255,8 +255,21 @@ spec:
             - {name: wait, value: 90}
             - {name: save, value: '{order_id: .data.placeOrder.order.id}'}
 
-    # 5. Кухня: новый заказ (RECEIVED) — в ListIncomingOrders после авторизации оплаты и
-    # Receive Order Request workflow; принятый попадает в Kitchen Queue (QUEUED).
+    # 5. Workflow стартует consumer собственного OrderPlaced, авторизует оплату и записывает
+    # её в Order: покупатель видит PAID с milestone PAID до того, как кухня примет заказ (AC-739).
+    - name: customer sees order paid
+      use:
+        template: ../templates/customer-graphql.yaml
+        with:
+          bindings:
+            - name: body
+              value: '{query: "query($id: ID!) { order(id: $id) { status milestones { kind } } }", variables: {id: $s.order_id}}'
+            - name: until
+              value: '.data.order.status == "PAID" and ([.data.order.milestones[]?.kind] | index("PAID")) != null'
+            - {name: wait, value: 120}
+
+    # Кухня: новый заказ (RECEIVED) — в ListIncomingOrders только после оплаты: Restaurant Order
+    # создаёт Receive Order Request workflow; принятый попадает в Kitchen Queue (QUEUED).
     - name: kitchen sees incoming order
       use:
         template: ../templates/driver-call.yaml

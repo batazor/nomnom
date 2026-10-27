@@ -19,6 +19,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
@@ -131,4 +132,8 @@ func toRecordDeliveryFailure(e messaging.Envelope, event *deliveryv1.DeliveryFai
 // from the Order.
 func toSyncOrderRelationships(_ messaging.Envelope, event *ordersv1.OrderRelationshipsChanged) syncorderrelationships.Input {
 	return syncorderrelationships.Input{OrderID: order.ID(event.GetOrderId())}
+}
+
+func toStartFulfillment(e messaging.Envelope, event *ordersv1.OrderPlaced) startfulfillment.Input {
+	return startfulfillment.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
 }

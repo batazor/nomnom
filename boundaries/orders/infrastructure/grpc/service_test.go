@@ -272,7 +272,6 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "order-1", response.GetOrderId())
 	assert.False(t, response.GetReplayed())
-	assert.True(t, response.GetFulfillmentStarted())
 	snapshot, ok := store.Snapshot("order-1")
 	require.True(t, ok)
 	assert.Equal(t, order.CustomerID("customer-1"), snapshot.CustomerID)

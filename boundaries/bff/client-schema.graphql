@@ -82,6 +82,8 @@ type RestaurantConnection {
 enum OrderStatus {
   """Order is placed and waits for confirmation"""
   RECEIVED
+  """Payment is authorized and the order waits for the restaurant"""
+  PAID
   """Order is confirmed and waits for the kitchen"""
   CONFIRMED
   """Kitchen is preparing the order"""
@@ -106,6 +108,8 @@ enum OrderEndReason {
   RESTAURANT_REJECTED
   """Delivery did not succeed"""
   DELIVERY_FAILED
+  """Payment was declined"""
+  PAYMENT_DECLINED
   """Order was not fulfilled for another reason"""
   NOT_FULFILLED
 }
@@ -114,6 +118,8 @@ enum OrderEndReason {
 enum OrderMilestoneKind {
   """Order is placed"""
   PLACED
+  """Payment is authorized"""
+  PAID
   """Order is confirmed"""
   CONFIRMED
   """Kitchen started preparation"""

@@ -1,8 +1,10 @@
 // Command restaurants-consumer consumes Integration Events of other contexts
 // through a Transactional Inbox in MongoDB (ADR 11, ADR 28, ADR 31): now
-// `nomnom.orders.v1.OrderPlaced` of `orders.v1.order-events`, which creates
-// the Restaurant Order by Receive Order Request. Replicas share one consumer
-// group. It follows the same runtime contract as cmd/restaurants
+// `nomnom.delivery.v1.DeliveryPickedUp` of `delivery.v1.delivery-events`, which
+// records the Pickup of the Restaurant Order, and refreshes the catalog read
+// cache by own events. The Restaurant Order itself is created only by the
+// fulfillment workflow of orders (RPC ReceiveOrderRequest) after payment.
+// Replicas share one consumer group. It follows the same runtime contract as cmd/restaurants
 // (pkg/lifecycle): management port with /health/*, SIGTERM, readiness delay
 // and drain of the message in progress. The object graph is composed by
 // Awilix in di/consumer.ts (ADR 5); this composition root owns the

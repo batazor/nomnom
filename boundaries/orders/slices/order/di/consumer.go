@@ -15,6 +15,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
@@ -34,6 +35,13 @@ type InboxStore interface {
 	syncorderrelationships.Revisions
 }
 
+// ConsumerWorkflow — Order Fulfillment Workflow для handlers orders-consumer:
+// Start Fulfillment запускает его по OrderPlaced, остальные передают факты.
+type ConsumerWorkflow interface {
+	fulfillment.Starter
+	fulfillment.Notifier
+}
+
 // Consumer — порты handlers orders-consumer; Wire заполняет все поля
 // (wire.Struct). Notifier workflow сюда не входит: его Temporal client с
 // metrics handler процесса открывает KafkaConsumer.Start, поэтому handlers
@@ -48,7 +56,7 @@ type Consumer struct {
 // декоратором телеметрии use cases. Record Courier Assignment и Record Courier
 // Release записывают RelationshipsChanged в своём Inbox unit of work, Sync Order
 // Relationships по нему пишет связи в SpiceDB.
-func (c Consumer) Handlers(workflow fulfillment.Notifier) ordermessaging.Handlers {
+func (c Consumer) Handlers(workflow ConsumerWorkflow) ordermessaging.Handlers {
 	store, relationships, uc := c.Store, c.Relationships, c.Telemetry
 	return ordermessaging.Handlers{
 		ConfirmOrder:             telemetry.Instrument(uc, observability.ConfirmOrder, confirmorder.NewHandler(store, store, store, workflow).Handle),
@@ -63,5 +71,6 @@ func (c Consumer) Handlers(workflow fulfillment.Notifier) ordermessaging.Handler
 		RecordDeliveryCompletion: telemetry.Instrument(uc, observability.RecordDeliveryCompletion, recorddeliverycompletion.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryFailure:    telemetry.Instrument(uc, observability.RecordDeliveryFailure, recorddeliveryfailure.NewHandler(store, store, store, workflow).Handle),
 		SyncOrderRelationships:   telemetry.Instrument(uc, observability.SyncOrderRelationships, syncorderrelationships.NewHandler(store, store, relationships, store).Handle),
+		StartFulfillment:         telemetry.Instrument(uc, observability.StartFulfillment, startfulfillment.NewHandler(store, store, store, workflow).Handle),
 	}
 }

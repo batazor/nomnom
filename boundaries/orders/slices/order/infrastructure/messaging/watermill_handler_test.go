@@ -29,6 +29,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -72,11 +73,12 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
 		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, relationships, store),
+		StartFulfillment:         startfulfillment.NewHandler(store, store, store, workflow),
 	}
 
 	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
 	poison := make(chan *message.Message, 10)
-	for _, stream := range []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic} {
+	for _, stream := range []string{ordermessaging.RestaurantOrderEventsTopic, ordermessaging.DeliveryEventsTopic, outbound.OrderEventsTopic} {
 		subscription, err := pubSub.Subscribe(context.Background(), messaging.DeadLetterTopic(stream))
 		require.NoError(t, err)
 		go func() {
@@ -167,6 +169,29 @@ func TestRestaurantOrderAcceptedConfirmsOrder(t *testing.T) {
 	assert.Equal(t, []fulfillment.Notification{{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
 	}}, c.workflow.Notifications())
+	c.noPoison(t)
+}
+
+// FR-638: the own OrderPlaced starts the workflow of the Order.
+func TestOrderPlacedStartsWorkflow(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+
+	c.publish(t, outbound.OrderEventsTopic, "event-placed", &ordersv1.OrderPlaced{OrderId: "order-1"})
+
+	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1", EventID: "event-placed", OccurredAt: occurredAt}}, c.workflow.Starts())
+	assert.Equal(t, 1, c.store.InboxSize())
+	c.noPoison(t)
+}
+
+// AC-822: own OrderCompleted and OrderCancelled are acknowledged without a dead letter.
+func TestOwnFinalEventsAreAcknowledged(t *testing.T) {
+	c := startConsumer(t)
+
+	c.publish(t, outbound.OrderEventsTopic, "event-completed", &ordersv1.OrderCompleted{OrderId: "order-1"})
+	c.publish(t, outbound.OrderEventsTopic, "event-cancelled", &ordersv1.OrderCancelled{OrderId: "order-1"})
+
+	assert.Empty(t, c.workflow.Starts())
+	assert.Zero(t, c.store.InboxSize())
 	c.noPoison(t)
 }
 

@@ -13,9 +13,9 @@ import (
 
 // NewTemporalClient — lazy Temporal client API: соединение открывается при
 // первом вызове, поэтому старт и readiness API не зависят от Temporal. Пока
-// Temporal недоступен, Place Order сохраняет заказ с fulfillment_started=false,
-// а Request Order Cancellation отвечает UNAVAILABLE.
-// Tracing interceptor продолжает trace Place Order в start и signal workflow;
+// Temporal недоступен, Request Order Cancellation отвечает UNAVAILABLE, а
+// consumer откладывает старт и сигналы до повторной доставки.
+// Tracing interceptor продолжает trace use case в start и signal workflow;
 // logger — JSON logger процесса.
 func NewTemporalClient(cfg config.TemporalConfig) (client.Client, func(), error) {
 	options, err := telemetry.TemporalClientOptions(client.Options{HostPort: cfg.HostPort, Namespace: cfg.Namespace})

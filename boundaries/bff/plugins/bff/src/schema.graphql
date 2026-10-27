@@ -126,6 +126,10 @@ enum OrderStatus {
   """
   RECEIVED
   """
+  Payment is authorized and the order waits for the restaurant
+  """
+  PAID
+  """
   Order is confirmed and waits for the kitchen
   """
   CONFIRMED
@@ -172,6 +176,10 @@ enum OrderEndReason {
   """
   DELIVERY_FAILED
   """
+  Payment was declined
+  """
+  PAYMENT_DECLINED
+  """
   Order was not fulfilled for another reason
   """
   NOT_FULFILLED
@@ -185,6 +193,10 @@ enum OrderMilestoneKind {
   Order is placed
   """
   PLACED
+  """
+  Payment is authorized
+  """
+  PAID
   """
   Order is confirmed
   """

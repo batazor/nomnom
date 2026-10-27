@@ -225,7 +225,7 @@ describe("mock store", () => {
 
     await run<OrderData>(store, orderStatus, { id: "order-live" });
     const statuses: string[] = [];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       const next = stream.next();
       await vi.advanceTimersByTimeAsync(liveStepMs);
       const { value } = await next;
@@ -236,6 +236,7 @@ describe("mock store", () => {
     vi.useRealTimers();
 
     expect(statuses).toEqual([
+      "PAID",
       "CONFIRMED",
       "PREPARING",
       "READY_FOR_PICKUP",

@@ -103,7 +103,7 @@ helm uninstall restaurants
 
 | Release | Values | Процесс |
 | --- | --- | --- |
-| `restaurants-consumer` | `values-consumer.yaml` | `orders.v1.order-events` → Inbox → Restaurant Order по `OrderPlaced` (ADR 11, ADR 28); реплики делят consumer group `restaurants` |
+| `restaurants-consumer` | `values-consumer.yaml` | `delivery.v1.delivery-events` → Inbox → Record Pickup (ADR 11, ADR 28) и обновление кеша каталога (ADR 43); `OrderPlaced` не читает — Restaurant Order создаёт RPC из workflow после оплаты; реплики делят consumer group `restaurants` |
 
 ```bash
 helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml \

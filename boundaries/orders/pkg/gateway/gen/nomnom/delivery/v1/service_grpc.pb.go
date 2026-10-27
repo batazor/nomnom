@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	DeliveryService_GetCourierCurrentDelivery_FullMethodName   = "/nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery"
+	DeliveryService_GetOrderCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/GetOrderCourier"
 	DeliveryService_CreateDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
 	DeliveryService_ReplanDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
 	DeliveryService_CancelDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
@@ -46,6 +47,11 @@ type DeliveryServiceClient interface {
 	// Delivery. Requires courier#act; an unregistered courier
 	// is NOT_FOUND.
 	GetCourierCurrentDelivery(ctx context.Context, in *GetCourierCurrentDeliveryRequest, opts ...grpc.CallOption) (*GetCourierCurrentDeliveryResponse, error)
+	// Courier of the Delivery of an order for whoever may view the order
+	// (order#view, FR-626): set while the Delivery is assigned, picked up or
+	// delivered, empty before an Assignment and after a failure or a
+	// cancellation. An order without a Delivery answers empty too.
+	GetOrderCourier(ctx context.Context, in *GetOrderCourierRequest, opts ...grpc.CallOption) (*GetOrderCourierResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
 	ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error)
@@ -92,6 +98,16 @@ func (c *deliveryServiceClient) GetCourierCurrentDelivery(ctx context.Context, i
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCourierCurrentDeliveryResponse)
 	err := c.cc.Invoke(ctx, DeliveryService_GetCourierCurrentDelivery_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) GetOrderCourier(ctx context.Context, in *GetOrderCourierRequest, opts ...grpc.CallOption) (*GetOrderCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOrderCourierResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_GetOrderCourier_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -266,6 +282,11 @@ type DeliveryServiceServer interface {
 	// Delivery. Requires courier#act; an unregistered courier
 	// is NOT_FOUND.
 	GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error)
+	// Courier of the Delivery of an order for whoever may view the order
+	// (order#view, FR-626): set while the Delivery is assigned, picked up or
+	// delivered, empty before an Assignment and after a failure or a
+	// cancellation. An order without a Delivery answers empty too.
+	GetOrderCourier(context.Context, *GetOrderCourierRequest) (*GetOrderCourierResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)
 	ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error)
@@ -310,6 +331,9 @@ type UnimplementedDeliveryServiceServer struct{}
 
 func (UnimplementedDeliveryServiceServer) GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCourierCurrentDelivery not implemented")
+}
+func (UnimplementedDeliveryServiceServer) GetOrderCourier(context.Context, *GetOrderCourierRequest) (*GetOrderCourierResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrderCourier not implemented")
 }
 func (UnimplementedDeliveryServiceServer) CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateDelivery not implemented")
@@ -394,6 +418,24 @@ func _DeliveryService_GetCourierCurrentDelivery_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DeliveryServiceServer).GetCourierCurrentDelivery(ctx, req.(*GetCourierCurrentDeliveryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_GetOrderCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrderCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).GetOrderCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_GetOrderCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).GetOrderCourier(ctx, req.(*GetOrderCourierRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -696,6 +738,10 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCourierCurrentDelivery",
 			Handler:    _DeliveryService_GetCourierCurrentDelivery_Handler,
+		},
+		{
+			MethodName: "GetOrderCourier",
+			Handler:    _DeliveryService_GetOrderCourier_Handler,
 		},
 		{
 			MethodName: "CreateDelivery",

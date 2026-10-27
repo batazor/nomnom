@@ -278,7 +278,7 @@ Domain Events, которые application-слой передаёт в Outbox po
 
 | Context | Domain Event | Use case | Примечание |
 | --- | --- | --- | --- |
-| `orders` | `OrderPlaced` | Place Order | Опубликован как `nomnom.orders.v1.OrderPlaced` с составом `items` (`menu_item_id`, `quantity`, `unit_price`). Consumer `restaurants-consumer` создаёт по нему `RECEIVED` Restaurant Order через Inbox (Receive Order Request, идемпотентно по `order_id` вместе с RPC `ReceiveOrderRequest`). Основной старт fulfillment workflow — consumer собственного `OrderPlaced` + `SignalWithStart` (не реализован); сейчас workflow запускается портом после commit |
+| `orders` | `OrderPlaced` | Place Order | Опубликован как `nomnom.orders.v1.OrderPlaced` с составом `items` (`menu_item_id`, `quantity`, `unit_price`). Единственный consumer — `orders` (Start Fulfillment, Inbox `orders.startfulfillment`): `SignalWithStart` fulfillment workflow. `restaurants` его не читает: Restaurant Order создаёт RPC `ReceiveOrderRequest` из workflow после оплаты |
 | `orders` | `OrderCompleted` | Complete Order | |
 | `orders` | `OrderCancelled` | Fail or Cancel Order | Содержит вид итога (Cancellation или Failure) и код причины |
 | `delivery` | `CourierAssignedToDelivery` | Accept Delivery Offer | Источник relation `delivery#courier` по [security](security.md#relationship-lifecycle) |
@@ -294,7 +294,7 @@ Domain Events, которые application-слой передаёт в Outbox po
 | `payments` | `PaymentRefunded` | Refund Payment | |
 | `payments` | `PaymentOperationDeclined` | Все финансовые операции, Apply Provider Callback, Apply Provider Operation Result | Отказ Provider без смены State `Payment` (кроме Authorization) |
 
-- Факты `orders` входящих сценариев (Fulfillment Fact) не создают Domain Event: они отражаются в `Order` и передаются workflow.
+- Факты `orders` входящих сценариев (Fulfillment Fact) не создают Domain Event: они отражаются в `Order` и передаются workflow. Факт `payment_authorized` записывает сам workflow (Record Payment Authorization) — тоже без Domain Event и Integration Event.
 - Create Payment событие не публикует.
 
 ## Открытые вопросы

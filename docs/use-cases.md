@@ -8,7 +8,8 @@
 
 | Boundary | Use Case | Type | Actor | Temporal | Kafka |
 | --- | --- | --- | --- | --- | --- |
-| `orders` | Place Order | Command | Клиент | starts fulfillment workflow | Outbox: факт оформления при необходимости |
+| `orders` | Place Order | Command | Клиент | no: workflow стартует Start Fulfillment по `OrderPlaced` | Outbox: `OrderPlaced` |
+| `orders` | Start Fulfillment | Command | Kafka consumer `orders` | starts workflow (`SignalWithStart`) | Inbox: consumes own `OrderPlaced` |
 | `orders` | Get Order | Query | Клиент или внутренний авторизованный actor | no | no |
 | `orders` | List Customer Orders | Query | Клиент или внутренний авторизованный actor | no | no |
 | `orders` | Request Order Cancellation | Command | Клиент или другой авторизованный actor | signals existing workflow | no |
@@ -20,6 +21,7 @@
 | `orders` | Record Pickup | Command | Kafka consumer `orders` | signals workflow | Inbox: consumes Pickup |
 | `orders` | Record Delivery Completion | Command | Kafka consumer `orders` | signals workflow | Inbox: consumes Delivery Completion |
 | `orders` | Record Delivery Failure | Command | Kafka consumer `orders` | signals workflow | Inbox: consumes delivery failure |
+| `orders` | Record Payment Authorization | Command | Temporal fulfillment workflow | invoked by Activity after approved Authorization | no: Fulfillment Fact `payment_authorized` |
 | `orders` | Complete Order | Command | Temporal fulfillment workflow | finalizes successful workflow result | Outbox: publishes business fact |
 | `orders` | Fail or Cancel Order | Command | Temporal fulfillment workflow | finalizes negative workflow result | Outbox: publishes business fact |
 | `restaurants` | Register Restaurant | Command | Оператор платформы или владелец ресторана | no | no |
@@ -41,8 +43,8 @@
 | `restaurants` | Start / Complete Preparation Item | Command | Авторизованный сотрудник станции | no | no: только при item-level model |
 | `restaurants` | Mark Assembled | Command | Авторизованный сотрудник кухни | no | no: локальный факт |
 | `restaurants` | Mark Ready for Pickup | Command | Авторизованный сотрудник кухни | workflow observes status asynchronously | Outbox: `RestaurantOrderReady` |
-| `restaurants` | Report Preparation Delay | Command | Авторизованный сотрудник кухни | workflow should observe delay (сигнала пока нет) | Outbox: `PreparationDelayed` |
-| `restaurants` | Report Preparation Failure | Command | Авторизованный сотрудник кухни | workflow should observe failure (сигнала пока нет) | Outbox: `PreparationFailed` |
+| `restaurants` | Report Preparation Delay | Command | Авторизованный сотрудник кухни | workflow observes delay asynchronously (`orders` Record Preparation Delay) | Outbox: `PreparationDelayed` |
+| `restaurants` | Report Preparation Failure | Command | Авторизованный сотрудник кухни | workflow observes failure asynchronously (`orders` Relay Preparation Issue) | Outbox: `PreparationFailed` |
 | `restaurants` | Cancel Restaurant Order | Command | Fulfillment process `orders` | invoked by Activity; synchronous result by stage | Outbox: `RestaurantOrderCancelled` if state changes |
 | `restaurants` | Reject After Acceptance | Command | Авторизованный сотрудник ресторана | workflow must handle rejection after Acceptance | Outbox: `RestaurantOrderRejected`; продуктовое решение не принято |
 | `restaurants` | Get Kitchen Queue | Query | Авторизованный сотрудник ресторана | no | no |
@@ -95,14 +97,13 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 - `orders` владеет общим жизненным циклом и orchestration, но не решает, может ли ресторан приготовить заказ, какой курьер подходит или успешна ли финансовая операция;
 - `restaurants` владеет `Restaurant Order`, Kitchen Queue и Preparation; его принятие не является `Order Confirmation`, успешной оплатой или назначением курьера; кухонные сценарии — в [Kitchen](kitchen.md);
 - `delivery` владеет `Delivery Offer`, `Courier Assignment`, Pickup и Delivery Completion; завершение доставки ещё не подменяет финализацию `Order`;
-- `payments` владеет Authorization, Capture и Refund; финансовая операция не определяет правила отмены `Order`;
+- `payments` владеет Authorization, Capture и Refund; финансовая операция не определяет правила отмены `Order`. Authorization выполняется первым шагом workflow: `orders` записывает факт `payment_authorized` (Record Payment Authorization) и только после этого запрашивает Restaurant Order ([ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md#saga));
 - BFF владеет только API composition и клиентским представлением, а authoritative authorization и бизнес-инварианты остаются у владельца команды или данных.
 
 ## Open questions
 
 Следующие продуктовые решения намеренно не приняты этим документом и должны быть уточнены до соответствующих SDD-спецификаций:
 
-- когда именно выполняется Authorization;
 - когда выполняется Capture;
 - какие сроки authorization window и refund window проверяют `PaymentCapturable` и `PaymentRefundable` (текущее допущение реализации: policies в handlers не подключены, Capture и Refund выполняются на полную сумму, см. [design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md));
 - можно ли принять `Restaurant Order`, если курьер ещё не назначен;
@@ -117,7 +118,7 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 - может ли ресторан отказаться от `Restaurant Order` после Acceptance;
 - как решается недоступность позиции после Acceptance;
 - как упорядочивается Kitchen Queue и допускается ли ручная перестановка;
-- как рассчитывается `expected_ready_at` и как `orders` реагирует на Preparation Delay.
+- как рассчитывается `expected_ready_at` (реакция `orders` на Preparation Delay — Record Preparation Delay: новый срок в `Order` и продление ожидания workflow).
 
 Полный список открытых вопросов кухни — в [Kitchen](kitchen.md#открытые-вопросы).
 

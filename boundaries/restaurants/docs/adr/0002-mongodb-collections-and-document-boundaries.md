@@ -102,4 +102,4 @@ Pickup введён так: `restaurant_orders/0004-picked-up` (`schemaVersion` 
 
 Окружения обязаны предоставлять replica set; standalone MongoDB не поддерживается. Каждое изменение формата документа требует обновления validator, `schemaVersion` и, при необходимости, миграции документов. In-memory адаптеры остаются только для unit-тестов; поведение MongoDB-адаптеров проверяют интеграционные тесты (`test/database-integration.test.ts`, `MONGODB_URI`).
 
-Доставка Outbox в Kafka (Debezium, ADR 37), Protobuf-mappers и событийные проекции этим решением не реализуются; Inbox и consumer `OrderPlaced` добавлены change `add-restaurants-order-placed-consumer`.
+Доставка Outbox в Kafka (Debezium, ADR 37), Protobuf-mappers и событийные проекции этим решением не реализуются; Inbox и consumer `OrderPlaced` добавлены change `add-restaurants-order-placed-consumer`; consumer `OrderPlaced` удалён change `start-fulfillment-and-pay-before-kitchen` (Restaurant Order создаёт только RPC из workflow после оплаты), Inbox остался у consumer `DeliveryPickedUp`.

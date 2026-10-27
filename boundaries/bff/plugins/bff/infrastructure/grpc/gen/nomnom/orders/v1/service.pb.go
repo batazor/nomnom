@@ -397,12 +397,9 @@ type PlaceOrderResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	// True when idempotency_key already identified a placed Order.
-	Replayed bool `protobuf:"varint,2,opt,name=replayed,proto3" json:"replayed,omitempty"`
-	// False when the fulfillment start failed after commit; repeating the
-	// request with the same idempotency_key retries the start.
-	FulfillmentStarted bool `protobuf:"varint,3,opt,name=fulfillment_started,json=fulfillmentStarted,proto3" json:"fulfillment_started,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	Replayed      bool `protobuf:"varint,2,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PlaceOrderResponse) Reset() {
@@ -445,13 +442,6 @@ func (x *PlaceOrderResponse) GetOrderId() string {
 func (x *PlaceOrderResponse) GetReplayed() bool {
 	if x != nil {
 		return x.Replayed
-	}
-	return false
-}
-
-func (x *PlaceOrderResponse) GetFulfillmentStarted() bool {
-	if x != nil {
-		return x.FulfillmentStarted
 	}
 	return false
 }
@@ -755,11 +745,10 @@ const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"\x11PlaceOrderRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x126\n" +
-	"\x05items\x18\x03 \x03(\v2 .nomnom.orders.v1.PlaceOrderItemR\x05itemsJ\x04\b\x04\x10\x05R\x10delivery_address\"|\n" +
+	"\x05items\x18\x03 \x03(\v2 .nomnom.orders.v1.PlaceOrderItemR\x05itemsJ\x04\b\x04\x10\x05R\x10delivery_address\"f\n" +
 	"\x12PlaceOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1a\n" +
-	"\breplayed\x18\x02 \x01(\bR\breplayed\x12/\n" +
-	"\x13fulfillment_started\x18\x03 \x01(\bR\x12fulfillmentStarted\"s\n" +
+	"\breplayed\x18\x02 \x01(\bR\breplayedJ\x04\b\x03\x10\x04R\x13fulfillment_started\"s\n" +
 	"\x1fRequestOrderCancellationRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1d\n" +
 	"\n" +

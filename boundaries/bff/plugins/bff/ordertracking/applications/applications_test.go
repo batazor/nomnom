@@ -90,6 +90,8 @@ func TestStatusFollowsStateAndFacts(t *testing.T) {
 		want  Status
 	}{
 		{"placed", snapshot("placed"), StatusReceived},
+		// AC-831: the recorded payment before acceptance is PAID.
+		{"paid", snapshot("placed", Fact{"payment_authorized", at(1)}), StatusPaid},
 		{"confirmed", snapshot("confirmed"), StatusConfirmed},
 		{"preparing", snapshot("confirmed", Fact{"preparation_started", at(3)}), StatusPreparing},
 		{"ready", snapshot("confirmed", Fact{"preparation_started", at(3)}, Fact{"ready_for_pickup", at(9)}), StatusReadyForPickup},
@@ -116,13 +118,25 @@ func TestEndReasonByReasonCode(t *testing.T) {
 		"customer_requested":            EndCustomerCancelled,
 		"restaurant_acceptance_timeout": EndRestaurantRejected,
 		"pickup_timeout":                EndDeliveryFailed,
-		"payment_declined":              EndNotFulfilled,
+		// AC-832: a declined Authorization or Capture is PAYMENT_DECLINED.
+		"payment_declined":         EndPaymentDeclined,
+		"payment_capture_declined": EndPaymentDeclined,
+		"preparation_timeout":      EndNotFulfilled,
 	} {
 		order := snapshot("cancelled")
 		order.Cancellation = &Cancellation{Outcome: "failure", ReasonCode: code, CancelledAt: at(5)}
 		assert.Equal(t, want, view(t, order, at(6)).EndReason, code)
 	}
 	assert.Empty(t, view(t, snapshot("placed"), at(1)).EndReason)
+}
+
+// AC-831: the payment moment is the PAID milestone after PLACED.
+func TestPaymentIsPaidMilestone(t *testing.T) {
+	order := snapshot("placed", Fact{"payment_authorized", at(1)})
+
+	got := view(t, order, at(2))
+
+	assert.Equal(t, []Milestone{{MilestonePlaced, placedAt}, {MilestonePaid, at(1)}}, got.Milestones)
 }
 
 // AC-564: the acceptance moment becomes CONFIRMED between PLACED and later facts.

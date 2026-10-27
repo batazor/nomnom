@@ -7,6 +7,7 @@ import type { MessageKey } from "../../shared/i18n/messages";
 
 export type StatusIconName =
   | "receipt"
+  | "card"
   | "check"
   | "pot"
   | "bag"
@@ -18,6 +19,7 @@ export type StatusIconName =
 // Customer-facing progress steps; CANCELLED and FAILED replace the progress.
 export const progressSteps = [
   "RECEIVED",
+  "PAID",
   "CONFIRMED",
   "PREPARING",
   "READY_FOR_PICKUP",
@@ -44,6 +46,13 @@ export const statusPresentation: Record<OrderStatus, StatusPresentation> = {
     detail: "order.status.RECEIVED.detail",
     icon: "receipt",
     step: step("RECEIVED"),
+    final: false,
+  },
+  PAID: {
+    label: "order.status.PAID.label",
+    detail: "order.status.PAID.detail",
+    icon: "card",
+    step: step("PAID"),
     final: false,
   },
   CONFIRMED: {
@@ -113,6 +122,10 @@ export const endReasonPresentation: Record<
     title: "order.end.DELIVERY_FAILED.title",
     detail: "order.end.DELIVERY_FAILED.detail",
   },
+  PAYMENT_DECLINED: {
+    title: "order.end.PAYMENT_DECLINED.title",
+    detail: "order.end.PAYMENT_DECLINED.detail",
+  },
   NOT_FULFILLED: {
     title: "order.end.NOT_FULFILLED.title",
     detail: "order.end.NOT_FULFILLED.detail",
@@ -121,6 +134,7 @@ export const endReasonPresentation: Record<
 
 export const milestoneLabel: Record<OrderMilestoneKind, MessageKey> = {
   PLACED: "order.milestone.PLACED",
+  PAID: "order.milestone.PAID",
   CONFIRMED: "order.milestone.CONFIRMED",
   PREPARATION_STARTED: "order.milestone.PREPARATION_STARTED",
   READY_FOR_PICKUP: "order.milestone.READY_FOR_PICKUP",

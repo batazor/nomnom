@@ -37,7 +37,7 @@ func (s *ordersServer) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOr
 	if s.err != nil {
 		return nil, s.err
 	}
-	return &ordersv1.PlaceOrderResponse{OrderId: "order-1", FulfillmentStarted: true}, nil
+	return &ordersv1.PlaceOrderResponse{OrderId: "order-1"}, nil
 }
 
 func connect(t *testing.T, server *ordersServer) *Orders {

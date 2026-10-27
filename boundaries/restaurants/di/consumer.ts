@@ -6,14 +6,11 @@
 // for exactly that message. The MongoDB connection, the dead letter producer
 // and the not yet connected Kafka consumer client are acquired and released
 // by cmd/restaurants-consumer.
-import { randomUUID } from "node:crypto";
-
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Valkey } from "iovalkey";
 import type { Db, MongoClient } from "mongodb";
 
 import type { Clock } from "../pkg/application/clock.ts";
-import type { IdGenerator } from "../pkg/application/id-generator.ts";
 import type {
   ConsumerConfig,
   ValkeyEnabledConfig,
@@ -53,7 +50,6 @@ import {
   createMenuCollection,
   DatabaseMenuReader,
 } from "../slices/menu/infrastructure/repository/menus.ts";
-import type { RestaurantRepository } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   CachedRestaurantCatalog,
   restaurantCacheRefreshes,
@@ -62,13 +58,8 @@ import { RESTAURANT_EVENTS_TOPIC } from "../slices/restaurant/infrastructure/int
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,
-  DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
-import type {
-  FulfillmentCoordinatorAccess,
-  PickupWitnessAccess,
-} from "../slices/restaurantorder/applications/access-control.ts";
-import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import type { PickupWitnessAccess } from "../slices/restaurantorder/applications/access-control.ts";
 import { RecordPickupHandler } from "../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
 import type { RestaurantOrderRepository } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
@@ -82,23 +73,14 @@ import {
   kitchenChangeNotifier,
 } from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
 import {
-  createOrderPlacedHandler,
-  ORDER_EVENTS_TOPIC,
-  ORDER_PLACED_CONSUMER,
-  OrdersEventSourceAccessControl,
-} from "../slices/restaurantorder/infrastructure/integration/order-placed.ts";
-import {
   ObservedDatabaseUnitOfWork,
   ObservedRestaurantOrderRepository,
-  observeReceiveOrderRequest,
-  type ReceiveOrderRequestPort,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
 import {
   createRestaurantOrderCollection,
   DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
-import { RepositoryRestaurantExistence } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
 
 /** Configuration and resources the composition root hands to the container. */
@@ -134,28 +116,20 @@ export interface ConsumerCradle {
   /** Span and duration of every use case listed in di/usecases.ts. */
   readonly useCaseTelemetry: UseCaseTelemetry;
   readonly clock: Clock;
-  readonly ids: IdGenerator;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: DatabaseUnitOfWork;
-  readonly restaurants: RestaurantRepository;
-  readonly restaurantExistence: RepositoryRestaurantExistence;
   readonly restaurantOrders: RestaurantOrderRepository;
-  /** Allows only Receive Order Request from the orders event stream. */
-  readonly fulfillmentAccess: FulfillmentCoordinatorAccess;
-  readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly inbox: Inbox;
   readonly kitchenChanges: KitchenChangeNotifier;
   readonly consumerMetrics: ConsumerMetrics;
-  readonly orderPlaced: EventHandler;
-  readonly messageProcessor: MessageProcessor;
   /** Allows only Record Pickup from the delivery event stream. */
   readonly pickupWitnessAccess: PickupWitnessAccess;
   readonly recordPickup: RecordPickupHandler;
   readonly deliveryPickedUp: EventHandler;
   readonly deliveryEventsProcessor: MessageProcessor;
   /**
-   * Consumer group of `orders.v1.order-events` and
-   * `delivery.v1.delivery-events` and the cache refresh group of
+   * Consumer group of `delivery.v1.delivery-events` and the cache refresh
+   * group of
    * `restaurants.v1.restaurant-events` and `restaurants.v1.menu-events`, run
    * by the Lifecycle.
    */
@@ -179,9 +153,6 @@ export const createConsumerContainer = (
     logger: asValue(resources.logger),
     useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),
     clock: asValue<Clock>({ now: () => new Date() }),
-    ids: asValue<IdGenerator>({ next: () => randomUUID() }),
-    // `nomnom.restaurants.orders.received` is recorded after the Inbox
-    // transaction of the message commits; an Inbox duplicate records nothing.
     domainMetrics: asFunction(
       () => new RestaurantOrderDomainMetrics(),
     ).singleton(),
@@ -198,17 +169,6 @@ export const createConsumerContainer = (
         () => clock.now(),
       ),
     ).singleton(),
-    restaurants: asFunction(
-      ({ db, unitOfWork, kitchenChanges }: ConsumerCradle) =>
-        new DatabaseRestaurantRepository(
-          createRestaurantCollection(db, unitOfWork),
-          kitchenChanges,
-        ),
-    ).singleton(),
-    restaurantExistence: asFunction(
-      ({ restaurants }: ConsumerCradle) =>
-        new RepositoryRestaurantExistence(restaurants),
-    ).singleton(),
     restaurantOrders: asFunction(
       ({ db, unitOfWork, kitchenChanges, domainMetrics }: ConsumerCradle) =>
         new ObservedRestaurantOrderRepository(
@@ -219,67 +179,11 @@ export const createConsumerContainer = (
           domainMetrics,
         ),
     ).singleton(),
-    fulfillmentAccess: asFunction(
-      () => new OrdersEventSourceAccessControl(),
-    ).singleton(),
-    receiveOrderRequest: asFunction(
-      ({
-        fulfillmentAccess,
-        restaurantExistence,
-        restaurantOrders,
-        ids,
-        clock,
-        domainMetrics,
-      }: ConsumerCradle) =>
-        observeReceiveOrderRequest(
-          new ReceiveOrderRequestHandler({
-            accessControl: fulfillmentAccess,
-            restaurants: restaurantExistence,
-            restaurantOrders,
-            ids,
-            clock,
-          }),
-          domainMetrics,
-        ),
-    ).singleton(),
     inbox: asFunction(
       ({ db, unitOfWork, clock }: ConsumerCradle) =>
         new DatabaseInbox(db, unitOfWork, () => clock.now()),
     ).singleton(),
     consumerMetrics: asFunction(() => new OtelConsumerMetrics()).singleton(),
-    orderPlaced: asFunction(({ receiveOrderRequest }: ConsumerCradle) =>
-      createOrderPlacedHandler({ receiveOrderRequest }),
-    ).singleton(),
-    messageProcessor: asFunction(
-      ({
-        consumerConfig,
-        orderPlaced,
-        inbox,
-        deadLetters,
-        consumerMetrics,
-        logger,
-      }: ConsumerCradle) => {
-        const log = logger.child({
-          operation: "kafka.consume",
-          "messaging.consumer.group.name": consumerConfig.groupId,
-        });
-        return new MessageProcessor({
-          consumer: ORDER_PLACED_CONSUMER,
-          group: consumerConfig.groupId,
-          handlers: [orderPlaced],
-          inbox,
-          deadLetters,
-          retry: {
-            maxRetries: consumerConfig.maxRetries,
-            initialIntervalMs: consumerConfig.retryInitialIntervalMs,
-            maxIntervalMs: consumerConfig.retryMaxIntervalMs,
-          },
-          metrics: consumerMetrics,
-          log: log.info,
-          warn: log.warn,
-        });
-      },
-    ).singleton(),
     pickupWitnessAccess: asFunction(
       () => new DeliveryEventSourceAccessControl(),
     ).singleton(),
@@ -372,7 +276,6 @@ export const createConsumerContainer = (
     worker: asFunction(
       ({
         kafkaConsumer,
-        messageProcessor,
         deliveryEventsProcessor,
         consumerConfig,
         cacheRefreshConsumer,
@@ -382,20 +285,8 @@ export const createConsumerContainer = (
         new ParallelWorkers([
           new KafkaConsumerWorker({
             client: kafkaConsumer,
-            topics: [ORDER_EVENTS_TOPIC, DELIVERY_EVENTS_TOPIC],
-            // Each stream goes to the processor of its consumer.
-            handler: {
-              process: (message, signal) => {
-                const processor = {
-                  [ORDER_EVENTS_TOPIC]: messageProcessor,
-                  [DELIVERY_EVENTS_TOPIC]: deliveryEventsProcessor,
-                }[message.topic];
-                if (processor === undefined) {
-                  throw new Error(`no processor for topic ${message.topic}`);
-                }
-                return processor.process(message, signal);
-              },
-            },
+            topics: [DELIVERY_EVENTS_TOPIC],
+            handler: deliveryEventsProcessor,
             groupId: consumerConfig.groupId,
           }),
           new KafkaConsumerWorker({

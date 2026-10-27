@@ -1,5 +1,6 @@
 // Package placeorder places an Order for the calling Customer from a verified
-// restaurant catalog snapshot and requests the start of its fulfillment.
+// restaurant catalog snapshot. Its fulfillment is started by the consumer of
+// the own OrderPlaced (startfulfillment), not here.
 package placeorder
 
 import (
@@ -8,7 +9,6 @@ import (
 	"fmt"
 
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -39,9 +39,6 @@ type Result struct {
 	OrderID order.ID
 	// Replayed reports that the IdempotencyKey already identified a placed Order.
 	Replayed bool
-	// FulfillmentStarted is false when the post-commit start failed; repeating
-	// the request with the same IdempotencyKey retries the start.
-	FulfillmentStarted bool
 }
 
 // CatalogItem is the price and availability of one Menu Item at placement time.
@@ -102,7 +99,6 @@ type Dependencies struct {
 	Relationships syncorderrelationships.Changes
 	IDs           IDGenerator
 	Clock         application.Clock
-	Workflow      fulfillment.Starter
 }
 
 type Handler struct {
@@ -124,7 +120,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, fmt.Errorf("find idempotency key: %w", err)
 	}
 	if found {
-		return h.start(ctx, Result{OrderID: existing, Replayed: true}), nil
+		return Result{OrderID: existing, Replayed: true}, nil
 	}
 
 	snapshot, err := h.deps.Catalog.Snapshot(ctx, in.RestaurantID, request.menuItemIDs())
@@ -181,7 +177,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return h.start(ctx, result), nil
+	return result, nil
 }
 
 // replayConcurrent reads the Order a concurrent request committed under key.
@@ -194,13 +190,6 @@ func (h Handler) replayConcurrent(ctx context.Context, customerID order.Customer
 		return Result{}, fmt.Errorf("%w: idempotency key %q is being placed concurrently", application.ErrConcurrencyConflict, key)
 	}
 	return Result{OrderID: existing, Replayed: true}, nil
-}
-
-// start runs after commit; the committed Order and OrderPlaced in the Outbox
-// stay valid when the workflow is temporarily unavailable.
-func (h Handler) start(ctx context.Context, result Result) Result {
-	result.FulfillmentStarted = h.deps.Workflow.Start(ctx, fulfillment.StartRequest{OrderID: result.OrderID}) == nil
-	return result
 }
 
 type itemRequest struct {

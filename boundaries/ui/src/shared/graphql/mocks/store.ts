@@ -302,7 +302,7 @@ export function createMockStore({
       expectedDeliveredAt: null,
     };
     state.orders.set(order.id, order);
-    fulfillment.received(order);
+    fulfillment.paid(order);
     return { order, problems: [] };
   }
 

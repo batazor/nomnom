@@ -163,9 +163,9 @@ func TestCustomerPlacesOrderAfterRandomDelay(t *testing.T) {
 	h.random.floats = []float64{0.5}
 	h.customer.Tick(ctx, start.Add(90*time.Second))
 
-	starts := h.workflow.Starts()
-	require.Len(t, starts, 1)
-	placed, ok := h.store.Snapshot(starts[0].OrderID)
+	placedIDs := h.placedOrders()
+	require.Len(t, placedIDs, 1)
+	placed, ok := h.store.Snapshot(placedIDs[0])
 	require.True(t, ok)
 	assert.Equal(t, order.CustomerID(customerID), placed.CustomerID)
 	assert.Equal(t, order.RestaurantID("restaurant-1"), placed.RestaurantID)
@@ -188,7 +188,7 @@ func TestCustomerCancelsPlacedOrderAfterDelay(t *testing.T) {
 	h.random.ints = []int{0, 0, 0, 0}
 	h.random.floats = []float64{0.05}
 	h.customer.Tick(ctx, start.Add(minDelay))
-	require.Len(t, h.workflow.Starts(), 1)
+	require.Len(t, h.placedOrders(), 1)
 
 	h.customer.Tick(ctx, start.Add(minDelay+time.Minute))
 	assert.Empty(t, h.workflow.Cancellations(), "cancellation is not due yet")
@@ -196,7 +196,7 @@ func TestCustomerCancelsPlacedOrderAfterDelay(t *testing.T) {
 	h.customer.Tick(ctx, start.Add(minDelay+2*time.Minute))
 	cancellations := h.workflow.Cancellations()
 	require.Len(t, cancellations, 1)
-	assert.Equal(t, h.workflow.Starts()[0].OrderID, cancellations[0].OrderID)
+	assert.Equal(t, h.placedOrders()[0], cancellations[0].OrderID)
 
 	h.customer.Tick(ctx, start.Add(minDelay+2*time.Minute+time.Second))
 	assert.Len(t, h.workflow.Cancellations(), 1, "each cancellation is attempted once")
@@ -217,7 +217,7 @@ func TestDisabledCustomerDoesNothing(t *testing.T) {
 	h.random.delays = []int64{0}
 	h.customer.Tick(ctx, start.Add(2*time.Hour))
 	assert.Zero(t, h.catalog.calls, "the schedule restarts after re-enabling")
-	assert.Empty(t, h.workflow.Starts())
+	assert.Empty(t, h.placedOrders())
 }
 
 // A failed placement is logged and the next one is scheduled.
@@ -236,5 +236,17 @@ func TestCustomerContinuesAfterFailedPlacement(t *testing.T) {
 	h.random.ints = []int{0, 0, 0, 0}
 	h.customer.Tick(ctx, start.Add(2*minDelay))
 	assert.Equal(t, 2, h.catalog.calls)
-	assert.Empty(t, h.workflow.Starts(), "Place Order refused the unknown restaurant")
+	assert.Empty(t, h.placedOrders(), "Place Order refused the unknown restaurant")
+}
+
+// placedOrders are the Orders whose OrderPlaced is in the Outbox: the workflow
+// is started from it by the consumer, not by Place Order.
+func (h *harness) placedOrders() []order.ID {
+	var ids []order.ID
+	for _, record := range h.store.OutboxRecords() {
+		if record.EventType == "nomnom.orders.v1.OrderPlaced" {
+			ids = append(ids, record.AggregateID)
+		}
+	}
+	return ids
 }

@@ -11,7 +11,7 @@
 
 - **Владелец:** `restaurants/slices/restaurantorder`.
 - **Домен:** `domains/restaurantorder`.
-- **Взаимодействие:** Вызывается Temporal Activity через RPC `ReceiveOrderRequest` (FR-428) и consumer Integration Event `nomnom.orders.v1.OrderPlaced` (`cmd/restaurants-consumer`, Transactional Inbox, `infrastructure/integration/order-placed.ts`); повтор того же состава по `order_id` возвращает `created = false`, поэтому оба пути сходятся к одному Restaurant Order; конфликтующий повтор — `ALREADY_EXISTS` (RPC) или бизнес-исход без Restaurant Order (consumer). Market Restaurant Order берётся из ресторана (порт `RestaurantMarkets`); `OrderPlaced.market_id`, если задан, сверяется с ним и с Market уже полученного заказа: другой Market — `MarketMismatchError` (`market_mismatch`), событие уходит в DLQ, Restaurant Order не создаётся.
+- **Взаимодействие:** Вызывается только Temporal Activity `RequestRestaurantOrder` через RPC `ReceiveOrderRequest` (FR-428) — после одобренной оплаты, поэтому кухня не видит неоплаченных заказов ([ADR 5 orders](../../../../../orders/docs/adr/0005-order-fulfillment-orchestration.md#saga)); `OrderPlaced` Restaurant Order не создаёт. Повтор того же состава по `order_id` возвращает `created = false`; конфликтующий повтор — `ALREADY_EXISTS`. Market Restaurant Order берётся из ресторана (порт `RestaurantMarkets`); названный вызывающим другой Market — `MarketMismatchError` (`market_mismatch`), Restaurant Order не создаётся.
 
 ## Последовательность
 

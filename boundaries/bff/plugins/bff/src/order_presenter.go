@@ -15,6 +15,7 @@ import (
 var (
 	orderStatuses = map[applications.Status]service.OrderStatus{
 		applications.StatusReceived:       service.OrderStatus_ORDER_STATUS_RECEIVED,
+		applications.StatusPaid:           service.OrderStatus_ORDER_STATUS_PAID,
 		applications.StatusConfirmed:      service.OrderStatus_ORDER_STATUS_CONFIRMED,
 		applications.StatusPreparing:      service.OrderStatus_ORDER_STATUS_PREPARING,
 		applications.StatusReadyForPickup: service.OrderStatus_ORDER_STATUS_READY_FOR_PICKUP,
@@ -27,10 +28,12 @@ var (
 		applications.EndCustomerCancelled:  service.OrderEndReason_ORDER_END_REASON_CUSTOMER_CANCELLED,
 		applications.EndRestaurantRejected: service.OrderEndReason_ORDER_END_REASON_RESTAURANT_REJECTED,
 		applications.EndDeliveryFailed:     service.OrderEndReason_ORDER_END_REASON_DELIVERY_FAILED,
+		applications.EndPaymentDeclined:    service.OrderEndReason_ORDER_END_REASON_PAYMENT_DECLINED,
 		applications.EndNotFulfilled:       service.OrderEndReason_ORDER_END_REASON_NOT_FULFILLED,
 	}
 	orderMilestoneKinds = map[applications.MilestoneKind]service.OrderMilestoneKind{
 		applications.MilestonePlaced:             service.OrderMilestoneKind_ORDER_MILESTONE_KIND_PLACED,
+		applications.MilestonePaid:               service.OrderMilestoneKind_ORDER_MILESTONE_KIND_PAID,
 		applications.MilestoneConfirmed:          service.OrderMilestoneKind_ORDER_MILESTONE_KIND_CONFIRMED,
 		applications.MilestonePreparationStarted: service.OrderMilestoneKind_ORDER_MILESTONE_KIND_PREPARATION_STARTED,
 		applications.MilestoneReadyForPickup:     service.OrderMilestoneKind_ORDER_MILESTONE_KIND_READY_FOR_PICKUP,

@@ -58,6 +58,7 @@ type Process struct {
 
 	// Journal of confirmed steps and owner-side closures for the Saga.
 	authorized          bool
+	paymentRecorded     bool
 	captured            bool
 	restaurantRequested bool
 	restaurantClosed    bool

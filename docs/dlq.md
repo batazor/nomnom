@@ -16,19 +16,19 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 
 ## Процедура
 
-Сигналы: alert `<context>-kafka-poison` (`nomnom.messaging.poison.messages`) — новый dead letter; лог `integration event sent to DLQ` с `error_class` и `detail`, у `restaurants-consumer` — WARN-лог `restaurants.order-placed dead-lettered …` или `restaurants.delivery-picked-up dead-lettered …`; alert `<context>-kafka-dlq-unresolved` — записи группы не разобраны сутки. Неразобранное считается как конец partition DLQ минус offset `<group>.dlq` (без commit — минус начало topic).
+Сигналы: alert `<context>-kafka-poison` (`nomnom.messaging.poison.messages`) — новый dead letter; лог `integration event sent to DLQ` с `error_class` и `detail`, у `restaurants-consumer` — WARN-лог `restaurants.delivery-picked-up dead-lettered …`; alert `<context>-kafka-dlq-unresolved` — записи группы не разобраны сутки. Неразобранное считается как конец partition DLQ минус offset `<group>.dlq` (без commit — минус начало topic).
 
 Команда разбора у каждого контекста своя, контракт один (аргументы, вывод, offset `<group>.dlq`):
 
 | Контекст | Pod | Команда | Стримы |
 | --- | --- | --- | --- |
-| `orders` | `-n nomnom-orders deploy/orders-consumer` | `/orders-admin` | `restaurants.v1.restaurant-order-events`, `delivery.v1.delivery-events` |
-| `restaurants` | `-n nomnom-restaurants deploy/restaurants-consumer` | `node dist/cmd/restaurants-admin/main.js` (в dev-образе `make kind-dev` — `node cmd/restaurants-admin/main.ts`) | `orders.v1.order-events`, `delivery.v1.delivery-events` |
+| `orders` | `-n nomnom-orders deploy/orders-consumer` | `/orders-admin` | `restaurants.v1.restaurant-order-events`, `delivery.v1.delivery-events`, `orders.v1.order-relationships`, `orders.v1.order-events` |
+| `restaurants` | `-n nomnom-restaurants deploy/restaurants-consumer` | `node dist/cmd/restaurants-admin/main.js` (в dev-образе `make kind-dev` — `node cmd/restaurants-admin/main.ts`) | `delivery.v1.delivery-events` |
 
 Примеры ниже — для `orders`; для `restaurants` подставляются pod, команда и стрим из таблицы:
 
 ```bash
-kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/restaurants-admin/main.js dlq list --stream orders.v1.order-events
+kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/restaurants-admin/main.js dlq list --stream delivery.v1.delivery-events
 ```
 
 1. Посмотреть неразобранные записи группы:

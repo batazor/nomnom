@@ -272,7 +272,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | `nomnom_orders_cancellation_requests_total` | use case decorator | counter | `nomnom_outcome` | `orders`: ожидается | — |
 | `nomnom_orders_fulfillment_duration_seconds` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | histogram | — | `orders-worker`: ожидается | — |
 | `nomnom_orders_in_state` | projection/polling | gauge | `nomnom_order_state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |
-| `nomnom_restaurants_orders_received_total` | Receive Order Request после commit (`created: true`) | counter | — | `restaurants`: ожидается | Пишут `restaurants` (gRPC) и `restaurants-consumer` (OrderPlaced): каждый заказ один раз, на dashboard — сумма обоих. |
+| `nomnom_restaurants_orders_received_total` | Receive Order Request после commit (`created: true`) | counter | — | `restaurants`: ожидается | Пишет `restaurants`: Restaurant Order создаёт только gRPC ReceiveOrderRequest workflow `orders` после оплаты. |
 | `nomnom_restaurants_orders_accepted_total` | Domain Events после commit Unit of Work (ObservedDatabaseUnitOfWork / ObservedOutbox) | counter | — | `restaurants`: ожидается | — |
 | `nomnom_restaurants_orders_rejected_total` | Domain Events после commit Unit of Work (ObservedDatabaseUnitOfWork / ObservedOutbox) | counter | `nomnom_reason` | `restaurants`: ожидается | `nomnom_reason` — утверждённый закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`. |
 | `nomnom_delivery_created_total` | Domain Events после commit Unit of Work (ObservedOutbox) | counter | — | `delivery`: ожидается | — |

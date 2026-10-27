@@ -109,7 +109,9 @@ export const messages = {
     "eta.shift": "+{minutes}\u00a0мин",
     "eta.shiftAnnounce": "Срок сдвинулся на {minutes} мин, теперь к {time}",
     "order.status.RECEIVED.label": "Заказ оформлен",
-    "order.status.RECEIVED.detail": "Передали заказ в ресторан",
+    "order.status.RECEIVED.detail": "Проверяем оплату",
+    "order.status.PAID.label": "Заказ оплачен",
+    "order.status.PAID.detail": "Передали заказ в ресторан",
     "order.status.CONFIRMED.label": "Ресторан принял заказ",
     "order.status.CONFIRMED.detail": "Заказ скоро начнут готовить",
     "order.status.PREPARING.label": "Готовится",
@@ -133,11 +135,15 @@ export const messages = {
     "order.end.DELIVERY_FAILED.title": "Доставка не удалась",
     "order.end.DELIVERY_FAILED.detail":
       "Курьер не смог передать заказ. Если нужна помощь, обратитесь в поддержку.",
+    "order.end.PAYMENT_DECLINED.title": "Оплата не прошла",
+    "order.end.PAYMENT_DECLINED.detail":
+      "Банк отклонил оплату, поэтому заказ не передан в ресторан. Попробуйте оформить его ещё раз.",
     "order.end.NOT_FULFILLED.title": "Заказ не выполнен",
     "order.end.NOT_FULFILLED.detail":
       "Мы не смогли выполнить заказ. Если нужна помощь, обратитесь в поддержку.",
     "order.milestones": "История",
     "order.milestone.PLACED": "Заказ оформлен",
+    "order.milestone.PAID": "Оплата подтверждена",
     "order.milestone.CONFIRMED": "Ресторан принял заказ",
     "order.milestone.PREPARATION_STARTED": "Начали готовить",
     "order.milestone.READY_FOR_PICKUP": "Заказ готов",
@@ -212,6 +218,7 @@ export const messages = {
     "board.customer": "Покупатель",
     "board.kitchen": "Кухня",
     "board.courier": "Курьер",
+    "board.payment": "Оплата",
     "board.customer.lead":
       "Выбирает ресторан, собирает корзину и оформляет заказ.",
     "board.kitchen.lead": "Принимает заказ, готовит и отдаёт курьеру.",
@@ -223,6 +230,7 @@ export const messages = {
     "board.orders.loading": "Загружаем заказ",
     "board.timeline.title": "Путь заказа",
     "board.step.received": "Оформлен",
+    "board.step.paid": "Оплачен",
     "board.step.confirmed": "Принят кухней",
     "board.step.preparing": "Готовится",
     "board.step.ready": "Готов к выдаче",
@@ -447,7 +455,9 @@ export const messages = {
     "eta.shift": "+{minutes}\u00a0min",
     "eta.shiftAnnounce": "Estimate moved by {minutes} min, now by {time}",
     "order.status.RECEIVED.label": "Order placed",
-    "order.status.RECEIVED.detail": "Sent to the restaurant",
+    "order.status.RECEIVED.detail": "Checking the payment",
+    "order.status.PAID.label": "Order paid",
+    "order.status.PAID.detail": "Sent to the restaurant",
     "order.status.CONFIRMED.label": "Restaurant accepted the order",
     "order.status.CONFIRMED.detail": "The kitchen will start soon",
     "order.status.PREPARING.label": "Preparing",
@@ -473,11 +483,15 @@ export const messages = {
     "order.end.DELIVERY_FAILED.title": "Delivery did not succeed",
     "order.end.DELIVERY_FAILED.detail":
       "The courier could not hand over the order. Contact support if you need help.",
+    "order.end.PAYMENT_DECLINED.title": "Payment declined",
+    "order.end.PAYMENT_DECLINED.detail":
+      "The bank declined the payment, so the order was not sent to the restaurant. Please try placing it again.",
     "order.end.NOT_FULFILLED.title": "Order not completed",
     "order.end.NOT_FULFILLED.detail":
       "We could not complete the order. Contact support if you need help.",
     "order.milestones": "History",
     "order.milestone.PLACED": "Order placed",
+    "order.milestone.PAID": "Payment confirmed",
     "order.milestone.CONFIRMED": "Restaurant accepted the order",
     "order.milestone.PREPARATION_STARTED": "Preparation started",
     "order.milestone.READY_FOR_PICKUP": "Order is ready",
@@ -554,6 +568,7 @@ export const messages = {
     "board.customer": "Customer",
     "board.kitchen": "Kitchen",
     "board.courier": "Courier",
+    "board.payment": "Payment",
     "board.customer.lead":
       "Picks a restaurant, fills the cart and places the order.",
     "board.kitchen.lead":
@@ -567,6 +582,7 @@ export const messages = {
     "board.orders.loading": "Loading the order",
     "board.timeline.title": "Order progress",
     "board.step.received": "Placed",
+    "board.step.paid": "Paid",
     "board.step.confirmed": "Accepted",
     "board.step.preparing": "Preparing",
     "board.step.ready": "Ready",

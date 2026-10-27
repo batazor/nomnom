@@ -4,6 +4,7 @@ import type { StatusIconName } from "./order-presentation";
 
 const paths: Record<StatusIconName, string> = {
   receipt: "M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4",
+  card: "M3 7h18v10H3zM3 11h18M7 15h3",
   check: "M5 12.5l4.5 4.5L19 7.5",
   pot: "M4 11h16M6 11v6a3 3 0 003 3h6a3 3 0 003-3v-6M9 7.5c0-1 1-1.5 1-2.5M14 7.5c0-1 1-1.5 1-2.5",
   bag: "M6 8h12l-1 12H7zM9 8a3 3 0 016 0",

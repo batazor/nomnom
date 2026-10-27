@@ -48,7 +48,6 @@ export const RESTAURANTS_USE_CASES = {
 
 /** Use cases of `cmd/restaurants-consumer` by cradle key. */
 export const CONSUMER_USE_CASES = {
-  receiveOrderRequest: command("receive_order_request"),
   recordPickup: command("record_pickup"),
 } as const;
 

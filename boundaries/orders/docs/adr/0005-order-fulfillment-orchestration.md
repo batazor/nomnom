@@ -38,9 +38,11 @@ Temporal не используется для:
 
 ### Старт
 
-Основной путь: Place Order атомарно сохраняет `Order` и `OrderPlaced` в Outbox; consumer `orders` получает собственное событие через Kafka и Inbox и выполняет `SignalWithStart(order:<order_id>, OrderPlaced, USE_EXISTING)`. Порядок start и первого Signal становится несущественным, а crash между commit и стартом не теряет процесс.
+Единственный путь: Place Order атомарно сохраняет `Order` и `OrderPlaced` в Outbox и Temporal не вызывает; consumer `orders.startfulfillment` (группа `orders`, `orders.v1.order-events`) получает собственное событие через Kafka и Inbox, в той же UoW читает `Order` и после commit выполняет `SignalWithStart(order:<order_id>, OrderPlaced, USE_EXISTING)`. Порядок start и первого Signal становится несущественным, а crash между commit заказа и стартом не теряет процесс. Дубликат Inbox тоже выполняет `SignalWithStart`: так лечится crash между commit Inbox и стартом, а повтор в работающий workflow отсекает дедупликация по `event_id`.
 
-Синхронный старт после commit (текущий `fulfillment.Starter` в `placeorder`) допустим как latency optimization: он повторяется с тем же Workflow ID и не заменяет `OrderPlaced` в Outbox. Старт до commit запрещён.
+Для `Order` в `completed` или `cancelled` сигнал не отправляется: история закрытого workflow могла уже уйти из namespace по retention, и `SignalWithStart` создал бы его заново (redrive DLQ, сброс offset). Ошибка Temporal — transient: сообщение не подтверждается и доставляется повторно, в DLQ не уходит. Собственные `OrderCompleted` и `OrderCancelled` того же топика consumer `orders` подтверждает явным no-op.
+
+Синхронный старт из Place Order (после commit или до него) не используется: он давал второй путь старта и терял процесс при crash между commit и стартом. В окне между commit заказа и стартом workflow Request Order Cancellation отвечает `UNAVAILABLE`, клиент повторяет запрос.
 
 ### Входящие события и идемпотентность
 
@@ -73,6 +75,8 @@ Activity, меняющая `orders`, вызывает handler слайса, ко
 
 Компенсации — orchestration-based Saga. Workflow ведёт журнал подтверждённых шагов и вызывает только применимые compensation Activities (`CancelRestaurantOrder`, `CancelPaymentAuthorization`, `RefundPayment`), каждая со стабильным idempotency key, timeout, retry policy и telemetry.
 
+Ресторан запрашивается только после оплаты: маршрут `AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → …`. Шаг `RecordPaymentAuthorization` вызывает use case слайса `order`, который записывает в `Order` Fulfillment Fact `payment_authorized` с моментом решения (время Workflow); повтор Activity — no-op, компенсации у шага нет — факт остаётся в `Order` как история. Restaurant Order создаёт только `RequestRestaurantOrder` (RPC `ReceiveOrderRequest`); `restaurants` не создаёт его из `OrderPlaced`. Иначе кухня видела неоплаченный заказ: её факты могли опередить шаг `RequestRestaurantOrder` (workflow отклонял их и падал по таймауту приёмки), а при отказе оплаты Saga не отменяла Restaurant Order, и кухня могла его приготовить. Поэтому при отказе Authorization Restaurant Order не существует и `CancelRestaurantOrder` не нужен. Цена — кухня видит заказ позже на время Authorization.
+
 ### State ownership
 
 | Что | Владелец |
@@ -94,16 +98,16 @@ API, Kafka consumer и Temporal worker — управляемые процесс
 Этот ADR не выбирает следующие решения; каждое принимается отдельным SDD change до реализации соответствующего шага:
 
 - продуктовые timeout Order Acceptance, Assignment, OperatorDecision, Preparation, Pickup и Delivery Completion и предел продления через `PreparationDelayed`;
-- момент Authorization/Capture и условия Refund вместо отмены Authorization;
+- момент Capture и условия Refund вместо отмены Authorization (Authorization идёт до запроса ресторана, см. [Saga](#saga));
 - параллельный запуск Assignment относительно Acceptance или Preparation;
 - policy каждого события, пришедшего после завершения workflow;
 - допускает ли `restaurants` отказ после Acceptance (workflow готов его принять);
 - Continue-As-New threshold и retention обработанных `event_id`.
 
-Логическая схема `Order placed → Authorize → Acceptance → Assignment → Preparation → Pickup → Capture → Delivery Completion → Completion` — карта coordination points, а не утверждённая последовательность.
+Логическая схема `Order placed → Authorize → Payment recorded → Acceptance → Assignment → Preparation → Pickup → Capture → Delivery Completion → Completion` — карта coordination points, а не утверждённая последовательность.
 
 ## Consequences
 
-Старт, входящие события, внешние эффекты и компенсации безопасны при at-least-once повторах и crash, а ответственность `payments`, `restaurants` и `delivery` не переходит в `orders`. `Order` остаётся source of truth и доступен без Temporal.
+Старт, входящие события, внешние эффекты и компенсации безопасны при at-least-once повторах и crash, а ответственность `payments`, `restaurants` и `delivery` не переходит в `orders`. `Order` остаётся source of truth и доступен без Temporal. У старта один путь — consumer собственного `OrderPlaced`; кухня получает только оплаченные заказы, и оплата видна в `Order` фактом `payment_authorized`.
 
-Цена: два уровня дедупликации, consumer собственного `OrderPlaced`, рост Event History на длинных заказах (потребуется Continue-As-New), versioning workflow code и replay tests в CI до первого production rollout. Откат worker допустим только к версии, совместимой с записанными histories.
+Цена: два уровня дедупликации; старт workflow зависит от Debezium и Kafka, поэтому при их задержке workflow, а с ним и кухня, стартует позже; кухня ждёт Authorization; рост Event History на длинных заказах (потребуется Continue-As-New), versioning workflow code и replay tests в CI до первого production rollout. Откат worker допустим только к версии, совместимой с записанными histories.

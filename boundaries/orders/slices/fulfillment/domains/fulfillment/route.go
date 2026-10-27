@@ -13,6 +13,7 @@ const (
 	StepCapturePayment             StepKind = "capture_payment"
 	StepCancelPaymentAuthorization StepKind = "cancel_payment_authorization"
 	StepRefundPayment              StepKind = "refund_payment"
+	StepRecordPaymentAuthorization StepKind = "record_payment_authorization"
 	StepRequestRestaurantOrder     StepKind = "request_restaurant_order"
 	StepCancelRestaurantOrder      StepKind = "cancel_restaurant_order"
 	StepCreateDelivery             StepKind = "create_delivery"
@@ -41,6 +42,11 @@ func (p *Process) Next() (step Step, ok bool) {
 		return Step{}, false
 	case !p.authorized:
 		return routeStep(StepAuthorizePayment), true
+	case !p.paymentRecorded:
+		// The restaurant gets the Order only after the payment is recorded in
+		// it: no kitchen fact can precede its step, and a declined payment
+		// leaves no Restaurant Order behind.
+		return routeStep(StepRecordPaymentAuthorization), true
 	case !p.restaurantRequested:
 		return routeStep(StepRequestRestaurantOrder), true
 	case p.accepted && !p.deliveryCreated:
@@ -69,6 +75,8 @@ func (p *Process) Confirm(step Step, approved bool, at time.Time) {
 			return
 		}
 		p.authorized = true
+	case StepRecordPaymentAuthorization:
+		p.paymentRecorded = true
 	case StepRequestRestaurantOrder:
 		p.restaurantRequested = true
 		p.acceptanceDeadline = at.Add(p.policy.AcceptanceTimeout)

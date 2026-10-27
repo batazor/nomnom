@@ -72,7 +72,7 @@ async function placeOrder(user: ReturnType<typeof userEvent.setup>) {
     }),
   );
   await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
-  return screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
+  return screen.findByRole("button", { name: /Кухня №8.*Оплачен/ });
 }
 
 // jsdom has no DataTransfer; the board only marks and reads the drag type.
@@ -130,6 +130,11 @@ describe("flow board", () => {
     expect(
       await screen.findByText("Дальше: Кухня — «Принят кухней»"),
     ).toBeVisible();
+    // AC-835: the order stands at the payment step of «Оплата», not of a column.
+    const timeline = screen.getByRole("region", { name: "Путь заказа" });
+    const paidStep = within(timeline).getByText("Оплачен").closest("li");
+    expect(paidStep).toHaveAttribute("data-state", "current");
+    expect(within(paidStep as HTMLElement).getByText("Оплата")).toBeVisible();
 
     // The kitchen moves the new order through its stages.
     for (const action of [
@@ -192,7 +197,7 @@ describe("flow board", () => {
     fireEvent.drop(column("Кухня"), { dataTransfer: dataTransfer() });
 
     expect(
-      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
     ).toBeInTheDocument();
   });
 
@@ -206,7 +211,7 @@ describe("flow board", () => {
       }),
     );
     await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
-    await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ });
+    await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ });
 
     const accept = await waitFor(selectedKitchenCard);
     await user.click(within(accept).getByRole("button", { name: "Принять" }));
@@ -237,7 +242,7 @@ describe("flow board", () => {
     );
     const panel = await screen.findByRole("dialog");
     expect(
-      await within(panel).findByRole("heading", { name: "Заказ оформлен" }),
+      await within(panel).findByRole("heading", { name: "Заказ оплачен" }),
     ).toBeVisible();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -251,7 +256,7 @@ describe("flow board", () => {
 
     renderBoard();
     expect(
-      await screen.findByRole("button", { name: /Кухня №8.*Оформлен/ }),
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
     ).toBeInTheDocument();
   });
 

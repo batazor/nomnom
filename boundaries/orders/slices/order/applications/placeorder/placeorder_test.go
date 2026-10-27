@@ -2,7 +2,6 @@ package placeorder_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -24,18 +22,16 @@ var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
 
 type env struct {
-	store    *repositorytest.Store
-	catalog  *fake.Catalog
-	workflow *fake.Workflow
-	handler  placeorder.Handler
+	store   *repositorytest.Store
+	catalog *fake.Catalog
+	handler placeorder.Handler
 }
 
 func newEnv(t *testing.T) env {
 	t.Helper()
 	e := env{
-		store:    repositorytest.Open(t),
-		catalog:  fake.NewCatalog(),
-		workflow: fake.NewWorkflow(),
+		store:   repositorytest.Open(t),
+		catalog: fake.NewCatalog(),
 	}
 	e.catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
 		MarketID: ordertest.MarketID(t),
@@ -57,7 +53,6 @@ func newEnv(t *testing.T) env {
 		Relationships:   e.store,
 		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
-		Workflow:        e.workflow,
 	})
 	return e
 }
@@ -78,7 +73,7 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 	result, err := e.handler.Handle(context.Background(), validInput())
 
 	require.NoError(t, err)
-	assert.Equal(t, placeorder.Result{OrderID: "order-1", FulfillmentStarted: true}, result)
+	assert.Equal(t, placeorder.Result{OrderID: "order-1"}, result)
 	placed, ok := e.store.Snapshot("order-1")
 	require.True(t, ok)
 	assert.Equal(t, order.StatePlaced, placed.State)
@@ -97,7 +92,6 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 		PlacedAt:     now,
 		Items:        placed.Items,
 	})[0], records[0])
-	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1"}}, e.workflow.Starts())
 
 	// ADR 18: the relationships of the new Order are synced by
 	// orders-consumer from RelationshipsChanged committed with it.
@@ -125,7 +119,6 @@ func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
 	assert.NotErrorIs(t, err, vo.ErrInvalidValue)
 	assert.Empty(t, e.store.OutboxRecords())
 	assert.Empty(t, e.store.RelationshipChanges())
-	assert.Empty(t, e.workflow.Starts())
 }
 
 // AC-101: unavailable items or limits reject placement without effects.
@@ -219,7 +212,7 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 	}
 }
 
-// AC-103: a repeated request returns the same Order and retries the start.
+// AC-103: a repeated request returns the same Order.
 func TestPlaceOrderIsIdempotentByKey(t *testing.T) {
 	e := newEnv(t)
 
@@ -228,36 +221,15 @@ func TestPlaceOrderIsIdempotentByKey(t *testing.T) {
 	second, err := e.handler.Handle(context.Background(), validInput())
 	require.NoError(t, err)
 
-	assert.Equal(t, placeorder.Result{OrderID: first.OrderID, Replayed: true, FulfillmentStarted: true}, second)
+	assert.Equal(t, placeorder.Result{OrderID: first.OrderID, Replayed: true}, second)
 	assert.Len(t, e.store.OutboxRecords(), 1)
 	assert.Equal(t, 1, e.catalog.Calls(), "a replay does not read the catalog again")
-	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1"}, {OrderID: "order-1"}}, e.workflow.Starts())
 
 	other := validInput()
 	other.IdempotencyKey = "key-2"
 	third, err := e.handler.Handle(context.Background(), other)
 	require.NoError(t, err)
 	assert.Equal(t, order.ID("order-2"), third.OrderID)
-}
-
-// AC-105: a failed start after commit keeps the Order; a replay retries it.
-func TestPlaceOrderKeepsOrderWhenStartFails(t *testing.T) {
-	e := newEnv(t)
-	e.workflow.FailStart(errors.New("temporal unavailable"))
-
-	result, err := e.handler.Handle(context.Background(), validInput())
-
-	require.NoError(t, err)
-	assert.Equal(t, placeorder.Result{OrderID: "order-1"}, result)
-	_, ok := e.store.Snapshot("order-1")
-	assert.True(t, ok)
-	assert.Len(t, e.store.OutboxRecords(), 1)
-
-	e.workflow.FailStart(nil)
-	replayed, err := e.handler.Handle(context.Background(), validInput())
-	require.NoError(t, err)
-	assert.True(t, replayed.FulfillmentStarted)
-	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1"}}, e.workflow.Starts())
 }
 
 func TestPlaceOrderPropagatesCatalogFailure(t *testing.T) {
@@ -276,7 +248,6 @@ func assertNothingPlaced(t *testing.T, e env) {
 	_, ok := e.store.Snapshot("order-1")
 	assert.False(t, ok)
 	assert.Empty(t, e.store.OutboxRecords())
-	assert.Empty(t, e.workflow.Starts())
 }
 
 // racingKeys hides a key committed by a concurrent request from the first
@@ -305,7 +276,6 @@ func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler
 		Relationships:   e.store,
 		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
-		Workflow:        e.workflow,
 	})
 }
 
@@ -320,8 +290,8 @@ func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
 	result, err := e.handlerWithKeys(&racingKeys{Store: e.store, hidden: 2}).Handle(context.Background(), validInput())
 
 	require.NoError(t, err)
-	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
-	assertNothingPlaced(t, env{store: e.store, workflow: fake.NewWorkflow()})
+	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true}, result)
+	assertNothingPlaced(t, env{store: e.store})
 }
 
 // takenKeys reports the key as taken without a committed Order behind it.
@@ -354,6 +324,6 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 	result, err := handler.Handle(context.Background(), validInput())
 
 	require.NoError(t, err)
-	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true, FulfillmentStarted: true}, result)
-	assertNothingPlaced(t, env{store: e.store, workflow: fake.NewWorkflow()})
+	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true}, result)
+	assertNothingPlaced(t, env{store: e.store})
 }

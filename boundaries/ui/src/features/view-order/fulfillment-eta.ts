@@ -104,6 +104,7 @@ export function activeStepEta(order: ViewedOrder): StepEta | null {
         order.expectedDeliveredAt,
       );
     case "RECEIVED":
+    case "PAID":
     case "DELIVERED":
     case "CANCELLED":
     case "FAILED":

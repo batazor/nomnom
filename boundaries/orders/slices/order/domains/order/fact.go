@@ -10,6 +10,9 @@ import (
 type FulfillmentFact string
 
 const (
+	// FactPaymentAuthorized is recorded by the fulfillment workflow after the
+	// approved Authorization of payments, before the restaurant is requested.
+	FactPaymentAuthorized  FulfillmentFact = "payment_authorized"
 	FactRestaurantAccepted FulfillmentFact = "restaurant_accepted"
 	FactRestaurantRejected FulfillmentFact = "restaurant_rejected"
 	FactPreparationStarted FulfillmentFact = "preparation_started"
@@ -21,6 +24,7 @@ const (
 )
 
 var allFacts = [...]FulfillmentFact{
+	FactPaymentAuthorized,
 	FactRestaurantAccepted,
 	FactRestaurantRejected,
 	FactPreparationStarted,
@@ -58,6 +62,16 @@ func isKnownFact(fact FulfillmentFact) bool {
 
 func (o *Order) RecordRestaurantRejection(occurredAt time.Time, reason string) (TransitionResult, error) {
 	return o.recordFact(FactRestaurantRejected, occurredAt, reason)
+}
+
+// RecordPaymentAuthorization records the approved Authorization. It is admitted
+// only in placed: the restaurant is requested after it, so a confirmed Order
+// already passed the payment.
+func (o *Order) RecordPaymentAuthorization(occurredAt time.Time) (TransitionResult, error) {
+	if o.state != StatePlaced {
+		return TransitionResult{}, InvalidTransition{From: o.state, Trigger: TriggerRecordFact}
+	}
+	return o.recordFact(FactPaymentAuthorized, occurredAt, "")
 }
 
 func (o *Order) RecordPreparationStarted(occurredAt time.Time) (TransitionResult, error) {

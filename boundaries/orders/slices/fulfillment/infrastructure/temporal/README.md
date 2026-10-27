@@ -11,7 +11,7 @@ Temporal-адаптер процесса Order Fulfillment по [ADR 5](../../..
 | `workflow.go` | Главный цикл: исполняет `Next` модели как Activity, ждёт `NextDeadline`, вызывает `Expire`, публикует `Stage`, исполняет план `Compensate` |
 | `signals.go` | Signals → `Apply`/`Decide` модели и журнал непринятых фактов; Update `CancellationRequested`: validator — `AdmitCancellation`, handler — `AcceptCancellation` |
 | `activities.go` | Activities: загрузить `Order` → построить запрос → вызвать порт соседа или use case → классифицировать ошибку; client-порты `Payments`, `Restaurants`, `Delivery` и их DTO — в [`applications/neighbours`](../../applications/neighbours/neighbours.go) |
-| `client.go` | Реализация порта [`fulfillment`](../../../order/applications/fulfillment/README.md) слайса `order` на Temporal client |
+| `client.go` | Реализация порта [`fulfillment`](../../../order/applications/fulfillment/README.md) слайса `order` на Temporal client: `Start` — `SignalWithStartWorkflow(order:<order_id>, OrderPlaced)` (`AlreadyStarted` — успех), `Notify`, Update отмены |
 | `searchattribute.go` | Проверка и регистрация Search Attribute `OrderFulfillmentStage` |
 | `register.go` | Регистрация workflow и Activities в worker |
 
@@ -20,7 +20,7 @@ Workflow не импортирует домен `Order` и handlers: Signals и 
 ## Маршрут
 
 ```text
-AuthorizePayment → RequestRestaurantOrder → [RestaurantOrderAccepted] → CreateDelivery
+AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → [RestaurantOrderAccepted] → CreateDelivery
 → [CourierAssignedToDelivery ∥ RestaurantOrderReady] → [DeliveryPickedUp] → CapturePayment
 → [DeliveryCompleted] → CompleteOrder
 ```
@@ -34,13 +34,13 @@ AuthorizePayment → RequestRestaurantOrder → [RestaurantOrderAccepted] → Cr
 | `PickupTimeout` | `pickup_timeout` |
 | `DeliveryTimeout` | `delivery_timeout` |
 
-Отрицательный итог запускает Saga по журналу шагов: `CancelDelivery` → `CancelRestaurantOrder` → `RefundPayment` после Capture или `CancelPaymentAuthorization`, затем `FailOrCancelOrder`. Шаг, закрытый владельцем (отказ ресторана, `PreparationFailed`, `DeliveryFailed`), не компенсируется.
+Отрицательный итог запускает Saga по журналу шагов: `CancelDelivery` → `CancelRestaurantOrder` → `RefundPayment` после Capture или `CancelPaymentAuthorization`, затем `FailOrCancelOrder`. Шаг, закрытый владельцем (отказ ресторана, `PreparationFailed`, `DeliveryFailed`), не компенсируется. Ресторан запрашивается только после записи оплаты в `Order`: при отказе Authorization Restaurant Order не создан и `CancelRestaurantOrder` не нужен; у `RecordPaymentAuthorization` компенсации нет.
 
 Update `CancellationRequested` принимается до Pickup; позже или во время завершения validator отвечает `CancellationRefused`, client-адаптер — `fulfillment.ErrCancellationRefused`.
 
 ## Activities
 
-Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`, прочитанного Activity на каждой попытке: так `market_id` Order ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) попадает в `payments.CreatePayment` и `delivery.CreateDelivery`. Данные `Order` не добавляются во вход (`Input`, `StepInput`) и состояние workflow: в Event History уже начатых workflow таких полей нет, а сохранённый `Order` их имеет, поэтому replay детерминирован без versioning. Отказ платежа — `PaymentDecision`, а не ошибка. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
+Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`, прочитанного Activity на каждой попытке: так `market_id` Order ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) попадает в `payments.CreatePayment` и `delivery.CreateDelivery`. Данные `Order` не добавляются во вход (`Input`, `StepInput`) и состояние workflow: в Event History уже начатых workflow таких полей нет, а сохранённый `Order` их имеет, поэтому replay детерминирован без versioning. Отказ платежа — `PaymentDecision`, а не ошибка. `RecordPaymentAuthorization` вызывает use case [Record Payment Authorization](../../../order/applications/recordpaymentauthorization/README.md) с `StepInput.DecidedAt` (время Workflow, как у `CompleteOrder`); повтор после commit — no-op. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
 
 ## Worker
 
@@ -48,5 +48,4 @@ Update `CancellationRequested` принимается до Pickup; позже и
 
 ## Не реализовано
 
-- Kafka consumers, вызывающие `Notifier` и `StartFromOrderPlaced`;
 - replay-тесты на записанных histories; изменение кода workflow несовместимо с replay ранее начатых workflow — перед выкаткой в kind их нужно дождаться или прервать.

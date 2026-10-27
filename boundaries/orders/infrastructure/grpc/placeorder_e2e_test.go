@@ -164,7 +164,6 @@ func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
 	response, err := env.client.PlaceOrder(asBFF(env.vectors.DelegateToken, env.vectors.Tokens["valid"]), placeRequest())
 	require.NoError(t, err)
 	assert.Equal(t, "order-1", response.GetOrderId())
-	assert.True(t, response.GetFulfillmentStarted())
 
 	snapshot, ok := env.store.Snapshot("order-1")
 	require.True(t, ok)

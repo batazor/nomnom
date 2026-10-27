@@ -29,6 +29,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -191,7 +192,10 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	}
 }
 
-func handlersOf(store *repositorytest.Store, workflow fulfillment.Notifier) ordermessaging.Handlers {
+func handlersOf(store *repositorytest.Store, workflow interface {
+	fulfillment.Notifier
+	fulfillment.Starter
+}) ordermessaging.Handlers {
 	return ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
@@ -205,6 +209,7 @@ func handlersOf(store *repositorytest.Store, workflow fulfillment.Notifier) orde
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
 		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, fake.NewRelationshipSync(), store),
+		StartFulfillment:         startfulfillment.NewHandler(store, store, store, workflow),
 	}
 }
 

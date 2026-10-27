@@ -25,9 +25,9 @@ func TestProcessRunsRouteToCompletion(t *testing.T) {
 	s.run()
 
 	assert.Equal(t, []string{
-		"authorize_payment", "request_restaurant_order", "create_delivery", "capture_payment", "complete_order",
+		"authorize_payment", "record_payment_authorization", "request_restaurant_order", "create_delivery", "capture_payment", "complete_order",
 	}, keysOf(s.steps))
-	assert.Equal(t, fulfillment.StageCompleting, s.steps[4].Stage, "completion runs in its own stage")
+	assert.Equal(t, fulfillment.StageCompleting, s.steps[5].Stage, "completion runs in its own stage")
 	assert.True(t, s.p.Completed())
 	assert.Equal(t, fulfillment.StageCompleted, s.p.Stage())
 	outcome, code := s.outcome()

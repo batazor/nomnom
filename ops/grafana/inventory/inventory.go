@@ -263,7 +263,7 @@ var Metrics = []Metric{
 	{Name: "nomnom_orders_fulfillment_duration_seconds", Section: "domain", Type: Histogram, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(OrdersWorker)},
 	{Name: "nomnom_orders_in_state", Section: "domain", Type: Gauge, Source: "projection/polling", Labels: []string{"nomnom_order_state"}, Status: expected(Orders), Note: "Требует отдельной projection; PromQL по counters не эмулируется."},
 	// domain: restaurants
-	{Name: "nomnom_restaurants_orders_received_total", Section: "domain", Type: Counter, Source: "Receive Order Request после commit (`created: true`)", Status: expected(Restaurants), Note: "Пишут `restaurants` (gRPC) и `restaurants-consumer` (OrderPlaced): каждый заказ один раз, на dashboard — сумма обоих."},
+	{Name: "nomnom_restaurants_orders_received_total", Section: "domain", Type: Counter, Source: "Receive Order Request после commit (`created: true`)", Status: expected(Restaurants), Note: "Пишет `restaurants`: Restaurant Order создаёт только gRPC ReceiveOrderRequest workflow `orders` после оплаты."},
 	{Name: "nomnom_restaurants_orders_accepted_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedDatabaseUnitOfWork / ObservedOutbox)", Status: expected(Restaurants)},
 	{Name: "nomnom_restaurants_orders_rejected_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedDatabaseUnitOfWork / ObservedOutbox)", Labels: []string{"nomnom_reason"}, Status: expected(Restaurants), Note: "`nomnom_reason` — утверждённый закрытый набор `too_busy | item_unavailable | restaurant_closed`, остальное `other`."},
 	// domain: delivery

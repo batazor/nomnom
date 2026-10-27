@@ -13,8 +13,9 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 | --- | --- | --- |
 | `orders.restaurant-order-events` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → `confirmorder`; `RestaurantOrderRejected` → `rejectorder`; `PreparationStarted` → `recordpreparationstarted`; `RestaurantOrderReady` → `recordorderready`; `PreparationDelayed` → `recordpreparationdelay`; `PreparationFailed` → `relaypreparationissue` |
 | `orders.delivery-events` | `delivery.v1.delivery-events` | `CourierAssignedToDelivery` → `recordcourierassignment`; `CourierUnassignedFromDelivery`, `DeliveryCancelled` → `recordcourierrelease`; `DeliveryPickedUp` → `recordpickup`; `DeliveryCompleted` → `recorddeliverycompletion`; `DeliveryFailed` → `recorddeliveryfailure` |
+| `orders.order-events` | `orders.v1.order-events` (собственный, [ADR 5](../../../../docs/adr/0005-order-fulfillment-orchestration.md#старт)) | `OrderPlaced` → `startfulfillment` (`SignalWithStart` workflow; ошибка Temporal — transient); `OrderCompleted`, `OrderCancelled` — явный no-op ack, иначе `rejectUnknownEvents` отправил бы их в `orders.v1.order-events.dlq` |
 
-Имена топиков предварительные до integration specification `restaurants` и `delivery`. Контракты — `events.proto` модулей publisher'ов; Go-типы генерируются в `gen/` (`make proto-generate`).
+Имена топиков предварительные до integration specification `restaurants` и `delivery`. Группа `orders.order-events` впервые читает топик с `KAFKA__INITIAL_OFFSET: oldest`: завершённые заказы пропускаются, заказы без workflow запускаются. Контракты — `events.proto` модулей publisher'ов; Go-типы генерируются в `gen/` (`make proto-generate`).
 
 ## Файлы
 

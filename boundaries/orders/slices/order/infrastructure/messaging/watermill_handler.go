@@ -12,6 +12,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"google.golang.org/protobuf/proto"
 
+	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
+
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
@@ -27,6 +29,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationstarted"
 	"nomnom/orders/slices/order/applications/rejectorder"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
+	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 )
@@ -52,6 +55,7 @@ type Handlers struct {
 	RecordDeliveryCompletion application.Handler[recorddeliverycompletion.Input, recorddeliverycompletion.Result]
 	RecordDeliveryFailure    application.Handler[recorddeliveryfailure.Input, recorddeliveryfailure.Result]
 	SyncOrderRelationships   application.Handler[syncorderrelationships.Input, syncorderrelationships.Result]
+	StartFulfillment         application.Handler[startfulfillment.Input, startfulfillment.Result]
 }
 
 // Streams returns one handler group per consumed stream.
@@ -79,6 +83,18 @@ func Streams(h Handlers) []messaging.Stream {
 				handle(h.RecordPickup.Handle, toRecordPickup),
 				handle(h.RecordDeliveryCompletion.Handle, toRecordDeliveryCompletion),
 				handle(h.RecordDeliveryFailure.Handle, toRecordDeliveryFailure),
+			},
+		},
+		{
+			// Own Integration Events of orders (ADR 5): OrderPlaced starts the
+			// workflow; OrderCompleted and OrderCancelled are acknowledged
+			// explicitly, otherwise rejectUnknownEvents would dead-letter them.
+			Group: "orders.order-events",
+			Topic: outbound.OrderEventsTopic,
+			Handlers: []cqrs.GroupEventHandler{
+				handle(h.StartFulfillment.Handle, toStartFulfillment),
+				acknowledge[ordersv1.OrderCompleted](),
+				acknowledge[ordersv1.OrderCancelled](),
 			},
 		},
 		{
@@ -119,6 +135,11 @@ func handle[E any, PE interface {
 	})
 }
 
+// acknowledge confirms an event of the stream that needs no action.
+func acknowledge[E any]() cqrs.GroupEventHandler {
+	return cqrs.NewGroupEventHandler(func(context.Context, *E) error { return nil })
+}
+
 // isDuplicate reports an Inbox duplicate of the reflecting use cases, whose
 // Result has the shape of fulfillment.Reflection.
 func isDuplicate(out any) bool {
@@ -147,6 +168,8 @@ func isDuplicate(out any) bool {
 		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
 	case recorddeliveryfailure.Result:
 		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+	case startfulfillment.Result:
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	default:
 		return false
 	}

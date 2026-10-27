@@ -59,9 +59,9 @@ message PlaceOrderResponse {
   string order_id = 1;
   // True when idempotency_key already identified a placed Order.
   bool replayed = 2;
-  // False when the fulfillment start failed after commit; repeating the
-  // request with the same idempotency_key retries the start.
-  bool fulfillment_started = 3;
+  // The fulfillment is started by the consumer of OrderPlaced, not by PlaceOrder.
+  reserved 3;
+  reserved "fulfillment_started";
 }
 
 message RequestOrderCancellationRequest {

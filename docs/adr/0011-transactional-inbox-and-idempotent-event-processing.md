@@ -160,7 +160,11 @@ Inbox решает дедупликацию, но не решает наруше
 
 ### Temporal в `orders`
 
-Temporal Activity retries не заменяют Inbox Pattern. Inbox используется для Kafka integration events, а Temporal имеет собственную модель durable execution. Событие Kafka, которое запускает workflow или отправляет ему Signal, сначала проходит соответствующую идемпотентную boundary. Повторный Kafka event не создаёт второй логический workflow и не применяет Signal повторно, если это нарушает бизнес-семантику. Стратегия связывания `event_id`, Workflow ID и Signal ID определяется при реализации соответствующего slice.
+Temporal Activity retries не заменяют Inbox Pattern. Inbox используется для Kafka integration events, а Temporal имеет собственную модель durable execution. Событие Kafka, которое запускает workflow или отправляет ему Signal, сначала проходит соответствующую идемпотентную boundary. Повторный Kafka event не создаёт второй логический workflow и не применяет Signal повторно, если это нарушает бизнес-семантику. Связывание в `orders` ([ADR 5 orders](../../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md)):
+
+- Workflow ID — `order:<order_id>`: один workflow на `Order`, повторный старт адресует существующий (`USE_EXISTING`).
+- Старт — только consumer `orders.startfulfillment` собственного `OrderPlaced`: Inbox и чтение `Order` в одной UoW, после commit — `SignalWithStart(order:<order_id>, OrderPlaced)`. Дубликат Inbox тоже выполняет `SignalWithStart` (лечит crash между commit Inbox и стартом); для завершённого `Order` старт не выполняется; ошибка Temporal оставляет сообщение неподтверждённым.
+- Имя Signal совпадает с именем Integration Event, в Signal передаётся `event_id`; workflow хранит обработанные `event_id` и превращает повтор Signal в no-op. Отдельного Signal ID нет.
 
 ### Retention
 
@@ -174,4 +178,4 @@ Inbox не обязан храниться бесконечно. Retention уч�
 
 Каждый consumer, изменяющий состояние, получает дополнительную запись в своей транзакции и уникальное ограничение в хранилище. Нужны retention и очистка Inbox, а также тесты на повторную и параллельную доставку. Хранилище consumer должно поддерживать атомарную запись Inbox и business state; для MongoDB это требует транзакций, а для ещё не выбранных хранилищ `delivery` и `payments` — проверки эквивалентной гарантии.
 
-Гарантия effectively-once ограничена локальной транзакцией consumer. Внешние побочные эффекты, poison messages, порядок событий и связывание с Temporal требуют отдельных механизмов и не решаются этим ADR.
+Гарантия effectively-once ограничена локальной транзакцией consumer. Внешние побочные эффекты, poison messages и порядок событий требуют отдельных механизмов и не решаются этим ADR; связывание с Temporal в `orders` описано выше и в ADR 5 orders.

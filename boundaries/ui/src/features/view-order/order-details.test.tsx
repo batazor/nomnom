@@ -271,6 +271,7 @@ describe("order updates", () => {
       await screen.findByRole("heading", { level: 3, name: "Заказ оформлен" }),
     ).toBeInTheDocument();
     for (const label of [
+      "Заказ оплачен",
       "Ресторан принял заказ",
       "Готовится",
       "Готов",
@@ -288,6 +289,25 @@ describe("order updates", () => {
     expect(requests.value).toBe(delivered);
     // The first load and one refetch when the stream connects (ADR 36).
     expect(delivered).toBe(2);
+  });
+});
+
+// AC-833, AC-834: the payment is a progress step, a declined one replaces it.
+describe("payment step", () => {
+  it("marks the paid step and keeps the restaurant next", async () => {
+    renderOrder("order-paid");
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Заказ оплачен" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Оплата подтверждена")).toBeInTheDocument();
+  });
+
+  it("explains a declined payment instead of the progress", async () => {
+    renderOrder("order-payment-declined");
+
+    expect(await screen.findByText("Оплата не прошла")).toBeInTheDocument();
+    expect(document.getElementById("order-progress-title")).toBeNull();
   });
 });
 
@@ -485,7 +505,7 @@ describe("order page quality", () => {
     expect(cancel).toHaveFocus();
 
     const progress = screen.getAllByRole("list")[0];
-    expect(within(progress).getAllByRole("listitem")).toHaveLength(6);
+    expect(within(progress).getAllByRole("listitem")).toHaveLength(7);
 
     const result = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },

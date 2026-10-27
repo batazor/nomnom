@@ -56,6 +56,7 @@ func newHarness(t *testing.T) *harness {
 	for _, name := range []string{
 		temporal.ActivityCancelPaymentAuthorization,
 		temporal.ActivityRefundPayment,
+		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCancelRestaurantOrder,
 		temporal.ActivityCreateDelivery,
@@ -116,6 +117,7 @@ func TestWorkflowCompletesOrder(t *testing.T) {
 	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCompleted}, result)
 	assert.Equal(t, []string{
 		temporal.ActivityAuthorizePayment,
+		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
 		temporal.ActivityCapturePayment,
@@ -123,14 +125,16 @@ func TestWorkflowCompletesOrder(t *testing.T) {
 	}, h.calls)
 	assert.Equal(t, []temporal.StepInput{
 		{OrderID: orderID, IdempotencyKey: "order:order-1:authorize_payment"},
+		{OrderID: orderID, IdempotencyKey: "order:order-1:record_payment_authorization", DecidedAt: h.steps[1].DecidedAt},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:request_restaurant_order"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:create_delivery"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:capture_payment"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:complete_order", DecidedAt: h.steps[len(h.steps)-1].DecidedAt},
 	}, h.steps)
-	// The completion moment is the workflow time after Delivery Completion.
+	// The payment and completion moments are the workflow time of their steps.
+	assert.False(t, h.steps[1].DecidedAt.IsZero())
 	assert.False(t, h.steps[len(h.steps)-1].DecidedAt.IsZero())
-	for _, step := range h.steps[:len(h.steps)-1] {
+	for _, step := range append([]temporal.StepInput{h.steps[0]}, h.steps[2:len(h.steps)-1]...) {
 		assert.True(t, step.DecidedAt.IsZero(), step.IdempotencyKey)
 	}
 }
@@ -209,6 +213,7 @@ func TestWorkflowEscalatesAssignmentToOperator(t *testing.T) {
 	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCancellation, ReasonCode: temporal.ReasonOperatorDecision}, result)
 	assert.Equal(t, []string{
 		temporal.ActivityAuthorizePayment,
+		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
 		temporal.ActivityReplanDelivery,
@@ -218,8 +223,8 @@ func TestWorkflowEscalatesAssignmentToOperator(t *testing.T) {
 		temporal.ActivityCancelPaymentAuthorization,
 		temporal.ActivityFailOrCancelOrder,
 	}, h.calls)
-	assert.Equal(t, "order:order-1:replan_delivery_1", h.steps[3].IdempotencyKey)
-	assert.Equal(t, "order:order-1:replan_delivery_2", h.steps[4].IdempotencyKey)
+	assert.Equal(t, "order:order-1:replan_delivery_1", h.steps[4].IdempotencyKey)
+	assert.Equal(t, "order:order-1:replan_delivery_2", h.steps[5].IdempotencyKey)
 }
 
 // AC-439: a Delivery failure Signal after Capture runs the refund Saga.
@@ -236,6 +241,7 @@ func TestWorkflowRefundsAfterCapture(t *testing.T) {
 	assert.Equal(t, temporal.ReasonDeliveryFailed, result.ReasonCode)
 	assert.Equal(t, []string{
 		temporal.ActivityAuthorizePayment,
+		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
 		temporal.ActivityCapturePayment,
@@ -269,6 +275,7 @@ func TestWorkflowCancelsOnUpdate(t *testing.T) {
 	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCancellation, ReasonCode: temporal.ReasonCustomerRequested}, result)
 	assert.Equal(t, []string{
 		temporal.ActivityAuthorizePayment,
+		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCancelRestaurantOrder,
 		temporal.ActivityCancelPaymentAuthorization,
