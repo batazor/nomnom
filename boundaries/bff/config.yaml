@@ -39,11 +39,16 @@ headers:
       - op: propagate
         named: X-Nomnom-Market
 
-# ADR 36: Cosmo Streams consume Order Change Notifications from Kafka; an
-# unreachable broker stops the Router (skip_unavailable_providers: false).
+# ADR 36: Cosmo Streams consume Order Change Notifications from Kafka and
+# courier positions from the Valkey of delivery (FR-668); an unreachable
+# provider stops the Router (skip_unavailable_providers: false).
 events:
   providers:
     kafka:
       - id: default
         brokers:
           - localhost:9092
+    redis:
+      - id: tracks
+        urls:
+          - "redis://localhost:6379"

@@ -15,6 +15,7 @@ import {
   preparationDelayed,
   restaurantFixtures,
 } from "./fixtures";
+import { courierMoves } from "./courier-tracks";
 import { createFulfillment, mockCourierId } from "./fulfillment";
 import { createChangeFeed } from "./order-changes";
 
@@ -345,6 +346,18 @@ export function createMockStore({
           throw bffError("NotFound", "courier pool not found");
         return { courierPoolChanged: pool };
       }),
+    // Like the Router: the courier positions of a tracking channel; an
+    // unknown channel never yields.
+    courierMoved: ({ channel }: { channel: string }) => {
+      const order = [liveOrder(), ...state.orders.values()].find(
+        (candidate) => candidate.tracking?.channel === channel,
+      );
+      return courierMoves(
+        channel,
+        order?.tracking ? order.status === "PICKED_UP" : null,
+        () => clock(),
+      );
+    },
     courierChanged: ({ id }: { id: string }) => {
       if (id !== mockCourierId) throw bffError("NotFound", "courier not found");
       return changes.subscribe(() => ({

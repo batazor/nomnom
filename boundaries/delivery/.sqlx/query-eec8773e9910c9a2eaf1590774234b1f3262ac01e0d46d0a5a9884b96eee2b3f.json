@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO deliveries (id, order_id, courier_id,\n                 state, failure_reason, authorization_revision, version,\n                 created_at, failure_detail, expected_pickup_at, expected_delivered_at,\n                 market_id, pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Text",
+        "Int8",
+        "Int8",
+        "Text",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eec8773e9910c9a2eaf1590774234b1f3262ac01e0d46d0a5a9884b96eee2b3f"
+}

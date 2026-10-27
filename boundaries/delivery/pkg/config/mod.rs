@@ -2,6 +2,7 @@ pub mod database;
 mod infrastructure;
 mod load;
 mod simulator;
+mod tracking;
 
 use std::time::Duration;
 
@@ -13,10 +14,16 @@ pub use load::load;
 #[cfg(test)]
 use load::{
     configure_identity, configure_reconciler, configure_settings, configure_simulator,
-    configure_spicedb, load_from,
+    configure_spicedb, configure_tracking, load_from,
 };
 pub use simulator::{
-    SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV, SimulatorConfig,
+    SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV,
+    SIMULATOR_TRACK_INTERVAL_ENV, SimulatorConfig,
+};
+pub use tracking::{
+    TRACKING_BLOCK_METERS_ENV, TRACKING_CITY_BLOCKS_ENV, TRACKING_CITY_ORIGIN_LATITUDE_ENV,
+    TRACKING_CITY_ORIGIN_LONGITUDE_ENV, TRACKING_PERSIST_INTERVAL_ENV, TrackingConfig,
+    VALKEY_URL_ENV, ValkeyConfig,
 };
 
 const CONFIG_KEY_PORT: &str = "server.port";
@@ -177,7 +184,7 @@ pub struct IdentityConfig {
     pub user_delegates: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct AppConfig {
     pub server: ServerConfig,
@@ -189,6 +196,8 @@ pub struct AppConfig {
     pub offers: OffersConfig,
     pub database: database::Config,
     pub simulator: SimulatorConfig,
+    pub tracking: TrackingConfig,
+    pub valkey: ValkeyConfig,
 }
 
 impl ShutdownConfig {

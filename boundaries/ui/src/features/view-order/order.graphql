@@ -43,6 +43,36 @@ fragment ViewedOrder on Order {
   courier {
     name
   }
+  # Live tracking of the courier, null unless the delivery is assigned or
+  # picked up (FR-663).
+  tracking {
+    channel
+    city {
+      origin {
+        latitude
+        longitude
+      }
+      blocks
+      blockMeters
+    }
+    pickup {
+      latitude
+      longitude
+    }
+    dropoff {
+      latitude
+      longitude
+    }
+    courierPosition {
+      ...TrackedPosition
+    }
+  }
+}
+
+fragment TrackedPosition on CourierPosition {
+  latitude
+  longitude
+  recordedAt
 }
 
 query ViewOrder($id: ID!) {
@@ -54,6 +84,14 @@ query ViewOrder($id: ID!) {
 subscription OrderChanged($id: ID!) {
   orderChanged(id: $id) {
     ...ViewedOrder
+  }
+}
+
+# Every new position of the courier; channel is Order.tracking.channel
+# (FR-668). Nothing is sent before the courier moves.
+subscription CourierMoved($channel: ID!) {
+  courierMoved(channel: $channel) {
+    ...TrackedPosition
   }
 }
 

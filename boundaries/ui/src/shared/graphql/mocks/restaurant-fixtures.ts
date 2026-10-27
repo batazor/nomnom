@@ -3,6 +3,7 @@ import type {
   OrderMilestoneKind,
   OrderStatus,
 } from "../generated/graphql";
+import type { MockTracking } from "./courier-tracks";
 
 // Development-only data shaped like the public schema. It is not a source of
 // business rules: the scenarios are fixed snapshots of the order lifecycle.
@@ -71,6 +72,9 @@ export type MockOrder = {
   // Courier delivering the order, null until assigned (FR-626); absent on
   // the fixed scenarios, which have no courier.
   courier?: { name: string } | null;
+  // Live tracking while the courier is assigned and the order is active,
+  // null otherwise (FR-663); absent where the BFF leaves it null.
+  tracking?: MockTracking | null;
 };
 
 const currency = "RUB";

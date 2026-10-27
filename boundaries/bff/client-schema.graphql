@@ -225,6 +225,66 @@ type Order {
   delivery; order(id) and orderChanged resolve it, customerOrders leaves it null
   """
   courier: OrderCourier
+  """
+  Live tracking of the courier, null unless the delivery is assigned or picked
+  up; order(id) and orderChanged resolve it, customerOrders leaves it null
+  """
+  tracking: OrderTracking
+}
+
+"""
+Live tracking of the courier of an order: the Virtual City, the pickup and
+dropoff points and the courier position
+"""
+type OrderTracking {
+  """Channel of the courierMoved subscription; only order viewers get it"""
+  channel: ID!
+  """Grid of streets the points lie on"""
+  city: VirtualCity!
+  """Where the courier picks the order up"""
+  pickup: GeoPoint!
+  """Where the courier hands the order over"""
+  dropoff: GeoPoint!
+  """
+  Last stored courier position, up to a few seconds old; null while unknown
+  """
+  courierPosition: CourierPosition
+}
+
+"""
+Square grid of blocks x blocks blocks of blockMeters meters from the
+south-west corner origin
+"""
+type VirtualCity {
+  """South-west corner"""
+  origin: GeoPoint!
+  """Blocks per side"""
+  blocks: Int!
+  """Side of a block in meters"""
+  blockMeters: Float!
+}
+
+"""Point in WGS 84 degrees"""
+type GeoPoint {
+  """Latitude in degrees"""
+  latitude: Float!
+  """Longitude in degrees"""
+  longitude: Float!
+}
+
+"""
+Position of the courier of an order; courierMoved pushes every new one. All
+fields form the key, so the router takes them from the event itself
+"""
+type CourierPosition {
+  """Channel of the tracking the position belongs to"""
+  channel: ID!
+  """Latitude in degrees"""
+  latitude: Float!
+  """Longitude in degrees"""
+  longitude: Float!
+  """Moment delivery recorded the position in RFC 3339"""
+  recordedAt: String!
 }
 
 """Courier of an order as its customer sees it"""
@@ -753,4 +813,11 @@ type Subscription {
   other than the Market of the request, gets an error event instead of data.
   """
   courierPoolChanged(marketId: ID!): CourierPool!
+  """
+  Every new position of the courier of an order; channel is
+  Order.tracking.channel, the capability that order(id) hands out to whoever
+  may view the order. Nothing is sent until the courier moves: query
+  order(id) first and take tracking.courierPosition.
+  """
+  courierMoved(channel: ID!): CourierPosition!
 }

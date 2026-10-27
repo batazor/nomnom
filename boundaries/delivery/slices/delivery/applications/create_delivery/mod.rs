@@ -2,20 +2,22 @@
 //! an order in the Market of the order (ADR 41). Idempotent by `OrderId`: a
 //! repeat with the same Market replays the Delivery, a repeat with another
 //! Market is rejected — the Market of a Delivery never changes. Does not start
-//! the courier search. The
-//! new Delivery and its `DeliveryCreated` fact are written in one Unit of Work;
-//! a replay writes nothing.
+//! the courier search. A new Delivery gets random pickup and dropoff points
+//! of the Virtual City and a Tracking Channel (FR-659); a replay keeps the
+//! stored ones. The new Delivery and its `DeliveryCreated` fact are written
+//! in one Unit of Work; a replay writes nothing.
 
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::domains::delivery::{
-    Delivery, DeliveryId, DeliveryRepository, OrderId,
+    Delivery, DeliveryId, DeliveryRepository, OrderId, VirtualCity,
 };
 
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
+use super::tracking::{RandomSource, new_tracking};
 use super::{market_id, order_id};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,6 +41,8 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub outbox: &'a dyn DeliveryOutbox,
     pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
+    pub city: &'a VirtualCity,
+    pub random: &'a dyn RandomSource,
 }
 
 /// Failure of the insert transaction; a uniqueness conflict is a lost race
@@ -80,12 +84,15 @@ impl<U: UnitOfWork> Handler<'_, U> {
         if let Some(existing) = self.deliveries.find_by_order(&order_id)? {
             return replay(&existing, &market_id);
         }
+        let tracking = new_tracking(self.city, self.random)
+            .map_err(|error| DeliveryApplicationError::DependencyUnavailable(error.to_string()))?;
         let mut delivery = Delivery::create(
             DeliveryId::new(self.ids.next_id()),
             order_id.clone(),
             market_id.clone(),
             self.clock.now_epoch_seconds(),
-        );
+        )
+        .with_tracking(Some(tracking));
         let delivery_id = delivery.id().clone();
         let inserted = self.unit_of_work.run(|| {
             self.deliveries.add(&delivery)?;
@@ -141,7 +148,9 @@ mod tests {
     use crate::slices::courier::domains::courier::MarketIdError;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
     use crate::slices::delivery::applications::outbox::OutboxMessage;
-    use crate::slices::delivery::applications::test_support::{NOW, World, berlin, service};
+    use crate::slices::delivery::applications::test_support::{
+        NOW, World, berlin, service, tracking,
+    };
     use crate::slices::delivery::domains::delivery::{DomainEvent, State};
 
     fn input() -> Input {
@@ -163,6 +172,8 @@ mod tests {
             outbox: &world.store,
             ids: &world.ids,
             clock: &world.clock,
+            city: &world.city,
+            random: &world.random,
         }
     }
 
@@ -188,6 +199,8 @@ mod tests {
         assert_eq!(delivery.order_id(), &OrderId::new("order-1"));
         assert_eq!(delivery.market_id(), &berlin());
         assert_eq!(delivery.created_at_epoch_seconds(), Some(NOW));
+        // AC-872
+        assert_eq!(delivery.tracking(), Some(&tracking()));
         assert_eq!(
             world.store.outbox_messages(),
             vec![OutboxMessage::delivery(DomainEvent::DeliveryCreated {
@@ -223,8 +236,10 @@ mod tests {
                 .map(|delivery| delivery.id().clone()),
             Some(DeliveryId::new("generated-1"))
         );
-        // The replay records no second `DeliveryCreated`.
+        // The replay records no second `DeliveryCreated`; AC-873: the points
+        // and the channel stay.
         assert_eq!(world.store.outbox_messages().len(), 1);
+        assert_eq!(world.delivery("generated-1").tracking(), Some(&tracking()));
     }
 
     /// ADR 41: the Market of a Delivery is immutable, so a repeat for the

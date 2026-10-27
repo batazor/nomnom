@@ -9,13 +9,16 @@ use shaku::{HasComponent, module};
 
 #[cfg(test)]
 use crate::infrastructure::memory::SequentialIdGenerator;
-use crate::infrastructure::memory::{RecordingRelationships, StaticCourierLocator};
+use crate::infrastructure::memory::{
+    FixedRandomSource, RecordingPositionPublisher, RecordingRelationships, StaticCourierLocator,
+};
 #[cfg(test)]
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
+use crate::slices::delivery::domains::delivery::VirtualCity;
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
@@ -23,7 +26,7 @@ use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
 #[cfg(test)]
 use super::infrastructure::local_authorization;
 use super::infrastructure::{
-    InfrastructureModule, ProcessAuthorization, ProcessStores, infrastructure,
+    InfrastructureModule, ProcessAuthorization, ProcessStores, ProcessTracking, infrastructure,
 };
 
 module! {
@@ -91,6 +94,19 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
     }
 }
 
+/// Live tracking тестовых графов: Virtual City 12 × 12 кварталов по 150 м
+/// у позиций курьеров kind, запись каждой позиции, записывающий publisher и
+/// фиксированная случайность.
+#[must_use]
+pub fn test_tracking() -> ProcessTracking {
+    ProcessTracking {
+        city: VirtualCity::new(52.515, 13.385, 12, 150.0).expect("test virtual city"),
+        persist_interval_seconds: 0,
+        publisher: Box::new(RecordingPositionPublisher::new()),
+        random: Box::new(FixedRandomSource::new((1..=24).collect())),
+    }
+}
+
 /// Тестовый граф над заданными хранилищами (PostgreSQL в integration-тестах)
 /// с UUID id, пустым locator и выбранной авторизацией.
 #[must_use]
@@ -104,6 +120,7 @@ pub fn build_over(
         Box::new(StaticCourierLocator::new(Vec::new())),
         authorization,
         Box::new(RecordingRelationships::new()),
+        test_tracking(),
     ))
 }
 
@@ -120,6 +137,7 @@ pub(crate) fn build_with_locator(
         Box::new(locator),
         Box::new(local_authorization()),
         Box::new(RecordingRelationships::new()),
+        test_tracking(),
     ))
 }
 
@@ -140,6 +158,7 @@ pub(crate) fn build_over_store(
         )),
         authorization,
         relationships,
+        test_tracking(),
     ))
 }
 

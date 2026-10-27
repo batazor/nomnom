@@ -1,0 +1,136 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.id, d.courier_id AS \"courier_id!\", d.state, d.pickup_x, d.pickup_y,\n                 d.dropoff_x, d.dropoff_y, d.tracking_channel,\n                 p.latitude AS \"latitude?\", p.longitude AS \"longitude?\"\n             FROM deliveries d LEFT JOIN courier_positions p ON p.courier_id = d.courier_id\n             WHERE d.state = ANY($1) AND d.courier_id IS NOT NULL ORDER BY d.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "courier_id!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "courier_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pickup_x",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "pickup_x"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "pickup_y",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "pickup_y"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dropoff_x",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "dropoff_x"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "dropoff_y",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "dropoff_y"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "tracking_channel",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "tracking_channel"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "latitude?",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "latitude"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "longitude?",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "longitude"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "deabc2cb1f814717827a9b7919d6b76b503623150ff6acbd4c15e00a8d4010f5"
+}

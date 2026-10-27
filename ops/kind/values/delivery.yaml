@@ -11,10 +11,19 @@ podLabels:
 env:
   # Единственный адрес для синхронных вызовов бизнес-API других приложений.
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  # Демо Simulator курьеров (FR-606): опрос и границы задержки действия.
+  # Демо Simulator курьеров (FR-606, FR-667): опрос, границы задержки действия и интервал
+  # позиций движущихся курьеров.
   SIMULATOR__INTERVAL: 5s
   SIMULATOR__MIN_DELAY: 30s
   SIMULATOR__MAX_DELAY: 2m
+  SIMULATOR__TRACK_INTERVAL: 1s
+  # Live tracking (FR-658): Virtual City 12 × 12 кварталов по 150 м накрывает позиции курьеров
+  # демо-данных (ops/kind/demo/files/seed.json) и стартовую точку курьеров BFF.
+  TRACKING__CITY_ORIGIN_LATITUDE: "52.515"
+  TRACKING__CITY_ORIGIN_LONGITUDE: "13.385"
+  TRACKING__CITY_BLOCKS: "12"
+  TRACKING__BLOCK_METERS: "150"
+  TRACKING__PERSIST_INTERVAL: 15s
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
@@ -31,6 +40,12 @@ identity:
   userJwksConfigMap: bff-jwks
   userIssuer: nomnom-bff
   userDelegates: bff,e2e-driver,demo-seed
+
+# FR-661: Valkey потока позиций; Secret delivery-valkey (URL ACL-пользователя delivery) создаёт
+# chart ops/kind/bootstrap.
+valkey:
+  urlSecret:
+    name: delivery-valkey
 
 # ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:

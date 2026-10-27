@@ -94,6 +94,17 @@ func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaura
 	}}, nil
 }
 
+func (s *restaurantsServer) BatchGetRestaurants(ctx context.Context, request *restaurantsv1.BatchGetRestaurantsRequest) (*restaurantsv1.BatchGetRestaurantsResponse, error) {
+	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	restaurants := make([]*restaurantsv1.Restaurant, 0, len(request.GetRestaurantIds()))
+	for _, id := range request.GetRestaurantIds() {
+		if id != "missing" {
+			restaurants = append(restaurants, &restaurantsv1.Restaurant{RestaurantId: id, Name: "Кухня " + id, IsOpen: true})
+		}
+	}
+	return &restaurantsv1.BatchGetRestaurantsResponse{Restaurants: restaurants}, nil
+}
+
 func credentials(t *testing.T) identity.OutgoingCredentials {
 	t.Helper()
 	dir := t.TempDir()
@@ -209,6 +220,21 @@ func TestCatalogIsPublic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, restaurant)
 	assert.Equal(t, []string{"Bearer token-nomnom.restaurants"}, server.seenMD.Get("authorization"))
+	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
+}
+
+// The restaurants of a history page are one public BatchGetRestaurants; an
+// unknown id is absent.
+func TestCatalogReadsRestaurantsInOneCall(t *testing.T) {
+	server := &restaurantsServer{}
+	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, server) }))
+
+	restaurants, err := catalog.Restaurants(customerContext(), []string{"restaurant-1", "missing"})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]applications.Restaurant{
+		"restaurant-1": {ID: "restaurant-1", Name: "Кухня restaurant-1", IsOpen: true},
+	}, restaurants)
 	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
 }
 

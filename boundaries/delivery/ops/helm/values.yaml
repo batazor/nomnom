@@ -90,8 +90,11 @@ resources:
 # env:
 #   OFFERS__EXPIRY_INTERVAL: 30s
 #   OFFERS__DISPATCH_INTERVAL: 2s
-# SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY и SIMULATOR__MAX_DELAY обязательны (FR-606):
-# без них процесс не стартует, значения задаёт окружение (kind: 5s, 30s, 2m).
+# SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY и SIMULATOR__TRACK_INTERVAL
+# обязательны (FR-606, FR-667), как и TRACKING__CITY_ORIGIN_LATITUDE,
+# TRACKING__CITY_ORIGIN_LONGITUDE, TRACKING__CITY_BLOCKS, TRACKING__BLOCK_METERS и
+# TRACKING__PERSIST_INTERVAL (FR-658): без них процесс не стартует, значения задаёт окружение
+# (kind: 5s, 30s, 2m, 1s; Virtual City 12 × 12 по 150 м у демо-курьеров, 15s).
 env: {}
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
@@ -196,6 +199,15 @@ spicedb:
   presharedKeySecret:
     name: ""
     key: "preshared-key"
+
+# Поток позиций курьеров (FR-661, FR-666): Valkey pub/sub. VALKEY__URL берётся из Secret
+# valkey.urlSecret (secretKeyRef, URL ACL-пользователя, который только публикует в
+# delivery.tracks.*); без него chart не рендерится, недоступный Valkey завершает startup.
+valkey:
+  urlSecret:
+    # redis://delivery:<password>@valkey-delivery.nomnom-data.svc.cluster.local:6379
+    name: ""
+    key: url
 
 # PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста). DATABASE__URI берётся из Secret
 # database.uriSecret (secretKeyRef); без него процесс не стартует (fail fast). Значение —

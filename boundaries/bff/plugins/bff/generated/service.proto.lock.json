@@ -134,7 +134,8 @@
         "addCourier": 13,
         "setCourierOnLine": 14,
         "retireCourier": 15,
-        "setSimulatorEnabled": 9
+        "setSimulatorEnabled": 9,
+        "startNextPreparation": 16
       }
     },
     "MutationPlaceOrderRequest": {
@@ -179,7 +180,8 @@
         "name": 2,
         "acceptingOrders": 4,
         "menu": 5,
-        "waitTime": 6
+        "waitTime": 6,
+        "premiumFee": 7
       },
       "reservedNumbers": [
         3
@@ -199,7 +201,10 @@
         "expectedReadyAt": 11,
         "expectedPickupAt": 12,
         "expectedDeliveredAt": 13,
-        "courier": 14
+        "courier": 14,
+        "tracking": 15,
+        "priority": 16,
+        "premiumFee": 17
       },
       "reservedNumbers": [
         7
@@ -215,7 +220,8 @@
       "fields": {
         "restaurantId": 1,
         "items": 2,
-        "idempotencyKey": 4
+        "idempotencyKey": 4,
+        "priority": 5
       },
       "reservedNumbers": [
         3
@@ -508,7 +514,8 @@
         "receivedAt": 5,
         "acceptedAt": 6,
         "expectedReadyAt": 7,
-        "cook": 8
+        "cook": 8,
+        "priority": 9
       }
     },
     "DeliveryOffer": {
@@ -803,6 +810,53 @@
         "elevated": 1,
         "expectedWaitMinutes": 2
       }
+    },
+    "CourierPosition": {
+      "fields": {
+        "channel": 1,
+        "latitude": 2,
+        "longitude": 3,
+        "recordedAt": 4
+      }
+    },
+    "OrderTracking": {
+      "fields": {
+        "channel": 1,
+        "city": 2,
+        "pickup": 3,
+        "dropoff": 4,
+        "courierPosition": 5
+      }
+    },
+    "VirtualCity": {
+      "fields": {
+        "origin": 1,
+        "blocks": 2,
+        "blockMeters": 3
+      }
+    },
+    "GeoPoint": {
+      "fields": {
+        "latitude": 1,
+        "longitude": 2
+      }
+    },
+    "MutationStartNextPreparationRequest": {
+      "fields": {
+        "restaurant_id": 1,
+        "request_id": 2
+      }
+    },
+    "MutationStartNextPreparation": {
+      "fields": {
+        "restaurantId": 1,
+        "requestId": 2
+      }
+    },
+    "MutationStartNextPreparationResponse": {
+      "fields": {
+        "start_next_preparation": 1
+      }
     }
   },
   "enums": {
@@ -846,7 +900,8 @@
         "ORDER_ITEM_UNAVAILABLE": 1,
         "ORDER_TOTAL_BELOW_MINIMUM": 2,
         "ORDER_TOTAL_ABOVE_MAXIMUM": 3,
-        "RESTAURANT_NOT_ACCEPTING_ORDERS": 4
+        "RESTAURANT_NOT_ACCEPTING_ORDERS": 4,
+        "PREMIUM_UNAVAILABLE": 5
       }
     },
     "OrderCancellationOutcome": {
@@ -875,10 +930,12 @@
       "fields": {
         "ACCEPT": 1,
         "REJECT": 2,
-        "START_PREPARATION": 3,
         "MARK_ASSEMBLED": 4,
         "MARK_READY": 5
-      }
+      },
+      "reservedNumbers": [
+        3
+      ]
     },
     "KitchenActionProblemCode": {
       "fields": {
@@ -924,6 +981,12 @@
         "COURIER_NAME_INVALID": 1,
         "COURIER_STATUS_CONFLICT": 2,
         "COURIER_ON_LINE": 3
+      }
+    },
+    "OrderPriority": {
+      "fields": {
+        "STANDARD": 1,
+        "PREMIUM": 2
       }
     }
   }

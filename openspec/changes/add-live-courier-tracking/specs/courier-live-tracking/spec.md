@@ -28,7 +28,7 @@
 ### Requirement: Доставка получает виртуальные точки и Tracking Channel
 **ID:** FR-659
 
-Create Delivery SHALL выбирать два разных случайных перекрёстка Virtual City как точки pickup и dropoff и создавать Tracking Channel — 128 случайных бит в base64url — и сохранять их в `Delivery`. Повтор Create Delivery по тому же `order_id` MUST возвращать уже сохранённые точки и канал. Доставка, созданная до этого изменения, остаётся без точек и канала.
+Create Delivery SHALL выбирать два разных случайных перекрёстка Virtual City как точки pickup и dropoff и создавать Tracking Channel — 128 случайных бит в 32 hex-символах — и сохранять их в `Delivery`. Повтор Create Delivery по тому же `order_id` MUST возвращать уже сохранённые точки и канал. Доставка, созданная до этого изменения, остаётся без точек и канала.
 
 #### Scenario: Новая доставка
 **ID:** AC-872

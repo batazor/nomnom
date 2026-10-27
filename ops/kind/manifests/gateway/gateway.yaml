@@ -145,6 +145,14 @@ spec:
         - method:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
+            method: BatchGetRestaurants
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: BatchGetMenus
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
             method: ListRestaurants
         - method:
             type: Exact
@@ -469,6 +477,11 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: GetOrderCourier
+        # Live tracking заказа для того, кто видит заказ (order#view): канал потока позиций курьера.
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: GetOrderTracking
         # Courier Pool диспетчера (platform#manage_couriers): линия и загрузка курьеров.
         - method:
             type: Exact

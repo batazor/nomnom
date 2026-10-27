@@ -38,6 +38,7 @@ const (
 	BffService_MutationSetCourierAvailability_FullMethodName     = "/service.BffService/MutationSetCourierAvailability"
 	BffService_MutationSetCourierOnLine_FullMethodName           = "/service.BffService/MutationSetCourierOnLine"
 	BffService_MutationSetSimulatorEnabled_FullMethodName        = "/service.BffService/MutationSetSimulatorEnabled"
+	BffService_MutationStartNextPreparation_FullMethodName       = "/service.BffService/MutationStartNextPreparation"
 	BffService_QueryBffInfo_FullMethodName                       = "/service.BffService/QueryBffInfo"
 	BffService_QueryCourier_FullMethodName                       = "/service.BffService/QueryCourier"
 	BffService_QueryCourierPool_FullMethodName                   = "/service.BffService/QueryCourierPool"
@@ -75,8 +76,7 @@ type BffServiceClient interface {
 	MutationAddCourier(ctx context.Context, in *MutationAddCourierRequest, opts ...grpc.CallOption) (*MutationAddCourierResponse, error)
 	// Apply a command to the current delivery of the courier
 	MutationApplyCourierDeliveryAction(ctx context.Context, in *MutationApplyCourierDeliveryActionRequest, opts ...grpc.CallOption) (*MutationApplyCourierDeliveryActionResponse, error)
-	// Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
-	// changes nothing
+	// Apply a kitchen command to a restaurant order; repeating MARK_READY changes nothing
 	MutationApplyKitchenAction(ctx context.Context, in *MutationApplyKitchenActionRequest, opts ...grpc.CallOption) (*MutationApplyKitchenActionResponse, error)
 	// Close a restaurant of the current user for new orders; repeating it changes nothing
 	MutationCloseRestaurant(ctx context.Context, in *MutationCloseRestaurantRequest, opts ...grpc.CallOption) (*MutationCloseRestaurantResponse, error)
@@ -100,6 +100,10 @@ type BffServiceClient interface {
 	MutationSetCourierOnLine(ctx context.Context, in *MutationSetCourierOnLineRequest, opts ...grpc.CallOption) (*MutationSetCourierOnLineResponse, error)
 	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
 	MutationSetSimulatorEnabled(ctx context.Context, in *MutationSetSimulatorEnabledRequest, opts ...grpc.CallOption) (*MutationSetSimulatorEnabledResponse, error)
+	// Start preparing the head of the kitchen queue: premium orders first, the kitchen does not
+	// choose the order. requestId is chosen per attempt and reused on a manual retry, which starts
+	// no other order. order is null when the queue is empty
+	MutationStartNextPreparation(ctx context.Context, in *MutationStartNextPreparationRequest, opts ...grpc.CallOption) (*MutationStartNextPreparationResponse, error)
 	// Metadata for the client BFF
 	QueryBffInfo(ctx context.Context, in *QueryBffInfoRequest, opts ...grpc.CallOption) (*QueryBffInfoResponse, error)
 	// Work of the current user as a courier, null if the user is not a registered courier
@@ -323,6 +327,16 @@ func (c *bffServiceClient) MutationSetSimulatorEnabled(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *bffServiceClient) MutationStartNextPreparation(ctx context.Context, in *MutationStartNextPreparationRequest, opts ...grpc.CallOption) (*MutationStartNextPreparationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationStartNextPreparationResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationStartNextPreparation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) QueryBffInfo(ctx context.Context, in *QueryBffInfoRequest, opts ...grpc.CallOption) (*QueryBffInfoResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryBffInfoResponse)
@@ -448,8 +462,7 @@ type BffServiceServer interface {
 	MutationAddCourier(context.Context, *MutationAddCourierRequest) (*MutationAddCourierResponse, error)
 	// Apply a command to the current delivery of the courier
 	MutationApplyCourierDeliveryAction(context.Context, *MutationApplyCourierDeliveryActionRequest) (*MutationApplyCourierDeliveryActionResponse, error)
-	// Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
-	// changes nothing
+	// Apply a kitchen command to a restaurant order; repeating MARK_READY changes nothing
 	MutationApplyKitchenAction(context.Context, *MutationApplyKitchenActionRequest) (*MutationApplyKitchenActionResponse, error)
 	// Close a restaurant of the current user for new orders; repeating it changes nothing
 	MutationCloseRestaurant(context.Context, *MutationCloseRestaurantRequest) (*MutationCloseRestaurantResponse, error)
@@ -473,6 +486,10 @@ type BffServiceServer interface {
 	MutationSetCourierOnLine(context.Context, *MutationSetCourierOnLineRequest) (*MutationSetCourierOnLineResponse, error)
 	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
 	MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error)
+	// Start preparing the head of the kitchen queue: premium orders first, the kitchen does not
+	// choose the order. requestId is chosen per attempt and reused on a manual retry, which starts
+	// no other order. order is null when the queue is empty
+	MutationStartNextPreparation(context.Context, *MutationStartNextPreparationRequest) (*MutationStartNextPreparationResponse, error)
 	// Metadata for the client BFF
 	QueryBffInfo(context.Context, *QueryBffInfoRequest) (*QueryBffInfoResponse, error)
 	// Work of the current user as a courier, null if the user is not a registered courier
@@ -562,6 +579,9 @@ func (UnimplementedBffServiceServer) MutationSetCourierOnLine(context.Context, *
 }
 func (UnimplementedBffServiceServer) MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationSetSimulatorEnabled not implemented")
+}
+func (UnimplementedBffServiceServer) MutationStartNextPreparation(context.Context, *MutationStartNextPreparationRequest) (*MutationStartNextPreparationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationStartNextPreparation not implemented")
 }
 func (UnimplementedBffServiceServer) QueryBffInfo(context.Context, *QueryBffInfoRequest) (*QueryBffInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryBffInfo not implemented")
@@ -956,6 +976,24 @@ func _BffService_MutationSetSimulatorEnabled_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_MutationStartNextPreparation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationStartNextPreparationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationStartNextPreparation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationStartNextPreparation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationStartNextPreparation(ctx, req.(*MutationStartNextPreparationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_QueryBffInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryBffInfoRequest)
 	if err := dec(in); err != nil {
@@ -1218,6 +1256,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MutationSetSimulatorEnabled",
 			Handler:    _BffService_MutationSetSimulatorEnabled_Handler,
+		},
+		{
+			MethodName: "MutationStartNextPreparation",
+			Handler:    _BffService_MutationStartNextPreparation_Handler,
 		},
 		{
 			MethodName: "QueryBffInfo",

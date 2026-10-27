@@ -13,15 +13,20 @@ type OrderReader interface {
 	GetOrder(ctx context.Context, orderID string) (OrderSnapshot, error)
 }
 
-// Couriers reads the courier of an Order from delivery on behalf of the
-// customer in the request context (order#view); nil without one.
+// Couriers reads the courier of an Order and its live tracking from
+// delivery on behalf of the customer in the request context (order#view);
+// nil without one.
 type Couriers interface {
 	CourierOf(ctx context.Context, orderID string) (*Courier, error)
+	TrackingOf(ctx context.Context, orderID string) (*Tracking, error)
 }
 
 // Catalog reads public data of restaurants: no customer is involved.
 type Catalog interface {
 	Restaurant(ctx context.Context, restaurantID string) (Restaurant, error)
+	// Restaurants reads the restaurants of a page in one call (ADR 7): the
+	// found ones by id, an unknown id is absent.
+	Restaurants(ctx context.Context, restaurantIDs []string) (map[string]Restaurant, error)
 }
 
 // GetOrder builds the customer view of one Order: orders on behalf of the
@@ -59,6 +64,13 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 		view.Courier, err = h.couriers.CourierOf(ctx, order.ID)
 		if err != nil {
 			return OrderView{}, fmt.Errorf("read courier: %w", err)
+		}
+		// A final Order has no courier on the way.
+		if !view.Status.Final() {
+			view.Tracking, err = h.couriers.TrackingOf(ctx, order.ID)
+			if err != nil {
+				return OrderView{}, fmt.Errorf("read tracking: %w", err)
+			}
 		}
 	}
 	return view, nil

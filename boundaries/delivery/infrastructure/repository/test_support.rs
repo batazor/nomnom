@@ -22,7 +22,7 @@ use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
 use crate::pkg::config::database;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_courier_location::{
-    CourierLocationStore, CourierPosition,
+    ActiveTrackingChannel, CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, MarketId};
 use crate::slices::delivery::applications::dispatch_deliveries::{
@@ -38,6 +38,9 @@ use crate::slices::delivery::applications::get_courier_pool::{
 use crate::slices::delivery::applications::get_order_courier::{
     OrderCourierReadModel, OrderCourierView,
 };
+use crate::slices::delivery::applications::get_order_tracking::{
+    OrderTrackingReadModel, OrderTrackingRecord,
+};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
@@ -45,7 +48,7 @@ use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, OrderId,
+    DeliveryRepository, DeliveryTracking, Intersection, OrderId, TrackingChannel,
 };
 use crate::slices::simulator::applications::work::{
     ActiveDeliveryWork, PendingOfferWork, SimulatorWork,
@@ -204,6 +207,26 @@ impl TestStore {
         self.rollbacks.load(Ordering::SeqCst)
     }
 
+    /// Delivery assigned to `courier` with the Tracking Channel `channel`;
+    /// the courier is not seeded.
+    pub fn assigned_delivery_with_channel(&self, courier: &str, channel: &str) {
+        let tracking = DeliveryTracking {
+            pickup: Intersection { x: 0, y: 0 },
+            dropoff: Intersection { x: 1, y: 1 },
+            channel: TrackingChannel::restore(channel).expect("tracking channel"),
+        };
+        let mut delivery = Delivery::new(
+            DeliveryId::new(format!("delivery-of-{courier}")),
+            OrderId::new(format!("order-of-{courier}")),
+            MarketId::new("berlin").expect("market id"),
+        )
+        .with_tracking(Some(tracking));
+        delivery
+            .assign(CourierId::new(courier), None)
+            .expect("assign");
+        DeliveryRepository::add(self, &delivery).expect("seed delivery");
+    }
+
     fn messages(&self) -> MutexGuard<'_, Vec<OutboxMessage>> {
         self.outbox.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -261,6 +284,15 @@ impl CourierRepository for TestStore {
 impl CourierLocationStore for TestStore {
     fn record(&self, position: &CourierPosition) -> Result<(), RepositoryError> {
         self.available()?.record(position)
+    }
+
+    fn record_thinned(
+        &self,
+        position: &CourierPosition,
+        min_interval_seconds: i64,
+    ) -> Result<bool, RepositoryError> {
+        self.available()?
+            .record_thinned(position, min_interval_seconds)
     }
 
     fn latest(&self, courier_id: &CourierId) -> Result<Option<CourierPosition>, RepositoryError> {
@@ -367,6 +399,21 @@ impl OrderCourierReadModel for TestStore {
         order_id: &OrderId,
     ) -> Result<Option<OrderCourierView>, RepositoryError> {
         self.available()?.courier_of_order(order_id)
+    }
+}
+
+impl OrderTrackingReadModel for TestStore {
+    fn tracking_of_order(
+        &self,
+        order_id: &OrderId,
+    ) -> Result<Option<OrderTrackingRecord>, RepositoryError> {
+        self.available()?.tracking_of_order(order_id)
+    }
+}
+
+impl ActiveTrackingChannel for TestStore {
+    fn active_channel(&self, courier_id: &CourierId) -> Result<Option<String>, RepositoryError> {
+        self.available()?.active_channel(courier_id)
     }
 }
 

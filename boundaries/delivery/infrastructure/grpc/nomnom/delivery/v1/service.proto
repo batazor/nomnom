@@ -15,6 +15,12 @@ service DeliveryService {
   // delivered, empty before an Assignment and after a failure or a
   // cancellation. An order without a Delivery answers empty too.
   rpc GetOrderCourier(GetOrderCourierRequest) returns (GetOrderCourierResponse);
+  // Live tracking of the Delivery of an order for whoever may view the order
+  // (order#view, FR-660): set while the Delivery is assigned or picked up and
+  // has a Tracking Channel, empty otherwise. tracking_channel is the
+  // capability of the courierMoved subscription: every courier position goes
+  // to the Valkey channel delivery.tracks.<tracking_channel> (FR-661).
+  rpc GetOrderTracking(GetOrderTrackingRequest) returns (GetOrderTrackingResponse);
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
@@ -61,6 +67,42 @@ message GetOrderCourierResponse {
   // Empty without a courier.
   string courier_id = 1;
   string name = 2;
+}
+
+message GetOrderTrackingRequest {
+  string order_id = 1;
+}
+
+message GetOrderTrackingResponse {
+  // Empty without tracking; the other fields are then unset.
+  string tracking_channel = 1;
+  // Virtual City of the points (FR-658).
+  VirtualCity city = 2;
+  GeoPoint pickup = 3;
+  GeoPoint dropoff = 4;
+  // Stored courier position, up to TRACKING__PERSIST_INTERVAL old; unset
+  // while unknown.
+  CourierLocation courier_position = 5;
+}
+
+// Square grid of blocks x blocks blocks of block_meters from the south-west
+// corner origin.
+message VirtualCity {
+  GeoPoint origin = 1;
+  uint32 blocks = 2;
+  double block_meters = 3;
+}
+
+message GeoPoint {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message CourierLocation {
+  double latitude = 1;
+  double longitude = 2;
+  // Time delivery recorded the position at.
+  int64 recorded_at_epoch_seconds = 3;
 }
 
 message GetCourierCurrentDeliveryRequest {

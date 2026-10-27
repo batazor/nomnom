@@ -83,3 +83,25 @@ max_conns = 10
 interval = "5s"
 min_delay = "30s"
 max_delay = "2m"
+# Интервал позиций движущихся курьеров (FR-667): не больше interval. Переменная:
+# SIMULATOR__TRACK_INTERVAL.
+track_interval = "1s"
+
+[tracking]
+# Live tracking (FR-658, FR-661): Virtual City — сетка city_blocks × city_blocks кварталов
+# со стороной block_meters от юго-западного угла; точки доставок — её перекрёстки.
+# Обязательно, значений по умолчанию нет; меньше 2 кварталов, неположительный размер или
+# рамка вне диапазонов широты и долготы завершают startup. Переменные:
+# TRACKING__CITY_ORIGIN_LATITUDE, TRACKING__CITY_ORIGIN_LONGITUDE, TRACKING__CITY_BLOCKS,
+# TRACKING__BLOCK_METERS, TRACKING__PERSIST_INTERVAL.
+city_origin_latitude = 52.515
+city_origin_longitude = 13.385
+city_blocks = 12
+block_meters = 150.0
+# Позиция курьера пишется в PostgreSQL не чаще этого интервала; поток получает каждую.
+persist_interval = "15s"
+
+[valkey]
+# Valkey потока позиций курьеров (pub/sub, FR-661). Обязательно: пусто или недоступный
+# Valkey завершают startup. Не храните URL с паролем в файле: задавайте VALKEY__URL из Secret.
+url = ""

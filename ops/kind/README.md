@@ -102,7 +102,10 @@ make kind-down
   `payments`, `delivery`, `controlplane`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
   [ADR 43](../../docs/adr/0043-application-caching-policy.md): без persistence, ACL-пользователь
   `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`; пользователь `exporter`
-  для Alloy — только INFO и CONFIG GET, пароль — Secret `alloy-valkey`) в `nomnom-data` (`emptyDir`). Secret DSN
+  для Alloy — только INFO и CONFIG GET, пароль — Secret `alloy-valkey`) и Valkey `delivery` (pub/sub потока
+  позиций курьеров, FR-661: ACL-пользователь `delivery` только публикует в `delivery.tracks.*`, URL — Secret
+  `delivery-valkey`; `bff` только подписывается, URL — Secret `bff-tracks-valkey` в `nomnom-bff`) в
+  `nomnom-data` (`emptyDir`). Secret DSN
   кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`). Миграции
   каждый процесс применяет сам при старте ([ADR 42](../../docs/adr/0042-schema-migrations-at-process-startup.md)).
 

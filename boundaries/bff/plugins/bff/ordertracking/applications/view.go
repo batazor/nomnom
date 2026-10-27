@@ -76,6 +76,41 @@ type OrderView struct {
 	// Courier is the courier delivering the Order (FR-626); nil before an
 	// Assignment and in the order history, which does not read it.
 	Courier *Courier
+	// Tracking is the live tracking of the courier (FR-663); nil without an
+	// assigned or picked up delivery and in the order history.
+	Tracking *Tracking
+}
+
+// Tracking is the live tracking of the delivery of an Order: the Tracking
+// Channel of the courierMoved subscription, the Virtual City and its points
+// and the stored courier position.
+type Tracking struct {
+	Channel string
+	City    VirtualCity
+	Pickup  GeoPoint
+	Dropoff GeoPoint
+	// CourierPosition is nil while delivery knows no position.
+	CourierPosition *CourierPosition
+}
+
+// VirtualCity is a grid of Blocks × Blocks blocks of BlockMeters from the
+// south-west corner Origin.
+type VirtualCity struct {
+	Origin      GeoPoint
+	Blocks      int
+	BlockMeters float64
+}
+
+type GeoPoint struct {
+	Latitude  float64
+	Longitude float64
+}
+
+// CourierPosition is a courier position with the moment delivery recorded it.
+type CourierPosition struct {
+	Channel    string
+	Point      GeoPoint
+	RecordedAt time.Time
 }
 
 // Courier names the courier of an Order for its customer; the cook stays

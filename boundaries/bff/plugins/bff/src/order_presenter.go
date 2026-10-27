@@ -104,7 +104,36 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 	if view.Courier != nil {
 		order.Courier = &service.OrderCourier{Name: view.Courier.Name}
 	}
+	if view.Tracking != nil {
+		order.Tracking = trackingMessage(*view.Tracking)
+	}
 	return order, nil
+}
+
+func trackingMessage(tracking applications.Tracking) *service.OrderTracking {
+	message := &service.OrderTracking{
+		Channel: tracking.Channel,
+		City: &service.VirtualCity{
+			Origin:      geoPoint(tracking.City.Origin),
+			Blocks:      int32(tracking.City.Blocks),
+			BlockMeters: tracking.City.BlockMeters,
+		},
+		Pickup:  geoPoint(tracking.Pickup),
+		Dropoff: geoPoint(tracking.Dropoff),
+	}
+	if position := tracking.CourierPosition; position != nil {
+		message.CourierPosition = &service.CourierPosition{
+			Channel:    position.Channel,
+			Latitude:   position.Point.Latitude,
+			Longitude:  position.Point.Longitude,
+			RecordedAt: timestamp(position.RecordedAt),
+		}
+	}
+	return message
+}
+
+func geoPoint(point applications.GeoPoint) *service.GeoPoint {
+	return &service.GeoPoint{Latitude: point.Latitude, Longitude: point.Longitude}
 }
 
 func money(value applications.Money) *service.Money {

@@ -1,18 +1,22 @@
 //! Fixtures shared by the `delivery` slice handler tests.
 
 use crate::infrastructure::memory::{
-    ManualClock, RecordingRelationships, RelationshipWrite, SequentialIdGenerator,
-    StaticAuthorization, StaticCourierLocator,
+    FixedRandomSource, ManualClock, RecordingRelationships, RelationshipWrite,
+    SequentialIdGenerator, StaticAuthorization, StaticCourierLocator,
 };
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::application::{RelationshipWriteError, Subject};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
+use crate::slices::courier::applications::update_courier_location::{
+    CourierLocationStore, CourierPosition,
+};
 use crate::slices::courier::domains::courier::{
-    Courier, CourierId, CourierName, CourierRepository, CourierStatus, MarketId,
+    Courier, CourierId, CourierName, CourierRepository, CourierStatus, Location, MarketId,
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, OfferState, OrderId, State,
+    DeliveryRepository, DeliveryTracking, Intersection, OfferState, OrderId, State,
+    TrackingChannel, VirtualCity,
 };
 
 use super::courier_locator::CourierCandidate;
@@ -31,6 +35,8 @@ pub struct World {
     pub locator: StaticCourierLocator,
     pub policy: AssignmentPolicy,
     pub relationships: RecordingRelationships,
+    pub city: VirtualCity,
+    pub random: FixedRandomSource,
 }
 
 impl World {
@@ -51,6 +57,8 @@ impl World {
                 offer_ttl_seconds: OFFER_TTL,
             },
             relationships: RecordingRelationships::new(),
+            city: city(),
+            random: FixedRandomSource::new(tracking_bytes()),
         }
     }
 
@@ -107,6 +115,32 @@ impl World {
         DeliveryRepository::add(&self.store, &delivery).expect("seed delivery");
     }
 
+    /// Delivery with [`tracking`] assigned to (or, with `picked_up`, picked
+    /// up by) a busy courier.
+    pub fn tracked_delivery(&self, id: &str, courier: &str, picked_up: bool) {
+        self.courier(courier, CourierStatus::Busy);
+        let courier_id = CourierId::new(courier);
+        let mut delivery = new_delivery(id).with_tracking(Some(tracking()));
+        delivery.assign(courier_id.clone(), None).expect("assign");
+        if picked_up {
+            delivery.confirm_pickup(&courier_id, None).expect("pickup");
+        }
+        DeliveryRepository::add(&self.store, &delivery).expect("seed delivery");
+    }
+
+    /// Stored position of a courier recorded at `recorded_at`.
+    pub fn courier_position(&self, courier: &str, latitude: f64, longitude: f64, recorded_at: i64) {
+        CourierLocationStore::record(
+            &self.store,
+            &CourierPosition {
+                courier_id: CourierId::new(courier),
+                location: Location::new(latitude, longitude).expect("location"),
+                recorded_at_epoch_seconds: recorded_at,
+            },
+        )
+        .expect("seed position");
+    }
+
     pub fn offer(&self, offer_id: &str, delivery_id: &str, courier: &str) {
         let offer = DeliveryOffer::new(
             DeliveryOfferId::new(offer_id),
@@ -154,6 +188,29 @@ impl World {
 
 pub fn berlin() -> MarketId {
     MarketId::new("berlin").expect("market id")
+}
+
+/// Virtual City of the tests: 12 × 12 blocks of 150 m.
+pub fn city() -> VirtualCity {
+    VirtualCity::new(52.515, 13.385, 12, 150.0).expect("virtual city")
+}
+
+/// Random bytes of [`World::random`]: pickup index 16, dropoff offset 9, the
+/// channel `cd…cd`.
+fn tracking_bytes() -> Vec<u8> {
+    let mut bytes = vec![0, 0, 0, 16, 0, 0, 0, 9];
+    bytes.extend([0xcd; 16]);
+    bytes
+}
+
+/// Tracking that [`World::random`] produces first in [`city`]: pickup
+/// (3, 1), dropoff index 26 — (0, 2).
+pub fn tracking() -> DeliveryTracking {
+    DeliveryTracking {
+        pickup: Intersection { x: 3, y: 1 },
+        dropoff: Intersection { x: 0, y: 2 },
+        channel: TrackingChannel::restore("cd".repeat(16)).expect("channel"),
+    }
 }
 
 pub fn hamburg() -> MarketId {

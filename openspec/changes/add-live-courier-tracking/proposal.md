@@ -12,7 +12,7 @@
 - **Виртуальные точки доставки.** Create Delivery выбирает случайные перекрёстки Virtual City для pickup и dropoff и сохраняет их в `Delivery`. Это демо-замена отсутствующим адресам.
 - **Tracking Channel.** У `Delivery` есть случайный непредсказуемый токен канала. Его выдаёт только query с проверкой `order#view`, и он нужен, чтобы подписаться на поток позиций.
 - **Поток позиций без Kafka.** Update Courier Location публикует точку в Valkey pub/sub, в канал активной доставки курьера. В PostgreSQL позиция записывается с прореживанием: не чаще `TRACKING__PERSIST_INTERVAL`. Integration Event на точку не публикуется.
-- **BFF.** У `Order` появляется `tracking`: канал, параметры Virtual City, точки pickup и dropoff, последняя сохранённая позиция. Подписка `courierMoved(channel)` идёт через провайдер Redis в Cosmo Streams по SSE. Координаты едут в самом событии, без запроса за данными на каждую точку.
+- **BFF.** У `Order` появляется `tracking`: канал, параметры Virtual City, точки pickup и dropoff, последняя сохранённая позиция. Подписка `courierMoved(channel)` идёт через провайдер Redis в Cosmo Streams по SSE. Координаты едут в самом событии (все поля `CourierPosition` — ключ сущности), без запроса за данными на каждую точку.
 - **Simulator водит курьера.** Когда курьер принимает offer, Simulator строит случайный кратчайший путь по улицам: от курьера к pickup, после Pickup — от pickup к dropoff. Скорость подбирается так, чтобы курьер приехал к уже запланированным `expected_pickup_at` и `expected_delivered_at`. Каждые `SIMULATOR__TRACK_INTERVAL` Simulator вызывает настоящий Update Courier Location от имени курьера.
 - **UI.** На странице заказа в статусах `COURIER_ASSIGNED` и `PICKED_UP` показывается SVG-карта сетки с рестораном, клиентом, курьером и его следом. Между точками маркер движется плавно через `requestAnimationFrame`, без polling.
 
@@ -46,5 +46,5 @@
   - proto `service.proto` (`GetOrderTracking`).
 - **`boundaries/bff`:** клиент `delivery`, `Order.tracking`, events subgraph `courierMoved` с провайдером Redis, `config.yaml` и `config.production.yaml`, composed client schema.
 - **`boundaries/ui`:** карта на экране заказа, подписка, i18n, моки (`mocks/subscriptions.ts`), тесты.
-- **ops:** Valkey `delivery` в `nomnom-data` с ACL-пользователями `delivery` (publish) и `bff` (subscribe), Secrets, NetworkPolicy egress `delivery` и `bff`, values kind.
+- **ops:** Valkey `delivery` в `nomnom-data` с ACL-пользователями `delivery` (publish) и `bff` (subscribe), Secrets, NetworkPolicy egress `delivery` и `bff`, values kind, Helm `valkey.urlSecret` (`delivery`) и `tracks.redisUrlSecret` (`bff`).
 - **Документация:** ADR 36 (второй вид подписок: данные в событии, канал-капабилити), ADR 43 (Valkey `delivery` как pub/sub, не кеш), README `delivery`, `bff`, `ui`, `docs/ubiquitous-language.md`.

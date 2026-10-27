@@ -112,6 +112,14 @@ const fn coordinates_delivery(permission: DeliveryPermission) -> bool {
     )
 }
 
+/// Permissions that follow `order#view`.
+fn views_order(permission: DeliveryPermission) -> bool {
+    matches!(
+        permission,
+        DeliveryPermission::ViewOrderCourier | DeliveryPermission::ViewOrderTracking
+    )
+}
+
 /// Check слайса `delivery`; `None` — сочетание не отображено и отклоняется.
 #[must_use]
 pub fn delivery_check(
@@ -122,8 +130,9 @@ pub fn delivery_check(
     if coordinates_delivery(permission) {
         return Some(PermissionCheck::platform("coordinate_delivery", subject));
     }
-    // The courier of an order is part of what its viewers see (FR-626).
-    if permission == DeliveryPermission::ViewOrderCourier {
+    // The courier of an order and its tracking are part of what its viewers
+    // see (FR-626, FR-660).
+    if views_order(permission) {
         return match resource {
             DeliveryResource::Order(id) => {
                 Some(PermissionCheck::new("order", id.as_str(), "view", subject))
@@ -158,7 +167,7 @@ mod tests {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
-    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 13] = [
+    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 14] = [
         DeliveryPermission::CreateDelivery,
         DeliveryPermission::FindCourier,
         DeliveryPermission::OfferDelivery,
@@ -172,6 +181,7 @@ mod tests {
         DeliveryPermission::CancelDelivery,
         DeliveryPermission::ReplanDelivery,
         DeliveryPermission::ViewOrderCourier,
+        DeliveryPermission::ViewOrderTracking,
     ];
 
     fn worker() -> Subject {
@@ -273,10 +283,9 @@ mod tests {
 
     #[test]
     fn other_delivery_permissions_check_courier_or_delivery() {
-        let others = ALL_DELIVERY_PERMISSIONS.into_iter().filter(|permission| {
-            !coordinates_delivery(*permission)
-                && *permission != DeliveryPermission::ViewOrderCourier
-        });
+        let others = ALL_DELIVERY_PERMISSIONS
+            .into_iter()
+            .filter(|permission| !coordinates_delivery(*permission) && !views_order(*permission));
         for permission in others {
             let on_delivery = if permission == DeliveryPermission::ReportDeliveryFailure {
                 "platform:nomnom#dispatch_delivery@user:user-1"
@@ -315,26 +324,28 @@ mod tests {
         }
     }
 
-    /// FR-626: the courier of an order follows `order#view`; other resources
-    /// are not mapped.
+    /// FR-626, FR-660: the courier and the tracking of an order follow
+    /// `order#view`; other resources are not mapped.
     #[test]
-    fn order_courier_checks_order_view() {
-        assert_eq!(
-            rendered(delivery_check(
-                &user(),
-                DeliveryPermission::ViewOrderCourier,
-                &DeliveryResource::Order(OrderId::new("order-1"))
-            )),
-            Some("order:order-1#view@user:user-1".to_owned())
-        );
-        for resource in delivery_resources() {
-            if matches!(resource, DeliveryResource::Order(_)) {
-                continue;
-            }
+    fn order_courier_and_tracking_check_order_view() {
+        for permission in [
+            DeliveryPermission::ViewOrderCourier,
+            DeliveryPermission::ViewOrderTracking,
+        ] {
             assert_eq!(
-                delivery_check(&user(), DeliveryPermission::ViewOrderCourier, &resource),
-                None
+                rendered(delivery_check(
+                    &user(),
+                    permission,
+                    &DeliveryResource::Order(OrderId::new("order-1"))
+                )),
+                Some("order:order-1#view@user:user-1".to_owned())
             );
+            for resource in delivery_resources() {
+                if matches!(resource, DeliveryResource::Order(_)) {
+                    continue;
+                }
+                assert_eq!(delivery_check(&user(), permission, &resource), None);
+            }
         }
     }
 }

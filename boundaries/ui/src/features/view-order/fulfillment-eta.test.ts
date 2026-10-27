@@ -33,6 +33,7 @@ function order(
     expectedPickupAt: null,
     expectedDeliveredAt: null,
     courier: null,
+    tracking: null,
     ...deadlines,
   };
 }

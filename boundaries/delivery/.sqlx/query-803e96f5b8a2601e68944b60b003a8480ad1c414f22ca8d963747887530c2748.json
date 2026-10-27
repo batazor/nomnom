@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, order_id, market_id, courier_id, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at\n             FROM deliveries\n             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)\n               AND NOT EXISTS (SELECT 1 FROM delivery_offers o\n                               WHERE o.delivery_id = deliveries.id AND o.state = $4)\n             ORDER BY COALESCE(created_at, 0), id LIMIT $5",
+  "query": "SELECT id, order_id, market_id, courier_id, state, failure_reason,\n                 failure_detail, authorization_revision, version, created_at,\n                 expected_pickup_at, expected_delivered_at,\n                 pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel\n             FROM deliveries WHERE order_id = $1",
   "describe": {
     "columns": [
       {
@@ -134,15 +134,66 @@
             "name": "expected_delivered_at"
           }
         }
+      },
+      {
+        "ordinal": 12,
+        "name": "pickup_x",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "pickup_x"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "pickup_y",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "pickup_y"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "dropoff_x",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "dropoff_x"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "dropoff_y",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "dropoff_y"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "tracking_channel",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "tracking_channel"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int8",
-        "Text",
-        "Text",
-        "Int8"
+        "Text"
       ]
     },
     "nullable": [
@@ -157,8 +208,13 @@
       false,
       true,
       true,
+      true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "24e5e3758052e9469fb17afdff91f32d218a0cc1f54f75b85d9f9f92976e689c"
+  "hash": "803e96f5b8a2601e68944b60b003a8480ad1c414f22ca8d963747887530c2748"
 }

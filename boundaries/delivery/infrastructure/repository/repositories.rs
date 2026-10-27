@@ -13,8 +13,8 @@ use crate::slices::delivery::domains::delivery::{
 
 use super::outbox::row_traceparent;
 use super::rows::{
-    CourierRow, DeliveryRow, OfferRow, courier_from_row, courier_status, delivery_from_row,
-    delivery_state, offer_from_row, offer_state,
+    CourierRow, DeliveryRow, OfferRow, TrackingColumns, courier_from_row, courier_status,
+    delivery_from_row, delivery_state, offer_from_row, offer_state,
 };
 use super::{Store, corrupt, db_version, storage_error};
 
@@ -150,7 +150,8 @@ impl DeliveryRepository for Store {
             DeliveryRow,
             "SELECT id, order_id, market_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
-                 expected_pickup_at, expected_delivered_at
+                 expected_pickup_at, expected_delivered_at,
+                 pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel
              FROM deliveries WHERE id = $1",
             id.as_str()
         )
@@ -164,7 +165,8 @@ impl DeliveryRepository for Store {
             DeliveryRow,
             "SELECT id, order_id, market_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
-                 expected_pickup_at, expected_delivered_at
+                 expected_pickup_at, expected_delivered_at,
+                 pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel
              FROM deliveries WHERE order_id = $1",
             order_id.as_str()
         )
@@ -175,14 +177,16 @@ impl DeliveryRepository for Store {
 
     fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         let version = db_version(delivery.version())?;
+        let tracking = delivery.tracking().map(TrackingColumns::of).transpose()?;
+        let tracking = tracking.as_ref();
         // ON CONFLICT DO NOTHING keeps the transaction usable after a
         // duplicate id or order id.
         let inserted = sql!(self, "INSERT", |connection| sqlx::query!(
             "INSERT INTO deliveries (id, order_id, courier_id,
                  state, failure_reason, authorization_revision, version,
                  created_at, failure_detail, expected_pickup_at, expected_delivered_at,
-                 market_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 market_id, pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
              ON CONFLICT DO NOTHING",
             delivery.id().as_str(),
             delivery.order_id().as_str(),
@@ -203,7 +207,14 @@ impl DeliveryRepository for Store {
             delivery
                 .expected_delivered_at()
                 .map(ExpectedTime::epoch_seconds),
-            delivery.market_id().as_str()
+            delivery.market_id().as_str(),
+            tracking.map(|tracking| tracking.pickup_x),
+            tracking.map(|tracking| tracking.pickup_y),
+            tracking.map(|tracking| tracking.dropoff_x),
+            tracking.map(|tracking| tracking.dropoff_y),
+            delivery
+                .tracking()
+                .map(|tracking| tracking.channel.as_str())
         )
         .execute(connection))?;
         if inserted.rows_affected() == 0 {
@@ -354,6 +365,27 @@ impl CourierLocationStore for Store {
         )
         .execute(connection))
         .map(drop)
+    }
+
+    fn record_thinned(
+        &self,
+        position: &CourierPosition,
+        min_interval_seconds: i64,
+    ) -> Result<bool, RepositoryError> {
+        sql!(self, "INSERT", |connection| sqlx::query!(
+            "INSERT INTO courier_positions (courier_id, latitude, longitude, recorded_at)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (courier_id) DO UPDATE SET latitude = EXCLUDED.latitude,
+                 longitude = EXCLUDED.longitude, recorded_at = EXCLUDED.recorded_at
+             WHERE courier_positions.recorded_at <= EXCLUDED.recorded_at - $5",
+            position.courier_id.as_str(),
+            position.location.latitude(),
+            position.location.longitude(),
+            position.recorded_at_epoch_seconds,
+            min_interval_seconds
+        )
+        .execute(connection))
+        .map(|result| result.rows_affected() == 1)
     }
 
     fn latest(&self, courier_id: &CourierId) -> Result<Option<CourierPosition>, RepositoryError> {

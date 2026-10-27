@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tracking_channel AS \"tracking_channel!\" FROM deliveries\n             WHERE courier_id = $1 AND state = ANY($2) AND tracking_channel IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tracking_channel!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "tracking_channel"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2f5cb6382cd8ab3b02c9a47ac8438614baac083f982bacb5304445010891a3d2"
+}

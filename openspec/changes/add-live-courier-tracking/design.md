@@ -21,13 +21,13 @@ Virtual City — value object домена `delivery` (слайс `delivery`): �
 
 ## Виртуальные точки доставки
 
-Create Delivery выбирает два разных случайных перекрёстка, `pickup_point` и `dropoff_point`, и сохраняет их в `Delivery` (миграция `slices/delivery/.../migrations/0008_delivery_tracking.sql`: `pickup_latitude`, `pickup_longitude`, `dropoff_latitude`, `dropoff_longitude`, `tracking_channel`). Повтор Create Delivery по тому же `order_id` возвращает уже сохранённые точки. Доставки, созданные до миграции, точек и канала не имеют: для них `tracking` равен `null`, и они живут как прежде.
+Create Delivery выбирает два разных случайных перекрёстка, `pickup_point` и `dropoff_point`, и сохраняет их в `Delivery` (миграция `slices/delivery/.../migrations/0008_delivery_tracking.sql`: `pickup_x`, `pickup_y`, `dropoff_x`, `dropoff_y` — перекрёстки сетки, `tracking_channel`). Хранятся перекрёстки, а не координаты: `Delivery` остаётся `Eq`, а координаты считает Virtual City при чтении. Повтор Create Delivery по тому же `order_id` возвращает уже сохранённые точки. Доставки, созданные до миграции, точек и канала не имеют: для них `tracking` равен `null`, и они живут как прежде.
 
 Генератор случайных чисел — порт (`RandomSource`), в тестах он детерминированный.
 
 ## Tracking Channel
 
-`tracking_channel` — 128 случайных бит в base64url, создаётся вместе с `Delivery`. Канал Valkey — `delivery.tracks.<tracking_channel>`.
+`tracking_channel` — 128 случайных бит в 32 hex-символах (генератор ОС, `getrandom`), создаётся вместе с `Delivery`. Канал Valkey — `delivery.tracks.<tracking_channel>`.
 
 Почему канал-капабилити, а не notification + refetch из ADR 36:
 
@@ -40,7 +40,7 @@ Create Delivery выбирает два разных случайных пере
 
 Handler после проверки прав и координат:
 
-1. сохраняет позицию через `CourierLocationStore` условным `UPDATE`: `latitude`, `longitude`, `recorded_at` меняются, только если прежняя запись старше `TRACKING__PERSIST_INTERVAL`;
+1. сохраняет позицию через `CourierLocationStore::record_thinned` условным upsert: `latitude`, `longitude`, `recorded_at` меняются, только если прежняя запись старше `TRACKING__PERSIST_INTERVAL`;
 2. читает канал активной доставки курьера (`assigned` или `picked_up`) через порт `ActiveTrackingChannel` слайса `courier`.
 
 Слайс `courier` не знает `Delivery` (FR-486), поэтому порт реализует адаптер верхнего уровня `infrastructure/tracks.rs`, как `StoredCourierLocator`: он читает `deliveries` по индексу `deliveries_courier`.
@@ -72,14 +72,13 @@ courierMoved(channel: ID!): CourierPosition!
   @edfs__redisSubscribe(channels: ["delivery.tracks.{{ args.channel }}"], providerId: "tracks")
 ```
 
-Все поля `CourierPosition` приходят в событии, поэтому Router не вызывает plugin. Провайдер `redis` с `id: tracks` и URL `BFF__TRACKS_REDIS_URL` (обязателен) добавляется в `config.yaml` и `config.production.yaml`. ACL-пользователь `bff` в Valkey может только `SUBSCRIBE` на `&delivery.tracks.*`.
+Все поля `CourierPosition` приходят в событии, поэтому Router не вызывает plugin. Провайдер `redis` с `id: tracks` и URL `BFF__TRACKS_REDIS_URL` (обязателен) добавляется в `config.yaml` и `config.production.yaml`. ACL-пользователь `bff` в Valkey может только подписываться (см. ниже).
 
-Проверить на закреплённой версии Router при реализации:
+Проверено на Router 0.363.0 (задача 0.1):
 
-- шаблон аргумента в `channels` для провайдера Redis;
-- требования композиции к типу события (`@key` у `CourierPosition`).
-
-Если `@key` обязателен, ключом становится `channel` с `resolvable: false`, как у остальных типов events subgraph. Если шаблон каналов не поддерживается, решение пересматривается до реализации, а не обходится.
+- шаблон `{{ args.channel }}` в `channels` провайдера Redis работает, чужой канал подписчику не приходит;
+- event-driven subgraph может объявлять только поля ключа, а тип события должен быть сущностью. Поэтому ключ `CourierPosition` — все её поля: `@key(fields: "channel latitude longitude recordedAt", resolvable: false)` в events subgraph (поля `@external`) и в plugin (обычные поля, тот же тип отдаёт `OrderTracking.courierPosition`). Lookup RPC plugin для него не генерируется, Router берёт поля из события;
+- Router подписывается `PSUBSCRIBE`, а ACL Valkey сравнивает шаблон PSUBSCRIBE буквально, поэтому у ACL-пользователя `bff` `allchannels` и только команды подписки (`SUBSCRIBE`, `PSUBSCRIBE` и их отмена, handshake), публиковать он не может.
 
 ## Simulator
 
@@ -89,7 +88,7 @@ courierMoved(channel: ID!): CourierPosition!
 - **Pickup.** Маршрут от `pickup_point` до `dropoff_point` до `expected_delivered_at`.
 - **Тик.** Каждые `SIMULATOR__TRACK_INTERVAL` для каждой движущейся доставки Simulator вычисляет точку на маршруте по доле прошедшего времени и вызывает Update Courier Location от имени курьера (`Subject::User(courier_id)`). Когда время вышло, курьер стоит в конечной точке до действия Pickup или вручения.
 
-Тик позиций идёт отдельно от `SIMULATOR__INTERVAL` (5s в kind): движение должно быть плавнее, чем шаги жизненного цикла. `SIMULATOR__TRACK_INTERVAL` обязателен, ноль или значение больше `SIMULATOR__INTERVAL` завершают startup (kind: 1s). Маршруты живут в памяти процесса, как и остальное расписание: после рестарта или выключения маршрут строится заново от сохранённой позиции курьера. Ошибка Update Courier Location пишется в лог, движение продолжается.
+Тик позиций идёт отдельно от `SIMULATOR__INTERVAL` (5s в kind): движение должно быть плавнее, чем шаги жизненного цикла. Один цикл worker шагает каждые `SIMULATOR__TRACK_INTERVAL` и раз в `SIMULATOR__INTERVAL` сначала делает проход расписания; маршрут шага строится на проходе, который видит доставку в этом шаге, поэтому курьер трогается в пределах `SIMULATOR__INTERVAL` после Accept или Pickup. `SIMULATOR__TRACK_INTERVAL` обязателен, ноль или значение больше `SIMULATOR__INTERVAL` завершают startup (kind: 1s). Маршруты живут в памяти процесса, как и остальное расписание: после рестарта или выключения маршрут строится заново от сохранённой позиции курьера. Ошибка Update Courier Location пишется в лог, движение продолжается.
 
 Simulator читает точки доставки из своей выборки работы (`slices/simulator`): выборка `assigned`/`picked_up` получает `pickup_point` и `dropoff_point`. Доставки без точек Simulator не двигает.
 
@@ -109,7 +108,7 @@ Simulator читает точки доставки из своей выборк�
 
 ## ops
 
-- Valkey `delivery` в `nomnom-data` без persistence: ACL-пользователь `delivery` (`PUBLISH` на `&delivery.tracks.*`), `bff` (`SUBSCRIBE` на `&delivery.tracks.*`), `exporter` для Alloy, как у `restaurants`. URL — Secrets `delivery-valkey` и `bff-tracks-valkey`.
+- Valkey `delivery` в `nomnom-data` без persistence: ACL-пользователь `delivery` (`PUBLISH` на `&delivery.tracks.*`), `bff` (`allchannels`, только подписка). Экспортера Alloy нет: ключей и кеш-метрик у pub/sub нет. URL — Secrets `delivery-valkey` и `bff-tracks-valkey`.
 - NetworkPolicy: egress `delivery` и `bff` к Valkey `delivery`.
 
 ## Риски

@@ -81,6 +81,20 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
   таймеру. Таймеры остаются только для продления токенов к моменту истечения.
 - **Без брокера Router не стартует.** `skip_unavailable_providers: false` (default), Helm требует
   `kafka.brokers`.
+- **Высокочастотные данные — в событии, права — каналом-капабилити.** Позиции курьера
+  (change `add-live-courier-tracking`, FR-661, FR-668) идут раз в секунду: notification + refetch
+  означал бы `GetOrderTracking` и check SpiceDB на каждую точку каждого подписчика. Поэтому
+  `courierMoved(channel)` читает канал Valkey `delivery.tracks.<channel>` провайдером `redis`
+  Cosmo Streams (не Kafka: точка не Integration Event и не идёт через Outbox), а событие несёт
+  все поля `CourierPosition`. Event-driven subgraph может объявлять только поля ключа, поэтому
+  ключ `CourierPosition` — все её поля (`@key(fields: "channel latitude longitude recordedAt",
+  resolvable: false)` в обоих subgraphs): Router берёт их из события и plugin не вызывает.
+  Права проверяются один раз — когда `delivery` выдаёт канал в `Order.tracking` по `order#view`:
+  канал — 128 случайных бит, без него подписаться не на что. После завершения доставки в канал
+  никто не публикует. Шаблон `{{ args.channel }}` в `channels` и доставка без вызова plugin
+  проверены на Router 0.363.0. Router подписывается `PSUBSCRIBE`, а ACL Valkey сравнивает шаблон
+  PSUBSCRIBE буквально, поэтому у ACL-пользователя `bff` `allchannels` и только команды
+  подписки.
 
 ## Consequences
 
@@ -93,7 +107,11 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
 - Подписчик чужого `id` узнаёт только момент изменения (error-событие), но не данные. `order_id`
   — UUID, перебор нереален. Ранний отказ при старте подписки потребовал бы Custom Module
   `SubscriptionOnStart`, то есть собственную сборку Router.
-- В kind BFF получает egress к Kafka (`manifests/netpol/app-infrastructure.yaml`).
+- В kind BFF получает egress к Kafka и к Valkey `delivery` (`manifests/netpol/app-infrastructure.yaml`);
+  без провайдера `tracks` (`BFF__TRACKS_REDIS_URL`) Router не стартует.
+- Канал-капабилити — подписка без проверки прав на каждое событие: тот, кто получил канал
+  заказа, видит позиции курьера до конца доставки. Для данных, которые могут стать чужими
+  посреди потока, этот приём не годится — там остаётся notification + refetch.
 - Клиентская схема теперь — композиция subgraphs (`boundaries/bff/client-schema.graphql`,
   генерируется `npm run compose`). Codegen и моки UI читают её, а не схему plugin.
 - Моки UI выполняют подписки внутри процесса (`mocks/subscriptions.ts`) на том же mock store:

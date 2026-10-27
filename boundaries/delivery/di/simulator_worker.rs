@@ -27,6 +27,14 @@
 //! запись расписания удаляется, Simulator продолжает. Lifecycle тот же, что у
 //! [`super::DispatchWorker`] (ADR 0017): цикл останавливается по сигналу
 //! остановки основного worker, начатый проход доводится до конца.
+//!
+//! Движение (FR-662, FR-667): доставку с точками Virtual City Simulator ведёт
+//! по случайному кратчайшему пути — в `Assigned` от перекрёстка у сохранённой
+//! позиции курьера к pickup, в `PickedUp` от pickup к dropoff — с прибытием в
+//! запланированный момент шага. Каждые `track_interval` ([`Simulator::track`])
+//! он передаёт точку маршрута настоящим Update Courier Location от имени
+//! курьера; проходы расписания ([`Simulator::tick`]) идут раз в `interval`.
+//! Маршруты живут в памяти, как и расписание.
 
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -38,19 +46,25 @@ use tokio::sync::watch;
 use crate::pkg::application::{Clock, Subject};
 use crate::pkg::lifecycle::Worker;
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::courier::applications::error::CourierApplicationError;
+use crate::slices::courier::applications::update_courier_location;
+use crate::slices::courier::domains::courier::{CourierId, Location};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, confirm_delivery, confirm_pickup, reject_delivery_offer,
     report_delivery_failure,
 };
 use crate::slices::delivery::domains::delivery::{
-    DeliveryFailureCode, DeliveryId, DeliveryOfferId,
+    DeliveryFailureCode, DeliveryId, DeliveryOfferId, VirtualCity,
 };
-use crate::slices::simulator::applications::work::DeliveryStep;
+use crate::slices::simulator::applications::work::{ActiveDeliveryWork, DeliveryStep};
 use crate::slices::simulator::di::SimulatorStore;
 
 use super::ServiceModule;
+
+mod movement;
+
+use movement::{Movement, route};
 
 /// Веса исходов, проценты первого исхода (FR-605).
 const ACCEPT_OFFER_PERCENT: u32 = 85;
@@ -162,6 +176,12 @@ pub trait CourierActions: Send + Sync {
         delivery: &DeliveryId,
         reason: DeliveryFailureCode,
     ) -> Result<(), DeliveryApplicationError>;
+    /// Передаёт позицию курьера (Update Courier Location).
+    fn update_location(
+        &self,
+        courier: &CourierId,
+        location: Location,
+    ) -> Result<(), CourierApplicationError>;
 }
 
 /// [`CourierActions`] над use cases процесса.
@@ -274,6 +294,24 @@ impl CourierActions for UseCaseCourierActions {
             )
             .map(|_| ())
     }
+
+    fn update_location(
+        &self,
+        courier: &CourierId,
+        location: Location,
+    ) -> Result<(), CourierApplicationError> {
+        self.use_cases
+            .couriers()
+            .update_courier_location(
+                &courier_subject(courier),
+                update_courier_location::Input {
+                    courier_id: courier.as_str().to_owned(),
+                    latitude: location.latitude(),
+                    longitude: location.longitude(),
+                },
+            )
+            .map(|_| ())
+    }
 }
 
 /// Сущность, ожидающая действия курьера.
@@ -289,6 +327,13 @@ struct Due {
     at_epoch_seconds: i64,
 }
 
+/// Курьер, которого Simulator ведёт к точке шага доставки.
+#[derive(Clone, Debug)]
+struct Moving {
+    courier: CourierId,
+    movement: Movement,
+}
+
 /// Расписание и выбор действий Simulator; один проход — [`Self::tick`].
 pub struct Simulator {
     store: Arc<dyn SimulatorStore>,
@@ -296,7 +341,10 @@ pub struct Simulator {
     clock: Arc<dyn Clock + Send + Sync>,
     random: Box<dyn Randomness>,
     schedule: SimulatorSchedule,
+    city: VirtualCity,
     due: HashMap<Work, Due>,
+    /// Маршруты шагов доставок (`Work::Delivery`).
+    moving: HashMap<Work, Moving>,
 }
 
 fn seconds(duration: Duration) -> i64 {
@@ -321,6 +369,7 @@ impl Simulator {
         clock: Arc<dyn Clock + Send + Sync>,
         random: Box<dyn Randomness>,
         schedule: SimulatorSchedule,
+        city: VirtualCity,
     ) -> Self {
         Self {
             store,
@@ -328,7 +377,9 @@ impl Simulator {
             clock,
             random,
             schedule,
+            city,
             due: HashMap::new(),
+            moving: HashMap::new(),
         }
     }
 
@@ -339,6 +390,7 @@ impl Simulator {
             Ok(true) => {}
             Ok(false) => {
                 self.due.clear();
+                self.moving.clear();
                 return;
             }
             Err(error) => {
@@ -378,6 +430,7 @@ impl Simulator {
             )
             .collect();
         self.due.retain(|work, _| seen.contains(work));
+        self.moving.retain(|work, _| seen.contains(work));
         for offer in offers {
             let work = Work::Offer(offer.offer_id);
             if !self.due.contains_key(&work) {
@@ -386,15 +439,77 @@ impl Simulator {
             }
         }
         for delivery in deliveries {
-            let work = Work::Delivery(delivery.delivery_id, delivery.step);
+            let work = Work::Delivery(delivery.delivery_id.clone(), delivery.step);
             if !self.due.contains_key(&work) {
                 let delay = self
                     .random
                     .delay(self.schedule.min_delay, self.schedule.max_delay);
-                self.schedule_work(work, delivery.courier_id, now, delay);
+                self.schedule_work(work.clone(), delivery.courier_id.clone(), now, delay);
+            }
+            if !self.moving.contains_key(&work) {
+                self.start_moving(work, &delivery, now);
             }
         }
         Ok(())
+    }
+
+    /// Строит маршрут шага доставки с точками: в `Assigned` — от перекрёстка
+    /// у сохранённой позиции курьера (неизвестна — стоит у pickup) к pickup,
+    /// в `PickedUp` — от pickup к dropoff; прибытие — запланированный момент
+    /// шага.
+    fn start_moving(&mut self, work: Work, delivery: &ActiveDeliveryWork, now: i64) {
+        let Some(points) = delivery.points else {
+            return;
+        };
+        let (from, to) = match delivery.step {
+            DeliveryStep::Pickup => (
+                delivery
+                    .courier_location
+                    .map_or(points.pickup, |location| self.city.nearest(&location)),
+                points.pickup,
+            ),
+            DeliveryStep::Handover => (points.pickup, points.dropoff),
+        };
+        let arrive_at = self.due.get(&work).map_or(now, |due| due.at_epoch_seconds);
+        let path = route(from, to, &mut *self.random);
+        self.moving.insert(
+            work,
+            Moving {
+                courier: delivery.courier_id.clone(),
+                movement: Movement {
+                    route: path,
+                    start_at_epoch_seconds: now,
+                    arrive_at_epoch_seconds: arrive_at,
+                },
+            },
+        );
+    }
+
+    /// Передаёт текущие точки маршрутов (FR-667). Маршруты есть, только пока
+    /// Simulator включён: выключенный проход их сбрасывает.
+    pub fn track(&mut self) {
+        let now = self.clock.now_epoch_seconds();
+        for moving in self.moving.values() {
+            let result = moving
+                .movement
+                .position(&self.city, now)
+                .map_err(|error| error.to_string())
+                .and_then(|location| {
+                    self.actions
+                        .update_location(&moving.courier, location)
+                        .map_err(|error| error.to_string())
+                });
+            if let Err(error) = result {
+                tracing::warn!(
+                    operation = "simulator",
+                    outcome = "failure",
+                    action = "update_courier_location",
+                    courier_id = moving.courier.as_str(),
+                    %error,
+                    "simulated courier position rejected"
+                );
+            }
+        }
     }
 
     fn schedule_work(&mut self, work: Work, courier: CourierId, now: i64, delay: Duration) {
@@ -532,22 +647,35 @@ pub struct SimulatorWorker<W> {
     inner: W,
     simulator: Simulator,
     interval: Duration,
+    track_interval: Duration,
 }
 
 impl<W: Worker> SimulatorWorker<W> {
+    /// `track_interval` не больше `interval` (FR-667).
     #[must_use]
-    pub fn new(inner: W, simulator: Simulator, interval: Duration) -> Self {
+    pub fn new(
+        inner: W,
+        simulator: Simulator,
+        interval: Duration,
+        track_interval: Duration,
+    ) -> Self {
         Self {
             inner,
             simulator,
             interval,
+            track_interval,
         }
     }
 }
 
 impl<W: Worker> Worker for SimulatorWorker<W> {
     async fn run(self, stop: watch::Receiver<bool>) -> io::Result<()> {
-        let simulating = tokio::spawn(run(self.simulator, self.interval, stop.clone()));
+        let simulating = tokio::spawn(run(
+            self.simulator,
+            self.interval,
+            self.track_interval,
+            stop.clone(),
+        ));
         let result = self.inner.run(stop.clone()).await;
         if !*stop.borrow() {
             // Основной worker завершился сам: lifecycle сочтёт это ошибкой.
@@ -558,16 +686,29 @@ impl<W: Worker> Worker for SimulatorWorker<W> {
     }
 }
 
-/// Проходы до `stop == true`; проход идёт на blocking thread (use cases и
-/// хранилище синхронны).
-pub async fn run(mut simulator: Simulator, interval: Duration, mut stop: watch::Receiver<bool>) {
+/// Шаги до `stop == true` каждые `track_interval`: на каждом шаге
+/// позиции движущихся курьеров, раз в `interval` — сначала проход
+/// расписания. Шаг идёт на blocking thread (use cases и хранилище синхронны).
+pub async fn run(
+    mut simulator: Simulator,
+    interval: Duration,
+    track_interval: Duration,
+    mut stop: watch::Receiver<bool>,
+) {
+    let steps_per_pass = (interval.as_millis() / track_interval.as_millis().max(1)).max(1);
+    let mut step: u128 = 0;
     loop {
         tokio::select! {
-            () = tokio::time::sleep(interval) => {}
+            () = tokio::time::sleep(track_interval) => {}
             _ = stop.wait_for(|stopped| *stopped) => return,
         }
+        let pass = step.is_multiple_of(steps_per_pass);
+        step = step.wrapping_add(1);
         let pass = tokio::task::spawn_blocking(move || {
-            simulator.tick();
+            if pass {
+                simulator.tick();
+            }
+            simulator.track();
             simulator
         });
         match pass.await {

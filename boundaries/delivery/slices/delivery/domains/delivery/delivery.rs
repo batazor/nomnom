@@ -1,8 +1,8 @@
 use super::fsm::{ensure_allowed, transition};
 use super::{
     CompoundState, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason, DeliveryId,
-    DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State, TransitionError,
-    TransitionResult, Trigger,
+    DeliveryTracking, DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State,
+    TransitionError, TransitionResult, Trigger,
 };
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::{CourierId, MarketId};
@@ -33,6 +33,9 @@ pub struct Delivery {
     expected_delivered_at: Option<ExpectedTime>,
     /// Creation time; `None` for a Delivery stored before it was recorded.
     created_at_epoch_seconds: Option<i64>,
+    /// Points in the Virtual City and Tracking Channel, set on creation
+    /// (FR-659); `None` for a Delivery stored before they existed.
+    tracking: Option<DeliveryTracking>,
     /// Technical field: revision of the last `delivery:<id>#courier` write.
     authorization_revision: Option<AuthorizationRevision>,
     /// Technical field: optimistic concurrency version of the stored snapshot.
@@ -53,6 +56,7 @@ impl Delivery {
             expected_pickup_at: None,
             expected_delivered_at: None,
             created_at_epoch_seconds: None,
+            tracking: None,
             authorization_revision: None,
             version: 0,
             events: Vec::new(),
@@ -112,6 +116,7 @@ impl Delivery {
             expected_pickup_at: None,
             expected_delivered_at: None,
             created_at_epoch_seconds: None,
+            tracking: None,
             authorization_revision: None,
             version: 0,
             events: Vec::new(),
@@ -141,6 +146,19 @@ impl Delivery {
     #[must_use]
     pub const fn created_at_epoch_seconds(&self) -> Option<i64> {
         self.created_at_epoch_seconds
+    }
+
+    /// Snapshot field `tracking`, absent in old snapshots; Create Delivery
+    /// sets it on a new Delivery.
+    #[must_use]
+    pub fn with_tracking(mut self, tracking: Option<DeliveryTracking>) -> Self {
+        self.tracking = tracking;
+        self
+    }
+
+    #[must_use]
+    pub fn tracking(&self) -> Option<&DeliveryTracking> {
+        self.tracking.as_ref()
     }
 
     /// Snapshot fields `expected_pickup_at` and `expected_delivered_at`.

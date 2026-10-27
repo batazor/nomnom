@@ -449,6 +449,9 @@ fn idempotent_repeat_is_recorded_once() {
     let authorization = StaticAuthorization::allow_all();
     let ids = SequentialIdGenerator::new("delivery");
     let clock = ManualClock::new(NOW);
+    let city = crate::slices::delivery::domains::delivery::VirtualCity::new(52.5, 13.4, 2, 150.0)
+        .expect("virtual city");
+    let random = crate::infrastructure::memory::FixedRandomSource::repeating(7);
     let handler = create_delivery::Handler {
         authorization: &authorization,
         unit_of_work: &unit_of_work,
@@ -456,6 +459,8 @@ fn idempotent_repeat_is_recorded_once() {
         outbox: &ports,
         ids: &ids,
         clock: &clock,
+        city: &city,
+        random: &random,
     };
     let input = || create_delivery::Input {
         order_id: "order-1".to_owned(),

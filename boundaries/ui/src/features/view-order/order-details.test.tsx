@@ -16,6 +16,7 @@ import {
 
 import { AppProviders } from "../../app/providers";
 import { mockStore } from "../../shared/graphql/mocks/handlers";
+import { courierStepMs } from "../../shared/graphql/mocks/courier-tracks";
 import { mockServer } from "../../shared/graphql/mocks/server";
 import { liveStepMs } from "../../shared/graphql/mocks/store";
 import { OrderDetails } from "./order-details";
@@ -287,8 +288,71 @@ describe("order updates", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(120_000));
     expect(requests.value).toBe(delivered);
-    // The first load and one refetch when the stream connects (ADR 36).
-    expect(delivered).toBe(2);
+    // The first load and one refetch when each stream connects (ADR 36):
+    // orderChanged, then courierMoved once the courier is assigned.
+    expect(delivered).toBe(3);
+  });
+});
+
+// FR-664, FR-669: the live map of the Virtual City while the courier is on
+// the way.
+describe("courier map", () => {
+  function markerPosition() {
+    return screen.getByTestId("courier-marker").getAttribute("transform");
+  }
+
+  it("AC-887: moves the courier by courierMoved, without polling", async () => {
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+    });
+    const requests = countOrderRequests();
+    renderOrder("order-picked-up");
+
+    const map = await screen.findByRole("img", {
+      name: "Курьер везёт заказ",
+    });
+    expect(map).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Где курьер" })).toBeVisible();
+    const start = markerPosition();
+    // The first load and the refetch when the streams connect (ADR 36).
+    await vi.waitFor(() => expect(requests.value).toBeGreaterThanOrEqual(2));
+    await act(() => vi.advanceTimersByTimeAsync(courierStepMs));
+    const loads = requests.value;
+
+    for (let step = 0; step < 3; step += 1) {
+      await act(() => vi.advanceTimersByTimeAsync(courierStepMs));
+    }
+
+    await vi.waitFor(() => {
+      expect(map.querySelector(".order-map-trail")).not.toBeNull();
+      expect(markerPosition()).not.toBe(start);
+    });
+    expect(requests.value).toBe(loads);
+  });
+
+  it("heads to the restaurant before the pickup", async () => {
+    renderOrder("order-preparing");
+
+    expect(
+      await screen.findByRole("img", { name: "Курьер едет в ресторан" }),
+    ).toBeInTheDocument();
+  });
+
+  it("AC-888: shows no map for a delivered order or one without a courier", async () => {
+    renderOrder("order-delivered");
+    await screen.findByRole("heading", { level: 3, name: "Доставлен" });
+    expect(screen.queryByRole("heading", { name: "Где курьер" })).toBeNull();
+  });
+
+  it("passes axe with the map", async () => {
+    const { container } = renderOrder("order-picked-up");
+    await screen.findByRole("img", { name: "Курьер везёт заказ" });
+
+    const result = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(result.violations).toEqual([]);
   });
 });
 

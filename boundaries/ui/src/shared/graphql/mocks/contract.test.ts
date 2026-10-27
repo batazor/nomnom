@@ -20,6 +20,7 @@ import {
   nightBakery,
   restaurantFixtures,
 } from "./fixtures";
+import { trackingChannel } from "./courier-tracks";
 import { mockCourierId } from "./fulfillment";
 import { publicSchema } from "./schema";
 import { createMockStore } from "./store";
@@ -42,6 +43,7 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   BffInfo: {},
   ViewOrder: { id: "order-preparing" },
   OrderChanged: { id: "order-preparing" },
+  CourierMoved: { channel: trackingChannel("order-preparing") },
   RequestOrderCancellation: {
     input: { orderId: "order-received", requestId: "contract-cancel" },
   },

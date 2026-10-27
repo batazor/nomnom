@@ -20,6 +20,7 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
 };
 use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
 use crate::slices::delivery::applications::get_order_courier::{self, OrderCourierReadModel};
+use crate::slices::delivery::applications::get_order_tracking::{self, OrderTrackingReadModel};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
@@ -27,12 +28,15 @@ use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
+use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
     dispatch_deliveries, expire_delivery_offers, find_courier, offer_delivery, reassign_courier,
     reject_delivery_offer, replan_delivery, report_delivery_failure,
 };
-use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
+use crate::slices::delivery::domains::delivery::{
+    DeliveryOfferRepository, DeliveryRepository, VirtualCity,
+};
 
 /// Транзакционная роль хранилища слайса: Unit of Work, репозитории
 /// `Delivery` и offer, занятость курьера (порт слайса `courier`) и Outbox.
@@ -69,6 +73,7 @@ pub trait DeliveryReadModels:
     + CourierCurrentDeliveryReadModel
     + CourierPoolReadModel
     + OrderCourierReadModel
+    + OrderTrackingReadModel
     + Send
     + Sync
 {
@@ -79,6 +84,7 @@ impl<T> DeliveryReadModels for T where
         + CourierCurrentDeliveryReadModel
         + CourierPoolReadModel
         + OrderCourierReadModel
+        + OrderTrackingReadModel
         + Send
         + Sync
 {
@@ -102,6 +108,10 @@ pub trait DeliveryPorts: Interface {
     fn clock(&self) -> &dyn Clock;
     fn ids(&self) -> &dyn IdGenerator;
     fn relationships(&self) -> &dyn DeliveryRelationshipWriter;
+    /// Virtual City of the tracking (FR-658).
+    fn city(&self) -> &VirtualCity;
+    /// Random source of the points and channel of a new Delivery.
+    fn random(&self) -> &dyn RandomSource;
 }
 
 /// Числовые параметры назначения; значения задаёт корневой `di`.
@@ -157,6 +167,12 @@ pub trait DeliveryUseCases: Interface {
         subject: &Subject,
         input: get_order_courier::Input,
     ) -> Result<get_order_courier::Output, DeliveryApplicationError>;
+
+    fn get_order_tracking(
+        &self,
+        subject: &Subject,
+        input: get_order_tracking::Input,
+    ) -> Result<get_order_tracking::Output, DeliveryApplicationError>;
 
     fn accept_delivery_offer(
         &self,
@@ -247,6 +263,8 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             outbox: self.ports.store(),
             ids: self.ports.ids(),
             clock: self.ports.clock(),
+            city: self.ports.city(),
+            random: self.ports.random(),
         }
         .execute(subject, input)
     }
@@ -335,6 +353,19 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         get_order_courier::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.read_models(),
+        }
+        .execute(subject, input)
+    }
+
+    fn get_order_tracking(
+        &self,
+        subject: &Subject,
+        input: get_order_tracking::Input,
+    ) -> Result<get_order_tracking::Output, DeliveryApplicationError> {
+        get_order_tracking::Handler {
+            authorization: self.ports.authorization(),
+            tracking: self.ports.read_models(),
+            city: self.ports.city(),
         }
         .execute(subject, input)
     }

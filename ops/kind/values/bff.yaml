@@ -34,6 +34,12 @@ env:
 kafka:
   brokers: kafka.nomnom-infra.svc.cluster.local:9092
 
+# FR-668: Valkey delivery в nomnom-data, ACL-пользователь bff (только SUBSCRIBE).
+tracks:
+  redisUrlSecret:
+    name: bff-tracks-valkey
+    key: url
+
 # ADR 32, ADR 35. ТОЛЬКО для kind: два identity provider из chart ops/kind/bootstrap —
 # Dex (вход в браузере, issuer — адрес port-forward на localhost) и тестовый test-idp
 # (tests/identity/fixtures, ключ подписи лежит в репозитории; tokens выпускает

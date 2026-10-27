@@ -23,8 +23,8 @@ func list(history OrderHistory, catalog Catalog) ListCustomerOrders {
 	return h
 }
 
-// The history carries the full card of each Order: one restaurants read per
-// distinct restaurant of the page and no GetOrder per Order.
+// The history carries the full card of each Order: one restaurants read for
+// the distinct restaurants of the page (ADR 7) and no GetOrder per Order.
 func TestCustomerOrdersAreFullOrderViewsWithTheirCursors(t *testing.T) {
 	history := NewMockOrderHistory(t)
 	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 3, "c4").Return(HistoryPage{
@@ -32,8 +32,10 @@ func TestCustomerOrdersAreFullOrderViewsWithTheirCursors(t *testing.T) {
 		NextCursor: "c1",
 	}, nil).Once()
 	catalog := NewMockCatalog(t)
-	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
-	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-2").Return(Restaurant{ID: "restaurant-2", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	catalog.EXPECT().Restaurants(mock.Anything, []string{"restaurant-1", "restaurant-2"}).Return(map[string]Restaurant{
+		"restaurant-1": {ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
+		"restaurant-2": {ID: "restaurant-2", Name: "Кухня №8", IsOpen: true},
+	}, nil).Once()
 
 	page, err := list(history, catalog).Handle(context.Background(), "customer-1", 3, "c4")
 
@@ -52,7 +54,7 @@ func TestLastHistoryPage(t *testing.T) {
 	history := NewMockOrderHistory(t)
 	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 10, "").Return(HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil).Once()
 	catalog := NewMockCatalog(t)
-	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	catalog.EXPECT().Restaurants(mock.Anything, []string{"restaurant-1"}).Return(map[string]Restaurant{"restaurant-1": Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}}, nil).Once()
 	page, err := list(history, catalog).Handle(context.Background(), "customer-1", 10, "")
 	require.NoError(t, err)
 	assert.False(t, page.HasNextPage)
@@ -80,7 +82,7 @@ func TestCustomerOrdersRefusals(t *testing.T) {
 	history := NewMockOrderHistory(t)
 	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 1, "").Return(HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil).Once()
 	catalog := NewMockCatalog(t)
-	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{}, down).Once()
+	catalog.EXPECT().Restaurants(mock.Anything, []string{"restaurant-1"}).Return(nil, down).Once()
 	_, err = list(history, catalog).Handle(context.Background(), "customer-1", 1, "")
 	assert.ErrorIs(t, err, down)
 
@@ -89,7 +91,14 @@ func TestCustomerOrdersRefusals(t *testing.T) {
 	brokenHistory := NewMockOrderHistory(t)
 	brokenHistory.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 1, "").Return(HistoryPage{Entries: []HistoryEntry{broken}}, nil).Once()
 	brokenCatalog := NewMockCatalog(t)
-	brokenCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	brokenCatalog.EXPECT().Restaurants(mock.Anything, []string{"restaurant-1"}).Return(map[string]Restaurant{"restaurant-1": Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}}, nil).Once()
 	_, err = list(brokenHistory, brokenCatalog).Handle(context.Background(), "customer-1", 1, "")
 	assert.Error(t, err, "an unknown state fails the page instead of being guessed")
+
+	missingHistory := NewMockOrderHistory(t)
+	missingHistory.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 1, "").Return(HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil).Once()
+	missingCatalog := NewMockCatalog(t)
+	missingCatalog.EXPECT().Restaurants(mock.Anything, []string{"restaurant-1"}).Return(map[string]Restaurant{}, nil).Once()
+	_, err = list(missingHistory, missingCatalog).Handle(context.Background(), "customer-1", 1, "")
+	assert.Error(t, err, "a restaurant restaurants does not know fails the page")
 }

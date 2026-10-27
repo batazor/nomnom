@@ -4,7 +4,9 @@
 use crate::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use crate::slices::courier::applications::update_courier_location::CourierPosition;
+use crate::slices::courier::applications::update_courier_location::{
+    ActiveTrackingChannel, CourierPosition,
+};
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location, MarketId};
 use crate::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
@@ -19,6 +21,9 @@ use crate::slices::delivery::applications::get_courier_pool::{
 use crate::slices::delivery::applications::get_order_courier::{
     OrderCourierReadModel, OrderCourierView,
 };
+use crate::slices::delivery::applications::get_order_tracking::{
+    OrderTrackingReadModel, OrderTrackingRecord,
+};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
@@ -29,7 +34,8 @@ use crate::slices::delivery::domains::delivery::{
 
 use super::rows::{
     DeliveryRow, active_assignment_states, courier_name, courier_status, delivery_from_row,
-    delivery_state, market_id, offer_state, parse_courier_status, parse_delivery_state,
+    delivery_state, delivery_tracking, market_id, offer_state, parse_courier_status,
+    parse_delivery_state,
 };
 use super::{Store, corrupt, domain_version, limit, storage_error};
 
@@ -115,6 +121,66 @@ impl CourierPoolReadModel for Store {
     }
 }
 
+impl OrderTrackingReadModel for Store {
+    fn tracking_of_order(
+        &self,
+        order_id: &OrderId,
+    ) -> Result<Option<OrderTrackingRecord>, RepositoryError> {
+        // An active delivery always has a courier: `courier_id!`.
+        let row = sql!(self, "SELECT", |connection| sqlx::query!(
+            r#"SELECT d.courier_id AS "courier_id!", d.pickup_x, d.pickup_y, d.dropoff_x,
+                 d.dropoff_y, d.tracking_channel,
+                 p.latitude AS "latitude?", p.longitude AS "longitude?",
+                 p.recorded_at AS "recorded_at?"
+             FROM deliveries d LEFT JOIN courier_positions p ON p.courier_id = d.courier_id
+             WHERE d.order_id = $1 AND d.state = ANY($2) AND d.courier_id IS NOT NULL
+               AND d.tracking_channel IS NOT NULL"#,
+            order_id.as_str(),
+            &active_assignment_states()[..] as &[&str]
+        )
+        .fetch_optional(connection))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let Some(tracking) = delivery_tracking(
+            (row.pickup_x, row.pickup_y),
+            (row.dropoff_x, row.dropoff_y),
+            row.tracking_channel,
+        )?
+        else {
+            return Err(corrupt("delivery tracking", "selected without a channel"));
+        };
+        let courier_position = match (row.latitude, row.longitude, row.recorded_at) {
+            (Some(latitude), Some(longitude), Some(recorded_at)) => Some(CourierPosition {
+                courier_id: CourierId::new(row.courier_id),
+                location: Location::new(latitude, longitude)
+                    .map_err(|error| corrupt("courier position", error))?,
+                recorded_at_epoch_seconds: recorded_at,
+            }),
+            _ => None,
+        };
+        Ok(Some(OrderTrackingRecord {
+            channel: tracking.channel,
+            pickup: tracking.pickup,
+            dropoff: tracking.dropoff,
+            courier_position,
+        }))
+    }
+}
+
+impl ActiveTrackingChannel for Store {
+    fn active_channel(&self, courier_id: &CourierId) -> Result<Option<String>, RepositoryError> {
+        // A courier has at most one active delivery (FR-310).
+        sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+            r#"SELECT tracking_channel AS "tracking_channel!" FROM deliveries
+             WHERE courier_id = $1 AND state = ANY($2) AND tracking_channel IS NOT NULL"#,
+            courier_id.as_str(),
+            &active_assignment_states()[..] as &[&str]
+        )
+        .fetch_optional(connection))
+    }
+}
+
 impl OrderCourierReadModel for Store {
     fn courier_of_order(
         &self,
@@ -154,7 +220,8 @@ impl WaitingDeliveries for Store {
             DeliveryRow,
             "SELECT id, order_id, market_id, courier_id, state, failure_reason,
                  failure_detail, authorization_revision, version, created_at,
-                 expected_pickup_at, expected_delivered_at
+                 expected_pickup_at, expected_delivered_at,
+                 pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel
              FROM deliveries
              WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)
                AND NOT EXISTS (SELECT 1 FROM delivery_offers o

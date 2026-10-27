@@ -5,11 +5,12 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use super::*;
 use crate::infrastructure::memory::RecordingRelationships;
 use crate::infrastructure::repository::test_support::TestStore;
+use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
 use crate::slices::courier::applications::{register_courier, update_courier_location};
 use crate::slices::delivery::applications::{create_delivery, dispatch_deliveries};
-use crate::slices::delivery::domains::delivery::{ExpectedTime, State};
+use crate::slices::delivery::domains::delivery::{ExpectedTime, Intersection, State};
 use crate::slices::simulator::applications::work::{
-    ActiveDeliveryWork, PendingOfferWork, SimulatorWork,
+    ActiveDeliveryWork, DeliveryPoints, PendingOfferWork, SimulatorWork,
 };
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
@@ -20,6 +21,10 @@ const SCHEDULE: SimulatorSchedule = SimulatorSchedule {
     min_delay: Duration::from_secs(30),
     max_delay: Duration::from_secs(120),
 };
+
+fn city() -> VirtualCity {
+    VirtualCity::new(52.515, 13.385, 12, 150.0).expect("virtual city")
+}
 
 struct FakeClock(AtomicI64);
 
@@ -91,7 +96,7 @@ impl SimulatorWork for FakeWork {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Call {
     /// Courier, offer, named Pickup time.
     Accept(String, String, i64),
@@ -100,6 +105,8 @@ enum Call {
     Pickup(String, String, i64),
     Deliver(String, String),
     Fail(String, String, DeliveryFailureCode),
+    /// Courier, position.
+    Locate(String, Location),
 }
 
 #[derive(Default)]
@@ -181,6 +188,18 @@ impl CourierActions for RecordingActions {
             reason,
         ))
     }
+
+    fn update_location(
+        &self,
+        courier: &CourierId,
+        location: Location,
+    ) -> Result<(), CourierApplicationError> {
+        self.calls
+            .lock()
+            .expect("calls")
+            .push(Call::Locate(courier.as_str().into(), location));
+        Ok(())
+    }
 }
 
 /// Delivery of an offer accepted through [`RecordingActions`].
@@ -206,6 +225,7 @@ fn harness(random: Scripted) -> Harness {
         Arc::clone(&clock) as _,
         Box::new(random),
         SCHEDULE,
+        city(),
     );
     Harness {
         work,
@@ -228,6 +248,8 @@ fn delivery(id: &str, courier: &str, step: DeliveryStep) -> ActiveDeliveryWork {
         delivery_id: DeliveryId::new(id),
         courier_id: CourierId::new(courier),
         step,
+        points: None,
+        courier_location: None,
     }
 }
 
@@ -429,6 +451,8 @@ fn names_planned_times_and_acts_at_them() {
             delivery_id: delivery_of("o-1"),
             courier_id: CourierId::new("c-1"),
             step: DeliveryStep::Pickup,
+            points: None,
+            courier_location: None,
         });
     h.clock.advance(44);
     h.simulator.tick();
@@ -525,6 +549,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
             min_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(2),
         },
+        city(),
     );
 
     // Delay 0: the offer is due on the pass that first sees it.
@@ -548,8 +573,81 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
             delivery_id: created.delivery_id,
             courier_id: CourierId::new("courier-1"),
             step: DeliveryStep::Pickup,
+            points: delivery.tracking().map(|tracking| DeliveryPoints {
+                pickup: tracking.pickup,
+                dropoff: tracking.dropoff,
+            }),
+            courier_location: Some(Location::new(52.37, 4.89).expect("location")),
         }]
     );
+
+    // FR-662: the next pass starts the route to pickup; the courier outside
+    // the Virtual City starts at its edge and its position goes through
+    // Update Courier Location.
+    simulator.tick();
+    simulator.track();
+    let position = store
+        .latest(&CourierId::new("courier-1"))
+        .expect("read position")
+        .expect("position");
+    assert_ne!(
+        position.location,
+        Location::new(52.37, 4.89).expect("location")
+    );
+    assert_eq!(
+        city().nearest(&position.location).x,
+        0,
+        "starts at the western edge"
+    );
+}
+
+/// AC-880, AC-881: a delivery with points moves to pickup by its planned
+/// moment, then stands there.
+#[test]
+fn moves_the_courier_to_pickup_by_the_planned_moment() {
+    let mut h = harness(scripted(&[120], &[]));
+    let pickup = Intersection { x: 4, y: 0 };
+    let mut work = delivery("d-1", "c-1", DeliveryStep::Pickup);
+    work.points = Some(DeliveryPoints {
+        pickup,
+        dropoff: Intersection { x: 4, y: 6 },
+    });
+    work.courier_location = Some(city().location(Intersection { x: 0, y: 0 }).expect("start"));
+    h.work.deliveries.lock().expect("deliveries").push(work);
+
+    h.simulator.tick();
+    h.clock.advance(60);
+    h.simulator.track();
+    h.clock.advance(60);
+    h.simulator.track();
+
+    assert_eq!(
+        h.actions.calls(),
+        vec![
+            Call::Locate(
+                "c-1".into(),
+                city()
+                    .location(Intersection { x: 2, y: 0 })
+                    .expect("halfway")
+            ),
+            Call::Locate("c-1".into(), city().location(pickup).expect("pickup")),
+        ]
+    );
+}
+
+#[test]
+fn delivery_without_points_does_not_move() {
+    let mut h = harness(scripted(&[120], &[]));
+    h.work.deliveries.lock().expect("deliveries").push(delivery(
+        "d-1",
+        "c-1",
+        DeliveryStep::Pickup,
+    ));
+
+    h.simulator.tick();
+    h.simulator.track();
+
+    assert!(h.actions.calls().is_empty());
 }
 
 #[tokio::test]
@@ -566,7 +664,13 @@ async fn worker_stops_with_the_main_worker() {
     let h = harness(Scripted::default());
     let (sender, receiver) = watch::channel(false);
     let worker = tokio::spawn(
-        SimulatorWorker::new(IdleWorker, h.simulator, Duration::from_millis(5)).run(receiver),
+        SimulatorWorker::new(
+            IdleWorker,
+            h.simulator,
+            Duration::from_millis(5),
+            Duration::from_millis(5),
+        )
+        .run(receiver),
     );
     tokio::time::sleep(Duration::from_millis(20)).await;
     sender.send(true).expect("stop");

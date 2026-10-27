@@ -3,6 +3,7 @@ import type {
   OrderMilestoneKind,
   OrderStatus,
 } from "../generated/graphql";
+import { mockTracking } from "./courier-tracks";
 import {
   kitchenEight,
   type MockOrder,
@@ -35,8 +36,19 @@ type ScenarioSpec = {
   courier?: string;
 };
 
+// Statuses with a courier on the way once one is assigned.
+const trackedStatuses: ReadonlySet<OrderStatus> = new Set([
+  "CONFIRMED",
+  "PREPARING",
+  "READY_FOR_PICKUP",
+  "PICKED_UP",
+]);
+
 function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
   const placed = -spec.placedMinutesAgo;
+  const assigned = (spec.milestones ?? []).some(
+    ([kind]) => kind === "COURIER_ASSIGNED",
+  );
   return {
     id: spec.id,
     status: spec.status,
@@ -60,6 +72,10 @@ function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
     expectedPickupAt: deadline(now, placed, spec.deadlines?.pickup),
     expectedDeliveredAt: deadline(now, placed, spec.deadlines?.delivered),
     courier: spec.courier ? { name: spec.courier } : null,
+    tracking:
+      assigned && trackedStatuses.has(spec.status)
+        ? mockTracking(spec.id, spec.status === "PICKED_UP", now)
+        : null,
   };
 }
 

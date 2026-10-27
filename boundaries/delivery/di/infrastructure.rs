@@ -18,7 +18,9 @@ use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
-use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
+use crate::slices::courier::applications::update_courier_location::{
+    ActiveTrackingChannel, CourierLocationStore, CourierPositionPublisher,
+};
 use crate::slices::courier::di::{CourierDependencies, CourierPorts};
 use crate::slices::courier::domains::courier::{
     CourierId, CourierRepository, CourierStatus, MarketId,
@@ -31,13 +33,14 @@ use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
+use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
     WaitingDeliveriesQuery,
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureCode, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    DeliveryOfferRepository, DeliveryRepository, OrderId,
+    DeliveryOfferRepository, DeliveryRepository, OrderId, VirtualCity,
 };
 use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
@@ -52,11 +55,40 @@ const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
     offer_ttl_seconds: 60,
 };
 
-/// Роль хранилища, которую видит слайс `courier`: `Courier` и последние
-/// позиции курьеров.
-pub trait CourierStore: CourierRepository + CourierLocationStore + Send + Sync {}
+/// Роль хранилища, которую видит слайс `courier`: `Courier`, последние
+/// позиции курьеров и Tracking Channel активной доставки курьера.
+pub trait CourierStore:
+    CourierRepository + CourierLocationStore + ActiveTrackingChannel + Send + Sync
+{
+}
 
-impl<T: CourierRepository + CourierLocationStore + Send + Sync> CourierStore for T {}
+impl<T> CourierStore for T where
+    T: CourierRepository + CourierLocationStore + ActiveTrackingChannel + Send + Sync
+{
+}
+
+/// Поток позиций курьеров: Valkey pub/sub в процессе
+/// ([`ValkeyPositionPublisher`](crate::infrastructure::tracks::ValkeyPositionPublisher)),
+/// записывающий только в тестах.
+pub trait ProcessPositionPublisher: CourierPositionPublisher + Send + Sync {}
+
+impl<T: CourierPositionPublisher + Send + Sync> ProcessPositionPublisher for T {}
+
+/// Случайность точек и каналов новых доставок: ОС в процессе
+/// ([`SystemRandomSource`](crate::infrastructure::random::SystemRandomSource)),
+/// фиксированная только в тестах.
+pub trait ProcessRandomSource: RandomSource + Send + Sync {}
+
+impl<T: RandomSource + Send + Sync> ProcessRandomSource for T {}
+
+/// Live tracking процесса (FR-658…FR-661): Virtual City, интервал записи
+/// позиции, поток позиций и случайность новых доставок.
+pub struct ProcessTracking {
+    pub city: VirtualCity,
+    pub persist_interval_seconds: i64,
+    pub publisher: Box<dyn ProcessPositionPublisher>,
+    pub random: Box<dyn ProcessRandomSource>,
+}
 
 /// Роли хранилища процесса над одним адаптером
 /// ([`Store`](crate::infrastructure::repository::Store); в
@@ -209,6 +241,8 @@ impl Clock for SystemClock {
 #[shaku(interface = CourierPorts)]
 pub struct LocalCourierPorts {
     store: Arc<dyn CourierStore>,
+    publisher: Box<dyn ProcessPositionPublisher>,
+    persist_interval_seconds: i64,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -230,12 +264,24 @@ impl CourierPorts for LocalCourierPorts {
         &*self.store
     }
 
+    fn channels(&self) -> &dyn ActiveTrackingChannel {
+        &*self.store
+    }
+
+    fn publisher(&self) -> &dyn CourierPositionPublisher {
+        &*self.publisher
+    }
+
     fn clock(&self) -> &dyn Clock {
         &*self.clock
     }
 
     fn relationships(&self) -> &dyn CourierRelationshipWriter {
         self.relationships.courier()
+    }
+
+    fn persist_interval_seconds(&self) -> i64 {
+        self.persist_interval_seconds
     }
 }
 
@@ -253,6 +299,8 @@ pub struct LocalDeliveryPorts {
     relationships: Arc<dyn SharedRelationships>,
     locator: Box<dyn ProcessLocator>,
     ids: Box<dyn ProcessIds>,
+    city: VirtualCity,
+    random: Box<dyn ProcessRandomSource>,
 }
 
 /// Closed set of `nomnom.reason` of `nomnom.delivery.failed`: the codes of the
@@ -411,6 +459,14 @@ impl DeliveryPorts for LocalDeliveryPorts {
     fn relationships(&self) -> &dyn DeliveryRelationshipWriter {
         self.relationships.delivery()
     }
+
+    fn city(&self) -> &VirtualCity {
+        &self.city
+    }
+
+    fn random(&self) -> &dyn RandomSource {
+        &*self.random
+    }
 }
 
 #[derive(Component)]
@@ -470,6 +526,7 @@ pub(super) fn infrastructure(
     locator: Box<dyn ProcessLocator>,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
+    tracking: ProcessTracking,
 ) -> Arc<InfrastructureModule> {
     Arc::new(
         InfrastructureModule::builder()
@@ -481,6 +538,8 @@ pub(super) fn infrastructure(
             })
             .with_component_parameters::<LocalCourierPorts>(LocalCourierPortsParameters {
                 store: stores.couriers,
+                publisher: tracking.publisher,
+                persist_interval_seconds: tracking.persist_interval_seconds,
             })
             .with_component_parameters::<LocalSimulatorPorts>(LocalSimulatorPortsParameters {
                 store: stores.simulator,
@@ -491,6 +550,8 @@ pub(super) fn infrastructure(
                 waiting: stores.waiting,
                 locator,
                 ids,
+                city: tracking.city,
+                random: tracking.random,
             })
             .build(),
     )

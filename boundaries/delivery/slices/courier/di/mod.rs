@@ -10,7 +10,9 @@ use crate::pkg::application::{Clock, Subject};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
-use crate::slices::courier::applications::update_courier_location::{self, CourierLocationStore};
+use crate::slices::courier::applications::update_courier_location::{
+    self, ActiveTrackingChannel, CourierLocationStore, CourierPositionPublisher,
+};
 use crate::slices::courier::applications::{
     register_courier, retire_courier, set_courier_availability,
 };
@@ -22,8 +24,12 @@ pub trait CourierPorts: Interface {
     fn authorization(&self) -> &dyn CourierAuthorization;
     fn couriers(&self) -> &dyn CourierRepository;
     fn locations(&self) -> &dyn CourierLocationStore;
+    fn channels(&self) -> &dyn ActiveTrackingChannel;
+    fn publisher(&self) -> &dyn CourierPositionPublisher;
     fn clock(&self) -> &dyn Clock;
     fn relationships(&self) -> &dyn CourierRelationshipWriter;
+    /// `TRACKING__PERSIST_INTERVAL` in seconds.
+    fn persist_interval_seconds(&self) -> i64;
 }
 
 /// Модуль, через который корневой `di` передаёт слайсу его порты.
@@ -110,7 +116,10 @@ impl CourierUseCases for CourierUseCasesImpl {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
             locations: self.ports.locations(),
+            channels: self.ports.channels(),
+            publisher: self.ports.publisher(),
             clock: self.ports.clock(),
+            persist_interval_seconds: self.ports.persist_interval_seconds(),
         }
         .execute(subject, input)
     }

@@ -52,8 +52,8 @@ type OrderPage struct {
 }
 
 // ListCustomerOrders pages the history of the customer: the history of
-// orders carries the full card of every Order, restaurants the restaurant of
-// each distinct restaurant of the page.
+// orders carries the full card of every Order, one BatchGetRestaurants of
+// restaurants the distinct restaurants of the page (ADR 7).
 type ListCustomerOrders struct {
 	history OrderHistory
 	catalog Catalog
@@ -64,7 +64,7 @@ func NewListCustomerOrders(history OrderHistory, catalog Catalog) ListCustomerOr
 	return ListCustomerOrders{history: history, catalog: catalog, now: time.Now}
 }
 
-// Handle builds the page with one restaurants read per distinct restaurant.
+// Handle builds the page with one restaurants read for all its restaurants.
 func (h ListCustomerOrders) Handle(ctx context.Context, customerID string, first int, after string) (OrderPage, error) {
 	if first < 1 || first > MaxPageSize {
 		return OrderPage{}, ErrInvalidPageSize
@@ -77,15 +77,15 @@ func (h ListCustomerOrders) Handle(ctx context.Context, customerID string, first
 		Edges:       make([]OrderEdge, 0, len(page.Entries)),
 		HasNextPage: page.NextCursor != "",
 	}
+	restaurants, err := h.restaurantsOf(ctx, page.Entries)
+	if err != nil {
+		return OrderPage{}, err
+	}
 	now := h.now()
-	restaurants := map[string]Restaurant{}
 	for _, entry := range page.Entries {
-		restaurant, known := restaurants[entry.Order.RestaurantID]
-		if !known {
-			if restaurant, err = h.catalog.Restaurant(ctx, entry.Order.RestaurantID); err != nil {
-				return OrderPage{}, fmt.Errorf("read restaurant: %w", err)
-			}
-			restaurants[entry.Order.RestaurantID] = restaurant
+		restaurant, found := restaurants[entry.Order.RestaurantID]
+		if !found {
+			return OrderPage{}, fmt.Errorf("read restaurant: restaurant %s of order %s not found", entry.Order.RestaurantID, entry.Order.ID)
 		}
 		view, err := compose(entry.Order, restaurant, now)
 		if err != nil {
@@ -100,4 +100,26 @@ func (h ListCustomerOrders) Handle(ctx context.Context, customerID string, first
 		result.EndCursor = page.NextCursor
 	}
 	return result, nil
+}
+
+// restaurantsOf reads the distinct restaurants of the page in one call; an
+// empty page reads nothing.
+func (h ListCustomerOrders) restaurantsOf(ctx context.Context, entries []HistoryEntry) (map[string]Restaurant, error) {
+	if len(entries) == 0 {
+		return map[string]Restaurant{}, nil
+	}
+	seen := make(map[string]struct{}, len(entries))
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if _, ok := seen[entry.Order.RestaurantID]; ok {
+			continue
+		}
+		seen[entry.Order.RestaurantID] = struct{}{}
+		ids = append(ids, entry.Order.RestaurantID)
+	}
+	restaurants, err := h.catalog.Restaurants(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read restaurants: %w", err)
+	}
+	return restaurants, nil
 }

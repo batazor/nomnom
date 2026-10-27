@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useI18n } from "../../shared/i18n/i18n";
 import { Button, Illustration } from "../../shared/ui";
 import { CancelOrder } from "./cancel-order";
+import { CourierMap } from "./courier-map";
 import { activeStepEta } from "./fulfillment-eta";
 import { HeaderEta, StepEtaBar } from "./order-eta";
 import {
@@ -104,7 +105,12 @@ function OrderView({
 
       <div className="order-layout">
         <div className="order-now">
-          {order.status === "DELIVERED" ? (
+          {order.tracking && !status.final ? (
+            <CourierMap
+              pickedUp={order.status === "PICKED_UP"}
+              tracking={order.tracking}
+            />
+          ) : order.status === "DELIVERED" ? (
             <Illustration name="order-delivered" />
           ) : order.status === "PICKED_UP" ? (
             <Illustration name="on-the-way" />

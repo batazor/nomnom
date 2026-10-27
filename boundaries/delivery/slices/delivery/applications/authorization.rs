@@ -20,6 +20,9 @@ pub enum DeliveryPermission {
     /// The name of the courier of an order, for whoever may view the order
     /// (FR-626).
     ViewOrderCourier,
+    /// The live tracking of an order and its Tracking Channel, for whoever
+    /// may view the order (FR-660).
+    ViewOrderTracking,
 }
 
 /// Resource of a delivery permission check.

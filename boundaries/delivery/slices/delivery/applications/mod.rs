@@ -13,6 +13,7 @@ pub mod find_courier;
 pub mod get_courier_current_delivery;
 pub mod get_courier_pool;
 pub mod get_order_courier;
+pub mod get_order_tracking;
 pub mod list_available_delivery_offers;
 pub mod offer_delivery;
 pub mod offers_of_delivery;
@@ -23,6 +24,7 @@ pub mod reject_delivery_offer;
 pub mod relationships;
 pub mod replan_delivery;
 pub mod report_delivery_failure;
+pub mod tracking;
 
 #[cfg(test)]
 mod test_support;

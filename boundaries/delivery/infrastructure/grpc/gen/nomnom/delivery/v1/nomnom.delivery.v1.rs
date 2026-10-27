@@ -240,6 +240,56 @@ pub struct GetOrderCourierResponse {
     pub name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetOrderTrackingRequest {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetOrderTrackingResponse {
+    /// Empty without tracking; the other fields are then unset.
+    #[prost(string, tag="1")]
+    pub tracking_channel: ::prost::alloc::string::String,
+    /// Virtual City of the points (FR-658).
+    #[prost(message, optional, tag="2")]
+    pub city: ::core::option::Option<VirtualCity>,
+    #[prost(message, optional, tag="3")]
+    pub pickup: ::core::option::Option<GeoPoint>,
+    #[prost(message, optional, tag="4")]
+    pub dropoff: ::core::option::Option<GeoPoint>,
+    /// Stored courier position, up to TRACKING__PERSIST_INTERVAL old; unset
+    /// while unknown.
+    #[prost(message, optional, tag="5")]
+    pub courier_position: ::core::option::Option<CourierLocation>,
+}
+/// Square grid of blocks x blocks blocks of block_meters from the south-west
+/// corner origin.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct VirtualCity {
+    #[prost(message, optional, tag="1")]
+    pub origin: ::core::option::Option<GeoPoint>,
+    #[prost(uint32, tag="2")]
+    pub blocks: u32,
+    #[prost(double, tag="3")]
+    pub block_meters: f64,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GeoPoint {
+    #[prost(double, tag="1")]
+    pub latitude: f64,
+    #[prost(double, tag="2")]
+    pub longitude: f64,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CourierLocation {
+    #[prost(double, tag="1")]
+    pub latitude: f64,
+    #[prost(double, tag="2")]
+    pub longitude: f64,
+    /// Time delivery recorded the position at.
+    #[prost(int64, tag="3")]
+    pub recorded_at_epoch_seconds: i64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCourierCurrentDeliveryRequest {
     #[prost(string, tag="1")]
     pub courier_id: ::prost::alloc::string::String,

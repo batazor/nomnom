@@ -3,8 +3,8 @@
 //! процесса; сами действия идут через use cases с subject курьера.
 
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::domains::courier::CourierId;
-use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId};
+use crate::slices::courier::domains::courier::{CourierId, Location};
+use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, Intersection};
 
 /// Pending offer, адресованный курьеру.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -23,12 +23,23 @@ pub enum DeliveryStep {
     Handover,
 }
 
+/// Точки доставки в Virtual City (FR-659).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DeliveryPoints {
+    pub pickup: Intersection,
+    pub dropoff: Intersection,
+}
+
 /// Доставка в `Assigned` или `PickedUp` с назначенным курьером.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ActiveDeliveryWork {
     pub delivery_id: DeliveryId,
     pub courier_id: CourierId,
     pub step: DeliveryStep,
+    /// `None` — доставка создана до точек, Simulator её не двигает (FR-662).
+    pub points: Option<DeliveryPoints>,
+    /// Сохранённая позиция курьера; `None` — неизвестна.
+    pub courier_location: Option<Location>,
 }
 
 /// Read model работы Simulator; реализует PostgreSQL.

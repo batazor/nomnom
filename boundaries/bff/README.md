@@ -64,6 +64,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-
 Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — тест `bff-end-to-end` в `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
 - **Курьер заказа** ([FR-626](../../openspec/changes/add-cook-and-courier-pools/)): `order(id)` и lookup `orderChanged` отдают `courier { name }` — `GetOrderCourier` `delivery` от имени покупателя (`order#view`, GRPCRoute `delivery-v1-courier-reads`), только когда у заказа есть milestone `COURIER_ASSIGNED`; без курьера (до Assignment, после Delivery Failure) — `null`. `customerOrders` его не читает и оставляет `null`. Сбой `delivery` — error, а не заказ без курьера. Имя повара покупателю не отдаётся.
+- **Live tracking** ([FR-663](../../openspec/changes/add-live-courier-tracking/)): `order(id)` и lookup `orderChanged` отдают `tracking { channel city pickup dropoff courierPosition }` — `GetOrderTracking` `delivery` от имени покупателя (`order#view`, GRPCRoute `delivery-v1-courier-reads`), только у незавершённого заказа с milestone `COURIER_ASSIGNED`; без активной доставки — `null`, `customerOrders` его не читает. Ответ с каналом, но без города или точек — error, а не заказ без трекинга. `channel` — капабилити подписки `courierMoved`.
 
 ### Слайс `catalog`
 
@@ -192,6 +193,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 - `kitchenChanged(restaurantId)` (`restaurants.v1.kitchen-changes`, `LookupKitchenByRestaurantId`, права кухни проверяет `restaurants`), `courierChanged(id)` (`delivery.v1.courier-changes`, `LookupCourierById`: только курьер с этим subject) и `courierPoolChanged(marketId)` (`delivery.v1.courier-pool-changes`, фильтр по `CourierPool.id = marketId`; `LookupCourierPoolById`: только диспетчер и только пул Market из `X-Nomnom-Market`, иначе `NOT_FOUND`) устроены так же; `Kitchen.restaurantId`, `Courier.id` и `CourierPool.id` — ключи сущностей.
 - `orderChanged(id)` объявлен в event-driven subgraph [`events/schema.graphql`](events/schema.graphql) (`@edfs__kafkaSubscribe`, фильтр по `id`). Router читает `orders.v1.order-changes` (`events.providers.kafka`, `BFF__KAFKA_BROKERS`, Helm `kafka.brokers` обязателен).
 - Событие — только ключ `{"__typename":"Order","id":…}`. Данные Router получает через `LookupOrderById` plugin (`Order @key(fields: "id")`) с `Authorization` подписчика: тот же сценарий, что `order(id)`. Чужой или отсутствующий заказ — error-событие `NOT_FOUND`.
+- `courierMoved(channel)` — исключение из notification + refetch: Router читает канал Valkey `delivery.tracks.{{ args.channel }}` (`@edfs__redisSubscribe`, `events.providers.redis` id `tracks`, `BFF__TRACKS_REDIS_URL`, Helm `tracks.redisUrlSecret` обязателен), а событие несёт все поля `CourierPosition`. Ключ `CourierPosition` — все её поля (`resolvable: false` в обоих subgraphs), поэтому Router plugin не вызывает. Права проверены при выдаче канала в `Order.tracking`. ACL-пользователь `bff` в Valkey только подписывается.
 - Клиенты подписываются по SSE (`POST /graphql`, `Accept: text/event-stream`). Первое событие приходит только после изменения, поэтому текущее состояние берётся query.
 - Клиентская схема — композиция subgraphs: `npm run compose` пишет `config.json` и [`client-schema.graphql`](client-schema.graphql) для codegen UI.
 
@@ -257,7 +259,7 @@ BFF проверяет клиентский GraphQL-запрос и access token
 - BFF может выполнять coarse-grained authorization для endpoint и раннего отказа, но authoritative check прав на доменное действие, принадлежности resource и tenant-изоляции остаётся у bounded context;
 - доменные данные получаются только через gRPC API владельцев;
 - BFF не читает базы данных bounded contexts;
-- BFF не публикует Kafka-сообщения и не потребляет Integration Events; Router читает только топики уведомлений `orders.v1.order-changes`, `restaurants.v1.kitchen-changes` и `delivery.v1.courier-changes` для subscriptions ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md));
+- BFF не публикует Kafka-сообщения и не потребляет Integration Events; Router читает только топики уведомлений `orders.v1.order-changes`, `restaurants.v1.kitchen-changes` и `delivery.v1.courier-changes` и каналы позиций курьеров Valkey `delivery.tracks.*` для subscriptions ([ADR 36](../../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md));
 - BFF не запускает и не управляет Temporal workflow напрямую;
 - агрегация не создаёт общую транзакцию или атомарный снимок нескольких сервисов.
 

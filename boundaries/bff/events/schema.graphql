@@ -1,7 +1,9 @@
 # Event-driven subgraph of the BFF (Cosmo Streams, ADR 36). It has no server:
 # the Router consumes the Kafka topics itself and resolves the entities of
 # each event through the plugin subgraph (LookupOrderById) with the
-# subscriber's Authorization. Events carry only the entity key.
+# subscriber's Authorization. Events carry only the entity key, except
+# courierMoved: its key is every field of CourierPosition, so the Router takes
+# the position from the Valkey event and calls no subgraph (FR-668).
 
 type Subscription {
   """
@@ -42,6 +44,15 @@ type Subscription {
   courierPoolChanged(marketId: ID!): CourierPool!
     @edfs__kafkaSubscribe(topics: ["delivery.v1.courier-pool-changes"], providerId: "default")
     @openfed__subscriptionFilter(condition: { IN: { fieldPath: "id", values: ["{{ args.marketId }}"] } })
+
+  """
+  Every new position of the courier of an order; channel is
+  Order.tracking.channel, the capability that order(id) hands out to whoever
+  may view the order. Nothing is sent until the courier moves: query
+  order(id) first and take tracking.courierPosition.
+  """
+  courierMoved(channel: ID!): CourierPosition!
+    @edfs__redisSubscribe(channels: ["delivery.tracks.{{ args.channel }}"], providerId: "tracks")
 }
 
 type Order @key(fields: "id", resolvable: false) {
@@ -58,4 +69,11 @@ type Courier @key(fields: "id", resolvable: false) {
 
 type CourierPool @key(fields: "id", resolvable: false) {
   id: ID! @external
+}
+
+type CourierPosition @key(fields: "channel latitude longitude recordedAt", resolvable: false) {
+  channel: ID! @external
+  latitude: Float! @external
+  longitude: Float! @external
+  recordedAt: String! @external
 }

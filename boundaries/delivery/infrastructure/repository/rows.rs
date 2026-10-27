@@ -7,7 +7,7 @@ use crate::slices::courier::domains::courier::{
 };
 use crate::slices::delivery::domains::delivery::{
     CompoundState, Delivery, DeliveryFailureReason, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    ExpectedTime, OfferState, OrderId, State,
+    DeliveryTracking, ExpectedTime, Intersection, OfferState, OrderId, State, TrackingChannel,
 };
 
 use super::{corrupt, domain_version};
@@ -128,6 +128,65 @@ pub(super) struct DeliveryRow {
     pub(super) created_at: Option<i64>,
     pub(super) expected_pickup_at: Option<i64>,
     pub(super) expected_delivered_at: Option<i64>,
+    pub(super) pickup_x: Option<i32>,
+    pub(super) pickup_y: Option<i32>,
+    pub(super) dropoff_x: Option<i32>,
+    pub(super) dropoff_y: Option<i32>,
+    pub(super) tracking_channel: Option<String>,
+}
+
+/// Columns `pickup_x` … `dropoff_y` of a [`DeliveryTracking`]; the channel
+/// is bound as is.
+pub(super) struct TrackingColumns {
+    pub(super) pickup_x: i32,
+    pub(super) pickup_y: i32,
+    pub(super) dropoff_x: i32,
+    pub(super) dropoff_y: i32,
+}
+
+impl TrackingColumns {
+    pub(super) fn of(tracking: &DeliveryTracking) -> Result<Self, RepositoryError> {
+        let column = |value: u32| {
+            i32::try_from(value).map_err(|error| corrupt("delivery tracking intersection", error))
+        };
+        Ok(Self {
+            pickup_x: column(tracking.pickup.x)?,
+            pickup_y: column(tracking.pickup.y)?,
+            dropoff_x: column(tracking.dropoff.x)?,
+            dropoff_y: column(tracking.dropoff.y)?,
+        })
+    }
+}
+
+/// Stored intersection of the Virtual City grid.
+pub(super) fn intersection(x: i32, y: i32) -> Result<Intersection, RepositoryError> {
+    let coordinate =
+        |value: i32| u32::try_from(value).map_err(|error| corrupt("intersection", error));
+    Ok(Intersection {
+        x: coordinate(x)?,
+        y: coordinate(y)?,
+    })
+}
+
+/// [`DeliveryTracking`] of the five tracking columns: all set or all empty
+/// (constraint `deliveries_tracking_complete`).
+pub(super) fn delivery_tracking(
+    pickup: (Option<i32>, Option<i32>),
+    dropoff: (Option<i32>, Option<i32>),
+    channel: Option<String>,
+) -> Result<Option<DeliveryTracking>, RepositoryError> {
+    match (pickup, dropoff, channel) {
+        ((None, None), (None, None), None) => Ok(None),
+        ((Some(pickup_x), Some(pickup_y)), (Some(dropoff_x), Some(dropoff_y)), Some(channel)) => {
+            Ok(Some(DeliveryTracking {
+                pickup: intersection(pickup_x, pickup_y)?,
+                dropoff: intersection(dropoff_x, dropoff_y)?,
+                channel: TrackingChannel::restore(channel)
+                    .map_err(|error| corrupt("tracking channel", error))?,
+            }))
+        }
+        _ => Err(corrupt("delivery tracking", "partially stored")),
+    }
 }
 
 pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, RepositoryError> {
@@ -136,6 +195,11 @@ pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, Repository
         .failure_reason
         .map(|reason| DeliveryFailureReason::restore(&reason, row.failure_detail.as_deref()));
     let version = domain_version(row.version)?;
+    let tracking = delivery_tracking(
+        (row.pickup_x, row.pickup_y),
+        (row.dropoff_x, row.dropoff_y),
+        row.tracking_channel,
+    )?;
     Delivery::restore(
         DeliveryId::new(row.id),
         OrderId::new(row.order_id),
@@ -148,6 +212,7 @@ pub(super) fn delivery_from_row(row: DeliveryRow) -> Result<Delivery, Repository
     .map(|delivery| {
         delivery
             .with_created_at(row.created_at)
+            .with_tracking(tracking)
             .with_expected_times(
                 row.expected_pickup_at.map(ExpectedTime::restore),
                 row.expected_delivered_at.map(ExpectedTime::restore),

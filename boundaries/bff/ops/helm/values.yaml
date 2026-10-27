@@ -144,6 +144,14 @@ courierPool:
 kafka:
   brokers: ""
 
+# FR-668: Valkey потока позиций курьеров delivery (BFF__TRACKS_REDIS_URL) для подписки
+# courierMoved. URL с паролем ACL-пользователя (только SUBSCRIBE) берётся из Secret.
+# Обязателен: без него chart не рендерится.
+tracks:
+  redisUrlSecret:
+    name: ""
+    key: url
+
 # ADR 32: identity покупателя. Router и plugin проверяют access token по JWKS identity
 # provider, которого называет iss (providers: issuer и jwksUrl); plugin подписывает user
 # assertions ключом из Secret assertionKeySecret (P-256 в PEM). tokenAudiences — контексты,

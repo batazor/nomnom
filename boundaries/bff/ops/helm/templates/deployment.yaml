@@ -68,6 +68,12 @@ spec:
             # ADR 36: Cosmo Streams; образ без брокера Router не запускает.
             - name: BFF__KAFKA_BROKERS
               value: {{ required "kafka.brokers is required (ADR 36)" .Values.kafka.brokers | quote }}
+            # FR-668: Valkey потока позиций курьеров; без него Router не запускается.
+            - name: BFF__TRACKS_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "tracks.redisUrlSecret.name is required (FR-668)" .Values.tracks.redisUrlSecret.name | quote }}
+                  key: {{ required "tracks.redisUrlSecret.key is required (FR-668)" .Values.tracks.redisUrlSecret.key | quote }}
             - name: BFF__INTERNAL_GATEWAY_ADDR
               value: {{ required "internalGateway.address is required" .Values.internalGateway.address | quote }}
             # FR-623: стартовая точка курьеров, которых добавляет диспетчер.

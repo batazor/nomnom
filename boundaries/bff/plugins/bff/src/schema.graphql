@@ -10,6 +10,20 @@ type BffInfo {
 }
 
 """
+Premium Priority of an order: a premium order is prepared first
+"""
+enum OrderPriority {
+  """
+  Prepared in the order of the kitchen queue
+  """
+  STANDARD
+  """
+  Prepared first for the premium fee of the restaurant
+  """
+  PREMIUM
+}
+
+"""
 Exact monetary amount
 """
 type Money {
@@ -61,6 +75,11 @@ type Restaurant {
   Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
   """
   waitTime: RestaurantWaitTime
+  """
+  Fee of Premium Priority, null when the restaurant offers no premium; set by the catalog
+  queries restaurants and restaurant, null elsewhere
+  """
+  premiumFee: Money
 }
 
 """
@@ -325,9 +344,17 @@ type Order @key(fields: "id") {
   """
   items: [OrderItem!]!
   """
-  Total amount of the order
+  Total amount of the order, the premium fee included
   """
   total: Money!
+  """
+  Premium Priority chosen at checkout
+  """
+  priority: OrderPriority!
+  """
+  Premium fee fixed at checkout, null for a standard order
+  """
+  premiumFee: Money
   """
   Moment the order was placed in RFC 3339
   """
@@ -360,6 +387,94 @@ type Order @key(fields: "id") {
   delivery; order(id) and orderChanged resolve it, customerOrders leaves it null
   """
   courier: OrderCourier
+  """
+  Live tracking of the courier, null unless the delivery is assigned or picked
+  up; order(id) and orderChanged resolve it, customerOrders leaves it null
+  """
+  tracking: OrderTracking
+}
+
+"""
+Live tracking of the courier of an order: the Virtual City, the pickup and
+dropoff points and the courier position
+"""
+type OrderTracking {
+  """
+  Channel of the courierMoved subscription; only order viewers get it
+  """
+  channel: ID!
+  """
+  Grid of streets the points lie on
+  """
+  city: VirtualCity!
+  """
+  Where the courier picks the order up
+  """
+  pickup: GeoPoint!
+  """
+  Where the courier hands the order over
+  """
+  dropoff: GeoPoint!
+  """
+  Last stored courier position, up to a few seconds old; null while unknown
+  """
+  courierPosition: CourierPosition
+}
+
+"""
+Square grid of blocks x blocks blocks of blockMeters meters from the
+south-west corner origin
+"""
+type VirtualCity {
+  """
+  South-west corner
+  """
+  origin: GeoPoint!
+  """
+  Blocks per side
+  """
+  blocks: Int!
+  """
+  Side of a block in meters
+  """
+  blockMeters: Float!
+}
+
+"""
+Point in WGS 84 degrees
+"""
+type GeoPoint {
+  """
+  Latitude in degrees
+  """
+  latitude: Float!
+  """
+  Longitude in degrees
+  """
+  longitude: Float!
+}
+
+"""
+Position of the courier of an order; courierMoved pushes every new one. All
+fields form the key, so the router takes them from the event itself
+"""
+type CourierPosition @key(fields: "channel latitude longitude recordedAt", resolvable: false) {
+  """
+  Channel of the tracking the position belongs to
+  """
+  channel: ID!
+  """
+  Latitude in degrees
+  """
+  latitude: Float!
+  """
+  Longitude in degrees
+  """
+  longitude: Float!
+  """
+  Moment delivery recorded the position in RFC 3339
+  """
+  recordedAt: String!
 }
 
 """
@@ -472,6 +587,10 @@ type KitchenOrder {
   left the Cook Pool
   """
   cook: Cook
+  """
+  Premium Priority of the order: premium orders are taken first
+  """
+  priority: OrderPriority!
 }
 
 """
@@ -592,10 +711,6 @@ enum KitchenAction {
   Reject a RECEIVED order
   """
   REJECT
-  """
-  Start preparing a QUEUED order
-  """
-  START_PREPARATION
   """
   Mark a PREPARING order assembled
   """
@@ -946,6 +1061,10 @@ input PlaceOrderInput {
   Client-generated key of this checkout attempt, reused on manual retry
   """
   idempotencyKey: String!
+  """
+  Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee
+  """
+  priority: OrderPriority
 }
 
 """
@@ -968,6 +1087,10 @@ enum PlaceOrderProblemCode {
   Restaurant does not accept orders now
   """
   RESTAURANT_NOT_ACCEPTING_ORDERS
+  """
+  Restaurant offers no Premium Priority
+  """
+  PREMIUM_UNAVAILABLE
 }
 
 type PlaceOrderProblem {
@@ -1089,10 +1212,15 @@ type Mutation {
   """
   closeRestaurant(restaurantId: ID!): RestaurantOpeningPayload!
   """
-  Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
-  changes nothing
+  Apply a kitchen command to a restaurant order; repeating MARK_READY changes nothing
   """
   applyKitchenAction(input: KitchenActionInput!): KitchenActionPayload!
+  """
+  Start preparing the head of the kitchen queue: premium orders first, the kitchen does not
+  choose the order. requestId is chosen per attempt and reused on a manual retry, which starts
+  no other order. order is null when the queue is empty
+  """
+  startNextPreparation(restaurantId: ID!, requestId: String!): KitchenActionPayload!
   """
   Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
   """

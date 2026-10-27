@@ -7,6 +7,7 @@ use config::{Config as ConfigLoader, ConfigError, File};
 use config::{ConfigBuilder, builder::DefaultState};
 
 use super::simulator::SIMULATOR_SETTINGS;
+use super::tracking::TRACKING_SETTINGS;
 use super::{
     AppConfig, CONFIG_KEY_DRAIN_TIMEOUT, CONFIG_KEY_MANAGEMENT_PORT, CONFIG_KEY_PORT,
     CONFIG_KEY_READINESS_DELAY, DATABASE_SETTINGS, DEFAULT_DRAIN_TIMEOUT, DEFAULT_MANAGEMENT_PORT,
@@ -36,6 +37,7 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     builder = configure_settings(builder, &OFFERS_SETTINGS, |name| std::env::var(name).ok())?;
     builder = configure_database(builder, |name| std::env::var(name).ok())?;
     builder = configure_simulator(builder, |name| std::env::var(name).ok())?;
+    builder = configure_tracking(builder, |name| std::env::var(name).ok())?;
 
     let config: AppConfig = builder.build()?.try_deserialize()?;
     config.server.validate()?;
@@ -46,6 +48,8 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     config.offers.validate()?;
     config.database.validate()?;
     config.simulator.validate()?;
+    config.tracking.validate()?;
+    config.valkey.validate()?;
 
     Ok(config)
 }
@@ -164,6 +168,20 @@ pub(super) fn configure_simulator(
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
     for (key, name) in SIMULATOR_SETTINGS {
+        if let Some(value) = env(name) {
+            builder = builder.set_override(key, value)?;
+        }
+    }
+    Ok(builder)
+}
+
+/// Tracking и Valkey без значений по умолчанию: ключ задаёт файл или
+/// переменная.
+pub(super) fn configure_tracking(
+    mut builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    for (key, name) in TRACKING_SETTINGS {
         if let Some(value) = env(name) {
             builder = builder.set_override(key, value)?;
         }

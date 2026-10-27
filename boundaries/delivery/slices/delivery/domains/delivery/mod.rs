@@ -6,6 +6,7 @@ mod ids;
 mod model;
 mod offer;
 mod repository;
+mod tracking;
 mod vo;
 
 pub use errors::*;
@@ -15,4 +16,5 @@ pub use ids::*;
 pub use model::*;
 pub use offer::*;
 pub use repository::*;
+pub use tracking::*;
 pub use vo::*;

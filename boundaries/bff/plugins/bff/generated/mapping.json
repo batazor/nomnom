@@ -109,6 +109,13 @@
     },
     {
       "type": "OPERATION_TYPE_MUTATION",
+      "original": "startNextPreparation",
+      "mapped": "MutationStartNextPreparation",
+      "request": "MutationStartNextPreparationRequest",
+      "response": "MutationStartNextPreparationResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
       "original": "hireCook",
       "mapped": "MutationHireCook",
       "request": "MutationHireCookRequest",
@@ -186,6 +193,14 @@
       "rpc": "LookupOrderById",
       "request": "LookupOrderByIdRequest",
       "response": "LookupOrderByIdResponse"
+    },
+    {
+      "typeName": "CourierPosition",
+      "kind": "entity",
+      "key": "channel latitude longitude recordedAt",
+      "rpc": "LookupCourierPositionByChannelAndLatitudeAndLongitudeAndRecordedAt",
+      "request": "LookupCourierPositionByChannelAndLatitudeAndLongitudeAndRecordedAtRequest",
+      "response": "LookupCourierPositionByChannelAndLatitudeAndLongitudeAndRecordedAtResponse"
     },
     {
       "typeName": "Kitchen",
@@ -356,6 +371,20 @@
             {
               "original": "input",
               "mapped": "input"
+            }
+          ]
+        },
+        {
+          "original": "startNextPreparation",
+          "mapped": "start_next_preparation",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            },
+            {
+              "original": "requestId",
+              "mapped": "request_id"
             }
           ]
         },
@@ -546,6 +575,10 @@
         {
           "original": "waitTime",
           "mapped": "wait_time"
+        },
+        {
+          "original": "premiumFee",
+          "mapped": "premium_fee"
         }
       ]
     },
@@ -706,6 +739,14 @@
           "mapped": "total"
         },
         {
+          "original": "priority",
+          "mapped": "priority"
+        },
+        {
+          "original": "premiumFee",
+          "mapped": "premium_fee"
+        },
+        {
           "original": "placedAt",
           "mapped": "placed_at"
         },
@@ -732,6 +773,86 @@
         {
           "original": "courier",
           "mapped": "courier"
+        },
+        {
+          "original": "tracking",
+          "mapped": "tracking"
+        }
+      ]
+    },
+    {
+      "type": "OrderTracking",
+      "fieldMappings": [
+        {
+          "original": "channel",
+          "mapped": "channel"
+        },
+        {
+          "original": "city",
+          "mapped": "city"
+        },
+        {
+          "original": "pickup",
+          "mapped": "pickup"
+        },
+        {
+          "original": "dropoff",
+          "mapped": "dropoff"
+        },
+        {
+          "original": "courierPosition",
+          "mapped": "courier_position"
+        }
+      ]
+    },
+    {
+      "type": "VirtualCity",
+      "fieldMappings": [
+        {
+          "original": "origin",
+          "mapped": "origin"
+        },
+        {
+          "original": "blocks",
+          "mapped": "blocks"
+        },
+        {
+          "original": "blockMeters",
+          "mapped": "block_meters"
+        }
+      ]
+    },
+    {
+      "type": "GeoPoint",
+      "fieldMappings": [
+        {
+          "original": "latitude",
+          "mapped": "latitude"
+        },
+        {
+          "original": "longitude",
+          "mapped": "longitude"
+        }
+      ]
+    },
+    {
+      "type": "CourierPosition",
+      "fieldMappings": [
+        {
+          "original": "channel",
+          "mapped": "channel"
+        },
+        {
+          "original": "latitude",
+          "mapped": "latitude"
+        },
+        {
+          "original": "longitude",
+          "mapped": "longitude"
+        },
+        {
+          "original": "recordedAt",
+          "mapped": "recorded_at"
         }
       ]
     },
@@ -817,6 +938,10 @@
         {
           "original": "cook",
           "mapped": "cook"
+        },
+        {
+          "original": "priority",
+          "mapped": "priority"
         }
       ]
     },
@@ -1105,6 +1230,10 @@
         {
           "original": "idempotencyKey",
           "mapped": "idempotency_key"
+        },
+        {
+          "original": "priority",
+          "mapped": "priority"
         }
       ]
     },
@@ -1188,6 +1317,19 @@
     }
   ],
   "enumMappings": [
+    {
+      "type": "OrderPriority",
+      "values": [
+        {
+          "original": "STANDARD",
+          "mapped": "ORDER_PRIORITY_STANDARD"
+        },
+        {
+          "original": "PREMIUM",
+          "mapped": "ORDER_PRIORITY_PREMIUM"
+        }
+      ]
+    },
     {
       "type": "OrderStatus",
       "values": [
@@ -1353,10 +1495,6 @@
           "mapped": "KITCHEN_ACTION_REJECT"
         },
         {
-          "original": "START_PREPARATION",
-          "mapped": "KITCHEN_ACTION_START_PREPARATION"
-        },
-        {
           "original": "MARK_ASSEMBLED",
           "mapped": "KITCHEN_ACTION_MARK_ASSEMBLED"
         },
@@ -1470,6 +1608,10 @@
         {
           "original": "RESTAURANT_NOT_ACCEPTING_ORDERS",
           "mapped": "PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS"
+        },
+        {
+          "original": "PREMIUM_UNAVAILABLE",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_PREMIUM_UNAVAILABLE"
         }
       ]
     },

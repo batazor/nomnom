@@ -15,10 +15,10 @@ use crate::slices::courier::applications::{
     register_courier, retire_courier, set_courier_availability, update_courier_location,
 };
 use crate::slices::courier::di::CourierUseCases;
-use crate::slices::courier::domains::courier::CourierStatus as DomainCourierStatus;
+use crate::slices::courier::domains::courier::{CourierStatus as DomainCourierStatus, Location};
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    get_courier_current_delivery, get_courier_pool, get_order_courier,
+    get_courier_current_delivery, get_courier_pool, get_order_courier, get_order_tracking,
     list_available_delivery_offers, reject_delivery_offer, replan_delivery,
     report_delivery_failure,
 };
@@ -31,17 +31,18 @@ use super::v1::delivery_service_server::{DeliveryService, DeliveryServiceServer}
 use super::v1::{
     AcceptDeliveryOfferRequest, AcceptDeliveryOfferResponse, CancelDeliveryRequest,
     CancelDeliveryResponse, ConfirmDeliveryRequest, ConfirmDeliveryResponse, ConfirmPickupRequest,
-    ConfirmPickupResponse, CourierAvailability, CourierStatus, CreateDeliveryRequest,
-    CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
-    GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse, GetCourierPoolRequest,
-    GetCourierPoolResponse, GetOrderCourierRequest, GetOrderCourierResponse, GetSimulatorRequest,
-    GetSimulatorResponse, ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
-    PoolCourier, RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
+    ConfirmPickupResponse, CourierAvailability, CourierLocation, CourierStatus,
+    CreateDeliveryRequest, CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
+    GeoPoint, GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse,
+    GetCourierPoolRequest, GetCourierPoolResponse, GetOrderCourierRequest, GetOrderCourierResponse,
+    GetOrderTrackingRequest, GetOrderTrackingResponse, GetSimulatorRequest, GetSimulatorResponse,
+    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse, PoolCourier,
+    RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
     RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
     ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, RetireCourierRequest,
     RetireCourierResponse, SetCourierAvailabilityRequest, SetCourierAvailabilityResponse,
     SetSimulatorEnabledRequest, SetSimulatorEnabledResponse, UpdateCourierLocationRequest,
-    UpdateCourierLocationResponse,
+    UpdateCourierLocationResponse, VirtualCity,
 };
 
 mod status;
@@ -134,6 +135,22 @@ impl DeliveryService for DeliveryGrpcService {
                 courier_id: courier.courier_id.as_str().to_owned(),
                 name: courier.name.as_str().to_owned(),
             },
+        )))
+    }
+
+    async fn get_order_tracking(
+        &self,
+        request: Request<GetOrderTrackingRequest>,
+    ) -> Result<Response<GetOrderTrackingResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let order_id = request.into_inner().order_id;
+        let output = self
+            .deliveries()
+            .get_order_tracking(&subject, get_order_tracking::Input { order_id })
+            .map_err(delivery_transport_error)?;
+        Ok(Response::new(output.tracking.map_or_else(
+            GetOrderTrackingResponse::default,
+            order_tracking,
         )))
     }
 
@@ -610,3 +627,28 @@ mod tests;
 
 #[cfg(test)]
 mod courier_api_tests;
+
+fn geo_point(location: Location) -> GeoPoint {
+    GeoPoint {
+        latitude: location.latitude(),
+        longitude: location.longitude(),
+    }
+}
+
+fn order_tracking(tracking: get_order_tracking::OrderTrackingView) -> GetOrderTrackingResponse {
+    GetOrderTrackingResponse {
+        tracking_channel: tracking.channel.as_str().to_owned(),
+        city: Some(VirtualCity {
+            origin: Some(geo_point(tracking.city.origin())),
+            blocks: tracking.city.blocks(),
+            block_meters: tracking.city.block_meters(),
+        }),
+        pickup: Some(geo_point(tracking.pickup)),
+        dropoff: Some(geo_point(tracking.dropoff)),
+        courier_position: tracking.courier_position.map(|position| CourierLocation {
+            latitude: position.location.latitude(),
+            longitude: position.location.longitude(),
+            recorded_at_epoch_seconds: position.recorded_at_epoch_seconds,
+        }),
+    }
+}

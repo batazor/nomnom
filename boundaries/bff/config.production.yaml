@@ -89,12 +89,18 @@ headers:
       - op: propagate
         named: X-Nomnom-Market
 
-# ADR 36: Cosmo Streams consume Order Change Notifications from Kafka. The
-# Helm chart requires BFF__KAFKA_BROKERS; an unreachable broker stops the
-# Router (skip_unavailable_providers: false) instead of disabling subscriptions.
+# ADR 36: Cosmo Streams consume Order Change Notifications from Kafka and
+# courier positions from the Valkey of delivery (FR-668). The Helm chart
+# requires BFF__KAFKA_BROKERS and BFF__TRACKS_REDIS_URL; an unreachable
+# provider stops the Router (skip_unavailable_providers: false) instead of
+# disabling subscriptions.
 events:
   providers:
     kafka:
       - id: default
         brokers:
           - "${BFF__KAFKA_BROKERS}"
+    redis:
+      - id: tracks
+        urls:
+          - "${BFF__TRACKS_REDIS_URL}"

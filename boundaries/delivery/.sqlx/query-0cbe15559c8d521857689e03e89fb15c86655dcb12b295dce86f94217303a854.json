@@ -1,0 +1,125 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.courier_id AS \"courier_id!\", d.pickup_x, d.pickup_y, d.dropoff_x,\n                 d.dropoff_y, d.tracking_channel,\n                 p.latitude AS \"latitude?\", p.longitude AS \"longitude?\",\n                 p.recorded_at AS \"recorded_at?\"\n             FROM deliveries d LEFT JOIN courier_positions p ON p.courier_id = d.courier_id\n             WHERE d.order_id = $1 AND d.state = ANY($2) AND d.courier_id IS NOT NULL\n               AND d.tracking_channel IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "courier_id!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "courier_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pickup_x",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "pickup_x"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "pickup_y",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "pickup_y"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "dropoff_x",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "dropoff_x"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "dropoff_y",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "dropoff_y"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "tracking_channel",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "tracking_channel"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "latitude?",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "latitude"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "longitude?",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "longitude"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "recorded_at?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "courier_positions",
+            "name": "recorded_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0cbe15559c8d521857689e03e89fb15c86655dcb12b295dce86f94217303a854"
+}

@@ -3,7 +3,7 @@
 //! Dispatch Deliveries.
 //!
 //! [`compose`] выбирает реализации портов и открывает общие клиенты процесса
-//! (fail fast: SpiceDB, PostgreSQL, service identity), собирает граф use cases
+//! (fail fast: SpiceDB, PostgreSQL, Valkey потока позиций, service identity), собирает граф use cases
 //! ([`super::service`]) и итоговый [`ServerModule`]. Worker процесса создаёт
 //! provider [`DeliveryWorkerProvider`] уже после открытия технического порта:
 //! бизнес-порт открывается последним (ADR 17).
@@ -24,21 +24,25 @@ use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, m
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
+use crate::infrastructure::random::SystemRandomSource;
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::repository::{Store, migrate};
 use crate::infrastructure::spicedb::{
     CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
 };
-use crate::pkg::config::{AppConfig, OffersConfig, SimulatorConfig, SpiceDbConfig, database};
+use crate::infrastructure::tracks::ValkeyPositionPublisher;
+use crate::pkg::config::{
+    AppConfig, OffersConfig, SimulatorConfig, SpiceDbConfig, TrackingConfig, ValkeyConfig, database,
+};
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
-use crate::slices::delivery::domains::delivery::DeliveryRepository;
+use crate::slices::delivery::domains::delivery::{DeliveryRepository, VirtualCity};
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 use crate::slices::simulator::di::SimulatorStore;
 
 use super::infrastructure::{
-    ProcessIds, ProcessLocator, ProcessStores, SystemClock, infrastructure,
+    ProcessIds, ProcessLocator, ProcessStores, ProcessTracking, SystemClock, infrastructure,
 };
 use super::service::{ServiceModule, service};
 use super::{
@@ -105,6 +109,34 @@ pub fn assignment_adapters(
         Box::new(UuidIdGenerator),
         Box::new(StoredCourierLocator::new(positions)),
     )
+}
+
+/// Virtual City процесса (FR-658): рамка вне диапазонов широты и долготы —
+/// ошибка startup.
+pub fn virtual_city(config: &TrackingConfig) -> Result<VirtualCity, String> {
+    VirtualCity::new(
+        config.city_origin_latitude,
+        config.city_origin_longitude,
+        config.city_blocks,
+        config.block_meters,
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// Live tracking процесса: Virtual City, поток позиций в Valkey и
+/// случайность ОС. Недоступный Valkey — ошибка startup (FR-666).
+pub fn tracking(
+    tracking: &TrackingConfig,
+    valkey: &ValkeyConfig,
+) -> Result<ProcessTracking, String> {
+    Ok(ProcessTracking {
+        city: virtual_city(tracking)?,
+        persist_interval_seconds: tracking.persist_interval_seconds(),
+        publisher: Box::new(
+            ValkeyPositionPublisher::connect(&valkey.url).map_err(|error| error.to_string())?,
+        ),
+        random: Box::new(SystemRandomSource),
+    })
 }
 
 /// gRPC-транспорт процесса: use cases, проверка вызывающего и бизнес-порт.
@@ -241,10 +273,11 @@ impl DeliveryDispatch for UseCaseDeliveryDispatch {
     }
 }
 
-/// Демо Simulator курьеров (FR-605) над use cases процесса.
+/// Демо Simulator курьеров (FR-605, FR-662) над use cases процесса.
 pub trait DemoSimulator: Interface {
     fn simulator(&self) -> Simulator;
     fn interval(&self) -> Duration;
+    fn track_interval(&self) -> Duration;
 }
 
 #[derive(Component)]
@@ -255,6 +288,7 @@ pub struct UseCaseDemoSimulator {
     /// Переключатель и работа Simulator в хранилище процесса.
     store: Arc<dyn SimulatorStore>,
     config: SimulatorConfig,
+    city: VirtualCity,
 }
 
 impl DemoSimulator for UseCaseDemoSimulator {
@@ -269,11 +303,16 @@ impl DemoSimulator for UseCaseDemoSimulator {
                 min_delay: self.config.min_delay,
                 max_delay: self.config.max_delay,
             },
+            self.city,
         )
     }
 
     fn interval(&self) -> Duration {
         self.config.interval
+    }
+
+    fn track_interval(&self) -> Duration {
+        self.config.track_interval
     }
 }
 
@@ -308,7 +347,12 @@ where
             .map_err(|error| format!("listen :{}: {error}", transport.port()))?;
         let worker = OfferExpiryWorker::new(worker, expiry.expire(), expiry.schedule());
         let worker = DispatchWorker::new(worker, dispatch.dispatch(), dispatch.schedule());
-        let worker = SimulatorWorker::new(worker, simulator.simulator(), simulator.interval());
+        let worker = SimulatorWorker::new(
+            worker,
+            simulator.simulator(),
+            simulator.interval(),
+            simulator.track_interval(),
+        );
         Ok(Box::new(ReconcilingWorker::new(
             worker,
             reconciliation.reconcilers(),
@@ -389,12 +433,17 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // Каждая роль хранилища разрешается отдельно над одним `Store`.
     let store = Arc::new(store(&config.database)?);
     let (ids, locator) = assignment_adapters(Arc::clone(&store) as _);
+    // Valkey потока позиций обязателен; Virtual City вне диапазонов —
+    // ошибка startup.
+    let tracking = tracking(&config.tracking, &config.valkey)?;
+    let city = tracking.city;
     let infrastructure = infrastructure(
         ProcessStores::over(&store),
         ids,
         locator,
         Box::new(spicedb_authorization(spicedb, Arc::clone(&store))),
         Box::new(SpiceDbRelationships::new(Arc::clone(&graph))),
+        tracking,
     );
     let use_cases = Arc::new(service(Arc::clone(&infrastructure)));
     Ok(ServerModule::builder()
@@ -410,6 +459,7 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
             use_cases: Arc::clone(&use_cases),
             store: Arc::clone(&store) as _,
             config: config.simulator,
+            city,
         })
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,
@@ -460,6 +510,7 @@ mod tests {
             locator,
             Box::new(local_authorization()),
             Box::new(RecordingRelationships::new()),
+            crate::di::service::test_tracking(),
         ))
     }
 

@@ -16,7 +16,9 @@ fn loads_port_from_toml() {
     let path = std::env::temp_dir().join(name);
     fs::write(
         &path,
-        format!("[server]\nport = 9003\n{DATABASE_TOML}{SIMULATOR_TOML}"),
+        format!(
+            "[server]\nport = 9003\n{DATABASE_TOML}{SIMULATOR_TOML}{TRACKING_TOML}{VALKEY_TOML}"
+        ),
     )
     .expect("write config");
 
@@ -30,15 +32,21 @@ fn loads_port_from_toml() {
 }
 
 /// Обязательная секция Simulator (FR-606) тестовых конфигов.
-const SIMULATOR_TOML: &str =
-    "\n[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\n";
+const SIMULATOR_TOML: &str = "\n[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\ntrack_interval = \"1s\"\n";
+
+/// Обязательная секция tracking (FR-658, FR-665) тестовых конфигов.
+const TRACKING_TOML: &str = "\n[tracking]\ncity_origin_latitude = 52.515\ncity_origin_longitude = 13.385\ncity_blocks = 12\nblock_meters = 150.0\npersist_interval = \"15s\"\n";
+
+/// Обязательный URL Valkey потока позиций (FR-666) тестовых конфигов.
+const VALKEY_TOML: &str = "\n[valkey]\nurl = \"redis://delivery:p@valkey:6379\"\n";
 
 /// Обязательный URI PostgreSQL тестовых конфигов.
 const DATABASE_TOML: &str = "\n[database]\nuri = \"postgresql://u:p@db:5432/delivery\"\n";
 
 /// Пишет TOML во временный файл с уникальным именем и загружает его; без
-/// своих секций `[database]` и `[simulator]` к нему добавляются
-/// [`DATABASE_TOML`] и [`SIMULATOR_TOML`].
+/// своих секций `[database]`, `[simulator]`, `[tracking]` и `[valkey]` к нему
+/// добавляются [`DATABASE_TOML`], [`SIMULATOR_TOML`], [`TRACKING_TOML`] и
+/// [`VALKEY_TOML`].
 fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
     let path = std::env::temp_dir().join(format!(
         "nomnom-delivery-{name}-{}.toml",
@@ -48,6 +56,8 @@ fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
     for (section, toml) in [
         ("[database]", DATABASE_TOML),
         ("[simulator]", SIMULATOR_TOML),
+        ("[tracking]", TRACKING_TOML),
+        ("[valkey]", VALKEY_TOML),
     ] {
         if !contents.contains(section) {
             contents.push_str(toml);
@@ -568,6 +578,7 @@ fn loads_simulator_from_toml() {
             interval: Duration::from_secs(5),
             min_delay: Duration::from_secs(30),
             max_delay: Duration::from_secs(120),
+            track_interval: Duration::from_secs(1),
         }
     );
 }
@@ -590,7 +601,7 @@ fn missing_simulator_settings_fail_startup() {
 fn min_delay_above_max_delay_fails_startup() {
     let error = load_toml(
         "simulator-inverted",
-        "[simulator]\ninterval = \"5s\"\nmin_delay = \"3m\"\nmax_delay = \"1m\"\n",
+        "[simulator]\ninterval = \"5s\"\nmin_delay = \"3m\"\nmax_delay = \"1m\"\ntrack_interval = \"1s\"\n",
     )
     .expect_err("MIN_DELAY > MAX_DELAY must fail");
 
@@ -602,15 +613,15 @@ fn zero_or_malformed_simulator_values_fail_startup() {
     for (name, contents) in [
         (
             "simulator-zero-interval",
-            "[simulator]\ninterval = \"0s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\n",
+            "[simulator]\ninterval = \"0s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\ntrack_interval = \"0s\"\n",
         ),
         (
             "simulator-zero-min",
-            "[simulator]\ninterval = \"5s\"\nmin_delay = \"0s\"\nmax_delay = \"2m\"\n",
+            "[simulator]\ninterval = \"5s\"\nmin_delay = \"0s\"\nmax_delay = \"2m\"\ntrack_interval = \"1s\"\n",
         ),
         (
             "simulator-bad-max",
-            "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"soon\"\n",
+            "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"soon\"\ntrack_interval = \"1s\"\n",
         ),
     ] {
         assert!(load_toml(name, contents).is_err(), "{name}");
@@ -631,5 +642,79 @@ fn simulator_env_sets_values() {
     assert_eq!(
         config.get_string("simulator.min_delay").expect("min delay"),
         "2s"
+    );
+}
+
+/// AC-890
+#[test]
+fn track_interval_above_interval_fails_startup() {
+    let error = load_toml(
+        "simulator-slow-track",
+        "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\ntrack_interval = \"6s\"\n",
+    )
+    .expect_err("TRACK_INTERVAL > INTERVAL must fail");
+
+    assert!(error.to_string().contains(SIMULATOR_TRACK_INTERVAL_ENV));
+}
+
+#[test]
+fn loads_tracking_and_valkey_from_toml() {
+    let config = load_toml("tracking", "").expect("load config");
+
+    assert_eq!(
+        config.tracking,
+        TrackingConfig {
+            city_origin_latitude: 52.515,
+            city_origin_longitude: 13.385,
+            city_blocks: 12,
+            block_meters: 150.0,
+            persist_interval: Duration::from_secs(15),
+        }
+    );
+    assert_eq!(config.valkey.url, "redis://delivery:p@valkey:6379");
+}
+
+/// AC-871, FR-666: no defaults; an invalid grid, persist interval or
+/// Valkey URL fails startup.
+#[test]
+fn missing_or_invalid_tracking_settings_fail_startup() {
+    for (name, contents) in [
+        ("tracking-missing", "[tracking]\n"),
+        (
+            "tracking-one-block",
+            "[tracking]\ncity_origin_latitude = 52.5\ncity_origin_longitude = 13.4\ncity_blocks = 1\nblock_meters = 150.0\npersist_interval = \"15s\"\n",
+        ),
+        (
+            "tracking-zero-block",
+            "[tracking]\ncity_origin_latitude = 52.5\ncity_origin_longitude = 13.4\ncity_blocks = 12\nblock_meters = 0.0\npersist_interval = \"15s\"\n",
+        ),
+        (
+            "tracking-zero-persist",
+            "[tracking]\ncity_origin_latitude = 52.5\ncity_origin_longitude = 13.4\ncity_blocks = 12\nblock_meters = 150.0\npersist_interval = \"0s\"\n",
+        ),
+        ("valkey-missing", "[valkey]\n"),
+        ("valkey-empty", "[valkey]\nurl = \"\"\n"),
+    ] {
+        assert!(load_toml(name, contents).is_err(), "{name}");
+    }
+}
+
+#[test]
+fn tracking_env_sets_values() {
+    let builder = configure_tracking(ConfigLoader::builder(), |name| match name {
+        TRACKING_CITY_BLOCKS_ENV => Some("8".to_owned()),
+        VALKEY_URL_ENV => Some("redis://valkey:6379".to_owned()),
+        _ => None,
+    })
+    .expect("configure tracking");
+    let config = builder.build().expect("build config");
+
+    assert_eq!(
+        config.get_string("tracking.city_blocks").expect("blocks"),
+        "8"
+    );
+    assert_eq!(
+        config.get_string("valkey.url").expect("valkey url"),
+        "redis://valkey:6379"
     );
 }
