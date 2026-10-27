@@ -22,7 +22,7 @@ func Services() []Options {
 			Services: []string{inventory.Restaurants, inventory.RestaurantsConsumer},
 			GRPC:     true, Database: MongoDB, DatabasePool: true, Cache: true,
 			Kafka: &Kafka{ConsumerGroup: "restaurants", Consumers: []string{inventory.Restaurants}, Connector: "restaurants-outbox",
-				DeadLetters: []string{"orders.v1.order-events.dlq"}},
+				DeadLetters: []string{"delivery.v1.delivery-events.dlq", "restaurants.v1.restaurant-order-events.dlq"}},
 			UnitOfWork: true, Lifecycle: true, Kitchen: true, Authorization: true,
 			Domain: restaurantsDomain,
 			SLO:    &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},

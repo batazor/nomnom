@@ -51,6 +51,11 @@ spicedb:
 mongodb:
   uriSecret:
     name: restaurants-mongodb
+  # Новый pod первые секунды живёт с identity init Cilium, пока label'ы не дошли до агента,
+  # а ingress MongoDB ещё не знает его настоящую identity: SYN отбрасываются. 5s server
+  # selection не переживали этого при выкатке (restart consumer, 2026-10-27); 20s — с запасом
+  # в бюджете startupProbe (60s).
+  timeout: 20s
 
 # ADR 37: Outbox доставляет Debezium в Kafka Connect nomnom-infra. URI replica set Connect читает
 # из Secret cdc-credentials (ключ restaurants-uri) через DirectoryConfigProvider.

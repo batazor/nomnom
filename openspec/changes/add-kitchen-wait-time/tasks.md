@@ -25,4 +25,4 @@
 
 ## 5. Проверка
 
-- [x] 5.1 Проверки каждого сервиса, `openspec validate add-kitchen-wait-time --strict`, прогон в kind. Chainsaw: 12 из 13; `workloads-healthy-under-policies` красный из-за перезапусков компонентов кластера (cert-manager, envoy-gateway, cilium-operator, kube-controller-manager, kube-scheduler) после создания политик 2026-10-26 и разового `MongoServerSelectionError` при старте `restaurants-consumer`; повторный старт consumer стабилен.
+- [x] 5.1 Проверки каждого сервиса, `openspec validate add-kitchen-wait-time --strict`, прогон в kind: Chainsaw 13 из 13. Старт `restaurants-consumer` падал на `MongoServerSelectionError`: первые секунды новый pod живёт с identity init Cilium и MongoDB отбрасывает SYN, 5s server selection не хватало — в kind `mongodb.timeout: 20s` для обоих процессов.
