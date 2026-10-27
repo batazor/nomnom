@@ -13,7 +13,6 @@ import (
 	"nomnom/orders/slices/order/applications/recordpickup"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -51,7 +50,7 @@ func TestHandleByOrderState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := repositorytest.Open(t)
-			workflow := mocks.NewMockNotifier(t)
+			workflow := NewMockNotifier(t)
 			workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 				OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
 			}).Return(nil).Once()
@@ -76,7 +75,7 @@ func TestHandleStoresExpectedDeliveredTime(t *testing.T) {
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
 	in := input("event-1")
 	in.ExpectedDeliveredAt = occurredAt.Add(20 * time.Minute)
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
 	}).Return(nil).Once()

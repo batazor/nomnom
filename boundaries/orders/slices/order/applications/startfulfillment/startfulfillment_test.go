@@ -15,7 +15,6 @@ import (
 	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -25,10 +24,10 @@ func input() startfulfillment.Input {
 	return startfulfillment.Input{EventID: "event-1", OrderID: "order-1", OccurredAt: occurredAt}
 }
 
-func newHandler(t *testing.T, options ...ordertest.Option) (*repositorytest.Store, *mocks.MockStarter, startfulfillment.Handler) {
+func newHandler(t *testing.T, options ...ordertest.Option) (*repositorytest.Store, *MockStarter, startfulfillment.Handler) {
 	t.Helper()
 	store := repositorytest.Open(t)
-	workflow := mocks.NewMockStarter(t)
+	workflow := NewMockStarter(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", options...)))
 	return store, workflow, startfulfillment.NewHandler(store, store, store, workflow)
 }

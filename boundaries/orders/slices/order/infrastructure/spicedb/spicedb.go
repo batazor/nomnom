@@ -45,12 +45,19 @@ type RevisionReader interface {
 	Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error)
 }
 
+// Permissions is the part of the SpiceDB Permissions API the adapter calls.
+type Permissions interface {
+	CheckPermission(ctx context.Context, in *v1.CheckPermissionRequest, opts ...grpc.CallOption) (*v1.CheckPermissionResponse, error)
+	ReadRelationships(ctx context.Context, in *v1.ReadRelationshipsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[v1.ReadRelationshipsResponse], error)
+	WriteRelationships(ctx context.Context, in *v1.WriteRelationshipsRequest, opts ...grpc.CallOption) (*v1.WriteRelationshipsResponse, error)
+}
+
 // Authorizer checks application.AccessCheck as `<type>:<id>#<permission>` for
 // `user:<id>` or `service:<id>`. An Order with a stored authorization revision
 // (the ZedToken of its last relationship sync) is checked at least as fresh as
 // that write.
 type Authorizer struct {
-	permissions v1.PermissionsServiceClient
+	permissions Permissions
 	revisions   RevisionReader
 	timeout     time.Duration
 	checks      checkMetrics
@@ -79,7 +86,7 @@ func Dial(cfg config.SpiceDBConfig) (*authzed.Client, error) {
 	return client, nil
 }
 
-func NewAuthorizer(permissions v1.PermissionsServiceClient, revisions RevisionReader, timeout time.Duration) *Authorizer {
+func NewAuthorizer(permissions Permissions, revisions RevisionReader, timeout time.Duration) *Authorizer {
 	return &Authorizer{permissions: permissions, revisions: revisions, timeout: timeout, checks: newCheckMetrics()}
 }
 

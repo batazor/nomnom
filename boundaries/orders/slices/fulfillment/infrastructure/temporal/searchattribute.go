@@ -8,15 +8,22 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 )
 
 // ErrSearchAttributeMissing means StageSearchAttribute is not registered and
 // the worker is not allowed to register it.
 var ErrSearchAttributeMissing = errors.New("search attribute is not registered")
 
+// SearchAttributes is the part of the Temporal Operator API the worker calls.
+type SearchAttributes interface {
+	ListSearchAttributes(ctx context.Context, in *operatorservice.ListSearchAttributesRequest, opts ...grpc.CallOption) (*operatorservice.ListSearchAttributesResponse, error)
+	AddSearchAttributes(ctx context.Context, in *operatorservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*operatorservice.AddSearchAttributesResponse, error)
+}
+
 // EnsureStageSearchAttribute makes sure the namespace has the Keyword Search
 // Attribute published by the workflow; with register it creates a missing one.
-func EnsureStageSearchAttribute(ctx context.Context, operator operatorservice.OperatorServiceClient, namespace string, register bool) error {
+func EnsureStageSearchAttribute(ctx context.Context, operator SearchAttributes, namespace string, register bool) error {
 	name := StageSearchAttribute.GetName()
 	existing, err := operator.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{Namespace: namespace})
 	if err != nil {

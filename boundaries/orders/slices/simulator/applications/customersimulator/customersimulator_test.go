@@ -18,7 +18,6 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
@@ -37,8 +36,8 @@ var start = time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
 type harness struct {
 	customer         *customersimulator.Customer
 	store            *repositorytest.Store
-	placementCatalog *mocks.MockCatalog
-	workflow         *mocks.MockCancellationRequester
+	placementCatalog *MockPlacementCatalog
+	workflow         *MockCancellationRequester
 	catalog          *MockCatalog
 	random           *MockRandom
 	keys             *MockKeys
@@ -53,14 +52,14 @@ type harness struct {
 func newHarness(t *testing.T) harness {
 	t.Helper()
 	store := repositorytest.Open(t)
-	placementCatalog := mocks.NewMockCatalog(t)
+	placementCatalog := NewMockPlacementCatalog(t)
 	policy, err := cancellationpolicy.NewFixed(time.Hour)
 	require.NoError(t, err)
-	workflow := mocks.NewMockCancellationRequester(t)
+	workflow := NewMockCancellationRequester(t)
 	module := orderdi.NewModule(orderdi.Dependencies{
 		Commands:   store,
 		ReadModels: store,
-		Authorizer: mocks.NewMockAuthorizer(t),
+		Authorizer: NewMockAuthorizer(t),
 		Policy:     policy,
 		Catalog:    placementCatalog,
 		Workflow:   workflow,

@@ -62,7 +62,7 @@ func TestCheckRecordsResult(t *testing.T) {
 	} {
 		t.Run(tc.result, func(t *testing.T) {
 			reader := installMeter(t)
-			permissions := NewMockPermissionsServiceClient(t)
+			permissions := NewMockPermissions(t)
 			permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
 				Return(&v1.CheckPermissionResponse{Permissionship: tc.permissionship}, tc.err).Once()
 			a := spicedb.NewAuthorizer(permissions, nil, time.Second)

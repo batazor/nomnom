@@ -1,6 +1,6 @@
 // Package fake holds in-process stand-ins with behaviour of their own: the
 // clock, the order id generator and an open cancellation window. Ports the
-// tests only assert calls on are mockery mocks (infrastructure/mocks). State
+// tests only assert calls on are mockery mocks generated next to each test. State
 // of orders itself lives only in PostgreSQL (repository/repositorytest).
 package fake
 

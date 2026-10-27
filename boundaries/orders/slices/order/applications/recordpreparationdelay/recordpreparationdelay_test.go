@@ -15,7 +15,6 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -29,7 +28,7 @@ func delay(eventID string, readyAt time.Time) recordpreparationdelay.Input {
 // replaces Order.expected_ready_at; the workflow gets the new time too.
 func TestDelayReplacesExpectedReadyTime(t *testing.T) {
 	store := repositorytest.Open(t)
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	accepted, delayed := occurredAt.Add(12*time.Minute), occurredAt.Add(20*time.Minute)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
@@ -56,7 +55,7 @@ func TestDelayReplacesExpectedReadyTime(t *testing.T) {
 func TestDelayOfFinalOrderIsLate(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateCompleted))))
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed,
 		OccurredAt: occurredAt.Add(5 * time.Minute), ExpectedReadyAt: occurredAt.Add(time.Hour),
@@ -74,7 +73,7 @@ func TestDelayOfFinalOrderIsLate(t *testing.T) {
 func TestDuplicateDelayIsNotAppliedAgain(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed,
 		OccurredAt: occurredAt.Add(5 * time.Minute), ExpectedReadyAt: occurredAt.Add(time.Hour),
@@ -92,7 +91,7 @@ func TestDuplicateDelayIsNotAppliedAgain(t *testing.T) {
 }
 
 func TestDelayRequiresExpectedReadyTime(t *testing.T) {
-	_, err := recordpreparationdelay.NewHandler(nil, nil, nil, mocks.NewMockNotifier(t)).Handle(context.Background(), delay("event-1", time.Time{}))
+	_, err := recordpreparationdelay.NewHandler(nil, nil, nil, NewMockNotifier(t)).Handle(context.Background(), delay("event-1", time.Time{}))
 
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 }

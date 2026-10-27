@@ -17,7 +17,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -25,8 +24,8 @@ var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-
 
 type env struct {
 	store      *repositorytest.Store
-	authorizer *mocks.MockAuthorizer
-	workflow   *mocks.MockCancellationRequester
+	authorizer *MockAuthorizer
+	workflow   *MockCancellationRequester
 	clock      *fake.Clock
 	handler    requestordercancellation.Handler
 }
@@ -35,8 +34,8 @@ func newEnv(t *testing.T, state order.State, policy requestordercancellation.Can
 	t.Helper()
 	e := env{
 		store:      repositorytest.Open(t),
-		authorizer: mocks.NewMockAuthorizer(t),
-		workflow:   mocks.NewMockCancellationRequester(t),
+		authorizer: NewMockAuthorizer(t),
+		workflow:   NewMockCancellationRequester(t),
 		clock:      fake.NewClock(ordertest.PlacedAt.Add(5 * time.Minute)),
 	}
 	ctx := context.Background()

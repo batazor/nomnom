@@ -29,7 +29,6 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -86,7 +85,7 @@ type e2e struct {
 	client     ordersv1.OrdersServiceClient
 	vectors    userVectors
 	store      *repositorytest.Store
-	authorizer *mocks.MockAuthorizer
+	authorizer *MockAuthorizer
 }
 
 func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
@@ -114,14 +113,14 @@ func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
 	},
 		grpc.WithUnaryInterceptor(gateway.ServiceToken(tokens)))
 	ports := commandPorts{
-		workflow: mocks.NewMockCancellationRequester(t),
+		workflow: NewMockCancellationRequester(t),
 		clock:    fake.NewClock(ordertest.PlacedAt),
 	}
 	ports.catalog = catalog.New(gatewayConn,
 		catalog.Limits{MinimumTotal: decimal.RequireFromString("0"), MaximumTotal: decimal.RequireFromString("100")}, time.Second)
 
 	// Place Order checks no permission: the authorizer expects no call.
-	store, authorizer := repositorytest.Open(t), mocks.NewMockAuthorizer(t)
+	store, authorizer := repositorytest.Open(t), NewMockAuthorizer(t)
 	return e2e{
 		client:     newClientWithPorts(t, resolver, store, authorizer, ports),
 		vectors:    v,

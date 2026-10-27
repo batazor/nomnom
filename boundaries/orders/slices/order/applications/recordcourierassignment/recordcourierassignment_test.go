@@ -14,7 +14,6 @@ import (
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -52,7 +51,7 @@ func TestHandleByOrderState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := repositorytest.Open(t)
-			workflow := mocks.NewMockNotifier(t)
+			workflow := NewMockNotifier(t)
 			workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 				OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
 			}).Return(nil).Once()
@@ -97,7 +96,7 @@ func linkedDelivery(t *testing.T, store *repositorytest.Store) string {
 func TestHandleLinksDelivery(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
 	}).Return(nil).Once()
@@ -119,7 +118,7 @@ func TestHandleLinksDelivery(t *testing.T) {
 func TestHandleReassignment(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
 	}).Return(nil).Once()
@@ -155,7 +154,7 @@ func TestHandleReassignment(t *testing.T) {
 func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
 	}).Return(nil).Once()
@@ -183,7 +182,7 @@ func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	changes := NewMockChanges(t)
 	changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).Return(errors.New("outbox unavailable")).Once()
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, changes)
 
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
@@ -210,7 +209,7 @@ func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 func TestHandleReplacesExpectedPickupTime(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
 	}).Return(nil).Once()

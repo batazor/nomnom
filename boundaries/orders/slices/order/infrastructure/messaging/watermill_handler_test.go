@@ -37,7 +37,6 @@ import (
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -46,9 +45,9 @@ var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 type consumer struct {
 	pubSub        *gochannel.GoChannel
 	store         *repositorytest.Store
-	starter       *mocks.MockStarter
-	notifier      *mocks.MockNotifier
-	relationships *mocks.MockRelationships
+	starter       *MockStarter
+	notifier      *MockNotifier
+	relationships *MockRelationships
 	poison        chan *message.Message
 }
 
@@ -61,7 +60,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 	for _, o := range orders {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
-	starter, notifier, relationships := mocks.NewMockStarter(t), mocks.NewMockNotifier(t), mocks.NewMockRelationships(t)
+	starter, notifier, relationships := NewMockStarter(t), NewMockNotifier(t), NewMockRelationships(t)
 	handlers := ordermessaging.Handlers{
 		ConfirmOrder:             confirmorder.NewHandler(store, store, store, notifier),
 		RejectOrder:              rejectorder.NewHandler(store, store, store, notifier),

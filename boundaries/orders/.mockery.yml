@@ -22,22 +22,18 @@ packages:
       Delivery: {}
       Payments: {}
       Restaurants: {}
-  go.temporal.io/api/operatorservice/v1:
+  nomnom/orders/slices/fulfillment/infrastructure/temporal:
     config:
-      include-auto-generated: true
-      dir: slices/fulfillment/infrastructure/temporal
-      filename: mocks_operatorservice_test.go
+      filename: mocks_test.go
       pkgname: temporal_test
     interfaces:
-      OperatorServiceClient: {}
-  github.com/authzed/authzed-go/proto/authzed/api/v1:
+      SearchAttributes: {}
+  nomnom/orders/slices/order/infrastructure/spicedb:
     config:
-      include-auto-generated: true
-      dir: slices/order/infrastructure/spicedb
       filename: mocks_test.go
       pkgname: spicedb_test
     interfaces:
-      PermissionsServiceClient: {}
+      Permissions: {}
   nomnom/orders/pkg/gateway/gen/nomnom/payments/v1:
     config:
       include-auto-generated: true
@@ -69,40 +65,104 @@ packages:
           - dir: infrastructure/grpc
             filename: mocks_test.go
             pkgname: grpcadapter_test
-  # Shared mocks of the order slice ports, used by tests of many packages.
+  # Ports of the order slice, generated into each consumer's tests.
   nomnom/orders/slices/order/applications/getorder:
-    config: &shared
-      dir: slices/order/infrastructure/mocks
-      filename: "{{.SrcPackageName}}.go"
-      pkgname: mocks
+    config:
+      filename: "mocks_{{.SrcPackageName}}_test.go"
     interfaces:
-      Authorizer: {}
+      Authorizer:
+        configs:
+          - dir: infrastructure/grpc
+            pkgname: grpcadapter_test
+          - dir: slices/order/applications/getorder
+            pkgname: getorder_test
+          - dir: slices/order/applications/listcustomerorders
+            pkgname: listcustomerorders_test
+          - dir: slices/order/applications/requestordercancellation
+            pkgname: requestordercancellation_test
+          - dir: slices/simulator/applications/customersimulator
+            pkgname: customersimulator_test
   nomnom/orders/slices/order/applications/placeorder:
-    config: *shared
+    config:
+      filename: "mocks_{{.SrcPackageName}}_test.go"
     interfaces:
-      Catalog: {}
+      Catalog:
+        configs:
+          - dir: infrastructure/grpc
+            pkgname: grpcadapter_test
+          - dir: slices/order/applications/placeorder
+            filename: mocks_test.go
+            pkgname: placeorder_test
+          - dir: slices/simulator/applications/customersimulator
+            pkgname: customersimulator_test
+            structname: MockPlacementCatalog
       IdempotencyKeys:
         config:
           dir: slices/order/applications/placeorder
           filename: mocks_test.go
           pkgname: placeorder_test
   nomnom/orders/slices/order/applications/fulfillment:
-    config: *shared
+    config:
+      filename: "mocks_{{.SrcPackageName}}_test.go"
     interfaces:
-      CancellationRequester: {}
-      Notifier: {}
-      Starter: {}
+      CancellationRequester:
+        configs:
+          - dir: infrastructure/grpc
+            pkgname: grpcadapter_test
+          - dir: slices/order/applications/requestordercancellation
+            pkgname: requestordercancellation_test
+          - dir: slices/simulator/applications/customersimulator
+            pkgname: customersimulator_test
+      Notifier:
+        configs:
+          - dir: slices/order/applications/confirmorder
+            pkgname: confirmorder_test
+          - dir: slices/order/applications/fulfillment
+            pkgname: fulfillment_test
+          - dir: slices/order/applications/recordcourierassignment
+            pkgname: recordcourierassignment_test
+          - dir: slices/order/applications/recordcourierrelease
+            pkgname: recordcourierrelease_test
+          - dir: slices/order/applications/recorddeliverycompletion
+            pkgname: recorddeliverycompletion_test
+          - dir: slices/order/applications/recorddeliveryfailure
+            pkgname: recorddeliveryfailure_test
+          - dir: slices/order/applications/recordorderready
+            pkgname: recordorderready_test
+          - dir: slices/order/applications/recordpickup
+            pkgname: recordpickup_test
+          - dir: slices/order/applications/recordpreparationdelay
+            pkgname: recordpreparationdelay_test
+          - dir: slices/order/applications/recordpreparationstarted
+            pkgname: recordpreparationstarted_test
+          - dir: slices/order/applications/rejectorder
+            pkgname: rejectorder_test
+          - dir: slices/order/applications/relaypreparationissue
+            pkgname: relaypreparationissue_test
+          - dir: slices/order/di
+            pkgname: di
+          - dir: slices/order/infrastructure/messaging
+            pkgname: messaging_test
+      Starter:
+        configs:
+          - dir: slices/order/applications/startfulfillment
+            pkgname: startfulfillment_test
+          - dir: slices/order/infrastructure/messaging
+            pkgname: messaging_test
   nomnom/orders/slices/order/applications/syncorderrelationships:
-    config: *shared
+    config:
+      filename: mocks_test.go
     interfaces:
-      Relationships: {}
+      Relationships:
+        config:
+          dir: slices/order/infrastructure/messaging
+          filename: "mocks_{{.SrcPackageName}}_test.go"
+          pkgname: messaging_test
       Changes:
         configs:
           - dir: slices/order/applications/recordcourierassignment
-            filename: mocks_test.go
             pkgname: recordcourierassignment_test
           - dir: slices/order/applications/recordcourierrelease
-            filename: mocks_test.go
             pkgname: recordcourierrelease_test
   # Ports replaced by tests of their consumers, generated next to those tests.
   nomnom/orders/slices/order/domains/order:

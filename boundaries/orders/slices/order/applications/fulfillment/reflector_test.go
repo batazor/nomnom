@@ -14,7 +14,6 @@ import (
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -22,12 +21,12 @@ var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type harness struct {
 	store    *repositorytest.Store
-	workflow *mocks.MockNotifier
+	workflow *MockNotifier
 }
 
 func newHarness(t *testing.T, seeded ...*order.Order) harness {
 	t.Helper()
-	h := harness{store: repositorytest.Open(t), workflow: mocks.NewMockNotifier(t)}
+	h := harness{store: repositorytest.Open(t), workflow: NewMockNotifier(t)}
 	for _, o := range seeded {
 		require.NoError(t, h.store.Add(context.Background(), o))
 	}

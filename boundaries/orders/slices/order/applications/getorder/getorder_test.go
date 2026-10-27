@@ -17,7 +17,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -29,15 +28,15 @@ var (
 
 const window = 5 * time.Minute
 
-func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *mocks.MockAuthorizer) {
+func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *MockAuthorizer) {
 	t.Helper()
 	return setupWithPolicy(t, fixedWindow(t, window), seeded...)
 }
 
-func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *mocks.MockAuthorizer) {
+func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *MockAuthorizer) {
 	t.Helper()
 	store := repositorytest.Open(t)
-	authorizer := mocks.NewMockAuthorizer(t)
+	authorizer := NewMockAuthorizer(t)
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))
 	}

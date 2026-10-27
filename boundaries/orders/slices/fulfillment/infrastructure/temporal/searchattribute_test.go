@@ -17,7 +17,7 @@ import (
 const stage = "OrderFulfillmentStage"
 
 func TestEnsureStageSearchAttributeAcceptsRegisteredKeyword(t *testing.T) {
-	operator := NewMockOperatorServiceClient(t)
+	operator := NewMockSearchAttributes(t)
 	operator.EXPECT().ListSearchAttributes(mock.Anything, mock.Anything).
 		Return(&operatorservice.ListSearchAttributesResponse{CustomAttributes: map[string]enumspb.IndexedValueType{stage: enumspb.INDEXED_VALUE_TYPE_KEYWORD}}, nil).Once()
 
@@ -31,7 +31,7 @@ func TestEnsureStageSearchAttributeRegistersMissing(t *testing.T) {
 		"created racing": serviceerror.NewAlreadyExists("exists"),
 	} {
 		t.Run(name, func(t *testing.T) {
-			operator := NewMockOperatorServiceClient(t)
+			operator := NewMockSearchAttributes(t)
 			operator.EXPECT().ListSearchAttributes(mock.Anything, mock.Anything).
 				Return(&operatorservice.ListSearchAttributesResponse{}, nil).Once()
 			operator.EXPECT().AddSearchAttributes(mock.Anything, mock.MatchedBy(func(request *operatorservice.AddSearchAttributesRequest) bool {
@@ -46,7 +46,7 @@ func TestEnsureStageSearchAttributeRegistersMissing(t *testing.T) {
 
 // AC-450: without permission to register, a missing attribute fails startup.
 func TestEnsureStageSearchAttributeFailsWhenMissing(t *testing.T) {
-	operator := NewMockOperatorServiceClient(t)
+	operator := NewMockSearchAttributes(t)
 	operator.EXPECT().ListSearchAttributes(mock.Anything, mock.Anything).
 		Return(&operatorservice.ListSearchAttributesResponse{}, nil).Once()
 
@@ -58,7 +58,7 @@ func TestEnsureStageSearchAttributeFailsWhenMissing(t *testing.T) {
 }
 
 func TestEnsureStageSearchAttributeRejectsWrongType(t *testing.T) {
-	operator := NewMockOperatorServiceClient(t)
+	operator := NewMockSearchAttributes(t)
 	operator.EXPECT().ListSearchAttributes(mock.Anything, mock.Anything).
 		Return(&operatorservice.ListSearchAttributesResponse{CustomAttributes: map[string]enumspb.IndexedValueType{stage: enumspb.INDEXED_VALUE_TYPE_TEXT}}, nil).Once()
 
@@ -66,7 +66,7 @@ func TestEnsureStageSearchAttributeRejectsWrongType(t *testing.T) {
 }
 
 func TestEnsureStageSearchAttributeReturnsRegistrationFailure(t *testing.T) {
-	operator := NewMockOperatorServiceClient(t)
+	operator := NewMockSearchAttributes(t)
 	operator.EXPECT().ListSearchAttributes(mock.Anything, mock.Anything).
 		Return(&operatorservice.ListSearchAttributesResponse{}, nil).Once()
 	operator.EXPECT().AddSearchAttributes(mock.Anything, mock.Anything).

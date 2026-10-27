@@ -2,7 +2,7 @@
 // github.com/vektra/mockery
 // template: testify
 
-package mocks
+package messaging_test
 
 import (
 	"context"

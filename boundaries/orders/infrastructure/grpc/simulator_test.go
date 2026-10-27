@@ -12,7 +12,6 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
 	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
@@ -28,7 +27,7 @@ var (
 func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 	store := repositorytest.Open(t)
 	// Three reads and two writes, each checked in SpiceDB.
-	authorizer := mocks.NewMockAuthorizer(t)
+	authorizer := NewMockAuthorizer(t)
 	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
 		Subject: operator, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
 	}).Return(nil).Times(5)
@@ -64,7 +63,7 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 func TestSimulatorDeniesNonOperator(t *testing.T) {
 	store := repositorytest.Open(t)
 	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
-	authorizer := mocks.NewMockAuthorizer(t)
+	authorizer := NewMockAuthorizer(t)
 	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
 		Subject: customer, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
 	}).Return(application.ErrPermissionDenied).Times(2)

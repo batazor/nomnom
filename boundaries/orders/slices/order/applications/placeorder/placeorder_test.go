@@ -16,7 +16,6 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/order/infrastructure/fake"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -26,7 +25,7 @@ var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-
 
 type env struct {
 	store   *repositorytest.Store
-	catalog *mocks.MockCatalog
+	catalog *MockCatalog
 	handler placeorder.Handler
 }
 
@@ -34,7 +33,7 @@ func newEnv(t *testing.T) env {
 	t.Helper()
 	e := env{
 		store:   repositorytest.Open(t),
-		catalog: mocks.NewMockCatalog(t),
+		catalog: NewMockCatalog(t),
 	}
 	e.handler = placeorder.NewHandler(placeorder.Dependencies{
 		UnitOfWork:      e.store,

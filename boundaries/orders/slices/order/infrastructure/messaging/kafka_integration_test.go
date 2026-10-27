@@ -36,7 +36,6 @@ import (
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -69,7 +68,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	}
 	// The workflow is started by no event of the test and no relationships
 	// change: starter and relationships expect no call.
-	notifier := mocks.NewMockNotifier(t)
+	notifier := NewMockNotifier(t)
 
 	logger := watermill.NopLogger{}
 	subscriber, err := messaging.NewSubscriber(cfg, logger)
@@ -80,7 +79,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		ConsumerGroup: cfg.ConsumerGroup,
 		Retry:         messaging.RetryPolicy{MaxRetries: 3, InitialInterval: 10 * time.Millisecond, MaxInterval: 50 * time.Millisecond},
 		CloseTimeout:  10 * time.Second,
-	}, subscriber, poisonPublisher, ordermessaging.Streams(handlersOf(store, notifier, mocks.NewMockStarter(t), mocks.NewMockRelationships(t))), logger)
+	}, subscriber, poisonPublisher, ordermessaging.Streams(handlersOf(store, notifier, NewMockStarter(t), NewMockRelationships(t))), logger)
 	require.NoError(t, err)
 	runCtx, cancel := context.WithCancel(ctx)
 	go func() { _ = router.Run(runCtx) }()

@@ -15,7 +15,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -28,7 +27,7 @@ var (
 	support  = application.Subject{Kind: application.SubjectService, ID: "support-console"}
 )
 
-func setup(t *testing.T) (listcustomerorders.Handler, *mocks.MockAuthorizer) {
+func setup(t *testing.T) (listcustomerorders.Handler, *MockAuthorizer) {
 	t.Helper()
 	store := repositorytest.Open(t)
 	ctx := context.Background()
@@ -40,7 +39,7 @@ func setup(t *testing.T) (listcustomerorders.Handler, *mocks.MockAuthorizer) {
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-x", ordertest.WithCustomer("customer-2"))))
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-h", ordertest.WithMarket("hamburg"),
 		ordertest.WithPlacedAt(ordertest.PlacedAt.Add(time.Hour+30*time.Minute)))))
-	authorizer := mocks.NewMockAuthorizer(t)
+	authorizer := NewMockAuthorizer(t)
 	policy, err := cancellationpolicy.NewFixed(window)
 	require.NoError(t, err)
 	return listcustomerorders.NewHandler(authorizer, store, policy), authorizer
@@ -79,6 +78,7 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 			MarketID:     ordertest.MarketID(t),
 			RestaurantID: "restaurant-1",
 			Items:        []orderdetails.Item{{MenuItemID: "menu-1", Name: "Margherita", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
+			Service:      order.StandardService(),
 			Total:        ordertest.Money(t, "20"),
 			State:        order.StatePlaced,
 			PlacedAt:     ordertest.PlacedAt,

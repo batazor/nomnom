@@ -59,7 +59,6 @@ test-postgres:
 generate:
 	$(MAKE) proto-generate
 	$(GO) tool wire ./di
-	$(GO) tool mockery
 
 proto-check:
 	cd ../.. && buf format --diff --exit-code
@@ -70,6 +69,7 @@ proto-generate:
 	cd infrastructure/grpc && buf generate --template buf.gen.yaml
 	cd pkg/gateway && buf generate --template buf.gen.yaml
 	cd slices/order/infrastructure/messaging && buf generate --template buf.gen.yaml
+	$(GO) tool mockery
 
 # Все тесты, включая PostgreSQL, Kafka, SpiceDB и Temporal в testcontainers (нужен Docker).
 test:

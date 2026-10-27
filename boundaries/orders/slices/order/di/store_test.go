@@ -15,7 +15,6 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
-	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
@@ -40,7 +39,7 @@ func TestExpectedTimeChangesAreAnnounced(t *testing.T) {
 	at := ordertest.PlacedAt.Add(time.Minute)
 	require.NoError(t, store.Do(ctx, func(ctx context.Context) error { return store.Add(ctx, ordertest.New(t, "order-1")) }))
 
-	workflow := mocks.NewMockNotifier(t)
+	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "delayed", Kind: fulfillment.KindPreparationDelayed, OccurredAt: at, ExpectedReadyAt: at.Add(20 * time.Minute),
 	}).Return(nil).Once()

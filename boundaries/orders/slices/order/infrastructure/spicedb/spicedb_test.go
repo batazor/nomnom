@@ -26,7 +26,7 @@ var customerCheck = application.AccessCheck{
 }
 
 func TestCheckMapsAccessCheckToSpiceDB(t *testing.T) {
-	permissions := NewMockPermissionsServiceClient(t)
+	permissions := NewMockPermissions(t)
 	permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
 		return r.GetResource().GetObjectType() == "order" &&
 			r.GetResource().GetObjectId() == "order-1" &&
@@ -44,7 +44,7 @@ func TestCheckDeniesWithoutPermission(t *testing.T) {
 		v1.CheckPermissionResponse_PERMISSIONSHIP_NO_PERMISSION,
 		v1.CheckPermissionResponse_PERMISSIONSHIP_CONDITIONAL_PERMISSION,
 	} {
-		permissions := NewMockPermissionsServiceClient(t)
+		permissions := NewMockPermissions(t)
 		permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
 			Return(&v1.CheckPermissionResponse{Permissionship: p}, nil).Once()
 		a := spicedb.NewAuthorizer(permissions, nil, time.Second)
@@ -54,7 +54,7 @@ func TestCheckDeniesWithoutPermission(t *testing.T) {
 
 // AC-466: an unavailable SpiceDB fails closed.
 func TestCheckFailsClosedOnError(t *testing.T) {
-	permissions := NewMockPermissionsServiceClient(t)
+	permissions := NewMockPermissions(t)
 	permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
 		Return(&v1.CheckPermissionResponse{}, errors.New("unavailable")).Once()
 	a := spicedb.NewAuthorizer(permissions, nil, time.Second)
@@ -74,7 +74,7 @@ func (r revisions) Revision(_ context.Context, id string) (application.Authoriza
 
 // AC-472: the stored revision of an Order makes the check at least as fresh.
 func TestCheckReadsAtLeastAsFreshAsTheStoredRevision(t *testing.T) {
-	permissions := NewMockPermissionsServiceClient(t)
+	permissions := NewMockPermissions(t)
 	permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
 		return r.GetConsistency().GetAtLeastAsFresh().GetToken() == "zed-1"
 	})).Return(&v1.CheckPermissionResponse{Permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION}, nil).Once()
@@ -86,7 +86,7 @@ func TestCheckReadsAtLeastAsFreshAsTheStoredRevision(t *testing.T) {
 // An unavailable SpiceDB fails the sync as a dependency error: the event is
 // redelivered.
 func TestSyncFailsAsUnavailable(t *testing.T) {
-	permissions := NewMockPermissionsServiceClient(t)
+	permissions := NewMockPermissions(t)
 	permissions.EXPECT().ReadRelationships(mock.Anything, mock.Anything).Return(nil, errors.New("unavailable")).Once()
 	a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 
