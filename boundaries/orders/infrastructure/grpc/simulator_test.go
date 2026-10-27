@@ -32,7 +32,10 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
 		Subject: operator, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
 	}).Return(nil).Times(5)
-	client := newClientWith(t, fixedSubject{subject: operator}, store, authorizer)
+	// Three reads and two writes, each resolving the caller.
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(operator, nil).Times(5)
+	client := newClientWith(t, subjects, store, authorizer)
 	ctx := context.Background()
 
 	initial, err := client.GetSimulator(ctx, &ordersv1.GetSimulatorRequest{})
@@ -65,7 +68,9 @@ func TestSimulatorDeniesNonOperator(t *testing.T) {
 	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
 		Subject: customer, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
 	}).Return(application.ErrPermissionDenied).Times(2)
-	client := newClientWith(t, fixedSubject{subject: customer}, store, authorizer)
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
+	client := newClientWith(t, subjects, store, authorizer)
 	ctx := context.Background()
 
 	_, err := client.GetSimulator(ctx, &ordersv1.GetSimulatorRequest{})

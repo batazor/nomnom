@@ -164,68 +164,63 @@ func TestFailedNotificationIsReturnedAndRepairedByRedelivery(t *testing.T) {
 	assert.Equal(t, fulfillment.Reflection{Outcome: fulfillment.OutcomeDuplicate, WorkflowNotified: true}, redelivered)
 }
 
-type failingSave struct {
-	order.Repository
-	err error
-}
-
-func (r failingSave) Save(context.Context, *order.Order) error { return r.err }
-
-// concurrentWriter changes the same Order between load and save of the handler.
-type concurrentWriter struct {
-	*repositorytest.Store
-}
-
-func (r concurrentWriter) Get(ctx context.Context, id order.ID) (*order.Order, error) {
-	loaded, err := r.Store.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	other, err := r.Store.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := other.Confirm(ordertest.PlacedAt.Add(time.Minute)); err != nil {
-		return nil, err
-	}
-	return loaded, r.Save(ctx, other)
-}
-
 // AC-114 and AC-130: a failed transaction leaves no Inbox, Order or notification.
 func TestFailedTransactionRollsBackWithoutNotification(t *testing.T) {
-	saveFailure := errors.New("disk full")
-	tests := []struct {
-		name    string
-		orders  func(*repositorytest.Store) order.Repository
-		wantErr error
-	}{
-		{
-			name: "save fails",
-			orders: func(store *repositorytest.Store) order.Repository {
-				return failingSave{Repository: store, err: saveFailure}
-			},
-			wantErr: saveFailure,
-		},
-		{
-			name:    "concurrent change",
-			orders:  func(store *repositorytest.Store) order.Repository { return concurrentWriter{Store: store} },
-			wantErr: application.ErrConcurrencyConflict,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// The notifier has no expectation: a notification fails the test.
-			h := newHarness(t, ordertest.New(t, "order-1"))
-			before, _ := h.store.Snapshot("order-1")
+	t.Run("save fails", func(t *testing.T) {
+		// The notifier has no expectation: a notification fails the test.
+		h := newHarness(t, ordertest.New(t, "order-1"))
+		before, _ := h.store.Snapshot("order-1")
+		saveFailure := errors.New("disk full")
+		orders := NewMockRepository(t)
+		orders.EXPECT().Get(mock.Anything, order.ID("order-1")).RunAndReturn(h.store.Get).Once()
+		orders.EXPECT().
+			Save(mock.Anything, mock.MatchedBy(func(o *order.Order) bool { return o.ID() == "order-1" })).
+			Return(saveFailure).
+			Once()
 
-			_, err := h.reflector(tt.orders(h.store)).Reflect(context.Background(), pickup("event-1"), recordPickup)
+		_, err := h.reflector(orders).Reflect(context.Background(), pickup("event-1"), recordPickup)
 
-			require.ErrorIs(t, err, tt.wantErr)
-			after, _ := h.store.Snapshot("order-1")
-			assert.Equal(t, before, after)
-			assert.Zero(t, h.store.InboxSize())
-		})
-	}
+		require.ErrorIs(t, err, saveFailure)
+		after, _ := h.store.Snapshot("order-1")
+		assert.Equal(t, before, after)
+		assert.Zero(t, h.store.InboxSize())
+	})
+	t.Run("concurrent change", func(t *testing.T) {
+		// The notifier has no expectation: a notification fails the test.
+		h := newHarness(t, ordertest.New(t, "order-1"))
+		before, _ := h.store.Snapshot("order-1")
+		orders := NewMockRepository(t)
+		// The same Order is changed between load and save of the handler in
+		// every attempt: the unit of work repeats the conflict three times.
+		orders.EXPECT().
+			Get(mock.Anything, order.ID("order-1")).
+			RunAndReturn(func(ctx context.Context, id order.ID) (*order.Order, error) {
+				loaded, err := h.store.Get(ctx, id)
+				if err != nil {
+					return nil, err
+				}
+				other, err := h.store.Get(ctx, id)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := other.Confirm(ordertest.PlacedAt.Add(time.Minute)); err != nil {
+					return nil, err
+				}
+				return loaded, h.store.Save(ctx, other)
+			}).
+			Times(3)
+		orders.EXPECT().
+			Save(mock.Anything, mock.MatchedBy(func(o *order.Order) bool { return o.ID() == "order-1" })).
+			RunAndReturn(h.store.Save).
+			Times(3)
+
+		_, err := h.reflector(orders).Reflect(context.Background(), pickup("event-1"), recordPickup)
+
+		require.ErrorIs(t, err, application.ErrConcurrencyConflict)
+		after, _ := h.store.Snapshot("order-1")
+		assert.Equal(t, before, after)
+		assert.Zero(t, h.store.InboxSize())
+	})
 }
 
 func TestReflectRejectsInvalidInputAndUnknownOrders(t *testing.T) {

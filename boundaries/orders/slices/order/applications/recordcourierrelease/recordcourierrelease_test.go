@@ -28,64 +28,52 @@ var (
 // assignedVersion is the Delivery version of the assignment of newWorld.
 const assignedVersion = 2
 
+// assignedNotification is what the assignment of newWorld hands to the workflow.
+var assignedNotification = fulfillment.Notification{
+	OrderID: "order-1", EventID: "assigned-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: assignedAt,
+}
+
 type world struct {
 	store    *repositorytest.Store
-	changes  *failingChanges
+	changes  *MockChanges
 	workflow *mocks.MockNotifier
 	assign   recordcourierassignment.Handler
 	release  recordcourierrelease.Handler
 }
 
 // newWorld has order-1 with courier-1 assigned on delivery-1 at assignedAt
-// (Delivery version assignedVersion); order#delivery links delivery-1.
-func newWorld(t *testing.T) world {
+// (Delivery version assignedVersion); order#delivery links delivery-1. The
+// test expects assignedNotification on workflow.
+func newWorld(t *testing.T, workflow *mocks.MockNotifier) world {
 	t.Helper()
-	w := newUnassignedWorld(t)
+	w := newUnassignedWorld(t, workflow)
 	w.assignCourier(t, "assigned-1", "courier-1", assignedVersion, assignedAt)
 	require.Equal(t, "delivery-1", w.linkedDelivery())
 	require.Len(t, w.store.RelationshipChanges(), 1)
 	return w
 }
 
-// newUnassignedWorld has order-1 without a stored Courier Assignment.
-func newUnassignedWorld(t *testing.T) world {
+// newUnassignedWorld has order-1 without a stored Courier Assignment. The
+// release records RelationshipsChanged through the changes mock; the
+// assignment records it in the store.
+func newUnassignedWorld(t *testing.T, workflow *mocks.MockNotifier) world {
 	t.Helper()
 	store := repositorytest.Open(t)
-	w := world{store: store, changes: &failingChanges{Store: store}, workflow: mocks.NewMockNotifier(t)}
+	w := world{store: store, changes: NewMockChanges(t), workflow: workflow}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
-	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.changes)
+	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.store)
 	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.changes)
 	return w
 }
 
-// assignCourier hands the assignment to the workflow exactly once; the release
-// handler never notifies it, so these are the only notifications of a test.
+// assignCourier handles the assignment on delivery-1; the test expects its
+// notification on the workflow. The release handler never notifies it.
 func (w world) assignCourier(t *testing.T, eventID, courierID string, version uint64, at time.Time) {
 	t.Helper()
-	w.workflow.EXPECT().
-		Notify(mock.Anything, fulfillment.Notification{
-			OrderID: "order-1", EventID: eventID, Kind: fulfillment.KindCourierAssigned, OccurredAt: at,
-		}).
-		Return(nil).
-		Once()
 	_, err := w.assign.Handle(context.Background(), recordcourierassignment.Input{
 		EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryVersion: version, DeliveryID: "delivery-1", CourierID: courierID,
 	})
 	require.NoError(t, err)
-}
-
-// failingChanges fails RelationshipsChanged while failing, otherwise records
-// it in the store.
-type failingChanges struct {
-	*repositorytest.Store
-	failing bool
-}
-
-func (c *failingChanges) RelationshipsChanged(ctx context.Context, orderID order.ID) error {
-	if c.failing {
-		return errors.New("outbox unavailable")
-	}
-	return c.Store.RelationshipsChanged(ctx, orderID)
 }
 
 // linkedDelivery is the stored Delivery: the subject of order#delivery that
@@ -121,7 +109,9 @@ func cancelled(eventID, deliveryID string, version uint64) recordcourierrelease.
 // records no RelationshipsChanged, order#delivery stays and the workflow is
 // left alone.
 func TestUnassignmentClearsCourierOnly(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 
 	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
 
@@ -136,7 +126,10 @@ func TestUnassignmentClearsCourierOnly(t *testing.T) {
 // AC-535: the cancellation clears the courier and the delivery and records
 // RelationshipsChanged: the sync deletes order#delivery.
 func TestCancellationUnlinksDelivery(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
+	w.changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).RunAndReturn(w.store.RelationshipsChanged).Once()
 
 	result, err := w.release.Handle(context.Background(), cancelled("event-1", "delivery-1", 3))
 
@@ -149,9 +142,12 @@ func TestCancellationUnlinksDelivery(t *testing.T) {
 
 // After an unassignment the cancellation of the same Delivery still unlinks it.
 func TestCancellationAfterUnassignmentUnlinksDelivery(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 	_, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
 	require.NoError(t, err)
+	w.changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).RunAndReturn(w.store.RelationshipsChanged).Once()
 
 	result, err := w.release.Handle(context.Background(), cancelled("event-2", "delivery-1", 4))
 
@@ -176,7 +172,9 @@ func TestEventOfAnotherAssignmentIsIgnored(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := newWorld(t)
+			workflow := mocks.NewMockNotifier(t)
+			workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+			w := newWorld(t, workflow)
 
 			result, err := w.release.Handle(context.Background(), tt.in)
 
@@ -195,14 +193,28 @@ func TestEventOfAnotherAssignmentIsIgnored(t *testing.T) {
 // AC-536: an assignment of an older Delivery version than the release,
 // delivered after it, does not change the assignment; a newer one does.
 func TestOlderAssignmentAfterReleaseIsSkipped(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 	_, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 4))
 	require.NoError(t, err)
 
 	// occurred_at is later than the release; the version orders it before.
+	w.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "assigned-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: releasedAt.Add(time.Hour),
+		}).
+		Return(nil).
+		Once()
 	w.assignCourier(t, "assigned-2", "courier-2", 3, releasedAt.Add(time.Hour))
 	assert.Empty(t, w.stored(t).CourierID)
 
+	w.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "assigned-3", Kind: fulfillment.KindCourierAssigned, OccurredAt: releasedAt,
+		}).
+		Return(nil).
+		Once()
 	w.assignCourier(t, "assigned-3", "courier-3", 5, releasedAt)
 	assert.Equal(t, "courier-3", w.stored(t).CourierID)
 	assert.Equal(t, "delivery-1", w.linkedDelivery())
@@ -212,7 +224,9 @@ func TestOlderAssignmentAfterReleaseIsSkipped(t *testing.T) {
 // applied even if occurred_at is older: occurred_at is the start of the
 // delivery transaction and does not order commits.
 func TestVersionOrdersReleaseNotOccurredAt(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 	in := unassigned("event-1", "delivery-1", "courier-1", assignedVersion+1)
 	in.OccurredAt = assignedAt.Add(-time.Minute)
 
@@ -227,12 +241,20 @@ func TestVersionOrdersReleaseNotOccurredAt(t *testing.T) {
 // has not been handled yet) leaves the Delivery without a courier: the stored
 // courier is cleared and the late assignment of the named one is skipped.
 func TestNewerUnassignmentOfAnotherCourierReleasesStoredOne(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 
 	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-2", 4))
 
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
+	w.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "assigned-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: releasedAt,
+		}).
+		Return(nil).
+		Once()
 	w.assignCourier(t, "assigned-2", "courier-2", 3, releasedAt)
 	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 4}, w.stored(t),
 		"the assignment the unassignment ended is skipped")
@@ -246,7 +268,7 @@ func TestReleaseBeforeAssignmentIsRemembered(t *testing.T) {
 		"cancellation": cancelled("event-1", "delivery-1", 3),
 	} {
 		t.Run(name, func(t *testing.T) {
-			w := newUnassignedWorld(t)
+			w := newUnassignedWorld(t, mocks.NewMockNotifier(t))
 
 			result, err := w.release.Handle(context.Background(), in)
 
@@ -257,6 +279,7 @@ func TestReleaseBeforeAssignmentIsRemembered(t *testing.T) {
 			assert.Equal(t, uint64(3), remembered.DeliveryVersion)
 			assert.Empty(t, remembered.CourierID)
 
+			w.workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
 			w.assignCourier(t, "assigned-1", "courier-1", assignedVersion, assignedAt)
 			assert.Empty(t, w.store.RelationshipChanges(), "the older assignment is skipped")
 			assert.Equal(t, remembered, w.stored(t), "the remembered release stays the state the sync reads")
@@ -267,10 +290,16 @@ func TestReleaseBeforeAssignmentIsRemembered(t *testing.T) {
 // A newer assignment after a release remembered ahead links the Delivery: the
 // release did not write order#delivery.
 func TestNewerAssignmentAfterRememberedReleaseLinksDelivery(t *testing.T) {
-	w := newUnassignedWorld(t)
+	w := newUnassignedWorld(t, mocks.NewMockNotifier(t))
 	_, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
 	require.NoError(t, err)
 
+	w.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "assigned-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: releasedAt,
+		}).
+		Return(nil).
+		Once()
 	w.assignCourier(t, "assigned-2", "courier-2", 4, releasedAt)
 
 	assert.Equal(t, "delivery-1", w.linkedDelivery())
@@ -278,8 +307,12 @@ func TestNewerAssignmentAfterRememberedReleaseLinksDelivery(t *testing.T) {
 }
 
 func TestRedeliveryIsDuplicate(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 	in := cancelled("event-1", "delivery-1", 3)
+	// The redelivery is a duplicate: only the first delivery records the change.
+	w.changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).RunAndReturn(w.store.RelationshipsChanged).Once()
 
 	_, err := w.release.Handle(context.Background(), in)
 	require.NoError(t, err)
@@ -293,8 +326,10 @@ func TestRedeliveryIsDuplicate(t *testing.T) {
 // AC-537: RelationshipsChanged commits with the release: a failure rolls the
 // Inbox record and the release back.
 func TestRelationshipFailureRollsBack(t *testing.T) {
-	w := newWorld(t)
-	w.changes.failing = true
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
+	w.changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).Return(errors.New("outbox unavailable")).Once()
 	in := cancelled("event-1", "delivery-1", 3)
 
 	_, err := w.release.Handle(context.Background(), in)
@@ -303,7 +338,7 @@ func TestRelationshipFailureRollsBack(t *testing.T) {
 	assert.Equal(t, 1, w.store.InboxSize())
 	assert.Equal(t, "courier-1", w.stored(t).CourierID)
 
-	w.changes.failing = false
+	w.changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).RunAndReturn(w.store.RelationshipsChanged).Once()
 	result, err := w.release.Handle(context.Background(), in)
 	require.NoError(t, err)
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
@@ -313,8 +348,10 @@ func TestRelationshipFailureRollsBack(t *testing.T) {
 // AC-534: an unassignment keeps order#delivery, so it records no
 // RelationshipsChanged and succeeds while the Outbox write would fail.
 func TestUnassignmentDoesNotNeedSpiceDB(t *testing.T) {
-	w := newWorld(t)
-	w.changes.failing = true
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
+	// The changes mock has no expectation: a RelationshipsChanged fails the test.
 
 	result, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
 
@@ -323,7 +360,9 @@ func TestUnassignmentDoesNotNeedSpiceDB(t *testing.T) {
 }
 
 func TestInvalidInput(t *testing.T) {
-	w := newWorld(t)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
 	for name, in := range map[string]recordcourierrelease.Input{
 		"no event id":           {OrderID: "order-1", OccurredAt: assignedAt, DeliveryID: "delivery-1", CourierID: "courier-1"},
 		"no occurred_at":        {EventID: "event-1", OrderID: "order-1", DeliveryID: "delivery-1", CourierID: "courier-1"},

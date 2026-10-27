@@ -61,6 +61,7 @@ func TestGetOrderReturnsView(t *testing.T) {
 		MarketID:     ordertest.MarketID(t),
 		RestaurantID: "restaurant-1",
 		Items:        []orderdetails.Item{{MenuItemID: "menu-1", Name: "Margherita", Quantity: 2, UnitPrice: ordertest.Money(t, "10")}},
+		Service:      order.StandardService(),
 		Total:        ordertest.Money(t, "20"),
 		State:        order.StateCancelled,
 		PlacedAt:     ordertest.PlacedAt,
@@ -168,15 +169,14 @@ func TestGetOrderOmitsCancellationWindowForFinalOrders(t *testing.T) {
 	}
 }
 
-type failingPolicy struct{}
-
-func (failingPolicy) Window(context.Context, time.Time) (order.CancellationWindow, error) {
-	return order.CancellationWindow{}, errors.New("policy unavailable")
-}
-
 // AC-507: a failing policy hides the window instead of failing the read.
 func TestGetOrderHidesCancellationWindowWhenPolicyFails(t *testing.T) {
-	handler, _ := setupWithPolicy(t, failingPolicy{}, ordertest.New(t, "order-1"))
+	policy := NewMockCancellationPolicy(t)
+	policy.EXPECT().
+		Window(mock.Anything, ordertest.PlacedAt).
+		Return(order.CancellationWindow{}, errors.New("policy unavailable")).
+		Once()
+	handler, _ := setupWithPolicy(t, policy, ordertest.New(t, "order-1"))
 
 	view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
 

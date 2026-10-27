@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/slices/order/domains/order"
@@ -35,18 +36,18 @@ func TestFixedRejectsNonPositiveWindow(t *testing.T) {
 	}
 }
 
-type failingPolicy struct{}
-
-func (failingPolicy) Window(context.Context, time.Time) (order.CancellationWindow, error) {
-	return order.CancellationWindow{}, errors.New("policy unavailable")
-}
-
 // AC-507: the decorator logs a failure and passes it on unchanged.
 func TestObservedLogsFailure(t *testing.T) {
 	var logs bytes.Buffer
-	policy := Observe(failingPolicy{}, slog.New(slog.NewTextHandler(&logs, nil)))
+	placedAt := time.Date(2026, 10, 25, 18, 0, 0, 0, time.UTC)
+	failing := NewMockPolicy(t)
+	failing.EXPECT().
+		Window(mock.Anything, placedAt).
+		Return(order.CancellationWindow{}, errors.New("policy unavailable")).
+		Once()
+	policy := Observe(failing, slog.New(slog.NewTextHandler(&logs, nil)))
 
-	_, err := policy.Window(context.Background(), time.Now())
+	_, err := policy.Window(context.Background(), placedAt)
 
 	require.EqualError(t, err, "policy unavailable")
 	assert.Contains(t, logs.String(), "cancellation window is unavailable")

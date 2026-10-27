@@ -37,15 +37,6 @@ import (
 	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
 )
 
-type fixedSubject struct {
-	subject application.Subject
-	err     error
-}
-
-func (r fixedSubject) Resolve(context.Context) (application.Subject, error) {
-	return r.subject, r.err
-}
-
 const cancellationWindow = 5 * time.Minute
 
 // newClient serves the orders API whose authorizer, catalog and workflow
@@ -113,10 +104,12 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 }
 
 func TestListCustomerOrdersCallsApplicationHandler(t *testing.T) {
-	client := newClient(t, fixedSubject{subject: application.Subject{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{
 		Kind: application.SubjectUser,
 		ID:   "customer-1",
-	}})
+	}, nil).Once()
+	client := newClient(t, subjects)
 
 	response, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
 		CustomerId: "customer-1",
@@ -133,7 +126,9 @@ func TestListCustomerOrdersReturnsOnlyTheRequestedMarket(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-berlin")))
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-hamburg", ordertest.WithMarket("hamburg"))))
-	client := newClientWith(t, fixedSubject{subject: customer}, store, mocks.NewMockAuthorizer(t))
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := newClientWith(t, subjects, store, mocks.NewMockAuthorizer(t))
 
 	response, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
 		CustomerId: "customer-1",
@@ -148,7 +143,9 @@ func TestListCustomerOrdersReturnsOnlyTheRequestedMarket(t *testing.T) {
 
 // ADR 41: market_id is required and must be a Market slug.
 func TestListCustomerOrdersRequiresMarket(t *testing.T) {
-	client := newClient(t, fixedSubject{subject: customer})
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
+	client := newClient(t, subjects)
 	for name, market := range map[string]string{"missing": "", "malformed": "Berlin"} {
 		t.Run(name, func(t *testing.T) {
 			_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
@@ -161,10 +158,12 @@ func TestListCustomerOrdersRequiresMarket(t *testing.T) {
 }
 
 func TestServiceReturnsStructuredInvalidArgument(t *testing.T) {
-	client := newClient(t, fixedSubject{subject: application.Subject{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{
 		Kind: application.SubjectUser,
 		ID:   "customer-1",
-	}})
+	}, nil).Once()
+	client := newClient(t, subjects)
 
 	_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{})
 	require.Error(t, err)
@@ -179,15 +178,11 @@ func TestServiceReturnsStructuredInvalidArgument(t *testing.T) {
 	assert.Equal(t, "nomnom.orders.v1", info.GetDomain())
 }
 
-// rejectingResolver fails every call as an unverified caller.
-type rejectingResolver struct{}
-
-func (rejectingResolver) Resolve(context.Context) (application.Subject, error) {
-	return application.Subject{}, grpcadapter.ErrUnauthenticated
-}
-
 func TestServiceRejectsUnverifiedCaller(t *testing.T) {
-	client := newClient(t, rejectingResolver{})
+	// The resolver fails the call as an unverified caller.
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{}, grpcadapter.ErrUnauthenticated).Once()
+	client := newClient(t, subjects)
 
 	_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
 		CustomerId: "customer-1",
@@ -205,10 +200,12 @@ func TestGetOrderMapsCancellationWindow(t *testing.T) {
 		o := ordertest.New(t, id, ordertest.WithState(state))
 		require.NoError(t, store.Add(context.Background(), o))
 	}
-	client := newClientWith(t, fixedSubject{subject: application.Subject{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{
 		Kind: application.SubjectUser,
 		ID:   "customer-1",
-	}}, store, authorizer)
+	}, nil).Times(2)
+	client := newClientWith(t, subjects, store, authorizer)
 
 	placed, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-placed"})
 	require.NoError(t, err)
@@ -229,7 +226,9 @@ func TestGetOrderMapsExpectedTimes(t *testing.T) {
 	expected := order.ExpectedTimes{ReadyAt: ordertest.PlacedAt.Add(20 * time.Minute), PickupAt: ordertest.PlacedAt.Add(25 * time.Minute)}
 	o := ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed), ordertest.WithExpectedTimes(expected))
 	require.NoError(t, store.Add(context.Background(), o))
-	client := newClientWith(t, fixedSubject{subject: customer}, store, authorizer)
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := newClientWith(t, subjects, store, authorizer)
 
 	response, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-1"})
 
@@ -238,6 +237,40 @@ func TestGetOrderMapsExpectedTimes(t *testing.T) {
 	assert.Equal(t, expected.ReadyAt, response.GetOrder().GetExpectedReadyAt().AsTime())
 	assert.Equal(t, expected.PickupAt, response.GetOrder().GetExpectedPickupAt().AsTime())
 	assert.Nil(t, response.GetOrder().GetExpectedDeliveredAt())
+}
+
+// FR-650: GetOrder carries the priority and the premium fee of the Order.
+func TestGetOrderMapsPremiumPriority(t *testing.T) {
+	store := repositorytest.Open(t)
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithPremium(t, "1.50"))))
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-2")))
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
+	client := newClientWith(t, subjects, store, mocks.NewMockAuthorizer(t))
+
+	premium, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-1"})
+	require.NoError(t, err)
+	assert.Equal(t, ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM, premium.GetOrder().GetPriority())
+	assert.Equal(t, "1.5", premium.GetOrder().GetPremiumFee().GetAmount())
+	assert.Equal(t, "21.5", premium.GetOrder().GetTotal().GetAmount(), "the fee is part of the total")
+
+	standard, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-2"})
+	require.NoError(t, err)
+	assert.Equal(t, ordersv1.OrderPriority_ORDER_PRIORITY_STANDARD, standard.GetOrder().GetPriority())
+	assert.Nil(t, standard.GetOrder().GetPremiumFee())
+}
+
+// FR-650: an unknown enum value is invalid input, not a standard Order.
+func TestPlaceOrderRefusesUnknownPriority(t *testing.T) {
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := newClient(t, subjects)
+	request := placeRequest()
+	request.Priority = ordersv1.OrderPriority(7)
+
+	_, err := client.PlaceOrder(context.Background(), request)
+
+	requireReason(t, err, codes.InvalidArgument, "INVALID_ARGUMENT")
 }
 
 var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
@@ -271,7 +304,9 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "100"),
 	}, nil).Once()
-	client := newClientWithPorts(t, fixedSubject{subject: customer}, store, mocks.NewMockAuthorizer(t), commandPorts{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
+	client := newClientWithPorts(t, subjects, store, mocks.NewMockAuthorizer(t), commandPorts{
 		catalog:  catalog,
 		workflow: mocks.NewMockCancellationRequester(t),
 		clock:    fake.NewClock(ordertest.PlacedAt),
@@ -297,7 +332,9 @@ func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	catalog := mocks.NewMockCatalog(t)
 	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
 		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", application.ErrDependencyUnavailable)).Once()
-	client := newClientWithPorts(t, fixedSubject{subject: customer}, repositorytest.Open(t), mocks.NewMockAuthorizer(t), commandPorts{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := newClientWithPorts(t, subjects, repositorytest.Open(t), mocks.NewMockAuthorizer(t), commandPorts{
 		catalog:  catalog,
 		workflow: mocks.NewMockCancellationRequester(t),
 		clock:    fake.NewClock(ordertest.PlacedAt),
@@ -321,7 +358,9 @@ func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
 			store, catalog := repositorytest.Open(t), mocks.NewMockCatalog(t)
 			catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
 				Return(placeorder.CatalogSnapshot{}, tc.err).Once()
-			client := newClientWithPorts(t, fixedSubject{subject: customer}, store, mocks.NewMockAuthorizer(t), commandPorts{
+			subjects := NewMockSubjectResolver(t)
+			subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+			client := newClientWithPorts(t, subjects, store, mocks.NewMockAuthorizer(t), commandPorts{
 				catalog:  catalog,
 				workflow: mocks.NewMockCancellationRequester(t),
 				clock:    fake.NewClock(ordertest.PlacedAt),
@@ -348,7 +387,9 @@ func TestPlaceOrderNamesUnorderableItems(t *testing.T) {
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "100"),
 	}, nil).Once()
-	client := newClientWithPorts(t, fixedSubject{subject: customer}, repositorytest.Open(t), mocks.NewMockAuthorizer(t), commandPorts{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := newClientWithPorts(t, subjects, repositorytest.Open(t), mocks.NewMockAuthorizer(t), commandPorts{
 		catalog:  catalog,
 		workflow: mocks.NewMockCancellationRequester(t),
 		clock:    fake.NewClock(ordertest.PlacedAt),
@@ -371,7 +412,9 @@ func TestPlaceOrderNamesEveryReasonCodeOnce(t *testing.T) {
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "10"),
 	}, nil).Once()
-	client := newClientWithPorts(t, fixedSubject{subject: customer}, repositorytest.Open(t), mocks.NewMockAuthorizer(t), commandPorts{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := newClientWithPorts(t, subjects, repositorytest.Open(t), mocks.NewMockAuthorizer(t), commandPorts{
 		catalog:  catalog,
 		workflow: mocks.NewMockCancellationRequester(t),
 		clock:    fake.NewClock(ordertest.PlacedAt),
@@ -399,7 +442,9 @@ func errorInfo(t *testing.T, err error) *errdetails.ErrorInfo {
 
 // AC-510: a service subject is not a Customer.
 func TestPlaceOrderDeniesServiceSubject(t *testing.T) {
-	client := newClient(t, fixedSubject{subject: application.Subject{Kind: application.SubjectService, ID: "bff"}})
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{Kind: application.SubjectService, ID: "bff"}, nil).Once()
+	client := newClient(t, subjects)
 
 	_, err := client.PlaceOrder(context.Background(), placeRequest())
 	requireReason(t, err, codes.PermissionDenied, "OPERATION_NOT_ALLOWED")
@@ -407,7 +452,9 @@ func TestPlaceOrderDeniesServiceSubject(t *testing.T) {
 
 // AC-511: malformed composition is INVALID_ORDER.
 func TestPlaceOrderMapsInvalidOrder(t *testing.T) {
-	client := newClient(t, fixedSubject{subject: customer})
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(3)
+	client := newClient(t, subjects)
 	for name, mutate := range map[string]func(*ordersv1.PlaceOrderRequest){
 		"no items":  func(r *ordersv1.PlaceOrderRequest) { r.Items = nil },
 		"duplicate": func(r *ordersv1.PlaceOrderRequest) { r.Items = append(r.Items, r.Items[0]) },
@@ -422,12 +469,12 @@ func TestPlaceOrderMapsInvalidOrder(t *testing.T) {
 	}
 }
 
-func cancellationClient(t *testing.T, state order.State, ports commandPorts, authorizer *mocks.MockAuthorizer) ordersv1.OrdersServiceClient {
+func cancellationClient(t *testing.T, state order.State, subjects grpcadapter.SubjectResolver, ports commandPorts, authorizer *mocks.MockAuthorizer) ordersv1.OrdersServiceClient {
 	t.Helper()
 	store := repositorytest.Open(t)
 	o := ordertest.New(t, "order-1", ordertest.WithState(state))
 	require.NoError(t, store.Add(context.Background(), o))
-	return newClientWithPorts(t, fixedSubject{subject: customer}, store, authorizer, ports)
+	return newClientWithPorts(t, subjects, store, authorizer, ports)
 }
 
 func cancellationRequest() *ordersv1.RequestOrderCancellationRequest {
@@ -444,7 +491,9 @@ func TestRequestOrderCancellationCallsApplicationHandler(t *testing.T) {
 		RequestedAt: ordertest.PlacedAt,
 		Reason:      "changed mind",
 	}).Return(nil).Once()
-	client := cancellationClient(t, order.StatePlaced, commandPorts{
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	client := cancellationClient(t, order.StatePlaced, subjects, commandPorts{
 		catalog:  mocks.NewMockCatalog(t),
 		workflow: workflow,
 		clock:    fake.NewClock(ordertest.PlacedAt),
@@ -455,7 +504,9 @@ func TestRequestOrderCancellationCallsApplicationHandler(t *testing.T) {
 	assert.Equal(t, ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_REQUESTED, response.GetOutcome())
 
 	// The cancelled Order does not reach the workflow.
-	cancelled := cancellationClient(t, order.StateCancelled, commandPorts{
+	cancelledSubjects := NewMockSubjectResolver(t)
+	cancelledSubjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+	cancelled := cancellationClient(t, order.StateCancelled, cancelledSubjects, commandPorts{
 		catalog:  mocks.NewMockCatalog(t),
 		workflow: mocks.NewMockCancellationRequester(t),
 		clock:    fake.NewClock(ordertest.PlacedAt),
@@ -469,7 +520,9 @@ func TestRequestOrderCancellationCallsApplicationHandler(t *testing.T) {
 // an absent workflow or SpiceDB outage is UNAVAILABLE.
 func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 	t.Run("completed", func(t *testing.T) {
-		client := cancellationClient(t, order.StateCompleted, commandPorts{
+		subjects := NewMockSubjectResolver(t)
+		subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+		client := cancellationClient(t, order.StateCompleted, subjects, commandPorts{
 			catalog:  mocks.NewMockCatalog(t),
 			workflow: mocks.NewMockCancellationRequester(t),
 			clock:    fake.NewClock(ordertest.PlacedAt),
@@ -480,7 +533,9 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 	t.Run("window expired", func(t *testing.T) {
 		clock := fake.NewClock(ordertest.PlacedAt)
 		clock.Advance(cancellationWindow + time.Second)
-		client := cancellationClient(t, order.StatePlaced, commandPorts{
+		subjects := NewMockSubjectResolver(t)
+		subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+		client := cancellationClient(t, order.StatePlaced, subjects, commandPorts{
 			catalog:  mocks.NewMockCatalog(t),
 			workflow: mocks.NewMockCancellationRequester(t),
 			clock:    clock,
@@ -498,7 +553,9 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 			RequestedAt: ordertest.PlacedAt,
 			Reason:      "changed mind",
 		}).Return(fulfillment.ErrCancellationRefused).Once()
-		client := cancellationClient(t, order.StatePlaced, commandPorts{
+		subjects := NewMockSubjectResolver(t)
+		subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+		client := cancellationClient(t, order.StatePlaced, subjects, commandPorts{
 			catalog:  mocks.NewMockCatalog(t),
 			workflow: workflow,
 			clock:    fake.NewClock(ordertest.PlacedAt),
@@ -515,7 +572,9 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 			RequestedAt: ordertest.PlacedAt,
 			Reason:      "changed mind",
 		}).Return(fulfillment.ErrWorkflowNotFound).Once()
-		client := cancellationClient(t, order.StatePlaced, commandPorts{
+		subjects := NewMockSubjectResolver(t)
+		subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
+		client := cancellationClient(t, order.StatePlaced, subjects, commandPorts{
 			catalog:  mocks.NewMockCatalog(t),
 			workflow: workflow,
 			clock:    fake.NewClock(ordertest.PlacedAt),
@@ -534,7 +593,9 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 		}).Return(spicedb.ErrUnavailable).Once()
 		store := repositorytest.Open(t)
 		require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-		client := newClientWithPorts(t, fixedSubject{subject: supportConsole}, store, authorizer, commandPorts{
+		subjects := NewMockSubjectResolver(t)
+		subjects.EXPECT().Resolve(mock.Anything).Return(supportConsole, nil).Once()
+		client := newClientWithPorts(t, subjects, store, authorizer, commandPorts{
 			catalog:  mocks.NewMockCatalog(t),
 			workflow: mocks.NewMockCancellationRequester(t),
 			clock:    fake.NewClock(ordertest.PlacedAt),

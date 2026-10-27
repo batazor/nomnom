@@ -81,6 +81,11 @@ packages:
     config: *shared
     interfaces:
       Catalog: {}
+      IdempotencyKeys:
+        config:
+          dir: slices/order/applications/placeorder
+          filename: mocks_test.go
+          pkgname: placeorder_test
   nomnom/orders/slices/order/applications/fulfillment:
     config: *shared
     interfaces:
@@ -91,3 +96,47 @@ packages:
     config: *shared
     interfaces:
       Relationships: {}
+      Changes:
+        configs:
+          - dir: slices/order/applications/recordcourierassignment
+            filename: mocks_test.go
+            pkgname: recordcourierassignment_test
+          - dir: slices/order/applications/recordcourierrelease
+            filename: mocks_test.go
+            pkgname: recordcourierrelease_test
+  # Ports replaced by tests of their consumers, generated next to those tests.
+  nomnom/orders/slices/order/domains/order:
+    interfaces:
+      Repository:
+        config:
+          dir: slices/order/applications/fulfillment
+          filename: mocks_test.go
+          pkgname: fulfillment_test
+  nomnom/orders/slices/order/applications/orderdetails:
+    interfaces:
+      CancellationPolicy:
+        config:
+          dir: slices/order/applications/getorder
+          filename: mocks_test.go
+          pkgname: getorder_test
+  nomnom/orders/slices/order/infrastructure/cancellationpolicy:
+    interfaces:
+      Policy:
+        config:
+          filename: mocks_test.go
+  nomnom/orders/slices/simulator/applications/customersimulator:
+    config:
+      dir: slices/simulator/applications/customersimulator
+      filename: mocks_test.go
+      pkgname: customersimulator_test
+    interfaces:
+      Catalog: {}
+      Keys: {}
+      Random: {}
+      Switch: {}
+  nomnom/orders/infrastructure/grpc:
+    config:
+      filename: mocks_subject_test.go
+      pkgname: grpcadapter_test
+    interfaces:
+      SubjectResolver: {}

@@ -303,22 +303,6 @@ func assertNothingPlaced(t *testing.T, e env) {
 	assert.Empty(t, e.store.OutboxRecords())
 }
 
-// racingKeys hides a key committed by a concurrent request from the first
-// hidden lookups (one by default).
-type racingKeys struct {
-	*repositorytest.Store
-	hidden  int
-	lookups int
-}
-
-func (k *racingKeys) FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error) {
-	k.lookups++
-	if k.lookups <= max(k.hidden, 1) {
-		return "", false, nil
-	}
-	return k.Store.FindOrder(ctx, customerID, key)
-}
-
 func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler {
 	return placeorder.NewHandler(placeorder.Dependencies{
 		UnitOfWork:      e.store,
@@ -353,22 +337,21 @@ func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
 	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
 	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
 
-	result, err := e.handlerWithKeys(&racingKeys{Store: e.store, hidden: 2}).Handle(context.Background(), validInput())
+	// Both lookups miss the key committed by the concurrent request; RememberOrder
+	// waits on it, and the replay reads it.
+	keys := NewMockIdempotencyKeys(t)
+	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").Return("", false, nil).Twice()
+	keys.EXPECT().
+		RememberOrder(mock.Anything, order.CustomerID("customer-1"), "key-1", order.ID("order-1")).
+		RunAndReturn(e.store.RememberOrder).
+		Once()
+	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").RunAndReturn(e.store.FindOrder).Once()
+
+	result, err := e.handlerWithKeys(keys).Handle(context.Background(), validInput())
 
 	require.NoError(t, err)
 	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true}, result)
 	assertNothingPlaced(t, env{store: e.store})
-}
-
-// takenKeys reports the key as taken without a committed Order behind it.
-type takenKeys struct{ *repositorytest.Store }
-
-func (takenKeys) FindOrder(context.Context, order.CustomerID, string) (order.ID, bool, error) {
-	return "", false, nil
-}
-
-func (takenKeys) RememberOrder(context.Context, order.CustomerID, string, order.ID) error {
-	return placeorder.ErrIdempotencyKeyTaken
 }
 
 // AC-671: if the conflicting Order cannot be read, the request fails with a
@@ -389,7 +372,15 @@ func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
 		}, nil).
 		Once()
 
-	_, err := e.handlerWithKeys(takenKeys{Store: e.store}).Handle(context.Background(), validInput())
+	// The key is taken without a committed Order behind it: every lookup misses.
+	keys := NewMockIdempotencyKeys(t)
+	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").Return("", false, nil).Times(3)
+	keys.EXPECT().
+		RememberOrder(mock.Anything, order.CustomerID("customer-1"), "key-1", order.ID("order-1")).
+		Return(placeorder.ErrIdempotencyKeyTaken).
+		Once()
+
+	_, err := e.handlerWithKeys(keys).Handle(context.Background(), validInput())
 
 	require.ErrorIs(t, err, application.ErrConcurrencyConflict)
 }
@@ -411,11 +402,113 @@ func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 		Once()
 	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
 	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
-	handler := e.handlerWithKeys(&racingKeys{Store: e.store})
+	// The first lookup misses the key committed by the concurrent request; the
+	// lookup in the transaction finds it.
+	keys := NewMockIdempotencyKeys(t)
+	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").Return("", false, nil).Once()
+	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").RunAndReturn(e.store.FindOrder).Once()
+	handler := e.handlerWithKeys(keys)
 
 	result, err := handler.Handle(context.Background(), validInput())
 
 	require.NoError(t, err)
 	assert.Equal(t, placeorder.Result{OrderID: "order-0", Replayed: true}, result)
 	assertNothingPlaced(t, env{store: e.store})
+}
+
+// premiumSnapshot prices pizza at 500 RUB; fee is the premium fee of the
+// Restaurant, nil when it offers no premium.
+func premiumSnapshot(t *testing.T, fee *vo.Money) placeorder.CatalogSnapshot {
+	t.Helper()
+	price, err := vo.ParseMoney("500.00", "RUB")
+	require.NoError(t, err)
+	minimum, err := vo.ParseMoney("10", "RUB")
+	require.NoError(t, err)
+	maximum, err := vo.ParseMoney("10000", "RUB")
+	require.NoError(t, err)
+	return placeorder.CatalogSnapshot{
+		MarketID:     ordertest.MarketID(t),
+		Currency:     "RUB",
+		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {Name: "Pizza", UnitPrice: price, Available: true}},
+		MinimumTotal: minimum,
+		MaximumTotal: maximum,
+		PremiumFee:   fee,
+	}
+}
+
+func premiumInput() placeorder.Input {
+	return placeorder.Input{
+		Subject:        customer,
+		IdempotencyKey: "key-premium",
+		RestaurantID:   "restaurant-1",
+		Items:          []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}},
+		Priority:       string(order.PriorityPremium),
+	}
+}
+
+// AC-854, AC-856: the fee of the snapshot is fixed in the Order and is part of
+// its total.
+func TestPlaceOrderPremiumAddsTheFeeOfTheRestaurant(t *testing.T) {
+	e := newEnv(t)
+	fee, err := vo.ParseMoney("99.00", "RUB")
+	require.NoError(t, err)
+	e.catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
+		Return(premiumSnapshot(t, &fee), nil).Once()
+
+	_, err = e.handler.Handle(context.Background(), premiumInput())
+
+	require.NoError(t, err)
+	placed, ok := e.store.Snapshot("order-1")
+	require.True(t, ok)
+	assert.Equal(t, order.PriorityPremium, placed.Service.Priority())
+	stored, premium := placed.Service.PremiumFee()
+	require.True(t, premium)
+	assert.True(t, stored.Equal(fee), "the fee of the snapshot is kept in the Order")
+	restored, err := order.Restore(placed)
+	require.NoError(t, err)
+	assert.Equal(t, "599 RUB", restored.Total().String())
+}
+
+// AC-855: Premium Priority at a restaurant without a fee places nothing.
+func TestPlaceOrderPremiumWithoutFeeIsUnavailable(t *testing.T) {
+	e := newEnv(t)
+	e.catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
+		Return(premiumSnapshot(t, nil), nil).Once()
+
+	_, err := e.handler.Handle(context.Background(), premiumInput())
+
+	require.ErrorIs(t, err, placeorder.ErrPremiumUnavailable)
+	assertNothingPlaced(t, e)
+}
+
+// FR-650: an unknown priority is refused before the catalog.
+func TestPlaceOrderRefusesUnknownPriority(t *testing.T) {
+	e := newEnv(t)
+	input := validInput()
+	input.Priority = "EXPRESS"
+
+	_, err := e.handler.Handle(context.Background(), input)
+
+	require.ErrorIs(t, err, application.ErrInvalidInput)
+	assertNothingPlaced(t, e)
+}
+
+// AC-870: an Order placed without priority is STANDARD without a fee.
+func TestPlaceOrderWithoutPriorityIsStandard(t *testing.T) {
+	e := newEnv(t)
+	fee, err := vo.ParseMoney("99.00", "RUB")
+	require.NoError(t, err)
+	e.catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
+		Return(premiumSnapshot(t, &fee), nil).Once()
+	input := premiumInput()
+	input.Priority = ""
+
+	_, err = e.handler.Handle(context.Background(), input)
+
+	require.NoError(t, err)
+	placed, ok := e.store.Snapshot("order-1")
+	require.True(t, ok)
+	assert.Equal(t, order.PriorityStandard, placed.Service.Priority())
+	_, premium := placed.Service.PremiumFee()
+	assert.False(t, premium, "a standard Order pays no fee even where premium is offered")
 }

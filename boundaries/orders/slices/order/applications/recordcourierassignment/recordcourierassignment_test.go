@@ -176,26 +176,13 @@ func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 	assert.Equal(t, "courier-2", stored.CourierID)
 }
 
-// failingChanges fails RelationshipsChanged until healed, then records it in
-// the store.
-type failingChanges struct {
-	*repositorytest.Store
-	failing bool
-}
-
-func (c *failingChanges) RelationshipsChanged(ctx context.Context, orderID order.ID) error {
-	if c.failing {
-		return errors.New("outbox unavailable")
-	}
-	return c.Store.RelationshipsChanged(ctx, orderID)
-}
-
 // AC-521: RelationshipsChanged commits with the assignment: a failure rolls
 // the Inbox record and the assignment back, so redelivery repeats the event.
 func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	changes := &failingChanges{Store: store, failing: true}
+	changes := NewMockChanges(t)
+	changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).Return(errors.New("outbox unavailable")).Once()
 	workflow := mocks.NewMockNotifier(t)
 	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, changes)
 
@@ -207,7 +194,7 @@ func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 	workflow.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
 	assert.Empty(t, linkedDelivery(t, store))
 
-	changes.failing = false
+	changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).RunAndReturn(store.RelationshipsChanged).Once()
 	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
 		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
 	}).Return(nil).Once()
