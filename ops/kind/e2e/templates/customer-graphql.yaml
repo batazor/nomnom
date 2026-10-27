@@ -5,10 +5,11 @@
 # без port-forward.
 #
 # BFF принимает только persisted operations (локальный ADR 3 BFF): запрос несёт SHA-256 текста
-# операции ops/kind/e2e/operations/<operation>.graphql, тело собирает scripts/graphql-body.sh.
+# операции из ops/kind/e2e/operations, тело собирает scripts/graphql-body.sh.
 #
 # Состояние прогона — ConfigMap $state теста; jq-программы видят его как $s. Bindings:
-#   operation — имя операции (файл ops/kind/e2e/operations/<operation>.graphql);
+#   graphql_operation — имя операции (файл ops/kind/e2e/operations/<имя>.graphql; $operation
+#               занят встроенным binding chainsaw);
 #   variables — jq: variables операции; покупатель — $s.customer;
 #   until — jq над ответом: запрос повторяется, пока результат не true (по умолчанию —
 #           ответ без errors);
@@ -40,7 +41,7 @@ spec:
           - name: STATE
             value: ($state)
           - name: OPERATION
-            value: ($operation)
+            value: ($graphql_operation)
           - name: VARIABLES
             value: ($variables)
           - name: UNTIL

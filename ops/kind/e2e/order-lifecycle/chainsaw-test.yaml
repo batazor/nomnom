@@ -246,7 +246,7 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - {name: operation, value: E2ePlaceOrder}
+            - {name: graphql_operation, value: E2ePlaceOrder}
             - name: variables
               value: >-
                 {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
@@ -262,7 +262,7 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - {name: operation, value: E2eOrder}
+            - {name: graphql_operation, value: E2eOrder}
             - {name: variables, value: '{id: $s.order_id}'}
             - name: until
               value: '.data.order.status == "PAID" and ([.data.order.milestones[]?.kind] | index("PAID")) != null'
@@ -372,7 +372,7 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - {name: operation, value: E2eOrder}
+            - {name: graphql_operation, value: E2eOrder}
             - {name: variables, value: '{id: $s.order_id}'}
             - name: until
               value: >-
@@ -406,7 +406,7 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - {name: operation, value: E2eOrder}
+            - {name: graphql_operation, value: E2eOrder}
             - {name: variables, value: '{id: $s.order_id}'}
             - name: until
               value: >-
