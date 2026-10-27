@@ -113,12 +113,22 @@ export function SignInProvider({
     return { add, remove };
   }, []);
 
+  // A refresh token is single use: Dex rotates it and refuses a second
+  // exchange. The restore effect may run twice for one provider (StrictMode
+  // mounts it twice in development), so both runs share one exchange.
+  const exchanges = useRef(new Map<string, Promise<OidcLogin>>());
+
   // After a reload: exchange each stored refresh token for a fresh login.
   useEffect(() => {
     if (!config) return;
     let stopped = false;
     for (const [role, stored] of Object.entries(readStored())) {
-      refreshLogin(config, stored.refreshToken, role)
+      let exchange = exchanges.current.get(stored.refreshToken);
+      if (exchange === undefined) {
+        exchange = refreshLogin(config, stored.refreshToken, role);
+        exchanges.current.set(stored.refreshToken, exchange);
+      }
+      exchange
         .then((login) => {
           if (!stopped) actions.add(login);
         })

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
@@ -16,6 +17,12 @@ import (
 
 // clockLeeway tolerates skew for exp and nbf, as in ADR 27 and ADR 32.
 const clockLeeway = 30 * time.Second
+
+// jwksRefreshInterval matches the JWKS cache lifetime of Dex (Cache-Control
+// max-age=600): a key published since is read within it. Dex signs with a new
+// key as soon as it rotates, so a token with an unknown kid still triggers a
+// refresh at once (oneRefreshAtATime).
+const jwksRefreshInterval = 10 * time.Minute
 
 // ErrUnauthenticated hides why a token was rejected from the client.
 var ErrUnauthenticated = errors.New("unauthenticated")
@@ -73,13 +80,31 @@ func NewAccessTokenVerifier(ctx context.Context, audience string, providers []Pr
 			}
 			continue
 		}
-		remote, err := keyfunc.NewDefaultCtx(ctx, []string{p.JWKSURL})
+		remote, err := keyfunc.NewDefaultOverrideCtx(ctx, []string{p.JWKSURL}, keyfunc.Override{RefreshInterval: jwksRefreshInterval})
 		if err != nil {
 			return nil, fmt.Errorf("jwks %s: %w", p.JWKSURL, err)
 		}
-		keys[p.Issuer] = remote.Keyfunc
+		keys[p.Issuer] = oneRefreshAtATime(remote.Keyfunc)
 	}
 	return &AccessTokenVerifier{keys: keys, audience: audience, now: time.Now}, nil
+}
+
+// oneRefreshAtATime lets requests share a JWKS refresh. Dex publishes a new key
+// only when it starts signing with it, so the first tokens after a rotation
+// carry a kid the key set does not have yet. keyfunc fetches the JWKS for an
+// unknown kid at most once per 5 minutes, and a concurrent request with that
+// kid fails instead of waiting for the fetch: all but one of the first
+// requests after a rotation were rejected. Under the lock they wait for the
+// fetch and find the new key; a known kid is a map lookup, so the lock costs
+// nothing else. The Router checks the signature by the same JWKS first, so an
+// unknown kid here comes from a rotation, not a forged token.
+func oneRefreshAtATime(keys jwt.Keyfunc) jwt.Keyfunc {
+	var mu sync.Mutex
+	return func(token *jwt.Token) (any, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return keys(token)
+	}
 }
 
 // FromIncomingContext verifies the access token the Router forwards as

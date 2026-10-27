@@ -2,12 +2,18 @@ package identity
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -99,6 +105,63 @@ func TestAccessTokenVerifierFetchesJWKSByIssuer(t *testing.T) {
 	require.NoError(t, err)
 	_, err = other.Verify(v.Tokens["valid"])
 	assert.ErrorIs(t, err, ErrUnauthenticated)
+}
+
+func rsaJWK(kid string, key *rsa.PrivateKey) map[string]string {
+	return map[string]string{
+		"kty": "RSA", "alg": "RS256", "use": "sig", "kid": kid,
+		"n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+		"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
+	}
+}
+
+// ADR 35: Dex signs with a new key as soon as it rotates; the first requests
+// after a rotation arrive together and all of them pass on one JWKS refresh.
+func TestAccessTokenVerifierSharesRefreshAfterKeyRotation(t *testing.T) {
+	const issuer = "https://dex.nomnom.test"
+	before, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	after, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	var published atomic.Value
+	published.Store([]map[string]string{rsaJWK("before", before)})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": published.Load()})
+	}))
+	defer server.Close()
+	verifier, err := NewAccessTokenVerifier(t.Context(), "nomnom-bff", []Provider{{Issuer: issuer, JWKSURL: server.URL}})
+	require.NoError(t, err)
+	sign := func(kid string, key *rsa.PrivateKey) string {
+		token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+			"iss": issuer, "aud": []string{"nomnom-bff"}, "sub": "customer-1",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		})
+		token.Header["kid"] = kid
+		signed, err := token.SignedString(key)
+		require.NoError(t, err)
+		return signed
+	}
+	_, err = verifier.Verify(sign("before", before))
+	require.NoError(t, err)
+
+	// Rotation: the old key stays for verification, the new one signs.
+	published.Store([]map[string]string{rsaJWK("before", before), rsaJWK("after", after)})
+	token := sign("after", after)
+	var wg sync.WaitGroup
+	errs := make([]error, 5)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = verifier.Verify(token)
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+	_, err = verifier.Verify(sign("before", before))
+	require.NoError(t, err, "a token signed before the rotation stays valid")
 }
 
 func TestAccessTokenFromIncomingContextRequiresBearer(t *testing.T) {

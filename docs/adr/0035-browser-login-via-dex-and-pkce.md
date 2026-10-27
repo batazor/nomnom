@@ -37,6 +37,16 @@ Cosmo Router и BFF. Регистрация, восстановление пар
 - Ключи подписи Dex создаёт при старте и ротирует сам, поэтому Router и BFF читают JWKS по URL
   с обновлением. BFF принимает несколько providers (`BFF__IDP_PROVIDERS`: issuer и JWKS), ключи
   одного issuer не подтверждают token другого.
+- Ротация не прерывает работу ([схема overlap-then-retire](https://docs.duendesoftware.com/identityserver/v6/fundamentals/keys/)):
+  прежний ключ Dex после ротации остаётся в JWKS для проверки на время жизни token
+  (`expiry.idTokens`), поэтому выданные до ротации token действуют до истечения. Новый ключ local
+  signer Dex публикует в момент, когда начинает им подписывать (шага анонса, как в IdentityServer или
+  Auth0, нет), поэтому первые token после ротации несут `kid`, которого у проверяющих ещё нет.
+  Проверяющие перечитывают JWKS на неизвестный `kid` сразу: Router — `refresh_unknown_kid`,
+  BFF — одним обновлением на все одновременные запросы (keyfunc ограничивает такие обновления
+  одним в 5 минут, и без общего обновления все запросы первой пачки, кроме одного, получали
+  `Unauthenticated`). Плановое обновление JWKS в BFF — раз в 10 минут, по `Cache-Control: max-age=600`
+  ответа Dex.
 - **Браузер получает access token через OIDC authorization code + PKCE** (public client, без
   client secret) и передаёт его в `Authorization: Bearer`. Cosmo Router и BFF проверяют token по
   JWKS Dex, как описано в ADR 32; контексты от Dex не зависят.
