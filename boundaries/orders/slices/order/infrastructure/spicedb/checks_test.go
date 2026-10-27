@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
@@ -63,7 +64,9 @@ func TestCheckRecordsResult(t *testing.T) {
 		t.Run(tc.result, func(t *testing.T) {
 			reader := installMeter(t)
 			permissions := NewMockPermissions(t)
-			permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
+			permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
+				return proto.Equal(r, customerCheckRequest)
+			})).
 				Return(&v1.CheckPermissionResponse{Permissionship: tc.permissionship}, tc.err).Once()
 			a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 

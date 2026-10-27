@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	"nomnom/orders/pkg/application"
 	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
@@ -50,14 +51,19 @@ var payment = neighbours.PaymentRequest{
 	OrderID: "order-1", MarketID: "berlin", Amount: "20", Currency: "EUR", IdempotencyKey: "order:order-1:authorize_payment",
 }
 
+// createPayment is the CreatePayment request every payment operation sends first.
+var createPayment = &paymentsv1.CreatePaymentRequest{
+	OrderId: "order-1", Amount: &paymentsv1.Money{Amount: "20", Currency: "EUR"}, MarketId: "berlin",
+}
+
 func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
 	conn, payments, _, _ := serve(t)
 	payments.EXPECT().CreatePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CreatePaymentRequest) bool {
 		// The Payment is in the Market of the Order.
-		return r.GetOrderId() == "order-1" && r.GetAmount().GetAmount() == "20" && r.GetMarketId() == "berlin"
+		return proto.Equal(r, createPayment)
 	})).Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
 	payments.EXPECT().AuthorizePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.AuthorizePaymentRequest) bool {
-		return r.GetPaymentId() == "payment-1" && r.GetIdempotencyKey() == payment.IdempotencyKey
+		return proto.Equal(r, &paymentsv1.AuthorizePaymentRequest{PaymentId: "payment-1", IdempotencyKey: payment.IdempotencyKey})
 	})).Return(&paymentsv1.AuthorizePaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED, DeclineReason: "card_declined"}}, nil).Once()
 
 	d, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
@@ -69,9 +75,13 @@ func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
 // AC-457: a provider decline is a business decision, not an error.
 func TestPaymentsDeclineIsDecision(t *testing.T) {
 	conn, payments, _, _ := serve(t)
-	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+	payments.EXPECT().CreatePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CreatePaymentRequest) bool {
+		return proto.Equal(r, createPayment)
+	})).
 		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
-	payments.EXPECT().CapturePayment(mock.Anything, mock.Anything).
+	payments.EXPECT().CapturePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CapturePaymentRequest) bool {
+		return proto.Equal(r, &paymentsv1.CapturePaymentRequest{PaymentId: "payment-1", IdempotencyKey: payment.IdempotencyKey})
+	})).
 		Return(&paymentsv1.CapturePaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED, DeclineReason: "card_declined"}}, nil).Once()
 
 	d, err := grpcclient.NewPayments(conn).Capture(context.Background(), payment)
@@ -83,9 +93,13 @@ func TestPaymentsDeclineIsDecision(t *testing.T) {
 // AC-458: a pending operation is retried by the Activity with the same key.
 func TestPaymentsPendingIsRetryable(t *testing.T) {
 	conn, payments, _, _ := serve(t)
-	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+	payments.EXPECT().CreatePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CreatePaymentRequest) bool {
+		return proto.Equal(r, createPayment)
+	})).
 		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
-	payments.EXPECT().AuthorizePayment(mock.Anything, mock.Anything).
+	payments.EXPECT().AuthorizePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.AuthorizePaymentRequest) bool {
+		return proto.Equal(r, &paymentsv1.AuthorizePaymentRequest{PaymentId: "payment-1", IdempotencyKey: payment.IdempotencyKey})
+	})).
 		Return(&paymentsv1.AuthorizePaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_PENDING, DeclineReason: "card_declined"}}, nil).Once()
 
 	_, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
@@ -96,11 +110,17 @@ func TestPaymentsPendingIsRetryable(t *testing.T) {
 
 func TestPaymentsDeclinedCompensationIsError(t *testing.T) {
 	conn, payments, _, _ := serve(t)
-	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+	payments.EXPECT().CreatePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CreatePaymentRequest) bool {
+		return proto.Equal(r, createPayment)
+	})).
 		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Times(2)
-	payments.EXPECT().RefundPayment(mock.Anything, mock.Anything).
+	payments.EXPECT().RefundPayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.RefundPaymentRequest) bool {
+		return proto.Equal(r, &paymentsv1.RefundPaymentRequest{PaymentId: "payment-1", IdempotencyKey: payment.IdempotencyKey})
+	})).
 		Return(&paymentsv1.RefundPaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED, DeclineReason: "card_declined"}}, nil).Once()
-	payments.EXPECT().CancelAuthorization(mock.Anything, mock.Anything).
+	payments.EXPECT().CancelAuthorization(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CancelAuthorizationRequest) bool {
+		return proto.Equal(r, &paymentsv1.CancelAuthorizationRequest{PaymentId: "payment-1", IdempotencyKey: payment.IdempotencyKey})
+	})).
 		Return(&paymentsv1.CancelAuthorizationResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED, DeclineReason: "card_declined"}}, nil).Once()
 
 	require.Error(t, grpcclient.NewPayments(conn).Refund(context.Background(), payment))
@@ -121,7 +141,9 @@ func TestErrorsMapToRetryability(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.code.String(), func(t *testing.T) {
 			conn, _, _, delivery := serve(t)
-			delivery.EXPECT().CancelDelivery(mock.Anything, mock.Anything).Return(nil, status.Error(tt.code, "boom")).Once()
+			delivery.EXPECT().CancelDelivery(mock.Anything, mock.MatchedBy(func(r *deliveryv1.CancelDeliveryRequest) bool {
+				return proto.Equal(r, &deliveryv1.CancelDeliveryRequest{OrderId: "order-1"})
+			})).Return(nil, status.Error(tt.code, "boom")).Once()
 
 			err := grpcclient.NewDelivery(conn).Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"})
 
@@ -134,12 +156,20 @@ func TestErrorsMapToRetryability(t *testing.T) {
 func TestRestaurantsRequestAndCancel(t *testing.T) {
 	conn, _, server, _ := serve(t)
 	server.EXPECT().ReceiveOrderRequest(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.ReceiveOrderRequestRequest) bool {
-		return len(r.GetItems()) == 1 && r.GetItems()[0].GetMenuItemId() == "menu-1" && r.GetItems()[0].GetQuantity() == 2 &&
-			r.GetPriority() == restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM // AC-857
+		return proto.Equal(r, &restaurantsv1.ReceiveOrderRequestRequest{
+			RestaurantId: "restaurant-1",
+			OrderId:      "order-1",
+			Items:        []*restaurantsv1.OrderRequestItem{{MenuItemId: "menu-1", Quantity: 2}},
+			Priority:     restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM, // AC-857
+		})
 	})).Return(&restaurantsv1.ReceiveOrderRequestResponse{RestaurantOrderId: "ro-1", Created: true}, nil).Once()
-	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.Anything).
+	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.CancelRestaurantOrderRequest) bool {
+		return proto.Equal(r, &restaurantsv1.CancelRestaurantOrderRequest{RestaurantId: "restaurant-1", OrderId: "order-1"})
+	})).
 		Return(&restaurantsv1.CancelRestaurantOrderResponse{Cancelled: true}, nil).Once()
-	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.Anything).
+	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.CancelRestaurantOrderRequest) bool {
+		return proto.Equal(r, &restaurantsv1.CancelRestaurantOrderRequest{RestaurantId: "restaurant-1", OrderId: "order-1"})
+	})).
 		Return(&restaurantsv1.CancelRestaurantOrderResponse{RejectionReason: "already_ready"}, nil).Once()
 	restaurants := grpcclient.NewRestaurants(conn)
 	request := neighbours.RestaurantOrderRequest{
@@ -157,9 +187,11 @@ func TestDeliveryCreateSendsTheOrder(t *testing.T) {
 	conn, _, _, delivery := serve(t)
 	delivery.EXPECT().CreateDelivery(mock.Anything, mock.MatchedBy(func(r *deliveryv1.CreateDeliveryRequest) bool {
 		// The Delivery is in the Market of the Order.
-		return r.GetOrderId() == "order-1" && r.GetMarketId() == "berlin"
+		return proto.Equal(r, &deliveryv1.CreateDeliveryRequest{OrderId: "order-1", MarketId: "berlin"})
 	})).Return(&deliveryv1.CreateDeliveryResponse{DeliveryId: "d-1", Created: true}, nil).Once()
-	delivery.EXPECT().CancelDelivery(mock.Anything, mock.Anything).
+	delivery.EXPECT().CancelDelivery(mock.Anything, mock.MatchedBy(func(r *deliveryv1.CancelDeliveryRequest) bool {
+		return proto.Equal(r, &deliveryv1.CancelDeliveryRequest{OrderId: "order-1"})
+	})).
 		Return(&deliveryv1.CancelDeliveryResponse{DeliveryId: "d-1", RejectionReason: "already_picked_up"}, nil).Once()
 	d := grpcclient.NewDelivery(conn)
 
@@ -169,7 +201,9 @@ func TestDeliveryCreateSendsTheOrder(t *testing.T) {
 
 func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {
 	conn, _, _, delivery := serve(t)
-	delivery.EXPECT().ReplanDelivery(mock.Anything, mock.Anything).Return(nil, status.Error(codes.FailedPrecondition, "candidate busy")).Once()
+	delivery.EXPECT().ReplanDelivery(mock.Anything, mock.MatchedBy(func(r *deliveryv1.ReplanDeliveryRequest) bool {
+		return proto.Equal(r, &deliveryv1.ReplanDeliveryRequest{OrderId: "order-1"})
+	})).Return(nil, status.Error(codes.FailedPrecondition, "candidate busy")).Once()
 
 	require.NoError(t, grpcclient.NewDelivery(conn).Replan(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 }

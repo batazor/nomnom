@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	"nomnom/orders/pkg/application"
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
@@ -66,9 +67,11 @@ func newCatalog(t *testing.T, server *MockRestaurantsServiceServer) *catalog.Cat
 func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 	server := NewMockRestaurantsServiceServer(t)
 	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-		return r.GetRestaurantId() == "restaurant-1"
+		return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
 	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
-	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
+	server.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetMenuRequest{RestaurantId: "restaurant-1"})
+	})).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
 		item("pizza", "12.50", "EUR", true),
 		item("gyoza", "6", "EUR", false),
 		item("soup", "4", "EUR", true),
@@ -91,11 +94,15 @@ func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 // FR-650: the premium fee of the Restaurant reaches the snapshot.
 func TestSnapshotReadsPremiumFee(t *testing.T) {
 	server := NewMockRestaurantsServiceServer(t)
-	server.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
+	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
+	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
 		RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market,
 		PremiumFee: &restaurantsv1.Money{Amount: "1.50", Currency: "EUR"},
 	}}, nil).Once()
-	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
+	server.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetMenuRequest{RestaurantId: "restaurant-1"})
+	})).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
 		item("pizza", "12.50", "EUR", true),
 	}}, nil).Once()
 
@@ -113,9 +120,11 @@ func TestSnapshotRefusesItemWithoutName(t *testing.T) {
 	nameless.Name = ""
 	server := NewMockRestaurantsServiceServer(t)
 	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-		return r.GetRestaurantId() == "restaurant-1"
+		return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
 	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
-	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{nameless}}, nil).Once()
+	server.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetMenuRequest{RestaurantId: "restaurant-1"})
+	})).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{nameless}}, nil).Once()
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 	require.ErrorContains(t, err, "has no name")
@@ -129,7 +138,7 @@ func TestSnapshotRefusesRestaurantWithoutMarket(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			server := NewMockRestaurantsServiceServer(t)
 			server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-				return r.GetRestaurantId() == "restaurant-1"
+				return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
 			})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: market}}, nil).Once()
 			// No GetMenu expectation: the menu is not read.
 
@@ -145,7 +154,7 @@ func TestSnapshotRefusesRestaurantWithoutMarket(t *testing.T) {
 func TestSnapshotRefusesClosedRestaurant(t *testing.T) {
 	server := NewMockRestaurantsServiceServer(t)
 	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-		return r.GetRestaurantId() == "restaurant-1"
+		return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
 	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: false, MarketId: ordertest.Market}}, nil).Once()
 	// No GetMenu expectation: the menu is not read.
 
@@ -177,17 +186,23 @@ func TestSnapshotMapsErrors(t *testing.T) {
 			switch {
 			case tc.restaurantErr != nil:
 				// No GetMenu expectation: the menu is not read.
-				server.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(nil, tc.restaurantErr).Once()
+				server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+					return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
+				})).Return(nil, tc.restaurantErr).Once()
 			case tc.menuErr != nil:
 				server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-					return r.GetRestaurantId() == "restaurant-1"
+					return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
 				})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
-				server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(nil, tc.menuErr).Once()
+				server.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool {
+					return proto.Equal(r, &restaurantsv1.GetMenuRequest{RestaurantId: "restaurant-1"})
+				})).Return(nil, tc.menuErr).Once()
 			default:
 				server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-					return r.GetRestaurantId() == "restaurant-1"
+					return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
 				})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
-				server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: tc.items}, nil).Once()
+				server.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool {
+					return proto.Equal(r, &restaurantsv1.GetMenuRequest{RestaurantId: "restaurant-1"})
+				})).Return(&restaurantsv1.GetMenuResponse{Items: tc.items}, nil).Once()
 			}
 
 			_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
@@ -198,7 +213,9 @@ func TestSnapshotMapsErrors(t *testing.T) {
 
 func TestSnapshotTimeoutIsUnavailable(t *testing.T) {
 	server := NewMockRestaurantsServiceServer(t)
-	server.EXPECT().GetRestaurant(mock.Anything, mock.Anything).RunAndReturn(
+	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
+	})).RunAndReturn(
 		func(ctx context.Context, _ *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
 			<-ctx.Done()
 			return nil, status.FromContextError(ctx.Err()).Err()
@@ -217,8 +234,12 @@ func TestSnapshotCallsCarryServiceToken(t *testing.T) {
 	server.EXPECT().GetRestaurant(mock.MatchedBy(func(ctx context.Context) bool {
 		md, _ := metadata.FromIncomingContext(ctx)
 		return assert.ObjectsAreEqual([]string{"Bearer token-1"}, md.Get("authorization"))
-	}), mock.Anything).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
-	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}, nil).Once()
+	}), mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetRestaurantRequest{RestaurantId: "restaurant-1"})
+	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
+	server.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool {
+		return proto.Equal(r, &restaurantsv1.GetMenuRequest{RestaurantId: "restaurant-1"})
+	})).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}, nil).Once()
 	adapter := catalog.New(dial(t, server, grpc.WithUnaryInterceptor(gateway.ServiceToken(dir))), limits, time.Second)
 
 	_, err := adapter.Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})

@@ -10,6 +10,7 @@ import (
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/config"
@@ -25,14 +26,19 @@ var customerCheck = application.AccessCheck{
 	Resource:   application.Resource{Type: "order", ID: "order-1"},
 }
 
+// customerCheckRequest is the CheckPermission request of customerCheck for an
+// Order without a stored revision.
+var customerCheckRequest = &v1.CheckPermissionRequest{
+	Consistency: &v1.Consistency{Requirement: &v1.Consistency_MinimizeLatency{MinimizeLatency: true}},
+	Resource:    &v1.ObjectReference{ObjectType: "order", ObjectId: "order-1"},
+	Permission:  "view",
+	Subject:     &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: "user", ObjectId: "customer-1"}},
+}
+
 func TestCheckMapsAccessCheckToSpiceDB(t *testing.T) {
 	permissions := NewMockPermissions(t)
 	permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
-		return r.GetResource().GetObjectType() == "order" &&
-			r.GetResource().GetObjectId() == "order-1" &&
-			r.GetPermission() == "view" &&
-			r.GetSubject().GetObject().GetObjectType() == "user" &&
-			r.GetConsistency().GetMinimizeLatency()
+		return proto.Equal(r, customerCheckRequest)
 	})).Return(&v1.CheckPermissionResponse{Permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION}, nil).Once()
 	a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 
@@ -45,7 +51,9 @@ func TestCheckDeniesWithoutPermission(t *testing.T) {
 		v1.CheckPermissionResponse_PERMISSIONSHIP_CONDITIONAL_PERMISSION,
 	} {
 		permissions := NewMockPermissions(t)
-		permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
+		permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
+			return proto.Equal(r, customerCheckRequest)
+		})).
 			Return(&v1.CheckPermissionResponse{Permissionship: p}, nil).Once()
 		a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 		require.ErrorIs(t, a.Check(context.Background(), customerCheck), application.ErrPermissionDenied)
@@ -55,7 +63,9 @@ func TestCheckDeniesWithoutPermission(t *testing.T) {
 // AC-466: an unavailable SpiceDB fails closed.
 func TestCheckFailsClosedOnError(t *testing.T) {
 	permissions := NewMockPermissions(t)
-	permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
+	permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
+		return proto.Equal(r, customerCheckRequest)
+	})).
 		Return(&v1.CheckPermissionResponse{}, errors.New("unavailable")).Once()
 	a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 
@@ -76,7 +86,12 @@ func (r revisions) Revision(_ context.Context, id string) (application.Authoriza
 func TestCheckReadsAtLeastAsFreshAsTheStoredRevision(t *testing.T) {
 	permissions := NewMockPermissions(t)
 	permissions.EXPECT().CheckPermission(mock.Anything, mock.MatchedBy(func(r *v1.CheckPermissionRequest) bool {
-		return r.GetConsistency().GetAtLeastAsFresh().GetToken() == "zed-1"
+		return proto.Equal(r, &v1.CheckPermissionRequest{
+			Consistency: &v1.Consistency{Requirement: &v1.Consistency_AtLeastAsFresh{AtLeastAsFresh: &v1.ZedToken{Token: "zed-1"}}},
+			Resource:    &v1.ObjectReference{ObjectType: "order", ObjectId: "order-1"},
+			Permission:  "view",
+			Subject:     &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: "user", ObjectId: "customer-1"}},
+		})
 	})).Return(&v1.CheckPermissionResponse{Permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION}, nil).Once()
 	a := spicedb.NewAuthorizer(permissions, revisions{"order-1": "zed-1"}, time.Second)
 
@@ -87,7 +102,12 @@ func TestCheckReadsAtLeastAsFreshAsTheStoredRevision(t *testing.T) {
 // redelivered.
 func TestSyncFailsAsUnavailable(t *testing.T) {
 	permissions := NewMockPermissions(t)
-	permissions.EXPECT().ReadRelationships(mock.Anything, mock.Anything).Return(nil, errors.New("unavailable")).Once()
+	permissions.EXPECT().ReadRelationships(mock.Anything, mock.MatchedBy(func(r *v1.ReadRelationshipsRequest) bool {
+		return proto.Equal(r, &v1.ReadRelationshipsRequest{
+			Consistency:        &v1.Consistency{Requirement: &v1.Consistency_FullyConsistent{FullyConsistent: true}},
+			RelationshipFilter: &v1.RelationshipFilter{ResourceType: "order", OptionalResourceId: "order-1"},
+		})
+	})).Return(nil, errors.New("unavailable")).Once()
 	a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 
 	_, err := a.SyncOrderRelationships(context.Background(), "order-1", syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"})

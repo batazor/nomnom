@@ -71,7 +71,10 @@ func TestPlaceOrderReturnsTheOrder(t *testing.T) {
 // AC-569: problems replace the order, without a GraphQL error.
 func TestPlaceOrderReturnsProblems(t *testing.T) {
 	placeOrder := newMockPlaceOrderHandler(t)
-	placeOrder.EXPECT().Handle(mock.Anything, mock.Anything).Return(applications.Result{Problems: []applications.Problem{
+	placeOrder.EXPECT().Handle(mock.Anything, applications.Input{
+		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
+		Priority: applications.PriorityStandard, IdempotencyKey: "attempt-1",
+	}).Return(applications.Result{Problems: []applications.Problem{
 		{Code: applications.ProblemOrderItemUnavailable, MenuItemIDs: []string{"menu-gyoza"}},
 		{Code: applications.ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}},
 	}}, nil).Once()
@@ -100,7 +103,10 @@ func TestPlaceOrderErrors(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			placeOrder := newMockPlaceOrderHandler(t)
-			placeOrder.EXPECT().Handle(mock.Anything, mock.Anything).Return(applications.Result{}, tc.err).Once()
+			placeOrder.EXPECT().Handle(mock.Anything, applications.Input{
+				RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
+				Priority: applications.PriorityStandard, IdempotencyKey: "attempt-1",
+			}).Return(applications.Result{}, tc.err).Once()
 			svc, ctx := checkoutService(t, placeOrder)
 			_, err := svc.MutationPlaceOrder(ctx, placeOrderRequest())
 			assert.Equal(t, tc.want, status.Code(err))

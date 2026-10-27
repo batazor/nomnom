@@ -1,11 +1,5 @@
 # Mocks of the ports the tests replace; regenerate with `go tool mockery`.
-template: testify
-dir: "{{.InterfaceDir}}"
-filename: mocks_test.go
-pkgname: "{{.SrcPackageName}}"
 structname: "{{.Mock}}{{.InterfaceName | firstUpper}}"
-force-file-write: true
-formatter: goimports
 packages:
   github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications:
     interfaces:

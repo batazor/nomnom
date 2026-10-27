@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/worker"
@@ -16,9 +17,26 @@ import (
 
 	"nomnom/orders/pkg/config"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
+	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
+
+// activityNames are the 12 Activities the fulfillment worker registers.
+var activityNames = []string{
+	fulfillmenttemporal.ActivityAuthorizePayment,
+	fulfillmenttemporal.ActivityCapturePayment,
+	fulfillmenttemporal.ActivityCancelPaymentAuthorization,
+	fulfillmenttemporal.ActivityRefundPayment,
+	fulfillmenttemporal.ActivityRecordPaymentAuthorization,
+	fulfillmenttemporal.ActivityRequestRestaurantOrder,
+	fulfillmenttemporal.ActivityCancelRestaurantOrder,
+	fulfillmenttemporal.ActivityCreateDelivery,
+	fulfillmenttemporal.ActivityReplanDelivery,
+	fulfillmenttemporal.ActivityCancelDelivery,
+	fulfillmenttemporal.ActivityCompleteOrder,
+	fulfillmenttemporal.ActivityFailOrCancelOrder,
+}
 
 func testConfig() config.Config {
 	return config.Config{
@@ -58,7 +76,9 @@ func TestTemporalWorkerStartsAndStops(t *testing.T) {
 	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
 		return options.Name == "OrderFulfillment"
 	})).Return().Once()
-	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	for _, name := range activityNames {
+		runner.EXPECT().RegisterActivityWithOptions(mock.Anything, activity.RegisterOptions{Name: name}).Return().Once()
+	}
 	runner.EXPECT().Start().Return(nil).Once()
 	runner.EXPECT().Stop().Return().Once()
 	w, temporalClient, options := newTestWorker(t, testConfig(), runner)
@@ -82,7 +102,9 @@ func TestTemporalWorkerChecksSearchAttributeOnlyWhenPublishing(t *testing.T) {
 			runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
 				return options.Name == "OrderFulfillment"
 			})).Return().Once()
-			runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+			for _, name := range activityNames {
+				runner.EXPECT().RegisterActivityWithOptions(mock.Anything, activity.RegisterOptions{Name: name}).Return().Once()
+			}
 			runner.EXPECT().Start().Return(nil).Once()
 		}
 		w, temporalClient, _ := newTestWorker(t, cfg, runner)
@@ -110,7 +132,9 @@ func TestTemporalWorkerStartFailureClosesClient(t *testing.T) {
 	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
 		return options.Name == "OrderFulfillment"
 	})).Return().Once()
-	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	for _, name := range activityNames {
+		runner.EXPECT().RegisterActivityWithOptions(mock.Anything, activity.RegisterOptions{Name: name}).Return().Once()
+	}
 	runner.EXPECT().Start().Return(startErr).Once()
 	w, temporalClient, _ := newTestWorker(t, testConfig(), runner)
 	temporalClient.On("Close").Return().Once()
@@ -140,7 +164,9 @@ func TestTemporalWorkerRunReturnsFatalError(t *testing.T) {
 	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
 		return options.Name == "OrderFulfillment"
 	})).Return().Once()
-	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	for _, name := range activityNames {
+		runner.EXPECT().RegisterActivityWithOptions(mock.Anything, activity.RegisterOptions{Name: name}).Return().Once()
+	}
 	runner.EXPECT().Start().Return(nil).Once()
 	w, _, options := newTestWorker(t, testConfig(), runner)
 	require.NoError(t, w.Start(context.Background()))
@@ -156,7 +182,9 @@ func TestTemporalWorkerShutdownRespectsDeadline(t *testing.T) {
 	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
 		return options.Name == "OrderFulfillment"
 	})).Return().Once()
-	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	for _, name := range activityNames {
+		runner.EXPECT().RegisterActivityWithOptions(mock.Anything, activity.RegisterOptions{Name: name}).Return().Once()
+	}
 	runner.EXPECT().Start().Return(nil).Once()
 	runner.EXPECT().Stop().RunAndReturn(func() { time.Sleep(200 * time.Millisecond) }).Once()
 	w, temporalClient, _ := newTestWorker(t, testConfig(), runner)

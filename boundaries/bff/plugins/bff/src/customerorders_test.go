@@ -27,7 +27,7 @@ func customerOrdersService(t *testing.T, list *mockListCustomerOrdersHandler) (*
 
 func TestCustomerOrdersOfTheVerifiedCustomer(t *testing.T) {
 	// the customer is the subject of the access token.
-	customer := mock.MatchedBy(func(customerID string) bool { return customerID != "" })
+	const customer = "customer-1"
 	list := newMockListCustomerOrdersHandler(t)
 	list.EXPECT().Handle(mock.Anything, customer, 1, "c0").Return(applications.OrderPage{
 		Edges: []applications.OrderEdge{{Cursor: "c1", Order: applications.OrderView{
@@ -62,7 +62,7 @@ func TestCustomerOrdersErrors(t *testing.T) {
 		errors.New("orders is down"):    codes.Unavailable,
 	} {
 		list := newMockListCustomerOrdersHandler(t)
-		list.EXPECT().Handle(mock.Anything, mock.Anything, 1, "").Return(applications.OrderPage{}, refusal).Once()
+		list.EXPECT().Handle(mock.Anything, "customer-1", 1, "").Return(applications.OrderPage{}, refusal).Once()
 		svc, ctx := customerOrdersService(t, list)
 		_, err := svc.QueryCustomerOrders(ctx, &service.QueryCustomerOrdersRequest{First: 1})
 		assert.Equal(t, code, status.Code(err), refusal.Error())
