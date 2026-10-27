@@ -52,7 +52,11 @@ func (r *Restaurants) List(ctx context.Context, request applications.PageRequest
 		NextCursor:  response.GetNextPageToken(),
 	}
 	for _, restaurant := range response.GetRestaurants() {
-		page.Restaurants = append(page.Restaurants, restaurantOf(restaurant))
+		view, err := restaurantOf(restaurant)
+		if err != nil {
+			return applications.Page{}, fmt.Errorf("list restaurants: %w", err)
+		}
+		page.Restaurants = append(page.Restaurants, view)
 	}
 	return page, nil
 }
@@ -65,7 +69,11 @@ func (r *Restaurants) Restaurant(ctx context.Context, restaurantID string) (appl
 	if err != nil {
 		return applications.Restaurant{}, fmt.Errorf("get restaurant: %w", err)
 	}
-	return restaurantOf(response.GetRestaurant()), nil
+	view, err := restaurantOf(response.GetRestaurant())
+	if err != nil {
+		return applications.Restaurant{}, fmt.Errorf("get restaurant: %w", err)
+	}
+	return view, nil
 }
 
 func (r *Restaurants) Menu(ctx context.Context, restaurantID string) ([]applications.MenuItem, error) {
@@ -89,10 +97,20 @@ func (r *Restaurants) Menu(ctx context.Context, restaurantID string) ([]applicat
 	return items, nil
 }
 
-func restaurantOf(restaurant *restaurantsv1.Restaurant) applications.Restaurant {
+// restaurantOf requires wait_time: GetRestaurant and ListRestaurants always
+// set it (restaurants FR-204).
+func restaurantOf(restaurant *restaurantsv1.Restaurant) (applications.Restaurant, error) {
+	waitTime := restaurant.GetWaitTime()
+	if waitTime == nil {
+		return applications.Restaurant{}, fmt.Errorf("restaurant %s has no wait_time", restaurant.GetRestaurantId())
+	}
 	return applications.Restaurant{
 		ID:     restaurant.GetRestaurantId(),
 		Name:   restaurant.GetName(),
 		IsOpen: restaurant.GetIsOpen(),
-	}
+		WaitTime: applications.WaitTime{
+			Elevated:            waitTime.GetElevated(),
+			ExpectedWaitMinutes: int(waitTime.GetExpectedWaitMinutes()),
+		},
+	}, nil
 }

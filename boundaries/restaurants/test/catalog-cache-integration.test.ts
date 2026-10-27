@@ -8,6 +8,7 @@ import { Valkey } from "iovalkey";
 import {
   MenuItemAvailabilityChangedSchema,
   RestaurantClosedSchema,
+  RestaurantWaitLevelChangedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 
 import { connectValkey } from "../pkg/infrastructure/valkey/client.ts";
@@ -28,7 +29,10 @@ import {
   DatabaseMenuReader,
   DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
-import type { RestaurantView } from "../slices/restaurant/applications/restaurant-view.ts";
+import type {
+  CatalogRestaurantView,
+  RestaurantView,
+} from "../slices/restaurant/applications/restaurant-view.ts";
 import {
   CachedRestaurantCatalog,
   restaurantCacheRefreshes,
@@ -81,24 +85,35 @@ const eventMessage = (eventType: string, payload: Uint8Array) => ({
 });
 
 /** Restaurants stored "in MongoDB": the test changes them like a command. */
+const NORMAL_WAIT = { elevated: false, expectedWaitMinutes: 20 };
+
 const restaurantSource = () => {
   const stored = new Map<string, RestaurantView>();
+  const waits = new Map<string, CatalogRestaurantView["waitTime"]>();
+  const catalogView = (view: RestaurantView): CatalogRestaurantView => ({
+    ...view,
+    waitTime: waits.get(view.restaurantId) ?? NORMAL_WAIT,
+  });
   let reads = 0;
   return {
     stored,
+    waits,
     reads: () => reads,
     source: {
       get: async (id: string) => {
         reads += 1;
-        return stored.get(id);
+        const view = stored.get(id);
+        return view === undefined ? undefined : catalogView(view);
       },
       list: async (criteria: { marketId: string; includeClosed: boolean }) => {
         reads += 1;
-        return [...stored.values()].filter(
-          (view) =>
-            view.marketId === criteria.marketId &&
-            (criteria.includeClosed || view.isOpen),
-        );
+        return [...stored.values()]
+          .filter(
+            (view) =>
+              view.marketId === criteria.marketId &&
+              (criteria.includeClosed || view.isOpen),
+          )
+          .map(catalogView);
       },
     },
   };
@@ -180,6 +195,9 @@ describe("refresh by Integration Events (ADR 43)", () => {
 
   after(() => client.quit());
 
+  const catalog = (world: ReturnType<typeof restaurantSource>) =>
+    new CachedRestaurantCatalog(world.source, options());
+
   test("RestaurantClosed rewrites the cached restaurant and drops the list pages", async () => {
     const id = `r-${randomUUID()}`;
     const world = restaurantSource();
@@ -240,6 +258,87 @@ describe("refresh by Integration Events (ADR 43)", () => {
       false,
       "the list page of the old generation is not read",
     );
+  });
+
+  test("FR-646 RestaurantWaitLevelChanged rewrites the cached wait and drops the list pages", async () => {
+    const id = `r-${randomUUID()}`;
+    const world = restaurantSource();
+    world.stored.set(id, {
+      restaurantId: id,
+      name: "Pho",
+      marketId: "berlin",
+      isOpen: true,
+    });
+    const catalog = new CachedRestaurantCatalog(world.source, options());
+    const page = {
+      marketId: "berlin",
+      includeClosed: false,
+      after: undefined,
+      limit: 1000,
+    };
+    assert.equal((await catalog.get(id))?.waitTime.elevated, false);
+    await stored(client, `restaurants:restaurant:${id}`);
+    await catalog.list(page);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    world.waits.set(id, { elevated: true, expectedWaitMinutes: 42 });
+    const handler = new CacheRefreshHandler({
+      refreshes: restaurantCacheRefreshes(catalog),
+      retry: { initialIntervalMs: 10, maxIntervalMs: 50 },
+      warn: () => {},
+    });
+    const changed = toBinary(
+      RestaurantWaitLevelChangedSchema,
+      create(RestaurantWaitLevelChangedSchema, {
+        restaurantId: id,
+        marketId: "berlin",
+        elevated: true,
+      }),
+    );
+    assert.equal(
+      await handler.process(
+        eventMessage(RestaurantWaitLevelChangedSchema.typeName, changed),
+        new AbortController().signal,
+      ),
+      "processed",
+    );
+
+    const reads = world.reads();
+    assert.deepEqual((await catalog.get(id))?.waitTime, {
+      elevated: true,
+      expectedWaitMinutes: 42,
+    });
+    assert.equal(world.reads(), reads, "refreshed, served from the cache");
+    assert.equal(
+      (await catalog.list(page)).find((view) => view.restaurantId === id)
+        ?.waitTime.elevated,
+      true,
+      "the list page of the old generation is not read",
+    );
+  });
+
+  test("FR-204 a cached restaurant without the wait time is a miss", async () => {
+    const id = `r-${randomUUID()}`;
+    const world = restaurantSource();
+    world.stored.set(id, {
+      restaurantId: id,
+      name: "Pho",
+      marketId: "berlin",
+      isOpen: true,
+    });
+    // Written by a release before the wait time.
+    await client.set(
+      `restaurants:restaurant:${id}`,
+      JSON.stringify({
+        restaurantId: id,
+        name: "Pho",
+        marketId: "berlin",
+        isOpen: true,
+      }),
+    );
+    const reads = world.reads();
+    assert.deepEqual((await catalog(world).get(id))?.waitTime, NORMAL_WAIT);
+    assert.equal(world.reads(), reads + 1, "read from MongoDB");
   });
 
   test("ADR 41 list pages are keyed per Market and refreshed only in the restaurant's Market", async () => {

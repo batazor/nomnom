@@ -33,6 +33,7 @@ import {
   FixedClock,
   SequentialIdGenerator,
   startOfDay,
+  testWaitTimePolicy,
 } from "./support/restaurants.ts";
 
 // FR-446 through the gRPC service composed like cmd/restaurants/main.ts:
@@ -164,7 +165,10 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     };
     const service = createService({
       getRestaurant: new GetRestaurantHandler({
-        reader: new DatabaseRestaurantCatalog(store),
+        reader: new DatabaseRestaurantCatalog(store, {
+          policy: testWaitTimePolicy(),
+          now: () => new Date(),
+        }),
       }),
       getMenu: unused,
       listRestaurants: unused,

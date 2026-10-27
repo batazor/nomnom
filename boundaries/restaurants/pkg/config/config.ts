@@ -22,6 +22,7 @@ import {
 import { type IdentityConfig, loadIdentityConfig } from "./identity.ts";
 import { type KitchenConfig, loadKitchenConfig } from "./kitchen.ts";
 import { durationSchema, portSchema } from "./schemas.ts";
+import { loadWaitTimeConfig, type WaitTimeConfig } from "./wait-time.ts";
 import {
   type ConsumerConfig,
   loadConsumerConfig,
@@ -36,6 +37,7 @@ export * from "./env.ts";
 export * from "./identity.ts";
 export * from "./kitchen.ts";
 export * from "./simulator.ts";
+export * from "./wait-time.ts";
 export * from "./workers.ts";
 
 export interface ServerConfig {
@@ -64,6 +66,7 @@ export interface AppConfig {
   readonly valkey: ValkeyConfig;
   readonly reconciler: ReconcilerConfig;
   readonly kitchen: KitchenConfig;
+  readonly waitTime: WaitTimeConfig;
   readonly kafka: KafkaConfig;
   readonly consumer: ConsumerConfig;
 }
@@ -110,6 +113,7 @@ export function loadConfig(
     valkey: loadValkeyConfig(environment),
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),
+    waitTime: loadWaitTimeConfig(environment),
     kafka: loadKafkaConfig(environment),
     consumer: loadConsumerConfig(environment),
   });

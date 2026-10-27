@@ -6,6 +6,10 @@ query BrowseRestaurants($first: Int!, $after: String) {
         id
         name
         acceptingOrders
+        waitTime {
+          elevated
+          expectedWaitMinutes
+        }
         menu {
           items {
             id

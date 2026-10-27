@@ -9,7 +9,8 @@ import "google/protobuf/timestamp.proto";
 // полное имя сообщения ниже, partition key — aggregate_id. Один стрим на
 // aggregate, чтобы порядок по aggregate_id сохранялся:
 //   restaurants.v1.restaurant-order-events — Kitchen Order (RestaurantOrder);
-//   restaurants.v1.restaurant-events       — Restaurant (RestaurantOpened, RestaurantClosed);
+//   restaurants.v1.restaurant-events       — Restaurant (RestaurantOpened, RestaurantClosed,
+//                                            RestaurantWaitLevelChanged);
 //   restaurants.v1.menu-events             — Menu (MenuItemAdded, MenuItemUpdated,
 //                                            MenuItemAvailabilityChanged).
 
@@ -22,6 +23,8 @@ message RestaurantOrderAccepted {
   google.protobuf.Timestamp expected_ready_at = 2;
   // Market of the aggregate (ADR 41).
   string market_id = 3;
+  // Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+  string restaurant_id = 4;
 }
 
 // Ресторан отказался принять Kitchen Order.
@@ -53,6 +56,8 @@ message PreparationFailed {
   string reason = 2;
   // Market of the aggregate (ADR 41).
   string market_id = 3;
+  // Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+  string restaurant_id = 4;
 }
 
 // Kitchen Order готов к Pickup.
@@ -60,6 +65,8 @@ message RestaurantOrderReady {
   string order_id = 1;
   // Market of the aggregate (ADR 41).
   string market_id = 2;
+  // Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+  string restaurant_id = 3;
 }
 
 // Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
@@ -70,6 +77,8 @@ message RestaurantOrderCancelled {
   bool preparation_started = 3;
   // Market of the aggregate (ADR 41).
   string market_id = 4;
+  // Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+  string restaurant_id = 5;
 }
 
 // --- restaurants.v1.restaurant-events (aggregate_type Restaurant, aggregate_id —
@@ -88,6 +97,16 @@ message RestaurantClosed {
   string restaurant_id = 1;
   // Market of the aggregate (ADR 41).
   string market_id = 2;
+}
+
+// Уровень ожидания ресторана сменился (Wait Time Statistics, FR-646):
+// elevated — текущее ожидание повышено относительно базового времени ресторана.
+// aggregate_type RestaurantWaitTime, aggregate_id — restaurant_id.
+message RestaurantWaitLevelChanged {
+  string restaurant_id = 1;
+  // Market of the restaurant (ADR 41).
+  string market_id = 2;
+  bool elevated = 3;
 }
 
 // --- restaurants.v1.menu-events (aggregate_type Menu, aggregate_id — menu_id) ---

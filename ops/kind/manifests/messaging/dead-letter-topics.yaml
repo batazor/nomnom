@@ -6,7 +6,7 @@
 # Одна partition: DLQ разбирается по порядку целиком, порядок по aggregate_id сохраняет ключ.
 #
 #   orders.v1.order-events.dlq               — группа orders (старт fulfillment по OrderPlaced)
-#   restaurants.v1.restaurant-order-events.dlq — группа orders
+#   restaurants.v1.restaurant-order-events.dlq — группы orders и restaurants (Wait Time Statistics)
 #   delivery.v1.delivery-events.dlq          — группы orders и restaurants
 #   orders.v1.order-relationships.dlq        — группа orders (внутренний стрим, ADR 18)
 apiVersion: batch/v1

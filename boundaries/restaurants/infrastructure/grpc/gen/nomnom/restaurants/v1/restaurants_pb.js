@@ -8,7 +8,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
  * Describes the file nomnom/restaurants/v1/restaurants.proto.
  */
 export const file_nomnom_restaurants_v1_restaurants = /*@__PURE__*/
-  fileDesc("Cidub21ub20vcmVzdGF1cmFudHMvdjEvcmVzdGF1cmFudHMucHJvdG8SFW5vbW5vbS5yZXN0YXVyYW50cy52MSJkCgpSZXN0YXVyYW50EhUKDXJlc3RhdXJhbnRfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdpc19vcGVuGAMgASgIEhEKCW1hcmtldF9pZBgFIAEoCUoECAQQBVIHYWRkcmVzcyIpCgVNb25leRIOCgZhbW91bnQYASABKAkSEAoIY3VycmVuY3kYAiABKAkigwEKCE1lbnVJdGVtEhQKDG1lbnVfaXRlbV9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEisKBXByaWNlGAQgASgLMhwubm9tbm9tLnJlc3RhdXJhbnRzLnYxLk1vbmV5EhEKCWF2YWlsYWJsZRgFIAEoCEKjAQoZY29tLm5vbW5vbS5yZXN0YXVyYW50cy52MUIQUmVzdGF1cmFudHNQcm90b1ABogIDTlJYqgIVTm9tbm9tLlJlc3RhdXJhbnRzLlYxygIVTm9tbm9tXFJlc3RhdXJhbnRzXFYx4gIhTm9tbm9tXFJlc3RhdXJhbnRzXFYxXEdQQk1ldGFkYXRh6gIXTm9tbm9tOjpSZXN0YXVyYW50czo6VjFiBnByb3RvMw");
+  fileDesc("Cidub21ub20vcmVzdGF1cmFudHMvdjEvcmVzdGF1cmFudHMucHJvdG8SFW5vbW5vbS5yZXN0YXVyYW50cy52MSKiAQoKUmVzdGF1cmFudBIVCg1yZXN0YXVyYW50X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHaXNfb3BlbhgDIAEoCBIRCgltYXJrZXRfaWQYBSABKAkSPAoJd2FpdF90aW1lGAYgASgLMikubm9tbm9tLnJlc3RhdXJhbnRzLnYxLlJlc3RhdXJhbnRXYWl0VGltZUoECAQQBVIHYWRkcmVzcyJFChJSZXN0YXVyYW50V2FpdFRpbWUSEAoIZWxldmF0ZWQYASABKAgSHQoVZXhwZWN0ZWRfd2FpdF9taW51dGVzGAIgASgFIikKBU1vbmV5Eg4KBmFtb3VudBgBIAEoCRIQCghjdXJyZW5jeRgCIAEoCSKDAQoITWVudUl0ZW0SFAoMbWVudV9pdGVtX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSKwoFcHJpY2UYBCABKAsyHC5ub21ub20ucmVzdGF1cmFudHMudjEuTW9uZXkSEQoJYXZhaWxhYmxlGAUgASgIQqMBChljb20ubm9tbm9tLnJlc3RhdXJhbnRzLnYxQhBSZXN0YXVyYW50c1Byb3RvUAGiAgNOUliqAhVOb21ub20uUmVzdGF1cmFudHMuVjHKAhVOb21ub21cUmVzdGF1cmFudHNcVjHiAiFOb21ub21cUmVzdGF1cmFudHNcVjFcR1BCTWV0YWRhdGHqAhdOb21ub206OlJlc3RhdXJhbnRzOjpWMWIGcHJvdG8z");
 
 /**
  * Describes the message nomnom.restaurants.v1.Restaurant.
@@ -18,16 +18,23 @@ export const RestaurantSchema = /*@__PURE__*/
   messageDesc(file_nomnom_restaurants_v1_restaurants, 0);
 
 /**
+ * Describes the message nomnom.restaurants.v1.RestaurantWaitTime.
+ * Use `create(RestaurantWaitTimeSchema)` to create a new message.
+ */
+export const RestaurantWaitTimeSchema = /*@__PURE__*/
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 1);
+
+/**
  * Describes the message nomnom.restaurants.v1.Money.
  * Use `create(MoneySchema)` to create a new message.
  */
 export const MoneySchema = /*@__PURE__*/
-  messageDesc(file_nomnom_restaurants_v1_restaurants, 1);
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 2);
 
 /**
  * Describes the message nomnom.restaurants.v1.MenuItem.
  * Use `create(MenuItemSchema)` to create a new message.
  */
 export const MenuItemSchema = /*@__PURE__*/
-  messageDesc(file_nomnom_restaurants_v1_restaurants, 2);
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 3);
 

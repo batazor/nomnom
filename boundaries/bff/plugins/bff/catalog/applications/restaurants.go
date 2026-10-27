@@ -26,9 +26,18 @@ type Money struct {
 
 // Restaurant is the public restaurant data of restaurants.
 type Restaurant struct {
-	ID     string
-	Name   string
-	IsOpen bool
+	ID       string
+	Name     string
+	IsOpen   bool
+	WaitTime WaitTime
+}
+
+// WaitTime is the wait for an order placed now (restaurants FR-645): an
+// estimate, not a promise.
+type WaitTime struct {
+	// Elevated is a kitchen slower than usual for this restaurant.
+	Elevated            bool
+	ExpectedWaitMinutes int
 }
 
 type MenuItem struct {

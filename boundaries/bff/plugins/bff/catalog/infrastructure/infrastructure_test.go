@@ -30,14 +30,19 @@ type restaurantsServer struct {
 	listed        *restaurantsv1.ListRestaurantsRequest
 	restaurantErr error
 	menuErr       error
-	seenMD        metadata.MD
+	// withoutWaitTime answers GetRestaurant like a restaurants without FR-204.
+	withoutWaitTime bool
+	seenMD          metadata.MD
 }
 
 func (s *restaurantsServer) ListRestaurants(ctx context.Context, request *restaurantsv1.ListRestaurantsRequest) (*restaurantsv1.ListRestaurantsResponse, error) {
 	s.seenMD, _ = metadata.FromIncomingContext(ctx)
 	s.listed = request
 	return &restaurantsv1.ListRestaurantsResponse{
-		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-1", Name: "Pho Bar", IsOpen: true}},
+		Restaurants: []*restaurantsv1.Restaurant{{
+			RestaurantId: "restaurant-1", Name: "Pho Bar", IsOpen: true,
+			WaitTime: &restaurantsv1.RestaurantWaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+		}},
 		NextPageToken: "restaurant-1",
 	}, nil
 }
@@ -47,7 +52,13 @@ func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaura
 	if s.restaurantErr != nil {
 		return nil, s.restaurantErr
 	}
-	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: request.GetRestaurantId(), Name: "Pho Bar", IsOpen: false}}, nil
+	if s.withoutWaitTime {
+		return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: request.GetRestaurantId(), Name: "Pho Bar"}}, nil
+	}
+	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
+		RestaurantId: request.GetRestaurantId(), Name: "Pho Bar", IsOpen: false,
+		WaitTime: &restaurantsv1.RestaurantWaitTime{ExpectedWaitMinutes: 20},
+	}}, nil
 }
 
 func (s *restaurantsServer) GetMenu(context.Context, *restaurantsv1.GetMenuRequest) (*restaurantsv1.GetMenuResponse, error) {
@@ -97,8 +108,11 @@ func TestListAsksForOpenRestaurantsWithoutUser(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, applications.Page{
-		Restaurants: []applications.Restaurant{{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true}},
-		NextCursor:  "restaurant-1",
+		Restaurants: []applications.Restaurant{{
+			ID: "restaurant-1", Name: "Pho Bar", IsOpen: true,
+			WaitTime: applications.WaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+		}},
+		NextCursor: "restaurant-1",
 	}, page)
 	assert.Equal(t, int32(1), server.listed.GetPageSize())
 	assert.Equal(t, "restaurant-0", server.listed.GetPageToken())
@@ -125,7 +139,10 @@ func TestRestaurantAndMenuMapPublicData(t *testing.T) {
 
 	restaurant, err := restaurants.Restaurant(customerContext(), "restaurant-1")
 	require.NoError(t, err)
-	assert.Equal(t, applications.Restaurant{ID: "restaurant-1", Name: "Pho Bar"}, restaurant)
+	assert.Equal(t, applications.Restaurant{
+		ID: "restaurant-1", Name: "Pho Bar",
+		WaitTime: applications.WaitTime{ExpectedWaitMinutes: 20},
+	}, restaurant)
 	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata))
 
 	menu, err := restaurants.Menu(customerContext(), "restaurant-1")
@@ -152,4 +169,11 @@ func TestNotFoundIsNamed(t *testing.T) {
 	_, err = restaurants.Restaurant(context.Background(), "restaurant-1")
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, applications.ErrRestaurantNotFound)
+}
+
+// restaurants FR-204: a restaurant without wait_time breaks the contract.
+func TestRestaurantWithoutWaitTimeIsAnError(t *testing.T) {
+	_, err := connect(t, &restaurantsServer{withoutWaitTime: true}).Restaurant(customerContext(), "restaurant-1")
+
+	require.ErrorContains(t, err, "no wait_time")
 }

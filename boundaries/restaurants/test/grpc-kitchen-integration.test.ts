@@ -28,6 +28,7 @@ import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.t
 import {
   createRestaurantCollection,
   DatabaseRestaurantRepository,
+  DatabaseRestaurantWaitTimes,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { AcceptOrderHandler } from "../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
@@ -40,10 +41,8 @@ import { RejectOrderHandler } from "../slices/restaurantorder/applications/rejec
 import { ReportPreparationDelayHandler } from "../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import { StartPreparationHandler } from "../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
-import {
-  FixedPreparationTimeEstimator,
-  UnconstrainedAcceptanceConditions,
-} from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
+import { UnconstrainedAcceptanceConditions } from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
+import { WaitTimeReadyTimeEstimator } from "../slices/restaurantorder/infrastructure/acceptance/wait-time.ts";
 import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import { FifoKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
 import {
@@ -61,6 +60,7 @@ import {
   type RestaurantsServiceUnderTest,
 } from "./support/grpc.ts";
 import { TestKitchenAccessControl } from "./support/kitchen.ts";
+import { testWaitTimePolicy } from "./support/restaurants.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, DatabaseOutbox with the Integration Event mapper) against a replica set:
@@ -200,7 +200,12 @@ describe("kitchen command RPCs over MongoDB", () => {
         ...commands,
         facts: new RepositoryAcceptanceFactsReader({ restaurants, menus }),
         conditions: new UnconstrainedAcceptanceConditions(),
-        readyTimeEstimator: new FixedPreparationTimeEstimator(20 * 60_000),
+        readyTimeEstimator: new WaitTimeReadyTimeEstimator({
+          store: new DatabaseRestaurantWaitTimes(
+            createRestaurantCollection(database.db, unitOfWork),
+          ),
+          policy: testWaitTimePolicy(),
+        }),
       }),
       rejectRestaurantOrder: new RejectOrderHandler(commands),
       startPreparation: new StartPreparationHandler({

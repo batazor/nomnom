@@ -13,7 +13,9 @@ import type { Db, MongoClient } from "mongodb";
 import type { Clock } from "../pkg/application/clock.ts";
 import type {
   ConsumerConfig,
+  KitchenConfig,
   ValkeyEnabledConfig,
+  WaitTimeConfig,
 } from "../pkg/config/config.ts";
 import {
   createProcessContainer,
@@ -23,13 +25,17 @@ import {
   type ConsumerClient,
   KafkaConsumerWorker,
 } from "../pkg/infrastructure/kafka/consumer.ts";
-import type { MessagePublisher } from "../pkg/infrastructure/messaging/envelope.ts";
+import type {
+  InboundMessage,
+  MessagePublisher,
+} from "../pkg/infrastructure/messaging/envelope.ts";
 import { OtelConsumerMetrics } from "../pkg/infrastructure/messaging/metrics.ts";
 import {
   type ConsumerMetrics,
   type EventHandler,
   type Inbox,
   MessageProcessor,
+  type ProcessOutcome,
 } from "../pkg/infrastructure/messaging/processor.ts";
 import type { DatabaseConnection } from "../pkg/infrastructure/repository/client.ts";
 import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
@@ -50,14 +56,24 @@ import {
   createMenuCollection,
   DatabaseMenuReader,
 } from "../slices/menu/infrastructure/repository/menus.ts";
+import { RecordWaitTimeHandler } from "../slices/restaurant/applications/record-wait-time/record-wait-time.ts";
+import { WaitTimePolicy } from "../slices/restaurant/domains/restaurant/wait-time.ts";
 import {
   CachedRestaurantCatalog,
   restaurantCacheRefreshes,
 } from "../slices/restaurant/infrastructure/cache/restaurants.ts";
-import { RESTAURANT_EVENTS_TOPIC } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
+import {
+  RESTAURANT_EVENTS_TOPIC,
+  restaurantWaitTimeEventMapper,
+} from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
+import {
+  createWaitTimeHandlers,
+  WAIT_TIME_CONSUMER,
+} from "../slices/restaurant/infrastructure/integration/wait-time-facts.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,
+  DatabaseRestaurantWaitTimes,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import type { PickupWitnessAccess } from "../slices/restaurantorder/applications/access-control.ts";
 import { RecordPickupHandler } from "../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
@@ -72,6 +88,7 @@ import {
   type KitchenChangeNotifier,
   kitchenChangeNotifier,
 } from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
+import { RESTAURANT_ORDER_EVENTS_TOPIC } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import {
   ObservedDatabaseUnitOfWork,
   ObservedRestaurantOrderRepository,
@@ -86,6 +103,9 @@ import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{
   consumer: ConsumerConfig;
+  /** Preparation time: the wait baseline until the sample is complete. */
+  kitchen: KitchenConfig;
+  waitTime: WaitTimeConfig;
   database: DatabaseConnection;
   /** Not yet connected; the worker connects and disconnects it. */
   kafkaConsumer: ConsumerClient;
@@ -127,9 +147,13 @@ export interface ConsumerCradle {
   readonly recordPickup: RecordPickupHandler;
   readonly deliveryPickedUp: EventHandler;
   readonly deliveryEventsProcessor: MessageProcessor;
+  readonly waitTimePolicy: WaitTimePolicy;
+  /** Records the context's own Restaurant Order facts (FR-644). */
+  readonly recordWaitTime: RecordWaitTimeHandler;
+  readonly waitTimeProcessor: MessageProcessor;
   /**
-   * Consumer group of `delivery.v1.delivery-events` and the cache refresh
-   * group of
+   * Consumer group of `delivery.v1.delivery-events` and
+   * `restaurants.v1.restaurant-order-events` and the cache refresh group of
    * `restaurants.v1.restaurant-events` and `restaurants.v1.menu-events`, run
    * by the Lifecycle.
    */
@@ -230,6 +254,59 @@ export const createConsumerContainer = (
         });
       },
     ).singleton(),
+    waitTimePolicy: asFunction(
+      () =>
+        new WaitTimePolicy({
+          ...resources.waitTime,
+          preparationTimeMs: resources.kitchen.preparationTimeMs,
+        }),
+    ).singleton(),
+    // RestaurantWaitLevelChanged goes to the Outbox of the statistics change.
+    recordWaitTime: asFunction(
+      ({ db, unitOfWork, waitTimePolicy, clock }: ConsumerCradle) =>
+        new RecordWaitTimeHandler({
+          unitOfWork,
+          store: new DatabaseRestaurantWaitTimes(
+            createRestaurantCollection(db, unitOfWork),
+          ),
+          policy: waitTimePolicy,
+          outbox: new DatabaseOutbox(db, unitOfWork, {
+            mapper: restaurantWaitTimeEventMapper,
+            metadata: currentTraceMetadata,
+          }),
+          clock,
+        }),
+    ).singleton(),
+    waitTimeProcessor: asFunction(
+      ({
+        consumerConfig,
+        recordWaitTime,
+        inbox,
+        deadLetters,
+        consumerMetrics,
+        logger,
+      }: ConsumerCradle) => {
+        const log = logger.child({
+          operation: "kafka.consume",
+          "messaging.consumer.group.name": consumerConfig.groupId,
+        });
+        return new MessageProcessor({
+          consumer: WAIT_TIME_CONSUMER,
+          group: consumerConfig.groupId,
+          handlers: createWaitTimeHandlers({ recordWaitTime }),
+          inbox,
+          deadLetters,
+          retry: {
+            maxRetries: consumerConfig.maxRetries,
+            initialIntervalMs: consumerConfig.retryInitialIntervalMs,
+            maxIntervalMs: consumerConfig.retryMaxIntervalMs,
+          },
+          metrics: consumerMetrics,
+          log: log.info,
+          warn: log.warn,
+        });
+      },
+    ).singleton(),
     cacheRefresh: asFunction(
       ({
         db,
@@ -238,6 +315,8 @@ export const createConsumerContainer = (
         valkeyConfig,
         cacheMetrics,
         consumerConfig,
+        waitTimePolicy,
+        clock,
         logger,
       }: ConsumerCradle) => {
         const cache = {
@@ -245,12 +324,17 @@ export const createConsumerContainer = (
           ttlMs: valkeyConfig.ttlMs,
           metrics: cacheMetrics,
         };
+        const waitTime = {
+          policy: waitTimePolicy,
+          now: () => clock.now(),
+        };
         return new CacheRefreshHandler({
           refreshes: {
             ...restaurantCacheRefreshes(
               new CachedRestaurantCatalog(
                 new DatabaseRestaurantCatalog(
                   createRestaurantCollection(db, unitOfWork),
+                  waitTime,
                 ),
                 cache,
               ),
@@ -277,6 +361,7 @@ export const createConsumerContainer = (
       ({
         kafkaConsumer,
         deliveryEventsProcessor,
+        waitTimeProcessor,
         consumerConfig,
         cacheRefreshConsumer,
         cacheRefresh,
@@ -285,8 +370,11 @@ export const createConsumerContainer = (
         new ParallelWorkers([
           new KafkaConsumerWorker({
             client: kafkaConsumer,
-            topics: [DELIVERY_EVENTS_TOPIC],
-            handler: deliveryEventsProcessor,
+            topics: [DELIVERY_EVENTS_TOPIC, RESTAURANT_ORDER_EVENTS_TOPIC],
+            handler: new TopicRouter({
+              [DELIVERY_EVENTS_TOPIC]: deliveryEventsProcessor,
+              [RESTAURANT_ORDER_EVENTS_TOPIC]: waitTimeProcessor,
+            }),
             groupId: consumerConfig.groupId,
           }),
           new KafkaConsumerWorker({
@@ -302,3 +390,23 @@ export const createConsumerContainer = (
   instrumentUseCases(container, CONSUMER_USE_CASES);
   return container;
 };
+
+/** One consumer group over several streams: each has its own processor. */
+class TopicRouter {
+  readonly #processors: Readonly<Record<string, MessageProcessor>>;
+
+  constructor(processors: Readonly<Record<string, MessageProcessor>>) {
+    this.#processors = processors;
+  }
+
+  process(
+    message: InboundMessage,
+    signal: AbortSignal,
+  ): Promise<ProcessOutcome> {
+    const processor = this.#processors[message.topic];
+    if (processor === undefined) {
+      throw new Error(`no processor for topic ${message.topic}`);
+    }
+    return processor.process(message, signal);
+  }
+}

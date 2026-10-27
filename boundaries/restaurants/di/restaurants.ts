@@ -35,6 +35,7 @@ import type {
   SimulatorConfig,
   SpiceDbEnabledConfig,
   ValkeyEnabledConfig,
+  WaitTimeConfig,
 } from "../pkg/config/config.ts";
 import {
   createProcessContainer,
@@ -105,6 +106,7 @@ export type RestaurantsResources = Readonly<{
   spicedb: SpiceDbEnabledConfig;
   reconciler: ReconcilerConfig;
   kitchen: KitchenConfig;
+  waitTime: WaitTimeConfig;
   simulator: SimulatorConfig;
   database: DatabaseConnection;
   valkeyConfig: ValkeyEnabledConfig;
@@ -120,6 +122,7 @@ export interface InfrastructureCradle {
   readonly spicedbConfig: SpiceDbEnabledConfig;
   readonly reconcilerConfig: ReconcilerConfig;
   readonly kitchenConfig: KitchenConfig;
+  readonly waitTimeConfig: WaitTimeConfig;
   readonly simulatorConfig: SimulatorConfig;
   readonly databaseClient: MongoClient;
   readonly db: Db;
@@ -196,6 +199,7 @@ const infrastructureRegistrations = (
   spicedbConfig: asValue(resources.spicedb),
   reconcilerConfig: asValue(resources.reconciler),
   kitchenConfig: asValue(resources.kitchen),
+  waitTimeConfig: asValue(resources.waitTime),
   simulatorConfig: asValue(resources.simulator),
   databaseClient: asValue(resources.database.client),
   db: asValue(resources.database.db),

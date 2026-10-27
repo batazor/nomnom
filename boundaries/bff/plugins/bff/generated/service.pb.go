@@ -4578,6 +4578,8 @@ type Restaurant struct {
 	AcceptingOrders bool `protobuf:"varint,4,opt,name=accepting_orders,json=acceptingOrders,proto3" json:"accepting_orders,omitempty"`
 	// Current menu, null if the restaurant has not published one
 	Menu *Menu `protobuf:"bytes,5,opt,name=menu,proto3" json:"menu,omitempty"`
+	// Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
+	WaitTime *RestaurantWaitTime `protobuf:"bytes,6,opt,name=wait_time,json=waitTime,proto3" json:"wait_time,omitempty"`
 }
 
 func (x *Restaurant) Reset() {
@@ -4636,6 +4638,13 @@ func (x *Restaurant) GetAcceptingOrders() bool {
 func (x *Restaurant) GetMenu() *Menu {
 	if x != nil {
 		return x.Menu
+	}
+	return nil
+}
+
+func (x *Restaurant) GetWaitTime() *RestaurantWaitTime {
+	if x != nil {
+		return x.WaitTime
 	}
 	return nil
 }
@@ -5460,6 +5469,64 @@ func (x *PageInfo) GetEndCursor() *wrapperspb.StringValue {
 	return nil
 }
 
+// Wait for a new order of a restaurant, estimated from its recent orders
+type RestaurantWaitTime struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The kitchen is slower than usual for this restaurant
+	Elevated bool `protobuf:"varint,1,opt,name=elevated,proto3" json:"elevated,omitempty"`
+	// Expected wait in minutes for an order placed now, an estimate rather than a promise
+	ExpectedWaitMinutes int32 `protobuf:"varint,2,opt,name=expected_wait_minutes,json=expectedWaitMinutes,proto3" json:"expected_wait_minutes,omitempty"`
+}
+
+func (x *RestaurantWaitTime) Reset() {
+	*x = RestaurantWaitTime{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_generated_service_proto_msgTypes[83]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RestaurantWaitTime) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestaurantWaitTime) ProtoMessage() {}
+
+func (x *RestaurantWaitTime) ProtoReflect() protoreflect.Message {
+	mi := &file_generated_service_proto_msgTypes[83]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestaurantWaitTime.ProtoReflect.Descriptor instead.
+func (*RestaurantWaitTime) Descriptor() ([]byte, []int) {
+	return file_generated_service_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *RestaurantWaitTime) GetElevated() bool {
+	if x != nil {
+		return x.Elevated
+	}
+	return false
+}
+
+func (x *RestaurantWaitTime) GetExpectedWaitMinutes() int32 {
+	if x != nil {
+		return x.ExpectedWaitMinutes
+	}
+	return 0
+}
+
 // Menu of one restaurant
 type Menu struct {
 	state         protoimpl.MessageState
@@ -5473,7 +5540,7 @@ type Menu struct {
 func (x *Menu) Reset() {
 	*x = Menu{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[83]
+		mi := &file_generated_service_proto_msgTypes[84]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5486,7 +5553,7 @@ func (x *Menu) String() string {
 func (*Menu) ProtoMessage() {}
 
 func (x *Menu) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[83]
+	mi := &file_generated_service_proto_msgTypes[84]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5499,7 +5566,7 @@ func (x *Menu) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Menu.ProtoReflect.Descriptor instead.
 func (*Menu) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{83}
+	return file_generated_service_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *Menu) GetItems() []*MenuItem {
@@ -5530,7 +5597,7 @@ type MenuItem struct {
 func (x *MenuItem) Reset() {
 	*x = MenuItem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[84]
+		mi := &file_generated_service_proto_msgTypes[85]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5543,7 +5610,7 @@ func (x *MenuItem) String() string {
 func (*MenuItem) ProtoMessage() {}
 
 func (x *MenuItem) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[84]
+	mi := &file_generated_service_proto_msgTypes[85]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5556,7 +5623,7 @@ func (x *MenuItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItem.ProtoReflect.Descriptor instead.
 func (*MenuItem) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{84}
+	return file_generated_service_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *MenuItem) GetId() string {
@@ -5608,7 +5675,7 @@ type RestaurantEdge struct {
 func (x *RestaurantEdge) Reset() {
 	*x = RestaurantEdge{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[85]
+		mi := &file_generated_service_proto_msgTypes[86]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5621,7 +5688,7 @@ func (x *RestaurantEdge) String() string {
 func (*RestaurantEdge) ProtoMessage() {}
 
 func (x *RestaurantEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[85]
+	mi := &file_generated_service_proto_msgTypes[86]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5634,7 +5701,7 @@ func (x *RestaurantEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestaurantEdge.ProtoReflect.Descriptor instead.
 func (*RestaurantEdge) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{85}
+	return file_generated_service_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *RestaurantEdge) GetCursor() string {
@@ -5665,7 +5732,7 @@ type OrderMilestone struct {
 func (x *OrderMilestone) Reset() {
 	*x = OrderMilestone{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[86]
+		mi := &file_generated_service_proto_msgTypes[87]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5678,7 +5745,7 @@ func (x *OrderMilestone) String() string {
 func (*OrderMilestone) ProtoMessage() {}
 
 func (x *OrderMilestone) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[86]
+	mi := &file_generated_service_proto_msgTypes[87]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5691,7 +5758,7 @@ func (x *OrderMilestone) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderMilestone.ProtoReflect.Descriptor instead.
 func (*OrderMilestone) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{86}
+	return file_generated_service_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *OrderMilestone) GetKind() OrderMilestoneKind {
@@ -5723,7 +5790,7 @@ type OrderedMenuItem struct {
 func (x *OrderedMenuItem) Reset() {
 	*x = OrderedMenuItem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[87]
+		mi := &file_generated_service_proto_msgTypes[88]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5736,7 +5803,7 @@ func (x *OrderedMenuItem) String() string {
 func (*OrderedMenuItem) ProtoMessage() {}
 
 func (x *OrderedMenuItem) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[87]
+	mi := &file_generated_service_proto_msgTypes[88]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5749,7 +5816,7 @@ func (x *OrderedMenuItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderedMenuItem.ProtoReflect.Descriptor instead.
 func (*OrderedMenuItem) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{87}
+	return file_generated_service_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *OrderedMenuItem) GetId() string {
@@ -5784,7 +5851,7 @@ type OrderItem struct {
 func (x *OrderItem) Reset() {
 	*x = OrderItem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[88]
+		mi := &file_generated_service_proto_msgTypes[89]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5797,7 +5864,7 @@ func (x *OrderItem) String() string {
 func (*OrderItem) ProtoMessage() {}
 
 func (x *OrderItem) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[88]
+	mi := &file_generated_service_proto_msgTypes[89]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5810,7 +5877,7 @@ func (x *OrderItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderItem.ProtoReflect.Descriptor instead.
 func (*OrderItem) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{88}
+	return file_generated_service_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *OrderItem) GetMenuItem() *OrderedMenuItem {
@@ -5854,7 +5921,7 @@ type OrderCancellationAvailability struct {
 func (x *OrderCancellationAvailability) Reset() {
 	*x = OrderCancellationAvailability{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[89]
+		mi := &file_generated_service_proto_msgTypes[90]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5867,7 +5934,7 @@ func (x *OrderCancellationAvailability) String() string {
 func (*OrderCancellationAvailability) ProtoMessage() {}
 
 func (x *OrderCancellationAvailability) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[89]
+	mi := &file_generated_service_proto_msgTypes[90]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5880,7 +5947,7 @@ func (x *OrderCancellationAvailability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderCancellationAvailability.ProtoReflect.Descriptor instead.
 func (*OrderCancellationAvailability) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{89}
+	return file_generated_service_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *OrderCancellationAvailability) GetAvailableUntil() string {
@@ -5903,7 +5970,7 @@ type OrderCourier struct {
 func (x *OrderCourier) Reset() {
 	*x = OrderCourier{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[90]
+		mi := &file_generated_service_proto_msgTypes[91]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5916,7 +5983,7 @@ func (x *OrderCourier) String() string {
 func (*OrderCourier) ProtoMessage() {}
 
 func (x *OrderCourier) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[90]
+	mi := &file_generated_service_proto_msgTypes[91]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5929,7 +5996,7 @@ func (x *OrderCourier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderCourier.ProtoReflect.Descriptor instead.
 func (*OrderCourier) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{90}
+	return file_generated_service_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *OrderCourier) GetName() string {
@@ -5953,7 +6020,7 @@ type OrderEdge struct {
 func (x *OrderEdge) Reset() {
 	*x = OrderEdge{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[91]
+		mi := &file_generated_service_proto_msgTypes[92]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5966,7 +6033,7 @@ func (x *OrderEdge) String() string {
 func (*OrderEdge) ProtoMessage() {}
 
 func (x *OrderEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[91]
+	mi := &file_generated_service_proto_msgTypes[92]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5979,7 +6046,7 @@ func (x *OrderEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderEdge.ProtoReflect.Descriptor instead.
 func (*OrderEdge) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{91}
+	return file_generated_service_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *OrderEdge) GetCursor() string {
@@ -6011,7 +6078,7 @@ type KitchenOrderItem struct {
 func (x *KitchenOrderItem) Reset() {
 	*x = KitchenOrderItem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[92]
+		mi := &file_generated_service_proto_msgTypes[93]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6024,7 +6091,7 @@ func (x *KitchenOrderItem) String() string {
 func (*KitchenOrderItem) ProtoMessage() {}
 
 func (x *KitchenOrderItem) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[92]
+	mi := &file_generated_service_proto_msgTypes[93]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6037,7 +6104,7 @@ func (x *KitchenOrderItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KitchenOrderItem.ProtoReflect.Descriptor instead.
 func (*KitchenOrderItem) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{92}
+	return file_generated_service_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *KitchenOrderItem) GetName() string {
@@ -6083,7 +6150,7 @@ type KitchenOrder struct {
 func (x *KitchenOrder) Reset() {
 	*x = KitchenOrder{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[93]
+		mi := &file_generated_service_proto_msgTypes[94]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6096,7 +6163,7 @@ func (x *KitchenOrder) String() string {
 func (*KitchenOrder) ProtoMessage() {}
 
 func (x *KitchenOrder) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[93]
+	mi := &file_generated_service_proto_msgTypes[94]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6109,7 +6176,7 @@ func (x *KitchenOrder) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KitchenOrder.ProtoReflect.Descriptor instead.
 func (*KitchenOrder) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{93}
+	return file_generated_service_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *KitchenOrder) GetId() string {
@@ -6187,7 +6254,7 @@ type Cook struct {
 func (x *Cook) Reset() {
 	*x = Cook{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[94]
+		mi := &file_generated_service_proto_msgTypes[95]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6200,7 +6267,7 @@ func (x *Cook) String() string {
 func (*Cook) ProtoMessage() {}
 
 func (x *Cook) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[94]
+	mi := &file_generated_service_proto_msgTypes[95]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6213,7 +6280,7 @@ func (x *Cook) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cook.ProtoReflect.Descriptor instead.
 func (*Cook) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{94}
+	return file_generated_service_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *Cook) GetId() string {
@@ -6265,7 +6332,7 @@ type CookPool struct {
 func (x *CookPool) Reset() {
 	*x = CookPool{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[95]
+		mi := &file_generated_service_proto_msgTypes[96]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6278,7 +6345,7 @@ func (x *CookPool) String() string {
 func (*CookPool) ProtoMessage() {}
 
 func (x *CookPool) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[95]
+	mi := &file_generated_service_proto_msgTypes[96]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6291,7 +6358,7 @@ func (x *CookPool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CookPool.ProtoReflect.Descriptor instead.
 func (*CookPool) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{95}
+	return file_generated_service_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *CookPool) GetSize() int32 {
@@ -6348,7 +6415,7 @@ type DeliveryOffer struct {
 func (x *DeliveryOffer) Reset() {
 	*x = DeliveryOffer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[96]
+		mi := &file_generated_service_proto_msgTypes[97]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6361,7 +6428,7 @@ func (x *DeliveryOffer) String() string {
 func (*DeliveryOffer) ProtoMessage() {}
 
 func (x *DeliveryOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[96]
+	mi := &file_generated_service_proto_msgTypes[97]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6374,7 +6441,7 @@ func (x *DeliveryOffer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeliveryOffer.ProtoReflect.Descriptor instead.
 func (*DeliveryOffer) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{96}
+	return file_generated_service_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *DeliveryOffer) GetId() string {
@@ -6422,7 +6489,7 @@ type CourierDelivery struct {
 func (x *CourierDelivery) Reset() {
 	*x = CourierDelivery{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[97]
+		mi := &file_generated_service_proto_msgTypes[98]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6435,7 +6502,7 @@ func (x *CourierDelivery) String() string {
 func (*CourierDelivery) ProtoMessage() {}
 
 func (x *CourierDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[97]
+	mi := &file_generated_service_proto_msgTypes[98]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6448,7 +6515,7 @@ func (x *CourierDelivery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CourierDelivery.ProtoReflect.Descriptor instead.
 func (*CourierDelivery) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{97}
+	return file_generated_service_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *CourierDelivery) GetId() string {
@@ -6493,7 +6560,7 @@ type PoolCourier struct {
 func (x *PoolCourier) Reset() {
 	*x = PoolCourier{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[98]
+		mi := &file_generated_service_proto_msgTypes[99]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6506,7 +6573,7 @@ func (x *PoolCourier) String() string {
 func (*PoolCourier) ProtoMessage() {}
 
 func (x *PoolCourier) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[98]
+	mi := &file_generated_service_proto_msgTypes[99]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6519,7 +6586,7 @@ func (x *PoolCourier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PoolCourier.ProtoReflect.Descriptor instead.
 func (*PoolCourier) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{98}
+	return file_generated_service_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *PoolCourier) GetId() string {
@@ -6571,7 +6638,7 @@ type OrderLineInput struct {
 func (x *OrderLineInput) Reset() {
 	*x = OrderLineInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[99]
+		mi := &file_generated_service_proto_msgTypes[100]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6584,7 +6651,7 @@ func (x *OrderLineInput) String() string {
 func (*OrderLineInput) ProtoMessage() {}
 
 func (x *OrderLineInput) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[99]
+	mi := &file_generated_service_proto_msgTypes[100]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6597,7 +6664,7 @@ func (x *OrderLineInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderLineInput.ProtoReflect.Descriptor instead.
 func (*OrderLineInput) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{99}
+	return file_generated_service_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *OrderLineInput) GetMenuItemId() string {
@@ -6628,7 +6695,7 @@ type PlaceOrderProblem struct {
 func (x *PlaceOrderProblem) Reset() {
 	*x = PlaceOrderProblem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[100]
+		mi := &file_generated_service_proto_msgTypes[101]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6641,7 +6708,7 @@ func (x *PlaceOrderProblem) String() string {
 func (*PlaceOrderProblem) ProtoMessage() {}
 
 func (x *PlaceOrderProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[100]
+	mi := &file_generated_service_proto_msgTypes[101]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6654,7 +6721,7 @@ func (x *PlaceOrderProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlaceOrderProblem.ProtoReflect.Descriptor instead.
 func (*PlaceOrderProblem) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{100}
+	return file_generated_service_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *PlaceOrderProblem) GetCode() PlaceOrderProblemCode {
@@ -6683,7 +6750,7 @@ type OrderCancellationProblem struct {
 func (x *OrderCancellationProblem) Reset() {
 	*x = OrderCancellationProblem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_generated_service_proto_msgTypes[101]
+		mi := &file_generated_service_proto_msgTypes[102]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6696,7 +6763,7 @@ func (x *OrderCancellationProblem) String() string {
 func (*OrderCancellationProblem) ProtoMessage() {}
 
 func (x *OrderCancellationProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_generated_service_proto_msgTypes[101]
+	mi := &file_generated_service_proto_msgTypes[102]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6709,7 +6776,7 @@ func (x *OrderCancellationProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderCancellationProblem.ProtoReflect.Descriptor instead.
 func (*OrderCancellationProblem) Descriptor() ([]byte, []int) {
-	return file_generated_service_proto_rawDescGZIP(), []int{101}
+	return file_generated_service_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *OrderCancellationProblem) GetCode() OrderCancellationProblemCode {
@@ -7140,7 +7207,7 @@ var file_generated_service_proto_rawDesc = []byte{
 	0x67, 0x65, 0x73, 0x12, 0x2e, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x6e, 0x66, 0x6f,
 	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
 	0x2e, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x08, 0x70, 0x61, 0x67, 0x65, 0x49,
-	0x6e, 0x66, 0x6f, 0x22, 0x84, 0x01, 0x0a, 0x0a, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61,
+	0x6e, 0x66, 0x6f, 0x22, 0xbe, 0x01, 0x0a, 0x0a, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61,
 	0x6e, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02,
 	0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
 	0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x29, 0x0a, 0x10, 0x61, 0x63, 0x63, 0x65, 0x70, 0x74,
@@ -7148,111 +7215,121 @@ var file_generated_service_proto_rawDesc = []byte{
 	0x52, 0x0f, 0x61, 0x63, 0x63, 0x65, 0x70, 0x74, 0x69, 0x6e, 0x67, 0x4f, 0x72, 0x64, 0x65, 0x72,
 	0x73, 0x12, 0x21, 0x0a, 0x04, 0x6d, 0x65, 0x6e, 0x75, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32,
 	0x0d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4d, 0x65, 0x6e, 0x75, 0x52, 0x04,
-	0x6d, 0x65, 0x6e, 0x75, 0x4a, 0x04, 0x08, 0x03, 0x10, 0x04, 0x22, 0x6b, 0x0a, 0x0f, 0x4f, 0x72,
-	0x64, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x28, 0x0a,
-	0x05, 0x65, 0x64, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x45, 0x64, 0x67, 0x65,
-	0x52, 0x05, 0x65, 0x64, 0x67, 0x65, 0x73, 0x12, 0x2e, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65, 0x5f,
-	0x69, 0x6e, 0x66, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x69, 0x63, 0x65, 0x2e, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x08, 0x70,
-	0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x22, 0x25, 0x0a, 0x09, 0x53, 0x69, 0x6d, 0x75, 0x6c,
-	0x61, 0x74, 0x6f, 0x72, 0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x22, 0x94,
-	0x01, 0x0a, 0x0f, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x6e, 0x70,
-	0x75, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74,
-	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x74, 0x61,
-	0x75, 0x72, 0x61, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x2d, 0x0a, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73,
-	0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
-	0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x4c, 0x69, 0x6e, 0x65, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x52,
-	0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x12, 0x27, 0x0a, 0x0f, 0x69, 0x64, 0x65, 0x6d, 0x70, 0x6f,
-	0x74, 0x65, 0x6e, 0x63, 0x79, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0e, 0x69, 0x64, 0x65, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x6e, 0x63, 0x79, 0x4b, 0x65, 0x79, 0x4a,
-	0x04, 0x08, 0x03, 0x10, 0x04, 0x22, 0x71, 0x0a, 0x11, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72,
-	0x64, 0x65, 0x72, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x24, 0x0a, 0x05, 0x6f, 0x72,
-	0x64, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76,
-	0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72,
-	0x12, 0x36, 0x0a, 0x08, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x03,
-	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x50, 0x6c, 0x61,
-	0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x52, 0x08,
-	0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x73, 0x22, 0x8f, 0x01, 0x0a, 0x1d, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x6f, 0x72,
-	0x64, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6f, 0x72,
-	0x64, 0x65, 0x72, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x49, 0x64, 0x12, 0x34, 0x0a, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61, 0x6c,
-	0x75, 0x65, 0x52, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x22, 0x9b, 0x01, 0x0a, 0x1f, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65,
-	0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x3b,
-	0x0a, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32,
-	0x21, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43,
-	0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4f, 0x75, 0x74, 0x63, 0x6f,
-	0x6d, 0x65, 0x52, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x3b, 0x0a, 0x07, 0x70,
-	0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x73,
-	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63,
-	0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x52,
-	0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x69, 0x0a, 0x18, 0x52, 0x65, 0x73, 0x74,
-	0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x4f, 0x70, 0x65, 0x6e, 0x69, 0x6e, 0x67, 0x50, 0x61, 0x79,
-	0x6c, 0x6f, 0x61, 0x64, 0x12, 0x33, 0x0a, 0x0a, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61,
-	0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
-	0x63, 0x65, 0x2e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x0a, 0x72,
-	0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x68, 0x61,
-	0x6e, 0x67, 0x65, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x63, 0x68, 0x61, 0x6e,
-	0x67, 0x65, 0x64, 0x22, 0x93, 0x01, 0x0a, 0x12, 0x4b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x41,
-	0x63, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65,
-	0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x49, 0x64, 0x12,
-	0x28, 0x0a, 0x10, 0x6b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x5f, 0x6f, 0x72, 0x64, 0x65, 0x72,
-	0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x6b, 0x69, 0x74, 0x63, 0x68,
-	0x65, 0x6e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x64, 0x12, 0x2e, 0x0a, 0x06, 0x61, 0x63, 0x74,
-	0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x16, 0x2e, 0x73, 0x65, 0x72, 0x76,
-	0x69, 0x63, 0x65, 0x2e, 0x4b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x41, 0x63, 0x74, 0x69, 0x6f,
-	0x6e, 0x52, 0x06, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x80, 0x01, 0x0a, 0x14, 0x4b, 0x69,
-	0x74, 0x63, 0x68, 0x65, 0x6e, 0x41, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x61, 0x79, 0x6c, 0x6f,
-	0x61, 0x64, 0x12, 0x2b, 0x0a, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x15, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4b, 0x69, 0x74, 0x63,
-	0x68, 0x65, 0x6e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x12,
-	0x3b, 0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e,
-	0x32, 0x21, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4b, 0x69, 0x74, 0x63, 0x68,
-	0x65, 0x6e, 0x41, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43,
-	0x6f, 0x64, 0x65, 0x52, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x73, 0x0a, 0x0e,
-	0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x2a,
-	0x0a, 0x07, 0x63, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x10, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65,
-	0x72, 0x52, 0x07, 0x63, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x12, 0x35, 0x0a, 0x07, 0x70, 0x72,
-	0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1b, 0x2e, 0x73, 0x65,
-	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x72, 0x6f,
+	0x6d, 0x65, 0x6e, 0x75, 0x12, 0x38, 0x0a, 0x09, 0x77, 0x61, 0x69, 0x74, 0x5f, 0x74, 0x69, 0x6d,
+	0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x57, 0x61, 0x69, 0x74,
+	0x54, 0x69, 0x6d, 0x65, 0x52, 0x08, 0x77, 0x61, 0x69, 0x74, 0x54, 0x69, 0x6d, 0x65, 0x4a, 0x04,
+	0x08, 0x03, 0x10, 0x04, 0x22, 0x6b, 0x0a, 0x0f, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x6f, 0x6e,
+	0x6e, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x28, 0x0a, 0x05, 0x65, 0x64, 0x67, 0x65, 0x73,
+	0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
+	0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x45, 0x64, 0x67, 0x65, 0x52, 0x05, 0x65, 0x64, 0x67, 0x65,
+	0x73, 0x12, 0x2e, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x50,
+	0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x08, 0x70, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66,
+	0x6f, 0x22, 0x25, 0x0a, 0x09, 0x53, 0x69, 0x6d, 0x75, 0x6c, 0x61, 0x74, 0x6f, 0x72, 0x12, 0x18,
+	0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x22, 0x94, 0x01, 0x0a, 0x0f, 0x50, 0x6c, 0x61,
+	0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x12, 0x23, 0x0a, 0x0d,
+	0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x49,
+	0x64, 0x12, 0x2d, 0x0a, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b,
+	0x32, 0x17, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72,
+	0x4c, 0x69, 0x6e, 0x65, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x52, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73,
+	0x12, 0x27, 0x0a, 0x0f, 0x69, 0x64, 0x65, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x6e, 0x63, 0x79, 0x5f,
+	0x6b, 0x65, 0x79, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x69, 0x64, 0x65, 0x6d, 0x70,
+	0x6f, 0x74, 0x65, 0x6e, 0x63, 0x79, 0x4b, 0x65, 0x79, 0x4a, 0x04, 0x08, 0x03, 0x10, 0x04, 0x22,
+	0x71, 0x0a, 0x11, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x50, 0x61, 0x79,
+	0x6c, 0x6f, 0x61, 0x64, 0x12, 0x24, 0x0a, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72,
+	0x64, 0x65, 0x72, 0x52, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x12, 0x36, 0x0a, 0x08, 0x70, 0x72,
+	0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x50, 0x6c, 0x61, 0x63, 0x65, 0x4f, 0x72, 0x64, 0x65,
+	0x72, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x52, 0x08, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65,
+	0x6d, 0x73, 0x22, 0x8f, 0x01, 0x0a, 0x1d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x4f, 0x72,
+	0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49,
+	0x6e, 0x70, 0x75, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x5f, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x49, 0x64, 0x12,
+	0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12, 0x34,
+	0x0a, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x06, 0x72, 0x65,
+	0x61, 0x73, 0x6f, 0x6e, 0x22, 0x9b, 0x01, 0x0a, 0x1f, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x3b, 0x0a, 0x07, 0x6f, 0x75, 0x74, 0x63,
+	0x6f, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x21, 0x2e, 0x73, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x52, 0x07, 0x6f, 0x75,
+	0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x3b, 0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
+	0x2e, 0x4f, 0x72, 0x64, 0x65, 0x72, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x52, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c,
+	0x65, 0x6d, 0x22, 0x69, 0x0a, 0x18, 0x52, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74,
+	0x4f, 0x70, 0x65, 0x6e, 0x69, 0x6e, 0x67, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x33,
+	0x0a, 0x0a, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x13, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x52, 0x65, 0x73,
+	0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x0a, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72,
+	0x61, 0x6e, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64, 0x22, 0x93, 0x01,
+	0x0a, 0x12, 0x4b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x41, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x49,
+	0x6e, 0x70, 0x75, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61,
+	0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73,
+	0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x6b, 0x69, 0x74,
+	0x63, 0x68, 0x65, 0x6e, 0x5f, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0e, 0x6b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x4f, 0x72, 0x64, 0x65,
+	0x72, 0x49, 0x64, 0x12, 0x2e, 0x0a, 0x06, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0e, 0x32, 0x16, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4b, 0x69,
+	0x74, 0x63, 0x68, 0x65, 0x6e, 0x41, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x06, 0x61, 0x63, 0x74,
+	0x69, 0x6f, 0x6e, 0x22, 0x80, 0x01, 0x0a, 0x14, 0x4b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x41,
+	0x63, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x2b, 0x0a, 0x05,
+	0x6f, 0x72, 0x64, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x4b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x4f, 0x72, 0x64,
+	0x65, 0x72, 0x52, 0x05, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x12, 0x3b, 0x0a, 0x07, 0x70, 0x72, 0x6f,
+	0x62, 0x6c, 0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x21, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2e, 0x4b, 0x69, 0x74, 0x63, 0x68, 0x65, 0x6e, 0x41, 0x63, 0x74, 0x69,
+	0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43, 0x6f, 0x64, 0x65, 0x52, 0x07, 0x70,
+	0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x73, 0x0a, 0x0e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65,
+	0x72, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x2a, 0x0a, 0x07, 0x63, 0x6f, 0x75, 0x72,
+	0x69, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x73, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x52, 0x07, 0x63, 0x6f, 0x75,
+	0x72, 0x69, 0x65, 0x72, 0x12, 0x35, 0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1b, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43, 0x6f,
+	0x64, 0x65, 0x52, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x79, 0x0a, 0x0f, 0x43,
+	0x6f, 0x6f, 0x6b, 0x50, 0x6f, 0x6f, 0x6c, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x2e,
+	0x0a, 0x09, 0x63, 0x6f, 0x6f, 0x6b, 0x5f, 0x70, 0x6f, 0x6f, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x6f, 0x6b,
+	0x50, 0x6f, 0x6f, 0x6c, 0x52, 0x08, 0x63, 0x6f, 0x6f, 0x6b, 0x50, 0x6f, 0x6f, 0x6c, 0x12, 0x36,
+	0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32,
+	0x1c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x6f, 0x6b, 0x50, 0x6f,
+	0x6f, 0x6c, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43, 0x6f, 0x64, 0x65, 0x52, 0x07, 0x70,
+	0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x88, 0x01, 0x0a, 0x12, 0x43, 0x6f, 0x75, 0x72, 0x69,
+	0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x37, 0x0a,
+	0x0c, 0x63, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x5f, 0x70, 0x6f, 0x6f, 0x6c, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f,
+	0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x52, 0x0b, 0x63, 0x6f, 0x75, 0x72, 0x69,
+	0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x12, 0x39, 0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65,
+	0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1f, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x2e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x50, 0x72, 0x6f,
 	0x62, 0x6c, 0x65, 0x6d, 0x43, 0x6f, 0x64, 0x65, 0x52, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65,
-	0x6d, 0x22, 0x79, 0x0a, 0x0f, 0x43, 0x6f, 0x6f, 0x6b, 0x50, 0x6f, 0x6f, 0x6c, 0x50, 0x61, 0x79,
-	0x6c, 0x6f, 0x61, 0x64, 0x12, 0x2e, 0x0a, 0x09, 0x63, 0x6f, 0x6f, 0x6b, 0x5f, 0x70, 0x6f, 0x6f,
-	0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
-	0x65, 0x2e, 0x43, 0x6f, 0x6f, 0x6b, 0x50, 0x6f, 0x6f, 0x6c, 0x52, 0x08, 0x63, 0x6f, 0x6f, 0x6b,
-	0x50, 0x6f, 0x6f, 0x6c, 0x12, 0x36, 0x0a, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
-	0x43, 0x6f, 0x6f, 0x6b, 0x50, 0x6f, 0x6f, 0x6c, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43,
-	0x6f, 0x64, 0x65, 0x52, 0x07, 0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x88, 0x01, 0x0a,
-	0x12, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x50, 0x61, 0x79, 0x6c,
-	0x6f, 0x61, 0x64, 0x12, 0x37, 0x0a, 0x0c, 0x63, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x5f, 0x70,
-	0x6f, 0x6f, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x73, 0x65, 0x72, 0x76,
-	0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x52,
-	0x0b, 0x63, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50, 0x6f, 0x6f, 0x6c, 0x12, 0x39, 0x0a, 0x07,
-	0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1f, 0x2e,
-	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x75, 0x72, 0x69, 0x65, 0x72, 0x50,
-	0x6f, 0x6f, 0x6c, 0x50, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x43, 0x6f, 0x64, 0x65, 0x52, 0x07,
-	0x70, 0x72, 0x6f, 0x62, 0x6c, 0x65, 0x6d, 0x22, 0x3b, 0x0a, 0x05, 0x4d, 0x6f, 0x6e, 0x65, 0x79,
-	0x12, 0x16, 0x0a, 0x06, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x06, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x1a, 0x0a, 0x08, 0x63, 0x75, 0x72, 0x72,
-	0x65, 0x6e, 0x63, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x75, 0x72, 0x72,
-	0x65, 0x6e, 0x63, 0x79, 0x22, 0x6b, 0x0a, 0x08, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f,
-	0x12, 0x22, 0x0a, 0x0d, 0x68, 0x61, 0x73, 0x5f, 0x6e, 0x65, 0x78, 0x74, 0x5f, 0x70, 0x61, 0x67,
-	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0b, 0x68, 0x61, 0x73, 0x4e, 0x65, 0x78, 0x74,
-	0x50, 0x61, 0x67, 0x65, 0x12, 0x3b, 0x0a, 0x0a, 0x65, 0x6e, 0x64, 0x5f, 0x63, 0x75, 0x72, 0x73,
-	0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e,
-	0x67, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x09, 0x65, 0x6e, 0x64, 0x43, 0x75, 0x72, 0x73, 0x6f,
-	0x72, 0x22, 0x2f, 0x0a, 0x04, 0x4d, 0x65, 0x6e, 0x75, 0x12, 0x27, 0x0a, 0x05, 0x69, 0x74, 0x65,
+	0x6d, 0x22, 0x3b, 0x0a, 0x05, 0x4d, 0x6f, 0x6e, 0x65, 0x79, 0x12, 0x16, 0x0a, 0x06, 0x61, 0x6d,
+	0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x61, 0x6d, 0x6f, 0x75,
+	0x6e, 0x74, 0x12, 0x1a, 0x0a, 0x08, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x22, 0x6b,
+	0x0a, 0x08, 0x50, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x22, 0x0a, 0x0d, 0x68, 0x61,
+	0x73, 0x5f, 0x6e, 0x65, 0x78, 0x74, 0x5f, 0x70, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x08, 0x52, 0x0b, 0x68, 0x61, 0x73, 0x4e, 0x65, 0x78, 0x74, 0x50, 0x61, 0x67, 0x65, 0x12, 0x3b,
+	0x0a, 0x0a, 0x65, 0x6e, 0x64, 0x5f, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61, 0x6c, 0x75, 0x65,
+	0x52, 0x09, 0x65, 0x6e, 0x64, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x22, 0x64, 0x0a, 0x12, 0x52,
+	0x65, 0x73, 0x74, 0x61, 0x75, 0x72, 0x61, 0x6e, 0x74, 0x57, 0x61, 0x69, 0x74, 0x54, 0x69, 0x6d,
+	0x65, 0x12, 0x1a, 0x0a, 0x08, 0x65, 0x6c, 0x65, 0x76, 0x61, 0x74, 0x65, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x08, 0x52, 0x08, 0x65, 0x6c, 0x65, 0x76, 0x61, 0x74, 0x65, 0x64, 0x12, 0x32, 0x0a,
+	0x15, 0x65, 0x78, 0x70, 0x65, 0x63, 0x74, 0x65, 0x64, 0x5f, 0x77, 0x61, 0x69, 0x74, 0x5f, 0x6d,
+	0x69, 0x6e, 0x75, 0x74, 0x65, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x13, 0x65, 0x78,
+	0x70, 0x65, 0x63, 0x74, 0x65, 0x64, 0x57, 0x61, 0x69, 0x74, 0x4d, 0x69, 0x6e, 0x75, 0x74, 0x65,
+	0x73, 0x22, 0x2f, 0x0a, 0x04, 0x4d, 0x65, 0x6e, 0x75, 0x12, 0x27, 0x0a, 0x05, 0x69, 0x74, 0x65,
 	0x6d, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x2e, 0x4d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x05, 0x69, 0x74, 0x65,
 	0x6d, 0x73, 0x22, 0xb2, 0x01, 0x0a, 0x08, 0x4d, 0x65, 0x6e, 0x75, 0x49, 0x74, 0x65, 0x6d, 0x12,
@@ -7816,7 +7893,7 @@ func file_generated_service_proto_rawDescGZIP() []byte {
 }
 
 var file_generated_service_proto_enumTypes = make([]protoimpl.EnumInfo, 15)
-var file_generated_service_proto_msgTypes = make([]protoimpl.MessageInfo, 102)
+var file_generated_service_proto_msgTypes = make([]protoimpl.MessageInfo, 103)
 var file_generated_service_proto_goTypes = []any{
 	(OrderStatus)(0),                                   // 0: service.OrderStatus
 	(OrderEndReason)(0),                                // 1: service.OrderEndReason
@@ -7916,26 +7993,27 @@ var file_generated_service_proto_goTypes = []any{
 	(*CourierPoolPayload)(nil),                         // 95: service.CourierPoolPayload
 	(*Money)(nil),                                      // 96: service.Money
 	(*PageInfo)(nil),                                   // 97: service.PageInfo
-	(*Menu)(nil),                                       // 98: service.Menu
-	(*MenuItem)(nil),                                   // 99: service.MenuItem
-	(*RestaurantEdge)(nil),                             // 100: service.RestaurantEdge
-	(*OrderMilestone)(nil),                             // 101: service.OrderMilestone
-	(*OrderedMenuItem)(nil),                            // 102: service.OrderedMenuItem
-	(*OrderItem)(nil),                                  // 103: service.OrderItem
-	(*OrderCancellationAvailability)(nil),              // 104: service.OrderCancellationAvailability
-	(*OrderCourier)(nil),                               // 105: service.OrderCourier
-	(*OrderEdge)(nil),                                  // 106: service.OrderEdge
-	(*KitchenOrderItem)(nil),                           // 107: service.KitchenOrderItem
-	(*KitchenOrder)(nil),                               // 108: service.KitchenOrder
-	(*Cook)(nil),                                       // 109: service.Cook
-	(*CookPool)(nil),                                   // 110: service.CookPool
-	(*DeliveryOffer)(nil),                              // 111: service.DeliveryOffer
-	(*CourierDelivery)(nil),                            // 112: service.CourierDelivery
-	(*PoolCourier)(nil),                                // 113: service.PoolCourier
-	(*OrderLineInput)(nil),                             // 114: service.OrderLineInput
-	(*PlaceOrderProblem)(nil),                          // 115: service.PlaceOrderProblem
-	(*OrderCancellationProblem)(nil),                   // 116: service.OrderCancellationProblem
-	(*wrapperspb.StringValue)(nil),                     // 117: google.protobuf.StringValue
+	(*RestaurantWaitTime)(nil),                         // 98: service.RestaurantWaitTime
+	(*Menu)(nil),                                       // 99: service.Menu
+	(*MenuItem)(nil),                                   // 100: service.MenuItem
+	(*RestaurantEdge)(nil),                             // 101: service.RestaurantEdge
+	(*OrderMilestone)(nil),                             // 102: service.OrderMilestone
+	(*OrderedMenuItem)(nil),                            // 103: service.OrderedMenuItem
+	(*OrderItem)(nil),                                  // 104: service.OrderItem
+	(*OrderCancellationAvailability)(nil),              // 105: service.OrderCancellationAvailability
+	(*OrderCourier)(nil),                               // 106: service.OrderCourier
+	(*OrderEdge)(nil),                                  // 107: service.OrderEdge
+	(*KitchenOrderItem)(nil),                           // 108: service.KitchenOrderItem
+	(*KitchenOrder)(nil),                               // 109: service.KitchenOrder
+	(*Cook)(nil),                                       // 110: service.Cook
+	(*CookPool)(nil),                                   // 111: service.CookPool
+	(*DeliveryOffer)(nil),                              // 112: service.DeliveryOffer
+	(*CourierDelivery)(nil),                            // 113: service.CourierDelivery
+	(*PoolCourier)(nil),                                // 114: service.PoolCourier
+	(*OrderLineInput)(nil),                             // 115: service.OrderLineInput
+	(*PlaceOrderProblem)(nil),                          // 116: service.PlaceOrderProblem
+	(*OrderCancellationProblem)(nil),                   // 117: service.OrderCancellationProblem
+	(*wrapperspb.StringValue)(nil),                     // 118: google.protobuf.StringValue
 }
 var file_generated_service_proto_depIdxs = []int32{
 	15,  // 0: service.LookupOrderByIdRequest.keys:type_name -> service.LookupOrderByIdRequestKey
@@ -7947,13 +8025,13 @@ var file_generated_service_proto_depIdxs = []int32{
 	24,  // 6: service.LookupCourierPoolByIdRequest.keys:type_name -> service.LookupCourierPoolByIdRequestKey
 	80,  // 7: service.LookupCourierPoolByIdResponse.result:type_name -> service.CourierPool
 	81,  // 8: service.QueryBffInfoResponse.bff_info:type_name -> service.BffInfo
-	117, // 9: service.QueryRestaurantsRequest.after:type_name -> google.protobuf.StringValue
+	118, // 9: service.QueryRestaurantsRequest.after:type_name -> google.protobuf.StringValue
 	82,  // 10: service.QueryRestaurantsResponse.restaurants:type_name -> service.RestaurantConnection
 	83,  // 11: service.QueryRestaurantResponse.restaurant:type_name -> service.Restaurant
 	77,  // 12: service.QueryOrderResponse.order:type_name -> service.Order
-	117, // 13: service.QueryCustomerOrdersRequest.after:type_name -> google.protobuf.StringValue
+	118, // 13: service.QueryCustomerOrdersRequest.after:type_name -> google.protobuf.StringValue
 	84,  // 14: service.QueryCustomerOrdersResponse.customer_orders:type_name -> service.OrderConnection
-	117, // 15: service.QueryMyRestaurantsRequest.after:type_name -> google.protobuf.StringValue
+	118, // 15: service.QueryMyRestaurantsRequest.after:type_name -> google.protobuf.StringValue
 	82,  // 16: service.QueryMyRestaurantsResponse.my_restaurants:type_name -> service.RestaurantConnection
 	78,  // 17: service.QueryKitchenResponse.kitchen:type_name -> service.Kitchen
 	79,  // 18: service.QueryCourierResponse.courier:type_name -> service.Courier
@@ -7982,128 +8060,129 @@ var file_generated_service_proto_depIdxs = []int32{
 	0,   // 41: service.Order.status:type_name -> service.OrderStatus
 	1,   // 42: service.Order.end_reason:type_name -> service.OrderEndReason
 	83,  // 43: service.Order.restaurant:type_name -> service.Restaurant
-	103, // 44: service.Order.items:type_name -> service.OrderItem
+	104, // 44: service.Order.items:type_name -> service.OrderItem
 	96,  // 45: service.Order.total:type_name -> service.Money
-	101, // 46: service.Order.milestones:type_name -> service.OrderMilestone
-	104, // 47: service.Order.cancellation:type_name -> service.OrderCancellationAvailability
-	117, // 48: service.Order.expected_ready_at:type_name -> google.protobuf.StringValue
-	117, // 49: service.Order.expected_pickup_at:type_name -> google.protobuf.StringValue
-	117, // 50: service.Order.expected_delivered_at:type_name -> google.protobuf.StringValue
-	105, // 51: service.Order.courier:type_name -> service.OrderCourier
+	102, // 46: service.Order.milestones:type_name -> service.OrderMilestone
+	105, // 47: service.Order.cancellation:type_name -> service.OrderCancellationAvailability
+	118, // 48: service.Order.expected_ready_at:type_name -> google.protobuf.StringValue
+	118, // 49: service.Order.expected_pickup_at:type_name -> google.protobuf.StringValue
+	118, // 50: service.Order.expected_delivered_at:type_name -> google.protobuf.StringValue
+	106, // 51: service.Order.courier:type_name -> service.OrderCourier
 	83,  // 52: service.Kitchen.restaurant:type_name -> service.Restaurant
-	108, // 53: service.Kitchen.orders:type_name -> service.KitchenOrder
-	110, // 54: service.Kitchen.cook_pool:type_name -> service.CookPool
+	109, // 53: service.Kitchen.orders:type_name -> service.KitchenOrder
+	111, // 54: service.Kitchen.cook_pool:type_name -> service.CookPool
 	7,   // 55: service.Courier.availability:type_name -> service.CourierAvailability
-	111, // 56: service.Courier.offers:type_name -> service.DeliveryOffer
-	112, // 57: service.Courier.current_delivery:type_name -> service.CourierDelivery
-	113, // 58: service.CourierPool.couriers:type_name -> service.PoolCourier
-	100, // 59: service.RestaurantConnection.edges:type_name -> service.RestaurantEdge
+	112, // 56: service.Courier.offers:type_name -> service.DeliveryOffer
+	113, // 57: service.Courier.current_delivery:type_name -> service.CourierDelivery
+	114, // 58: service.CourierPool.couriers:type_name -> service.PoolCourier
+	101, // 59: service.RestaurantConnection.edges:type_name -> service.RestaurantEdge
 	97,  // 60: service.RestaurantConnection.page_info:type_name -> service.PageInfo
-	98,  // 61: service.Restaurant.menu:type_name -> service.Menu
-	106, // 62: service.OrderConnection.edges:type_name -> service.OrderEdge
-	97,  // 63: service.OrderConnection.page_info:type_name -> service.PageInfo
-	114, // 64: service.PlaceOrderInput.items:type_name -> service.OrderLineInput
-	77,  // 65: service.PlaceOrderPayload.order:type_name -> service.Order
-	115, // 66: service.PlaceOrderPayload.problems:type_name -> service.PlaceOrderProblem
-	117, // 67: service.RequestOrderCancellationInput.reason:type_name -> google.protobuf.StringValue
-	13,  // 68: service.RequestOrderCancellationPayload.outcome:type_name -> service.OrderCancellationOutcome
-	116, // 69: service.RequestOrderCancellationPayload.problem:type_name -> service.OrderCancellationProblem
-	83,  // 70: service.RestaurantOpeningPayload.restaurant:type_name -> service.Restaurant
-	5,   // 71: service.KitchenActionInput.action:type_name -> service.KitchenAction
-	108, // 72: service.KitchenActionPayload.order:type_name -> service.KitchenOrder
-	6,   // 73: service.KitchenActionPayload.problem:type_name -> service.KitchenActionProblemCode
-	79,  // 74: service.CourierPayload.courier:type_name -> service.Courier
-	10,  // 75: service.CourierPayload.problem:type_name -> service.CourierProblemCode
-	110, // 76: service.CookPoolPayload.cook_pool:type_name -> service.CookPool
-	4,   // 77: service.CookPoolPayload.problem:type_name -> service.CookPoolProblemCode
-	80,  // 78: service.CourierPoolPayload.courier_pool:type_name -> service.CourierPool
-	11,  // 79: service.CourierPoolPayload.problem:type_name -> service.CourierPoolProblemCode
-	117, // 80: service.PageInfo.end_cursor:type_name -> google.protobuf.StringValue
-	99,  // 81: service.Menu.items:type_name -> service.MenuItem
-	117, // 82: service.MenuItem.description:type_name -> google.protobuf.StringValue
-	96,  // 83: service.MenuItem.price:type_name -> service.Money
-	83,  // 84: service.RestaurantEdge.node:type_name -> service.Restaurant
-	2,   // 85: service.OrderMilestone.kind:type_name -> service.OrderMilestoneKind
-	102, // 86: service.OrderItem.menu_item:type_name -> service.OrderedMenuItem
-	96,  // 87: service.OrderItem.unit_price:type_name -> service.Money
-	96,  // 88: service.OrderItem.line_total:type_name -> service.Money
-	77,  // 89: service.OrderEdge.node:type_name -> service.Order
-	3,   // 90: service.KitchenOrder.stage:type_name -> service.KitchenOrderStage
-	107, // 91: service.KitchenOrder.items:type_name -> service.KitchenOrderItem
-	117, // 92: service.KitchenOrder.accepted_at:type_name -> google.protobuf.StringValue
-	117, // 93: service.KitchenOrder.expected_ready_at:type_name -> google.protobuf.StringValue
-	109, // 94: service.KitchenOrder.cook:type_name -> service.Cook
-	117, // 95: service.Cook.current_kitchen_order_id:type_name -> google.protobuf.StringValue
-	109, // 96: service.CookPool.cooks:type_name -> service.Cook
-	8,   // 97: service.CourierDelivery.stage:type_name -> service.CourierDeliveryStage
-	7,   // 98: service.PoolCourier.availability:type_name -> service.CourierAvailability
-	117, // 99: service.PoolCourier.offered_order_id:type_name -> google.protobuf.StringValue
-	117, // 100: service.PoolCourier.current_order_id:type_name -> google.protobuf.StringValue
-	12,  // 101: service.PlaceOrderProblem.code:type_name -> service.PlaceOrderProblemCode
-	14,  // 102: service.OrderCancellationProblem.code:type_name -> service.OrderCancellationProblemCode
-	22,  // 103: service.BffService.LookupCourierById:input_type -> service.LookupCourierByIdRequest
-	25,  // 104: service.BffService.LookupCourierPoolById:input_type -> service.LookupCourierPoolByIdRequest
-	19,  // 105: service.BffService.LookupKitchenByRestaurantId:input_type -> service.LookupKitchenByRestaurantIdRequest
-	16,  // 106: service.BffService.LookupOrderById:input_type -> service.LookupOrderByIdRequest
-	59,  // 107: service.BffService.MutationAcceptDeliveryOffer:input_type -> service.MutationAcceptDeliveryOfferRequest
-	71,  // 108: service.BffService.MutationAddCourier:input_type -> service.MutationAddCourierRequest
-	61,  // 109: service.BffService.MutationApplyCourierDeliveryAction:input_type -> service.MutationApplyCourierDeliveryActionRequest
-	55,  // 110: service.BffService.MutationApplyKitchenAction:input_type -> service.MutationApplyKitchenActionRequest
-	53,  // 111: service.BffService.MutationCloseRestaurant:input_type -> service.MutationCloseRestaurantRequest
-	65,  // 112: service.BffService.MutationHireCook:input_type -> service.MutationHireCookRequest
-	51,  // 113: service.BffService.MutationOpenRestaurant:input_type -> service.MutationOpenRestaurantRequest
-	47,  // 114: service.BffService.MutationPlaceOrder:input_type -> service.MutationPlaceOrderRequest
-	49,  // 115: service.BffService.MutationRequestOrderCancellation:input_type -> service.MutationRequestOrderCancellationRequest
-	69,  // 116: service.BffService.MutationRetireCook:input_type -> service.MutationRetireCookRequest
-	75,  // 117: service.BffService.MutationRetireCourier:input_type -> service.MutationRetireCourierRequest
-	67,  // 118: service.BffService.MutationSetCookOnLine:input_type -> service.MutationSetCookOnLineRequest
-	57,  // 119: service.BffService.MutationSetCourierAvailability:input_type -> service.MutationSetCourierAvailabilityRequest
-	73,  // 120: service.BffService.MutationSetCourierOnLine:input_type -> service.MutationSetCourierOnLineRequest
-	63,  // 121: service.BffService.MutationSetSimulatorEnabled:input_type -> service.MutationSetSimulatorEnabledRequest
-	27,  // 122: service.BffService.QueryBffInfo:input_type -> service.QueryBffInfoRequest
-	41,  // 123: service.BffService.QueryCourier:input_type -> service.QueryCourierRequest
-	45,  // 124: service.BffService.QueryCourierPool:input_type -> service.QueryCourierPoolRequest
-	35,  // 125: service.BffService.QueryCustomerOrders:input_type -> service.QueryCustomerOrdersRequest
-	39,  // 126: service.BffService.QueryKitchen:input_type -> service.QueryKitchenRequest
-	37,  // 127: service.BffService.QueryMyRestaurants:input_type -> service.QueryMyRestaurantsRequest
-	33,  // 128: service.BffService.QueryOrder:input_type -> service.QueryOrderRequest
-	31,  // 129: service.BffService.QueryRestaurant:input_type -> service.QueryRestaurantRequest
-	29,  // 130: service.BffService.QueryRestaurants:input_type -> service.QueryRestaurantsRequest
-	43,  // 131: service.BffService.QuerySimulator:input_type -> service.QuerySimulatorRequest
-	23,  // 132: service.BffService.LookupCourierById:output_type -> service.LookupCourierByIdResponse
-	26,  // 133: service.BffService.LookupCourierPoolById:output_type -> service.LookupCourierPoolByIdResponse
-	20,  // 134: service.BffService.LookupKitchenByRestaurantId:output_type -> service.LookupKitchenByRestaurantIdResponse
-	17,  // 135: service.BffService.LookupOrderById:output_type -> service.LookupOrderByIdResponse
-	60,  // 136: service.BffService.MutationAcceptDeliveryOffer:output_type -> service.MutationAcceptDeliveryOfferResponse
-	72,  // 137: service.BffService.MutationAddCourier:output_type -> service.MutationAddCourierResponse
-	62,  // 138: service.BffService.MutationApplyCourierDeliveryAction:output_type -> service.MutationApplyCourierDeliveryActionResponse
-	56,  // 139: service.BffService.MutationApplyKitchenAction:output_type -> service.MutationApplyKitchenActionResponse
-	54,  // 140: service.BffService.MutationCloseRestaurant:output_type -> service.MutationCloseRestaurantResponse
-	66,  // 141: service.BffService.MutationHireCook:output_type -> service.MutationHireCookResponse
-	52,  // 142: service.BffService.MutationOpenRestaurant:output_type -> service.MutationOpenRestaurantResponse
-	48,  // 143: service.BffService.MutationPlaceOrder:output_type -> service.MutationPlaceOrderResponse
-	50,  // 144: service.BffService.MutationRequestOrderCancellation:output_type -> service.MutationRequestOrderCancellationResponse
-	70,  // 145: service.BffService.MutationRetireCook:output_type -> service.MutationRetireCookResponse
-	76,  // 146: service.BffService.MutationRetireCourier:output_type -> service.MutationRetireCourierResponse
-	68,  // 147: service.BffService.MutationSetCookOnLine:output_type -> service.MutationSetCookOnLineResponse
-	58,  // 148: service.BffService.MutationSetCourierAvailability:output_type -> service.MutationSetCourierAvailabilityResponse
-	74,  // 149: service.BffService.MutationSetCourierOnLine:output_type -> service.MutationSetCourierOnLineResponse
-	64,  // 150: service.BffService.MutationSetSimulatorEnabled:output_type -> service.MutationSetSimulatorEnabledResponse
-	28,  // 151: service.BffService.QueryBffInfo:output_type -> service.QueryBffInfoResponse
-	42,  // 152: service.BffService.QueryCourier:output_type -> service.QueryCourierResponse
-	46,  // 153: service.BffService.QueryCourierPool:output_type -> service.QueryCourierPoolResponse
-	36,  // 154: service.BffService.QueryCustomerOrders:output_type -> service.QueryCustomerOrdersResponse
-	40,  // 155: service.BffService.QueryKitchen:output_type -> service.QueryKitchenResponse
-	38,  // 156: service.BffService.QueryMyRestaurants:output_type -> service.QueryMyRestaurantsResponse
-	34,  // 157: service.BffService.QueryOrder:output_type -> service.QueryOrderResponse
-	32,  // 158: service.BffService.QueryRestaurant:output_type -> service.QueryRestaurantResponse
-	30,  // 159: service.BffService.QueryRestaurants:output_type -> service.QueryRestaurantsResponse
-	44,  // 160: service.BffService.QuerySimulator:output_type -> service.QuerySimulatorResponse
-	132, // [132:161] is the sub-list for method output_type
-	103, // [103:132] is the sub-list for method input_type
-	103, // [103:103] is the sub-list for extension type_name
-	103, // [103:103] is the sub-list for extension extendee
-	0,   // [0:103] is the sub-list for field type_name
+	99,  // 61: service.Restaurant.menu:type_name -> service.Menu
+	98,  // 62: service.Restaurant.wait_time:type_name -> service.RestaurantWaitTime
+	107, // 63: service.OrderConnection.edges:type_name -> service.OrderEdge
+	97,  // 64: service.OrderConnection.page_info:type_name -> service.PageInfo
+	115, // 65: service.PlaceOrderInput.items:type_name -> service.OrderLineInput
+	77,  // 66: service.PlaceOrderPayload.order:type_name -> service.Order
+	116, // 67: service.PlaceOrderPayload.problems:type_name -> service.PlaceOrderProblem
+	118, // 68: service.RequestOrderCancellationInput.reason:type_name -> google.protobuf.StringValue
+	13,  // 69: service.RequestOrderCancellationPayload.outcome:type_name -> service.OrderCancellationOutcome
+	117, // 70: service.RequestOrderCancellationPayload.problem:type_name -> service.OrderCancellationProblem
+	83,  // 71: service.RestaurantOpeningPayload.restaurant:type_name -> service.Restaurant
+	5,   // 72: service.KitchenActionInput.action:type_name -> service.KitchenAction
+	109, // 73: service.KitchenActionPayload.order:type_name -> service.KitchenOrder
+	6,   // 74: service.KitchenActionPayload.problem:type_name -> service.KitchenActionProblemCode
+	79,  // 75: service.CourierPayload.courier:type_name -> service.Courier
+	10,  // 76: service.CourierPayload.problem:type_name -> service.CourierProblemCode
+	111, // 77: service.CookPoolPayload.cook_pool:type_name -> service.CookPool
+	4,   // 78: service.CookPoolPayload.problem:type_name -> service.CookPoolProblemCode
+	80,  // 79: service.CourierPoolPayload.courier_pool:type_name -> service.CourierPool
+	11,  // 80: service.CourierPoolPayload.problem:type_name -> service.CourierPoolProblemCode
+	118, // 81: service.PageInfo.end_cursor:type_name -> google.protobuf.StringValue
+	100, // 82: service.Menu.items:type_name -> service.MenuItem
+	118, // 83: service.MenuItem.description:type_name -> google.protobuf.StringValue
+	96,  // 84: service.MenuItem.price:type_name -> service.Money
+	83,  // 85: service.RestaurantEdge.node:type_name -> service.Restaurant
+	2,   // 86: service.OrderMilestone.kind:type_name -> service.OrderMilestoneKind
+	103, // 87: service.OrderItem.menu_item:type_name -> service.OrderedMenuItem
+	96,  // 88: service.OrderItem.unit_price:type_name -> service.Money
+	96,  // 89: service.OrderItem.line_total:type_name -> service.Money
+	77,  // 90: service.OrderEdge.node:type_name -> service.Order
+	3,   // 91: service.KitchenOrder.stage:type_name -> service.KitchenOrderStage
+	108, // 92: service.KitchenOrder.items:type_name -> service.KitchenOrderItem
+	118, // 93: service.KitchenOrder.accepted_at:type_name -> google.protobuf.StringValue
+	118, // 94: service.KitchenOrder.expected_ready_at:type_name -> google.protobuf.StringValue
+	110, // 95: service.KitchenOrder.cook:type_name -> service.Cook
+	118, // 96: service.Cook.current_kitchen_order_id:type_name -> google.protobuf.StringValue
+	110, // 97: service.CookPool.cooks:type_name -> service.Cook
+	8,   // 98: service.CourierDelivery.stage:type_name -> service.CourierDeliveryStage
+	7,   // 99: service.PoolCourier.availability:type_name -> service.CourierAvailability
+	118, // 100: service.PoolCourier.offered_order_id:type_name -> google.protobuf.StringValue
+	118, // 101: service.PoolCourier.current_order_id:type_name -> google.protobuf.StringValue
+	12,  // 102: service.PlaceOrderProblem.code:type_name -> service.PlaceOrderProblemCode
+	14,  // 103: service.OrderCancellationProblem.code:type_name -> service.OrderCancellationProblemCode
+	22,  // 104: service.BffService.LookupCourierById:input_type -> service.LookupCourierByIdRequest
+	25,  // 105: service.BffService.LookupCourierPoolById:input_type -> service.LookupCourierPoolByIdRequest
+	19,  // 106: service.BffService.LookupKitchenByRestaurantId:input_type -> service.LookupKitchenByRestaurantIdRequest
+	16,  // 107: service.BffService.LookupOrderById:input_type -> service.LookupOrderByIdRequest
+	59,  // 108: service.BffService.MutationAcceptDeliveryOffer:input_type -> service.MutationAcceptDeliveryOfferRequest
+	71,  // 109: service.BffService.MutationAddCourier:input_type -> service.MutationAddCourierRequest
+	61,  // 110: service.BffService.MutationApplyCourierDeliveryAction:input_type -> service.MutationApplyCourierDeliveryActionRequest
+	55,  // 111: service.BffService.MutationApplyKitchenAction:input_type -> service.MutationApplyKitchenActionRequest
+	53,  // 112: service.BffService.MutationCloseRestaurant:input_type -> service.MutationCloseRestaurantRequest
+	65,  // 113: service.BffService.MutationHireCook:input_type -> service.MutationHireCookRequest
+	51,  // 114: service.BffService.MutationOpenRestaurant:input_type -> service.MutationOpenRestaurantRequest
+	47,  // 115: service.BffService.MutationPlaceOrder:input_type -> service.MutationPlaceOrderRequest
+	49,  // 116: service.BffService.MutationRequestOrderCancellation:input_type -> service.MutationRequestOrderCancellationRequest
+	69,  // 117: service.BffService.MutationRetireCook:input_type -> service.MutationRetireCookRequest
+	75,  // 118: service.BffService.MutationRetireCourier:input_type -> service.MutationRetireCourierRequest
+	67,  // 119: service.BffService.MutationSetCookOnLine:input_type -> service.MutationSetCookOnLineRequest
+	57,  // 120: service.BffService.MutationSetCourierAvailability:input_type -> service.MutationSetCourierAvailabilityRequest
+	73,  // 121: service.BffService.MutationSetCourierOnLine:input_type -> service.MutationSetCourierOnLineRequest
+	63,  // 122: service.BffService.MutationSetSimulatorEnabled:input_type -> service.MutationSetSimulatorEnabledRequest
+	27,  // 123: service.BffService.QueryBffInfo:input_type -> service.QueryBffInfoRequest
+	41,  // 124: service.BffService.QueryCourier:input_type -> service.QueryCourierRequest
+	45,  // 125: service.BffService.QueryCourierPool:input_type -> service.QueryCourierPoolRequest
+	35,  // 126: service.BffService.QueryCustomerOrders:input_type -> service.QueryCustomerOrdersRequest
+	39,  // 127: service.BffService.QueryKitchen:input_type -> service.QueryKitchenRequest
+	37,  // 128: service.BffService.QueryMyRestaurants:input_type -> service.QueryMyRestaurantsRequest
+	33,  // 129: service.BffService.QueryOrder:input_type -> service.QueryOrderRequest
+	31,  // 130: service.BffService.QueryRestaurant:input_type -> service.QueryRestaurantRequest
+	29,  // 131: service.BffService.QueryRestaurants:input_type -> service.QueryRestaurantsRequest
+	43,  // 132: service.BffService.QuerySimulator:input_type -> service.QuerySimulatorRequest
+	23,  // 133: service.BffService.LookupCourierById:output_type -> service.LookupCourierByIdResponse
+	26,  // 134: service.BffService.LookupCourierPoolById:output_type -> service.LookupCourierPoolByIdResponse
+	20,  // 135: service.BffService.LookupKitchenByRestaurantId:output_type -> service.LookupKitchenByRestaurantIdResponse
+	17,  // 136: service.BffService.LookupOrderById:output_type -> service.LookupOrderByIdResponse
+	60,  // 137: service.BffService.MutationAcceptDeliveryOffer:output_type -> service.MutationAcceptDeliveryOfferResponse
+	72,  // 138: service.BffService.MutationAddCourier:output_type -> service.MutationAddCourierResponse
+	62,  // 139: service.BffService.MutationApplyCourierDeliveryAction:output_type -> service.MutationApplyCourierDeliveryActionResponse
+	56,  // 140: service.BffService.MutationApplyKitchenAction:output_type -> service.MutationApplyKitchenActionResponse
+	54,  // 141: service.BffService.MutationCloseRestaurant:output_type -> service.MutationCloseRestaurantResponse
+	66,  // 142: service.BffService.MutationHireCook:output_type -> service.MutationHireCookResponse
+	52,  // 143: service.BffService.MutationOpenRestaurant:output_type -> service.MutationOpenRestaurantResponse
+	48,  // 144: service.BffService.MutationPlaceOrder:output_type -> service.MutationPlaceOrderResponse
+	50,  // 145: service.BffService.MutationRequestOrderCancellation:output_type -> service.MutationRequestOrderCancellationResponse
+	70,  // 146: service.BffService.MutationRetireCook:output_type -> service.MutationRetireCookResponse
+	76,  // 147: service.BffService.MutationRetireCourier:output_type -> service.MutationRetireCourierResponse
+	68,  // 148: service.BffService.MutationSetCookOnLine:output_type -> service.MutationSetCookOnLineResponse
+	58,  // 149: service.BffService.MutationSetCourierAvailability:output_type -> service.MutationSetCourierAvailabilityResponse
+	74,  // 150: service.BffService.MutationSetCourierOnLine:output_type -> service.MutationSetCourierOnLineResponse
+	64,  // 151: service.BffService.MutationSetSimulatorEnabled:output_type -> service.MutationSetSimulatorEnabledResponse
+	28,  // 152: service.BffService.QueryBffInfo:output_type -> service.QueryBffInfoResponse
+	42,  // 153: service.BffService.QueryCourier:output_type -> service.QueryCourierResponse
+	46,  // 154: service.BffService.QueryCourierPool:output_type -> service.QueryCourierPoolResponse
+	36,  // 155: service.BffService.QueryCustomerOrders:output_type -> service.QueryCustomerOrdersResponse
+	40,  // 156: service.BffService.QueryKitchen:output_type -> service.QueryKitchenResponse
+	38,  // 157: service.BffService.QueryMyRestaurants:output_type -> service.QueryMyRestaurantsResponse
+	34,  // 158: service.BffService.QueryOrder:output_type -> service.QueryOrderResponse
+	32,  // 159: service.BffService.QueryRestaurant:output_type -> service.QueryRestaurantResponse
+	30,  // 160: service.BffService.QueryRestaurants:output_type -> service.QueryRestaurantsResponse
+	44,  // 161: service.BffService.QuerySimulator:output_type -> service.QuerySimulatorResponse
+	133, // [133:162] is the sub-list for method output_type
+	104, // [104:133] is the sub-list for method input_type
+	104, // [104:104] is the sub-list for extension type_name
+	104, // [104:104] is the sub-list for extension extendee
+	0,   // [0:104] is the sub-list for field type_name
 }
 
 func init() { file_generated_service_proto_init() }
@@ -9109,7 +9188,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[83].Exporter = func(v any, i int) any {
-			switch v := v.(*Menu); i {
+			switch v := v.(*RestaurantWaitTime); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9121,7 +9200,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[84].Exporter = func(v any, i int) any {
-			switch v := v.(*MenuItem); i {
+			switch v := v.(*Menu); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9133,7 +9212,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[85].Exporter = func(v any, i int) any {
-			switch v := v.(*RestaurantEdge); i {
+			switch v := v.(*MenuItem); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9145,7 +9224,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[86].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderMilestone); i {
+			switch v := v.(*RestaurantEdge); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9157,7 +9236,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[87].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderedMenuItem); i {
+			switch v := v.(*OrderMilestone); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9169,7 +9248,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[88].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderItem); i {
+			switch v := v.(*OrderedMenuItem); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9181,7 +9260,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[89].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderCancellationAvailability); i {
+			switch v := v.(*OrderItem); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9193,7 +9272,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[90].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderCourier); i {
+			switch v := v.(*OrderCancellationAvailability); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9205,7 +9284,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[91].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderEdge); i {
+			switch v := v.(*OrderCourier); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9217,7 +9296,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[92].Exporter = func(v any, i int) any {
-			switch v := v.(*KitchenOrderItem); i {
+			switch v := v.(*OrderEdge); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9229,7 +9308,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[93].Exporter = func(v any, i int) any {
-			switch v := v.(*KitchenOrder); i {
+			switch v := v.(*KitchenOrderItem); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9241,7 +9320,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[94].Exporter = func(v any, i int) any {
-			switch v := v.(*Cook); i {
+			switch v := v.(*KitchenOrder); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9253,7 +9332,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[95].Exporter = func(v any, i int) any {
-			switch v := v.(*CookPool); i {
+			switch v := v.(*Cook); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9265,7 +9344,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[96].Exporter = func(v any, i int) any {
-			switch v := v.(*DeliveryOffer); i {
+			switch v := v.(*CookPool); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9277,7 +9356,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[97].Exporter = func(v any, i int) any {
-			switch v := v.(*CourierDelivery); i {
+			switch v := v.(*DeliveryOffer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9289,7 +9368,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[98].Exporter = func(v any, i int) any {
-			switch v := v.(*PoolCourier); i {
+			switch v := v.(*CourierDelivery); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9301,7 +9380,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[99].Exporter = func(v any, i int) any {
-			switch v := v.(*OrderLineInput); i {
+			switch v := v.(*PoolCourier); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9313,7 +9392,7 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[100].Exporter = func(v any, i int) any {
-			switch v := v.(*PlaceOrderProblem); i {
+			switch v := v.(*OrderLineInput); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9325,6 +9404,18 @@ func file_generated_service_proto_init() {
 			}
 		}
 		file_generated_service_proto_msgTypes[101].Exporter = func(v any, i int) any {
+			switch v := v.(*PlaceOrderProblem); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_generated_service_proto_msgTypes[102].Exporter = func(v any, i int) any {
 			switch v := v.(*OrderCancellationProblem); i {
 			case 0:
 				return &v.state
@@ -9343,7 +9434,7 @@ func file_generated_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_generated_service_proto_rawDesc,
 			NumEnums:      15,
-			NumMessages:   102,
+			NumMessages:   103,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -49,6 +49,7 @@ export const RESTAURANTS_USE_CASES = {
 /** Use cases of `cmd/restaurants-consumer` by cradle key. */
 export const CONSUMER_USE_CASES = {
   recordPickup: command("record_pickup"),
+  recordWaitTime: command("record_wait_time"),
 } as const;
 
 type Executable = { execute(input: never): Promise<unknown> };

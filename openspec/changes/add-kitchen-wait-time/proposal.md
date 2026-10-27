@@ -16,8 +16,8 @@
   Линия поваров и Cook Pool в расчёт не входят.
 - **Оценка ожидания.** Базовое время — медиана последних N длительностей. Текущее ожидание — большее из двух величин: медианы заказов, готовых за последнее окно, и возраста самого старого незавершённого заказа. Пока длительностей меньше N, обе величины равны `KITCHEN__PREPARATION_TIME`.
 - **Уровень с гистерезисом.** `ELEVATED` ставится, когда текущее ожидание больше базового в `k_on` раз. `NORMAL` возвращается, когда оно не больше базового в `k_off` раз. Если уровень сменился, в той же транзакции через Outbox публикуется `RestaurantWaitLevelChanged`, и по нему обновляется кеш каталога.
-- **`expected_ready_at` по статистике.** Ready Time Estimator возвращает `accepted_at` + текущее ожидание. Сроки не пересчитываются и не гарантируются.
-- **Каталог.** `GetRestaurant` и `ListRestaurants` отдают уровень ожидания и текущее ожидание. В GraphQL у `Restaurant` появляются `waitTimeElevated` и `expectedWaitMinutes`.
+- **`expected_ready_at` по статистике.** Ready Time Estimator возвращает `accepted_at` + текущее ожидание; `FixedPreparationTimeEstimator` удаляется. Сроки не пересчитываются и не гарантируются.
+- **Каталог.** `GetRestaurant` и `ListRestaurants` отдают уровень ожидания и текущее ожидание. В GraphQL у `Restaurant` появляется `waitTime { elevated, expectedWaitMinutes }`: его заполняют запросы каталога, в остальных местах — `null`, как `menu`.
 - **UI.** Бейдж «Повышенное время ожидания» в списке ресторанов и на странице ресторана. При оформлении заказа показывается «≈N мин».
 - В `RestaurantOrderAccepted`, `RestaurantOrderReady`, `RestaurantOrderCancelled` и `PreparationFailed` добавляется `restaurant_id`, изменение аддитивное.
 

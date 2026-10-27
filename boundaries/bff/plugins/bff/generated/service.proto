@@ -632,6 +632,8 @@ message Restaurant {
   bool accepting_orders = 4;
   // Current menu, null if the restaurant has not published one
   Menu menu = 5;
+  // Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
+  RestaurantWaitTime wait_time = 6;
 }
 
 message OrderConnection {
@@ -739,6 +741,14 @@ message PageInfo {
   bool has_next_page = 1;
   // Cursor of the last returned item, null for an empty page
   google.protobuf.StringValue end_cursor = 2;
+}
+
+// Wait for a new order of a restaurant, estimated from its recent orders
+message RestaurantWaitTime {
+  // The kitchen is slower than usual for this restaurant
+  bool elevated = 1;
+  // Expected wait in minutes for an order placed now, an estimate rather than a promise
+  int32 expected_wait_minutes = 2;
 }
 
 // Menu of one restaurant

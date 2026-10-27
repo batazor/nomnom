@@ -178,7 +178,8 @@
         "id": 1,
         "name": 2,
         "acceptingOrders": 4,
-        "menu": 5
+        "menu": 5,
+        "waitTime": 6
       },
       "reservedNumbers": [
         3
@@ -795,6 +796,12 @@
     "OrderCourier": {
       "fields": {
         "name": 1
+      }
+    },
+    "RestaurantWaitTime": {
+      "fields": {
+        "elevated": 1,
+        "expectedWaitMinutes": 2
       }
     }
   },

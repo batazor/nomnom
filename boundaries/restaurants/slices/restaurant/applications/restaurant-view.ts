@@ -9,6 +9,18 @@ export type RestaurantView = Readonly<{
   isOpen: boolean;
 }>;
 
+/** Wait for a new order of the restaurant, computed when read (FR-645). */
+export type RestaurantWaitView = Readonly<{
+  /** Stored level of the Wait Time Statistics. */
+  elevated: boolean;
+  /** Current wait rounded up to a minute. */
+  expectedWaitMinutes: number;
+}>;
+
+/** Public catalog representation: Get Restaurant and List Restaurants (FR-204). */
+export type CatalogRestaurantView = RestaurantView &
+  Readonly<{ waitTime: RestaurantWaitView }>;
+
 /** Result of commands that change a restaurant. */
 export type RestaurantChangeResult = RestaurantView &
   Readonly<{

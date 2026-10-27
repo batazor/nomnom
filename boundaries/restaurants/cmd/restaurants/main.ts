@@ -71,6 +71,7 @@ const container = createRestaurantsContainer({
   spicedb: config.spicedb,
   reconciler: config.reconciler,
   kitchen: config.kitchen,
+  waitTime: config.waitTime,
   simulator,
   database,
   valkeyConfig: config.valkey,

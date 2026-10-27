@@ -142,6 +142,9 @@ function RestaurantView({
             {t("restaurant.closed")}
           </p>
         )}
+        {restaurant.waitTime?.elevated ? (
+          <p className="restaurant-wait">{t("restaurants.waitElevated")}</p>
+        ) : null}
       </m.header>
 
       {menu ? (
@@ -181,6 +184,7 @@ function RestaurantView({
             >
               {restaurant.acceptingOrders ? (
                 <PlaceOrder
+                  expectedWaitMinutes={restaurant.waitTime?.expectedWaitMinutes}
                   lines={entries.map(({ line }) => line)}
                   onItemProblems={setItemProblems}
                   onPlaced={(orderId) => {

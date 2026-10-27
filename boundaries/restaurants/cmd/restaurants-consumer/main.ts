@@ -94,6 +94,8 @@ try {
   });
   container = createConsumerContainer({
     consumer: config.consumer,
+    kitchen: config.kitchen,
+    waitTime: config.waitTime,
     database,
     kafkaConsumer,
     cacheRefreshConsumer,

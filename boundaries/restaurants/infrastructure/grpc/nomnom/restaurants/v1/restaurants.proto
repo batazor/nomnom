@@ -11,6 +11,16 @@ message Restaurant {
   reserved "address";
   // Market of the Restaurant (ADR 41); immutable.
   string market_id = 5;
+  // Set by GetRestaurant and ListRestaurants only (FR-204).
+  RestaurantWaitTime wait_time = 6;
+}
+
+// Wait for a new order of the restaurant (Wait Time Statistics, FR-645).
+message RestaurantWaitTime {
+  // The current wait is elevated against the baseline of the restaurant.
+  bool elevated = 1;
+  // Current wait rounded up to a minute, computed when read.
+  int32 expected_wait_minutes = 2;
 }
 
 // Exact amount: a decimal string with a dot separator and an ISO 4217 currency.

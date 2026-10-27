@@ -24,3 +24,9 @@
   color: var(--color-danger);
   font-size: var(--font-size-sm);
 }
+
+.checkout .checkout-wait {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+}

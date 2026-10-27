@@ -1,7 +1,4 @@
-import type {
-  AcceptanceConditionsProvider,
-  ReadyTimeEstimator,
-} from "../../applications/accept-order/accept-order.ts";
+import type { AcceptanceConditionsProvider } from "../../applications/accept-order/accept-order.ts";
 import type { AcceptanceConditions } from "../../domains/restaurantorder/acceptance.ts";
 
 const BEGINNING = new Date(0);
@@ -38,24 +35,5 @@ export class UnconstrainedAcceptanceConditions
       },
       menuItems,
     };
-  }
-}
-
-/**
- * MVP estimate of the initial `expected_ready_at`: a fixed preparation time
- * after Acceptance. Staff move it later with Report Preparation Delay.
- */
-export class FixedPreparationTimeEstimator implements ReadyTimeEstimator {
-  readonly #milliseconds: number;
-
-  constructor(milliseconds: number) {
-    if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
-      throw new Error("preparation time must be a positive duration");
-    }
-    this.#milliseconds = milliseconds;
-  }
-
-  async estimate(input: { acceptedAt: Date }): Promise<Date> {
-    return new Date(input.acceptedAt.getTime() + this.#milliseconds);
   }
 }

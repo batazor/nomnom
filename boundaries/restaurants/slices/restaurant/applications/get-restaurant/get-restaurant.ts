@@ -1,11 +1,11 @@
 import { NotFoundError } from "../../../../pkg/application/errors.ts";
-import type { RestaurantView } from "../restaurant-view.ts";
+import type { CatalogRestaurantView } from "../restaurant-view.ts";
 
 export type GetRestaurant = Readonly<{ restaurantId: string }>;
 
 /** Query model port: public data of one restaurant. */
 export interface RestaurantPublicReader {
-  get(restaurantId: string): Promise<RestaurantView | undefined>;
+  get(restaurantId: string): Promise<CatalogRestaurantView | undefined>;
 }
 
 /** Returns the public restaurant representation; public data needs no authorization. */
@@ -16,7 +16,7 @@ export class GetRestaurantHandler {
     this.#reader = dependencies.reader;
   }
 
-  async execute(query: GetRestaurant): Promise<RestaurantView> {
+  async execute(query: GetRestaurant): Promise<CatalogRestaurantView> {
     const restaurant = await this.#reader.get(query.restaurantId);
     if (restaurant === undefined) {
       throw new NotFoundError("Restaurant", query.restaurantId);

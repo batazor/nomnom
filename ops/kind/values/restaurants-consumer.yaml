@@ -6,6 +6,13 @@ image:
 
 env:
   KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+  # Wait Time Statistics (FR-645, FR-657): уровень ожидания считает consumer; значения
+  # совпадают с release restaurants, иначе каталог и уровень разойдутся.
+  KITCHEN__PREPARATION_TIME: 1m
+  WAIT_TIME__SAMPLE_SIZE: "50"
+  WAIT_TIME__RECENT_WINDOW: 30m
+  WAIT_TIME__ELEVATED_FACTOR: "1.5"
+  WAIT_TIME__NORMAL_FACTOR: "1.2"
 
 # ADR 8, ADR 31: Inbox и Restaurant Orders — в MongoDB restaurants; Secret restaurants-mongodb
 # создаёт chart ops/kind/bootstrap, коллекции и индексы процесс мигрирует сам при старте.

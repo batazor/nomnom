@@ -1,8 +1,9 @@
 // Cached Get Restaurant and List Restaurants (ADR 43, local ADR 3): read by the
-// UI, the BFF and Place Order of orders (is_open). RestaurantOpened and
-// RestaurantClosed refresh the restaurant and start a new generation of the
-// list pages right after the commit; renames and new restaurants publish no
-// event and are visible within the TTL. List pages are keyed and generated
+// UI, the BFF and Place Order of orders (is_open). RestaurantOpened,
+// RestaurantClosed and RestaurantWaitLevelChanged refresh the restaurant and
+// start a new generation of the list pages right after the commit; renames and
+// new restaurants publish no event and are visible within the TTL, like the
+// expected wait in minutes computed when read. List pages are keyed and generated
 // per Market (ADR 41), so the pages of two Markets never mix and an opening
 // change drops only the pages of the restaurant's Market.
 import { fromBinary } from "@bufbuild/protobuf";
@@ -11,6 +12,7 @@ import type { Valkey } from "iovalkey";
 import {
   RestaurantClosedSchema,
   RestaurantOpenedSchema,
+  RestaurantWaitLevelChangedSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import {
   type CacheMetrics,
@@ -19,12 +21,16 @@ import {
 import type { CacheRefreshes } from "../../../../pkg/infrastructure/valkey/refresh.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
-import type { RestaurantView } from "../../applications/restaurant-view.ts";
+import type { CatalogRestaurantView } from "../../applications/restaurant-view.ts";
 import { MarketId } from "../../domains/restaurant/restaurant.ts";
 
 type CacheOptions = { client: Valkey; ttlMs: number; metrics: CacheMetrics };
 
-const hasMarket = (view: RestaurantView): boolean => {
+const isCurrentView = (view: CatalogRestaurantView): boolean => {
+  // FR-204: an entry cached before the wait time has no waitTime.
+  if (typeof view.waitTime !== "object" || view.waitTime === null) {
+    return false;
+  }
   if (typeof view.marketId !== "string") return false;
   try {
     MarketId.of(view.marketId);
@@ -41,8 +47,8 @@ export class CachedRestaurantCatalog
   implements RestaurantPublicReader, RestaurantCatalogReader
 {
   readonly #source: RestaurantPublicReader & RestaurantCatalogReader;
-  readonly #restaurants: ReadCache<RestaurantView>;
-  readonly #pages: ReadCache<readonly RestaurantView[]>;
+  readonly #restaurants: ReadCache<CatalogRestaurantView>;
+  readonly #pages: ReadCache<readonly CatalogRestaurantView[]>;
 
   constructor(
     source: RestaurantPublicReader & RestaurantCatalogReader,
@@ -54,17 +60,19 @@ export class CachedRestaurantCatalog
       name: "restaurant",
       prefix: "restaurants:restaurant:",
       // ADR 41: an entry cached before Markets has no marketId; GetRestaurant
-      // must never return an empty Market, so such an entry is a miss.
-      isCurrent: hasMarket,
+      // must never return an empty Market, so such an entry is a miss, like
+      // an entry cached before the wait time.
+      isCurrent: isCurrentView,
     });
     this.#pages = new ReadCache({
       ...options,
       name: "restaurant_list",
       prefix: "restaurants:list:",
+      isCurrent: (views) => views.every(isCurrentView),
     });
   }
 
-  get(restaurantId: string): Promise<RestaurantView | undefined> {
+  get(restaurantId: string): Promise<CatalogRestaurantView | undefined> {
     return this.#restaurants.read(restaurantId, () =>
       this.#source.get(restaurantId),
     );
@@ -76,7 +84,7 @@ export class CachedRestaurantCatalog
     includeClosed: boolean;
     after: string | undefined;
     limit: number;
-  }): Promise<readonly RestaurantView[]> {
+  }): Promise<readonly CatalogRestaurantView[]> {
     const key = `${criteria.marketId}:${criteria.includeClosed ? "all" : "open"}:${criteria.limit}:${criteria.after ?? ""}`;
     return this.#pages.readInGeneration(listScope(criteria.marketId), key, () =>
       this.#source.list(criteria),
@@ -97,7 +105,7 @@ export class CachedRestaurantCatalog
   }
 }
 
-/** Opening facts of restaurants.v1.restaurant-events that change the cache. */
+/** Facts of restaurants.v1.restaurant-events that change the cache. */
 export const restaurantCacheRefreshes = (
   catalog: CachedRestaurantCatalog,
 ): CacheRefreshes => ({
@@ -105,4 +113,8 @@ export const restaurantCacheRefreshes = (
     catalog.refresh(fromBinary(RestaurantOpenedSchema, payload).restaurantId),
   [RestaurantClosedSchema.typeName]: (payload) =>
     catalog.refresh(fromBinary(RestaurantClosedSchema, payload).restaurantId),
+  [RestaurantWaitLevelChangedSchema.typeName]: (payload) =>
+    catalog.refresh(
+      fromBinary(RestaurantWaitLevelChangedSchema, payload).restaurantId,
+    ),
 });

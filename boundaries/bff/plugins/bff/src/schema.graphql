@@ -57,6 +57,24 @@ type Restaurant {
   Current menu, null if the restaurant has not published one
   """
   menu: Menu
+  """
+  Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
+  """
+  waitTime: RestaurantWaitTime
+}
+
+"""
+Wait for a new order of a restaurant, estimated from its recent orders
+"""
+type RestaurantWaitTime {
+  """
+  The kitchen is slower than usual for this restaurant
+  """
+  elevated: Boolean!
+  """
+  Expected wait in minutes for an order placed now, an estimate rather than a promise
+  """
+  expectedWaitMinutes: Int!
 }
 
 """

@@ -36,7 +36,10 @@ func (f *fakeGetRestaurant) Handle(context.Context, string) (applications.Restau
 	return f.view, f.err
 }
 
-var phoBar = applications.Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true}
+var phoBar = applications.Restaurant{
+	ID: "restaurant-1", Name: "Pho Bar", IsOpen: true,
+	WaitTime: applications.WaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+}
 
 // Catalog resolvers need no BFF identity in the service and no access token.
 func catalogService(list *fakeListRestaurants, get *fakeGetRestaurant) *BffService {
@@ -61,6 +64,8 @@ func TestQueryRestaurantsMapsThePageWithoutAccessToken(t *testing.T) {
 	assert.Equal(t, "restaurant-1", connection.GetEdges()[0].GetCursor())
 	assert.Equal(t, "Pho Bar", connection.GetEdges()[0].GetNode().GetName())
 	assert.True(t, connection.GetEdges()[0].GetNode().GetAcceptingOrders())
+	assert.True(t, connection.GetEdges()[0].GetNode().GetWaitTime().GetElevated(), "FR-647")
+	assert.Equal(t, int32(42), connection.GetEdges()[0].GetNode().GetWaitTime().GetExpectedWaitMinutes())
 	assert.Nil(t, connection.GetEdges()[0].GetNode().GetMenu(), "menu is not filled in the list")
 	assert.True(t, connection.GetPageInfo().GetHasNextPage())
 	assert.Equal(t, "restaurant-1", connection.GetPageInfo().GetEndCursor().GetValue())

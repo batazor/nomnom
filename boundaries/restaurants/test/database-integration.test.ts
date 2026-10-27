@@ -63,6 +63,7 @@ import {
   DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import { databaseUri, noKitchenChanges } from "./support/database.ts";
+import { testWaitTimePolicy } from "./support/restaurants.ts";
 
 // Runs against a MongoDB replica set (transactions), for example
 // the testcontainer of the global setup (test/support/global-containers.ts).
@@ -452,7 +453,10 @@ describe("MongoDB storage", () => {
         collection,
         noKitchenChanges,
       ),
-      catalog: new DatabaseRestaurantCatalog(collection),
+      catalog: new DatabaseRestaurantCatalog(collection, {
+        policy: testWaitTimePolicy(),
+        now: () => new Date(),
+      }),
       memberships: new DatabaseRestaurantMemberships(collection),
     };
   };

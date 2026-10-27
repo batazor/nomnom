@@ -13,6 +13,7 @@ import { CloseRestaurantHandler } from "../../slices/restaurant/applications/clo
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import { WaitTimePolicy } from "../../slices/restaurant/domains/restaurant/wait-time.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,
@@ -24,6 +25,22 @@ import {
   noKitchenChanges,
   RecordedOutbox,
 } from "./database.ts";
+
+/** Wait Time Statistics parameters of the tests (the defaults of .env.example). */
+export const testWaitTimePolicy = (preparationTimeMs = 20 * 60_000) =>
+  new WaitTimePolicy({
+    sampleSize: 50,
+    recentWindowMs: 30 * 60_000,
+    elevatedFactor: 1.5,
+    normalFactor: 1.2,
+    preparationTimeMs,
+  });
+
+/** Catalog wait estimated at the time of the read. */
+export const testCatalogWaitTime = (clock: Clock) => ({
+  policy: testWaitTimePolicy(),
+  now: () => clock.now(),
+});
 
 export const operator: Subject = { type: "user", id: "operator" };
 export const owner: Subject = { type: "user", id: "owner" };
@@ -58,7 +75,10 @@ export const createRestaurantWorld = async (
     infrastructure.unitOfWork,
   );
   const restaurants = new DatabaseRestaurantRepository(store, noKitchenChanges);
-  const catalog = new DatabaseRestaurantCatalog(store);
+  const catalog = new DatabaseRestaurantCatalog(
+    store,
+    testCatalogWaitTime(infrastructure.clock),
+  );
   const memberships = new DatabaseRestaurantMemberships(store);
   const authorization = new TestRestaurantAuthorization().allowRegistration(
     operator,

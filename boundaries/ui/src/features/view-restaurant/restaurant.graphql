@@ -3,6 +3,10 @@ query ViewRestaurant($id: ID!) {
     id
     name
     acceptingOrders
+    waitTime {
+      elevated
+      expectedWaitMinutes
+    }
     menu {
       items {
         id

@@ -1,5 +1,5 @@
 import { MarketId } from "../../domains/restaurant/restaurant.ts";
-import type { RestaurantView } from "../restaurant-view.ts";
+import type { CatalogRestaurantView } from "../restaurant-view.ts";
 
 export const DEFAULT_RESTAURANT_PAGE_SIZE = 50;
 export const MAX_RESTAURANT_PAGE_SIZE = 100;
@@ -16,7 +16,7 @@ export type ListRestaurants = Readonly<{
 }>;
 
 export type ListRestaurantsResult = Readonly<{
-  restaurants: readonly RestaurantView[];
+  restaurants: readonly CatalogRestaurantView[];
   nextCursor: string | undefined;
 }>;
 
@@ -27,7 +27,7 @@ export interface RestaurantCatalogReader {
     includeClosed: boolean;
     after: string | undefined;
     limit: number;
-  }): Promise<readonly RestaurantView[]>;
+  }): Promise<readonly CatalogRestaurantView[]>;
 }
 
 export class InvalidPageSizeError extends Error {

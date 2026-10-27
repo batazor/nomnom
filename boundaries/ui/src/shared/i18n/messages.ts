@@ -29,6 +29,7 @@ export const messages = {
     "restaurants.loadingMore": "Загружаем ещё рестораны",
     "restaurants.moreError": "Не удалось загрузить следующие рестораны.",
     "restaurants.closed": "Не принимает заказы",
+    "restaurants.waitElevated": "Повышенное время ожидания",
     "restaurant.back": "Все рестораны",
     "restaurant.loading": "Загружаем меню",
     "restaurant.notFound.title": "Ресторан не найден",
@@ -61,6 +62,7 @@ export const messages = {
     "cart.jump": "Корзина ({count})",
     "checkout.title": "Доставка",
     "checkout.submit": "Оформить заказ",
+    "checkout.expectedWait": "Ожидание ≈{minutes} мин",
     "checkout.retry": "Отправить ещё раз",
     "checkout.sending": "Оформляем заказ",
     "checkout.transportError":
@@ -374,6 +376,7 @@ export const messages = {
     "restaurants.loadingMore": "Loading more restaurants",
     "restaurants.moreError": "Could not load more restaurants.",
     "restaurants.closed": "Not taking orders",
+    "restaurants.waitElevated": "Longer wait than usual",
     "restaurant.back": "All restaurants",
     "restaurant.loading": "Loading the menu",
     "restaurant.notFound.title": "Restaurant not found",
@@ -407,6 +410,7 @@ export const messages = {
     "cart.jump": "Cart ({count})",
     "checkout.title": "Delivery",
     "checkout.submit": "Place order",
+    "checkout.expectedWait": "Wait ≈{minutes} min",
     "checkout.retry": "Send again",
     "checkout.sending": "Placing the order",
     "checkout.transportError":

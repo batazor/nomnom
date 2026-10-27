@@ -10,12 +10,24 @@ import type { AuthorizationRevision } from "../../applications/access-control.ts
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { OwnedRestaurantsReader } from "../../applications/list-owned-restaurants/list-owned-restaurants.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
-import type { RestaurantView } from "../../applications/restaurant-view.ts";
+import type {
+  StoredWaitTime,
+  WaitTimeStatisticsStore,
+} from "../../applications/record-wait-time/record-wait-time.ts";
+import type {
+  CatalogRestaurantView,
+  RestaurantView,
+} from "../../applications/restaurant-view.ts";
 import {
   Restaurant,
   type RestaurantRepository,
   type StoredRestaurantSnapshot,
 } from "../../domains/restaurant/restaurant.ts";
+import {
+  NO_WAIT_TIME_STATISTICS,
+  type WaitTimePolicy,
+  type WaitTimeStatistics,
+} from "../../domains/restaurant/wait-time.ts";
 import type {
   RestaurantMembers,
   RestaurantMemberships,
@@ -32,7 +44,9 @@ export const RESTAURANT_SCHEMA_VERSION = 2;
  * relationship write. Menus and
  * Restaurant Orders are separate collections referencing `restaurantId`.
  * `staff` may be absent in documents written before it existed (see
- * {@link StoredRestaurantSnapshot}).
+ * {@link StoredRestaurantSnapshot}). `waitTime` is the Wait Time Statistics
+ * read model (FR-644): absent until the first accepted order, written without
+ * the aggregate version and kept by its saves.
  */
 export type RestaurantDocument = VersionedDocument & {
   name: string;
@@ -41,7 +55,36 @@ export type RestaurantDocument = VersionedDocument & {
   isOpen: boolean;
   staff?: string[];
   authorizationRevision?: string;
+  waitTime?: WaitTimeDocument;
 };
+
+export type WaitTimeDocument = {
+  completed: { orderId: string; readyAt: Date; durationMs: number }[];
+  open: { orderId: string; acceptedAt: Date }[];
+  level: "NORMAL" | "ELEVATED";
+  revision: number;
+};
+
+const toStatistics = (
+  document: WaitTimeDocument | undefined,
+): WaitTimeStatistics =>
+  document === undefined
+    ? NO_WAIT_TIME_STATISTICS
+    : {
+        completed: document.completed,
+        open: document.open,
+        level: document.level,
+        revision: document.revision,
+      };
+
+const toWaitTimeDocument = (
+  statistics: WaitTimeStatistics,
+): WaitTimeDocument => ({
+  completed: statistics.completed.map((entry) => ({ ...entry })),
+  open: statistics.open.map((entry) => ({ ...entry })),
+  level: statistics.level,
+  revision: statistics.revision,
+});
 
 const toSnapshot = (
   document: RestaurantDocument,
@@ -77,7 +120,39 @@ export const createRestaurantCollection = (
     name: RESTAURANTS_COLLECTION,
     aggregateType: "Restaurant",
     unitOfWork,
+    readModelFields: ["waitTime"],
   });
+
+/** Wait Time Statistics of the restaurant documents (FR-644). */
+export class DatabaseRestaurantWaitTimes implements WaitTimeStatisticsStore {
+  readonly #collection: VersionedCollection<RestaurantDocument>;
+
+  constructor(collection: VersionedCollection<RestaurantDocument>) {
+    this.#collection = collection;
+  }
+
+  async load(restaurantId: string): Promise<StoredWaitTime | undefined> {
+    const document = await this.#collection.findOne({ _id: restaurantId });
+    return document === undefined
+      ? undefined
+      : {
+          marketId: document.marketId,
+          statistics: toStatistics(document.waitTime),
+        };
+  }
+
+  async save(
+    restaurantId: string,
+    statistics: WaitTimeStatistics,
+  ): Promise<void> {
+    const saved = await this.#collection.setUnversioned(restaurantId, {
+      waitTime: toWaitTimeDocument(statistics),
+    });
+    if (!saved) {
+      throw new Error(`restaurant ${restaurantId} disappeared`);
+    }
+  }
+}
 
 /**
  * Runs the save of a Restaurant with what has to commit together with it;
@@ -217,6 +292,29 @@ const toView = (document: RestaurantDocument): RestaurantView => ({
   isOpen: document.isOpen,
 });
 
+const MINUTE_MS = 60_000;
+
+/** Wait estimated at the time of the read (FR-204, FR-645). */
+export type CatalogWaitTime = Readonly<{
+  policy: WaitTimePolicy;
+  now: () => Date;
+}>;
+
+const toCatalogView = (
+  document: RestaurantDocument,
+  waitTime: CatalogWaitTime,
+): CatalogRestaurantView => {
+  const statistics = toStatistics(document.waitTime);
+  const { currentMs } = waitTime.policy.estimate(statistics, waitTime.now());
+  return {
+    ...toView(document),
+    waitTime: {
+      elevated: statistics.level === "ELEVATED",
+      expectedWaitMinutes: Math.ceil(currentMs / MINUTE_MS),
+    },
+  };
+};
+
 /**
  * Query model over the restaurant documents, ordered by restaurant id. Lists
  * are filtered by Market through the `(marketId, isOpen, _id)`,
@@ -229,14 +327,21 @@ export class DatabaseRestaurantCatalog
     OwnedRestaurantsReader
 {
   readonly #collection: VersionedCollection<RestaurantDocument>;
+  readonly #waitTime: CatalogWaitTime;
 
-  constructor(collection: VersionedCollection<RestaurantDocument>) {
+  constructor(
+    collection: VersionedCollection<RestaurantDocument>,
+    waitTime: CatalogWaitTime,
+  ) {
     this.#collection = collection;
+    this.#waitTime = waitTime;
   }
 
-  async get(restaurantId: string): Promise<RestaurantView | undefined> {
+  async get(restaurantId: string): Promise<CatalogRestaurantView | undefined> {
     const document = await this.#collection.findOne({ _id: restaurantId });
-    return document === undefined ? undefined : toView(document);
+    return document === undefined
+      ? undefined
+      : toCatalogView(document, this.#waitTime);
   }
 
   async list(criteria: {
@@ -244,7 +349,7 @@ export class DatabaseRestaurantCatalog
     includeClosed: boolean;
     after: string | undefined;
     limit: number;
-  }): Promise<readonly RestaurantView[]> {
+  }): Promise<readonly CatalogRestaurantView[]> {
     const documents = await this.#collection.find(
       {
         marketId: criteria.marketId,
@@ -255,7 +360,7 @@ export class DatabaseRestaurantCatalog
       },
       { sort: { _id: 1 }, limit: criteria.limit },
     );
-    return documents.map(toView);
+    return documents.map((document) => toCatalogView(document, this.#waitTime));
   }
 
   async listOwned(criteria: {

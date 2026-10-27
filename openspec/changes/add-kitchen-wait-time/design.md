@@ -10,7 +10,7 @@ Wait Time Statistics — блок `waitTime` документа `Restaurant` (с
 | `open` | `order_id → accepted_at` незавершённых заказов |
 | `level` | `NORMAL` или `ELEVATED` |
 
-Блок — read model, а не часть агрегата: consumer меняет его атомарным update (`$set`/`$unset`/`$push` с `$slice`) без проверки и без увеличения `version` ресторана. Поэтому Update, Open и Close Restaurant не конфликтуют со статистикой.
+Блок — read model, а не часть агрегата: consumer записывает его `$set` без проверки и без увеличения `version` ресторана (`VersionedCollection.setUnversioned`). Сохранение агрегата заменяет документ, поэтому коллекция ресторанов объявляет `waitTime` полем read model: `save` заменяет документ pipeline-update'ом, который сохраняет это поле как есть. Update, Open и Close Restaurant не конфликтуют со статистикой по версии; одновременная запись в одном документе — write conflict транзакции, который драйвер повторяет.
 
 Consumer `restaurant.wait-time` в `restaurants-consumer` читает `restaurants.v1.restaurant-order-events`:
 
@@ -21,7 +21,7 @@ Consumer `restaurant.wait-time` в `restaurants-consumer` читает `restaura
 | `RestaurantOrderCancelled`, `PreparationFailed` | ключ удаляется из `open`, длительность не пишется |
 | остальные | явный no-op |
 
-Повторная доставка безопасна без Inbox: повторный Accepted пишет то же значение, а Ready и отмена после удаления ключа ничего не меняют. Partition key — id Restaurant Order, поэтому факты одного заказа приходят по порядку. Ресторан берётся из нового поля `restaurant_id` событий. События, опубликованные до этого change, `restaurant_id` не несут: consumer подтверждает их без изменений, а статистика наполняется с новых заказов.
+Consumer — свой `MessageProcessor` с Inbox `restaurants.wait-time` в группе `KAFKA__CONSUMER_GROUP`; worker группы направляет сообщение processor'у его стрима. Повтор безопасен и без Inbox: повторный Accepted для известного заказа ничего не меняет, Ready и отмена после удаления заказа тоже. Partition key — id Restaurant Order, поэтому факты одного заказа приходят по порядку. Ресторан берётся из нового поля `restaurant_id` событий. События, опубликованные до этого change, `restaurant_id` не несут: consumer подтверждает их без изменений, а статистика наполняется с новых заказов. Остальные типы стрима processor подтверждает без обработки.
 
 Ресторана нет — ошибка consumer'а (DLQ), а не пропуск.
 
@@ -43,13 +43,13 @@ Consumer `restaurant.wait-time` в `restaurants-consumer` читает `restaura
 
 ## Смена уровня
 
-Consumer после update вычисляет уровень. Если он изменился, в той же транзакции MongoDB consumer записывает новый `level` и `RestaurantWaitLevelChanged` (`restaurant_id`, `market_id`, `elevated`) в Outbox ресторана. Событие идёт в `restaurants.v1.restaurant-events`, partition key — `restaurant_id`.
+Consumer после update вычисляет уровень. Если он изменился, в той же транзакции MongoDB consumer записывает новый `level` и `RestaurantWaitLevelChanged` (`restaurant_id`, `market_id`, `elevated`) в Outbox. `aggregate_type` события — `RestaurantWaitTime`, версия — номер смены уровня (`revision` статистики): id события Outbox строится из типа, id и версии агрегата, а версия `Restaurant` при смене уровня не растёт. Событие идёт в `restaurants.v1.restaurant-events`, partition key — `restaurant_id`.
 
 Уровень пересчитывается только на событиях ресторана, без таймеров и polling (ADR 36). Если кухня встала и событий нет, сохранённый уровень не меняется до следующего факта. Минуты при этом считаются при чтении и растут вместе с `A`.
 
 ## Каталог и кеш
 
-`RestaurantView` получает `waitTimeElevated` (сохранённый `level`) и `expectedWait` (`W` на момент чтения, округлённое вверх до минуты).
+Get Restaurant и List Restaurants возвращают `CatalogRestaurantView` — `RestaurantView` с `waitTime { elevated, expectedWaitMinutes }`: сохранённый `level` и `W` на момент чтения, округлённое вверх до минуты. В proto это `Restaurant.wait_time`, его заполняют только эти два RPC; ответы команд и List Owned Restaurants его не несут. Кешированная запись или страница без ожидания — промах.
 
 Кеш каталога (ADR 0003 restaurants) обновляется по `RestaurantWaitLevelChanged` так же, как по `RestaurantOpened` и `RestaurantClosed`: перечитывается ресторан и начинается новое поколение страниц его Market. Минуты в кеше устаревают не больше чем на `CACHE__TTL`. Этого достаточно: время в минутах — оценка, а не обещание.
 
@@ -59,8 +59,9 @@ Consumer после update вычисляет уровень. Если он из
 
 ## Customer UI
 
-- Список ресторанов и страница ресторана: бейдж «Повышенное время ожидания», если `waitTimeElevated`.
-- Оформление заказа: «Ожидание ≈N мин» из `expectedWaitMinutes`.
+- Список ресторанов и страница ресторана: бейдж «Повышенное время ожидания», если `waitTime.elevated`.
+- Оформление заказа: «Ожидание ≈N мин» из `waitTime.expectedWaitMinutes`.
+- GraphQL: `Restaurant.waitTime: RestaurantWaitTime` — заполняют `restaurants` и `restaurant`; в заказе, на кухне и в `myRestaurants` — `null`, как `menu`, а не нули.
 - Данные приходят с каталогом. Отдельной подписки и polling нет.
 
 ## Риски

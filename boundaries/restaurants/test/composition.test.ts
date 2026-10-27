@@ -53,6 +53,7 @@ const resourcesOf = (
     spicedb: config.spicedb,
     reconciler: config.reconciler,
     kitchen: config.kitchen,
+    waitTime: config.waitTime,
     simulator: loadSimulatorConfig(simulatorEnvironment),
     database,
     valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
@@ -134,35 +135,45 @@ test("the restaurants container resolves every registration in the application s
   }
 });
 
-test("the kitchen tunables reach the composed handlers from configuration", async () => {
+test("the kitchen and wait time tunables reach the composed policy from configuration", async () => {
   const database = offlineDatabase();
-  const acceptedAt = new Date(Date.UTC(2026, 9, 25, 9));
-  const estimate = async (config: AppConfig) => {
+  const policyOf = async (config: AppConfig) => {
     const container = createRestaurantsContainer(resourcesOf(config, database));
     try {
-      return await container.cradle.readyTimeEstimator.estimate({
-        restaurantId: "restaurant",
-        items: [],
-        acceptedAt,
-      });
+      return container.cradle.waitTimePolicy;
     } finally {
       await container.dispose();
     }
   };
   try {
-    assert.equal(
-      (await estimate(loadConfig(environment))).getTime() -
-        acceptedAt.getTime(),
-      20 * 60_000,
+    const defaults = await policyOf(loadConfig(environment));
+    assert.deepEqual(
+      {
+        sampleSize: defaults.sampleSize,
+        recentWindowMs: defaults.recentWindowMs,
+        elevatedFactor: defaults.elevatedFactor,
+        normalFactor: defaults.normalFactor,
+        preparationTimeMs: defaults.preparationTimeMs,
+      },
+      {
+        sampleSize: 50,
+        recentWindowMs: 30 * 60_000,
+        elevatedFactor: 1.5,
+        normalFactor: 1.2,
+        preparationTimeMs: 20 * 60_000,
+      },
     );
-    assert.equal(
-      (
-        await estimate(
-          loadConfig({ ...environment, KITCHEN__PREPARATION_TIME: "35m" }),
-        )
-      ).getTime() - acceptedAt.getTime(),
-      35 * 60_000,
+    const tuned = await policyOf(
+      loadConfig({
+        ...environment,
+        KITCHEN__PREPARATION_TIME: "35m",
+        WAIT_TIME__SAMPLE_SIZE: "10",
+        WAIT_TIME__ELEVATED_FACTOR: "2",
+      }),
     );
+    assert.equal(tuned.preparationTimeMs, 35 * 60_000);
+    assert.equal(tuned.sampleSize, 10);
+    assert.equal(tuned.elevatedFactor, 2);
   } finally {
     await database.close();
   }
@@ -172,6 +183,8 @@ test("the consumer container resolves every registration", async () => {
   const database = offlineDatabase();
   const container = createConsumerContainer({
     consumer: loadConfig({}).consumer,
+    kitchen: loadConfig({}).kitchen,
+    waitTime: loadConfig({}).waitTime,
     database,
     kafkaConsumer: {
       connect: async () => {},

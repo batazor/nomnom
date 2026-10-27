@@ -28,12 +28,19 @@ export type MockMenuItem = {
   available: boolean;
 };
 
+export type MockWaitTime = { elevated: boolean; expectedWaitMinutes: number };
+
 export type MockRestaurant = {
   id: string;
   name: string;
   acceptingOrders: boolean;
   menu: { items: MockMenuItem[] } | null;
+  // Set by the catalog queries, null elsewhere like in the BFF.
+  waitTime: MockWaitTime | null;
 };
+
+// A kitchen working at its usual pace.
+const usualWait: MockWaitTime = { elevated: false, expectedWaitMinutes: 20 };
 
 export type MockOrderItem = {
   menuItem: { id: string; name: string };
@@ -87,6 +94,8 @@ export const kitchenEight: MockRestaurant = {
   id: "restaurant-kitchen-8",
   name: "Кухня №8",
   acceptingOrders: true,
+  // The kitchen is slower than usual: the catalog shows the badge.
+  waitTime: { elevated: true, expectedWaitMinutes: 42 },
   menu: {
     items: [
       {
@@ -125,6 +134,7 @@ export const nightBakery: MockRestaurant = {
   id: "restaurant-night-bakery",
   name: "Ночная пекарня",
   acceptingOrders: false,
+  waitTime: usualWait,
   menu: {
     items: [
       {
@@ -154,6 +164,7 @@ const moreRestaurants: MockRestaurant[] = [
     id: "restaurant-north-dumplings",
     name: "Пельменная «Север»",
     acceptingOrders: true,
+    waitTime: usualWait,
     menu: {
       items: [
         item(
@@ -170,6 +181,7 @@ const moreRestaurants: MockRestaurant[] = [
     id: "restaurant-georgian-yard",
     name: "Грузинский дворик",
     acceptingOrders: true,
+    waitTime: usualWait,
     menu: {
       items: [
         item("menu-khachapuri", "Хачапури по-аджарски", "520.00"),
@@ -181,6 +193,7 @@ const moreRestaurants: MockRestaurant[] = [
     id: "restaurant-sora-ramen",
     name: "Рамен-бар Сора",
     acceptingOrders: true,
+    waitTime: usualWait,
     menu: {
       items: [item("menu-shoyu", "Сёю рамен", "640.00", "Курица, яйцо, нори")],
     },
@@ -189,6 +202,7 @@ const moreRestaurants: MockRestaurant[] = [
     id: "restaurant-green-bowl",
     name: "Овощи и злаки",
     acceptingOrders: true,
+    waitTime: usualWait,
     menu: {
       items: [item("menu-buddha-bowl", "Боул с киноа", "480.50")],
     },
@@ -197,6 +211,7 @@ const moreRestaurants: MockRestaurant[] = [
     id: "restaurant-bridge-pizza",
     name: "Пицца у моста",
     acceptingOrders: true,
+    waitTime: usualWait,
     menu: {
       items: [item("menu-margherita", "Маргарита", "560.00")],
     },
@@ -205,6 +220,7 @@ const moreRestaurants: MockRestaurant[] = [
     id: "restaurant-corner-coffee",
     name: "Кофейня на углу",
     acceptingOrders: true,
+    waitTime: usualWait,
     menu: null,
   },
 ];

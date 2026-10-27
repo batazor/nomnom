@@ -214,6 +214,37 @@ describe("view restaurant", () => {
     expect(screen.getByTestId("cart-subtotal")).toHaveTextContent(/420/);
   });
 
+  it("AC-848 shows a longer wait and the expected minutes, ordering stays open", async () => {
+    const user = userEvent.setup();
+    renderRestaurant();
+
+    expect(await screen.findByText("Повышенное время ожидания")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Добавить в корзину: Бао с грибами",
+      }),
+    );
+
+    expect(within(cart()).getByText("Ожидание ≈42 мин")).toBeVisible();
+    expect(
+      within(cart()).getByRole("button", { name: "Оформить заказ" }),
+    ).toBeEnabled();
+  });
+
+  it("FR-648 shows no badge for a kitchen at its usual pace", async () => {
+    renderRestaurant("restaurant-north-dumplings");
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "Пельменная «Север»",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Повышенное время ожидания"),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not take orders while the restaurant is closed", async () => {
     renderRestaurant("restaurant-night-bakery");
 

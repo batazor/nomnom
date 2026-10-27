@@ -323,6 +323,8 @@ test("AC-211 get restaurant returns the public representation", async () => {
     name: "Pho Bar",
     marketId: market,
     isOpen: true,
+    // FR-204: no history yet, the wait is the preparation time.
+    waitTime: { elevated: false, expectedWaitMinutes: 20 },
   });
 });
 

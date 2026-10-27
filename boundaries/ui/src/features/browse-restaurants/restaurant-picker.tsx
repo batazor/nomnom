@@ -86,6 +86,11 @@ export function RestaurantPicker({
               <m.span className="catalog-name" layout="position">
                 {restaurant.name}
               </m.span>
+              {restaurant.waitTime?.elevated ? (
+                <span className="catalog-wait">
+                  {t("restaurants.waitElevated")}
+                </span>
+              ) : null}
             </m.button>
           </li>
         ))}

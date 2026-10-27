@@ -27,11 +27,14 @@ type Attempt = { key: string; request: string };
 
 export function PlaceOrder({
   restaurantId,
+  expectedWaitMinutes,
   lines,
   onItemProblems,
   onPlaced,
 }: {
   restaurantId: string;
+  // Estimate of the restaurant for an order placed now, not a promise.
+  expectedWaitMinutes: number | undefined;
   lines: readonly OrderLine[];
   onItemProblems: (problems: ItemProblems) => void;
   onPlaced: (orderId: string) => void;
@@ -112,6 +115,11 @@ export function PlaceOrder({
         </p>
       ) : null}
 
+      {expectedWaitMinutes === undefined ? null : (
+        <p className="checkout-wait">
+          {t("checkout.expectedWait", { minutes: expectedWaitMinutes })}
+        </p>
+      )}
       <Button fullWidth isPending={state.kind === "sending"} type="submit">
         {state.kind === "transportError"
           ? t("checkout.retry")

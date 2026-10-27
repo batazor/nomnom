@@ -542,6 +542,23 @@
         {
           "original": "menu",
           "mapped": "menu"
+        },
+        {
+          "original": "waitTime",
+          "mapped": "wait_time"
+        }
+      ]
+    },
+    {
+      "type": "RestaurantWaitTime",
+      "fieldMappings": [
+        {
+          "original": "elevated",
+          "mapped": "elevated"
+        },
+        {
+          "original": "expectedWaitMinutes",
+          "mapped": "expected_wait_minutes"
         }
       ]
     },

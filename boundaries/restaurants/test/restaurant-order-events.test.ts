@@ -209,3 +209,46 @@ test("event_id is the UUIDv5 of the aggregate version and event type", () => {
     ),
   );
 });
+
+test("AC-869 facts of the Wait Time Statistics carry the restaurant", () => {
+  const facts = [
+    {
+      schema: RestaurantOrderAcceptedSchema,
+      event: {
+        type: "RestaurantOrderAccepted",
+        acceptedAt: at,
+        expectedReadyAt: at,
+      },
+    },
+    {
+      schema: RestaurantOrderReadySchema,
+      event: { type: "RestaurantOrderReady", readyAt: at },
+    },
+    {
+      schema: RestaurantOrderCancelledSchema,
+      event: {
+        type: "RestaurantOrderCancelled",
+        stage: RestaurantOrderState.Preparing,
+        preparationStarted: true,
+        reason: undefined,
+      },
+    },
+    {
+      schema: PreparationFailedSchema,
+      event: {
+        type: "RestaurantOrderFailed",
+        stage: RestaurantOrderState.Preparing,
+        reason: "oven",
+      },
+    },
+  ] as const;
+  for (const { schema, event } of facts) {
+    const mapped = map({ ...base, ...event });
+    assert.equal(
+      (fromBinary(schema, mapped.payload) as { restaurantId: string })
+        .restaurantId,
+      "rest-1",
+      event.type,
+    );
+  }
+});

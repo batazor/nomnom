@@ -27,7 +27,9 @@ type Restaurant struct {
 	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	IsOpen       bool                   `protobuf:"varint,3,opt,name=is_open,json=isOpen,proto3" json:"is_open,omitempty"`
 	// Market of the Restaurant (ADR 41); immutable.
-	MarketId      string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	MarketId string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Set by GetRestaurant and ListRestaurants only (FR-204).
+	WaitTime      *RestaurantWaitTime `protobuf:"bytes,6,opt,name=wait_time,json=waitTime,proto3" json:"wait_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -90,6 +92,68 @@ func (x *Restaurant) GetMarketId() string {
 	return ""
 }
 
+func (x *Restaurant) GetWaitTime() *RestaurantWaitTime {
+	if x != nil {
+		return x.WaitTime
+	}
+	return nil
+}
+
+// Wait for a new order of the restaurant (Wait Time Statistics, FR-645).
+type RestaurantWaitTime struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The current wait is elevated against the baseline of the restaurant.
+	Elevated bool `protobuf:"varint,1,opt,name=elevated,proto3" json:"elevated,omitempty"`
+	// Current wait rounded up to a minute, computed when read.
+	ExpectedWaitMinutes int32 `protobuf:"varint,2,opt,name=expected_wait_minutes,json=expectedWaitMinutes,proto3" json:"expected_wait_minutes,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *RestaurantWaitTime) Reset() {
+	*x = RestaurantWaitTime{}
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestaurantWaitTime) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestaurantWaitTime) ProtoMessage() {}
+
+func (x *RestaurantWaitTime) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestaurantWaitTime.ProtoReflect.Descriptor instead.
+func (*RestaurantWaitTime) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RestaurantWaitTime) GetElevated() bool {
+	if x != nil {
+		return x.Elevated
+	}
+	return false
+}
+
+func (x *RestaurantWaitTime) GetExpectedWaitMinutes() int32 {
+	if x != nil {
+		return x.ExpectedWaitMinutes
+	}
+	return 0
+}
+
 // Exact amount: a decimal string with a dot separator and an ISO 4217 currency.
 type Money struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -101,7 +165,7 @@ type Money struct {
 
 func (x *Money) Reset() {
 	*x = Money{}
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -113,7 +177,7 @@ func (x *Money) String() string {
 func (*Money) ProtoMessage() {}
 
 func (x *Money) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -126,7 +190,7 @@ func (x *Money) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Money.ProtoReflect.Descriptor instead.
 func (*Money) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{1}
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Money) GetAmount() string {
@@ -157,7 +221,7 @@ type MenuItem struct {
 
 func (x *MenuItem) Reset() {
 	*x = MenuItem{}
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -169,7 +233,7 @@ func (x *MenuItem) String() string {
 func (*MenuItem) ProtoMessage() {}
 
 func (x *MenuItem) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -182,7 +246,7 @@ func (x *MenuItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItem.ProtoReflect.Descriptor instead.
 func (*MenuItem) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{2}
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *MenuItem) GetMenuItemId() string {
@@ -224,13 +288,17 @@ var File_nomnom_restaurants_v1_restaurants_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_restaurants_proto_rawDesc = "" +
 	"\n" +
-	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"\x8a\x01\n" +
+	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"\xd2\x01\n" +
 	"\n" +
 	"Restaurant\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
 	"\ais_open\x18\x03 \x01(\bR\x06isOpen\x12\x1b\n" +
-	"\tmarket_id\x18\x05 \x01(\tR\bmarketIdJ\x04\b\x04\x10\x05R\aaddress\";\n" +
+	"\tmarket_id\x18\x05 \x01(\tR\bmarketId\x12F\n" +
+	"\twait_time\x18\x06 \x01(\v2).nomnom.restaurants.v1.RestaurantWaitTimeR\bwaitTimeJ\x04\b\x04\x10\x05R\aaddress\"d\n" +
+	"\x12RestaurantWaitTime\x12\x1a\n" +
+	"\belevated\x18\x01 \x01(\bR\belevated\x122\n" +
+	"\x15expected_wait_minutes\x18\x02 \x01(\x05R\x13expectedWaitMinutes\";\n" +
 	"\x05Money\x12\x16\n" +
 	"\x06amount\x18\x01 \x01(\tR\x06amount\x12\x1a\n" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\xb4\x01\n" +
@@ -255,19 +323,21 @@ func file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP() []byte {
 	return file_nomnom_restaurants_v1_restaurants_proto_rawDescData
 }
 
-var file_nomnom_restaurants_v1_restaurants_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_nomnom_restaurants_v1_restaurants_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_nomnom_restaurants_v1_restaurants_proto_goTypes = []any{
-	(*Restaurant)(nil), // 0: nomnom.restaurants.v1.Restaurant
-	(*Money)(nil),      // 1: nomnom.restaurants.v1.Money
-	(*MenuItem)(nil),   // 2: nomnom.restaurants.v1.MenuItem
+	(*Restaurant)(nil),         // 0: nomnom.restaurants.v1.Restaurant
+	(*RestaurantWaitTime)(nil), // 1: nomnom.restaurants.v1.RestaurantWaitTime
+	(*Money)(nil),              // 2: nomnom.restaurants.v1.Money
+	(*MenuItem)(nil),           // 3: nomnom.restaurants.v1.MenuItem
 }
 var file_nomnom_restaurants_v1_restaurants_proto_depIdxs = []int32{
-	1, // 0: nomnom.restaurants.v1.MenuItem.price:type_name -> nomnom.restaurants.v1.Money
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1, // 0: nomnom.restaurants.v1.Restaurant.wait_time:type_name -> nomnom.restaurants.v1.RestaurantWaitTime
+	2, // 1: nomnom.restaurants.v1.MenuItem.price:type_name -> nomnom.restaurants.v1.Money
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_restaurants_v1_restaurants_proto_init() }
@@ -281,7 +351,7 @@ func file_nomnom_restaurants_v1_restaurants_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_restaurants_v1_restaurants_proto_rawDesc), len(file_nomnom_restaurants_v1_restaurants_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

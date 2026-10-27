@@ -266,7 +266,20 @@ drink   PENDING → READY ────────────┘
 - **Acceptance от линии не зависит.** При пустой линии заказы принимаются и ждут в `QUEUED`; если никто не встанет на линию, таймер ожидания Preparation workflow `orders` ведёт к бизнес-ветке отмены. Kitchen board показывает пустую линию предупреждением.
 - **Pool Load** — `busy / on_line` и Kitchen Queue как backlog (Get Cook Pool).
 
-Не решено: ручное назначение Cook, расчёт `expected_ready_at` по очереди и числу Cook на линии, связь Cook с Kitchen Station.
+Не решено: ручное назначение Cook, связь Cook с Kitchen Station. `expected_ready_at` считается по [Wait Time Statistics](#wait-time-statistics), без линии.
+
+## Wait Time Statistics
+
+Перегрузку кухни видно до заказа, но приём не ограничивается: ни паузы, ни скрытия ресторана, ни load shedding. Технический rate limiting gateway (429) с этим не связан. Change [`add-kitchen-wait-time`](../openspec/changes/add-kitchen-wait-time/design.md).
+
+- **Статистика** — read model в документе `Restaurant`: последние `WAIT_TIME__SAMPLE_SIZE` длительностей «принят → готов» и незавершённые заказы. Её ведёт consumer собственных `RestaurantOrderAccepted`, `RestaurantOrderReady`, `RestaurantOrderCancelled`, `PreparationFailed` (use case Record Wait Time); запись не меняет `version` агрегата. Cook Pool и линия не участвуют.
+- **Базовое время** — медиана выборки; пока она не набрана — `KITCHEN__PREPARATION_TIME`.
+- **Текущее ожидание** — большее из медианы готовых за `WAIT_TIME__RECENT_WINDOW` и возраста самого старого незавершённого заказа.
+- **Wait Level** — `ELEVATED` выше `WAIT_TIME__ELEVATED_FACTOR` базовых, снова `NORMAL` не выше `WAIT_TIME__NORMAL_FACTOR`; смена публикует `RestaurantWaitLevelChanged`, по нему обновляется кеш каталога. Уровень пересчитывается только на фактах ресторана, без таймеров.
+- **Каталог** отдаёт уровень и текущее ожидание в минутах на момент чтения; клиент видит метку и «≈N мин» при оформлении.
+- **Expected Ready At** без срока от кухни — момент Acceptance плюс текущее ожидание. Принятые заказы не пересчитываются; срок — оценка, не обещание.
+
+Улучшение на потом: базовое время по часам суток.
 
 ## События
 
@@ -402,10 +415,9 @@ Feature: Order ready for pickup
 - Может ли ресторан отказаться после Acceptance и до какой стадии. Текущее допущение реализации — `InvalidTransition`.
 - Политика unavailable item: cancel, substitution, удаление с компенсацией, ожидание Customer.
 - Порядок Kitchen Queue: FIFO, priority, courier ETA, ручной порядок; ручная перестановка делает очередь aggregate.
-- Kitchen Capacity: влияние Cook Pool на `expected_ready_at` и ручное назначение Cook ([Kitchen Capacity](#kitchen-capacity)).
+- Kitchen Capacity: ручное назначение Cook ([Kitchen Capacity](#kitchen-capacity)).
 - Когда начинается поиск курьера относительно Preparation.
 - Нужен ли кухне courier ETA.
-- Как рассчитывается начальное `expected_preparation_time` / `expected_ready_at`.
 - Семантика дубликата команды: no-op или ошибка для Start Preparation и Mark Ready for Pickup. Текущее допущение реализации — обязательный параметр handler `onRepeat` без значения по умолчанию.
 - Политика отмены во время Preparation и после Ready, включая списание еды. Текущее допущение реализации — обязательный параметр handler `cancellationDuringPreparation` без значения по умолчанию.
 - Нужно ли `restaurants` подтверждение передачи заказа курьеру (state после `READY`) или достаточно факта Pickup из `delivery`.

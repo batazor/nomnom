@@ -92,3 +92,9 @@
   color: var(--color-danger);
   font-size: var(--font-size-sm);
 }
+
+/* FR-648: the kitchen is slower than usual; ordering stays available. */
+.catalog-wait {
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+}

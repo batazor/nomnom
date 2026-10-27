@@ -35,6 +35,13 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
    * @generated from field: string market_id = 5;
    */
   marketId: string;
+
+  /**
+   * Set by GetRestaurant and ListRestaurants only (FR-204).
+   *
+   * @generated from field: nomnom.restaurants.v1.RestaurantWaitTime wait_time = 6;
+   */
+  waitTime?: RestaurantWaitTime | undefined;
 };
 
 /**
@@ -42,6 +49,33 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
  * Use `create(RestaurantSchema)` to create a new message.
  */
 export declare const RestaurantSchema: GenMessage<Restaurant>;
+
+/**
+ * Wait for a new order of the restaurant (Wait Time Statistics, FR-645).
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantWaitTime
+ */
+export declare type RestaurantWaitTime = Message<"nomnom.restaurants.v1.RestaurantWaitTime"> & {
+  /**
+   * The current wait is elevated against the baseline of the restaurant.
+   *
+   * @generated from field: bool elevated = 1;
+   */
+  elevated: boolean;
+
+  /**
+   * Current wait rounded up to a minute, computed when read.
+   *
+   * @generated from field: int32 expected_wait_minutes = 2;
+   */
+  expectedWaitMinutes: number;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantWaitTime.
+ * Use `create(RestaurantWaitTimeSchema)` to create a new message.
+ */
+export declare const RestaurantWaitTimeSchema: GenMessage<RestaurantWaitTime>;
 
 /**
  * Exact amount: a decimal string with a dot separator and an ISO 4217 currency.

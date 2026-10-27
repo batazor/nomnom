@@ -5,7 +5,10 @@ import type {
   MenuView,
 } from "../../slices/menu/applications/menu-support.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
-import type { RestaurantView } from "../../slices/restaurant/applications/restaurant-view.ts";
+import type {
+  CatalogRestaurantView,
+  RestaurantView,
+} from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { KitchenQueueEntry } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { ActiveRestaurantOrder } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type { IncomingOrder } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
@@ -28,6 +31,19 @@ export const toRestaurantMessage = (view: RestaurantView) =>
     name: view.name,
     isOpen: view.isOpen,
     marketId: view.marketId,
+  });
+
+/** Get Restaurant and List Restaurants also carry the wait (FR-204). */
+export const toCatalogRestaurantMessage = (view: CatalogRestaurantView) =>
+  create(RestaurantSchema, {
+    restaurantId: view.restaurantId,
+    name: view.name,
+    isOpen: view.isOpen,
+    marketId: view.marketId,
+    waitTime: {
+      elevated: view.waitTime.elevated,
+      expectedWaitMinutes: view.waitTime.expectedWaitMinutes,
+    },
   });
 
 export const toMenuItemMessage = (item: MenuItemView) =>

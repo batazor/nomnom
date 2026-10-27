@@ -50,6 +50,7 @@ import { createKitchenRpcs } from "./kitchen.ts";
 import { createKitchenBoardRpcs } from "./kitchen-board.ts";
 import { createMenuRpcs } from "./menu-commands.ts";
 import {
+  toCatalogRestaurantMessage,
   toMenuItemMessages,
   toRestaurantMessage,
   toStaffMessage,
@@ -115,7 +116,7 @@ export const createRestaurantsService = (
           restaurantId: request.restaurantId,
         });
         return create(GetRestaurantResponseSchema, {
-          restaurant: toRestaurantMessage(view),
+          restaurant: toCatalogRestaurantMessage(view),
         });
       } catch (error) {
         throw transportError(error);
@@ -148,7 +149,7 @@ export const createRestaurantsService = (
           cursor: request.pageToken === "" ? undefined : request.pageToken,
         });
         return create(ListRestaurantsResponseSchema, {
-          restaurants: result.restaurants.map(toRestaurantMessage),
+          restaurants: result.restaurants.map(toCatalogRestaurantMessage),
           nextPageToken: result.nextCursor ?? "",
         });
       } catch (error) {

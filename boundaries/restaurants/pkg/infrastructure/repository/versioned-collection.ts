@@ -29,6 +29,7 @@ export class VersionedCollection<D extends VersionedDocument> {
   readonly #aggregateType: string;
   readonly #unitOfWork: DatabaseUnitOfWork;
   readonly #duplicateKey: DuplicateKeyMapper<D>;
+  readonly #readModelFields: readonly string[];
 
   constructor(options: {
     db: Db;
@@ -36,11 +37,17 @@ export class VersionedCollection<D extends VersionedDocument> {
     aggregateType: string;
     unitOfWork: DatabaseUnitOfWork;
     duplicateKey?: DuplicateKeyMapper<D>;
+    /**
+     * Fields of a read model kept in the aggregate document: {@link save}
+     * leaves them as stored, {@link setUnversioned} writes them.
+     */
+    readModelFields?: readonly string[];
   }) {
     this.collection = options.db.collection<D>(options.name);
     this.#aggregateType = options.aggregateType;
     this.#unitOfWork = options.unitOfWork;
     this.#duplicateKey = options.duplicateKey ?? (() => undefined);
+    this.#readModelFields = options.readModelFields ?? [];
   }
 
   get #session() {
@@ -82,11 +89,33 @@ export class VersionedCollection<D extends VersionedDocument> {
           session: this.#session,
         });
       } else {
-        const result = await this.collection.replaceOne(
-          { _id: id, version: expectedVersion } as Filter<D>,
-          document,
-          { session: this.#session },
-        );
+        const filter = { _id: id, version: expectedVersion } as Filter<D>;
+        // Read model fields survive the replacement; `$literal` keeps
+        // values that start with `$` from being read as field paths.
+        const result =
+          this.#readModelFields.length === 0
+            ? await this.collection.replaceOne(filter, document, {
+                session: this.#session,
+              })
+            : await this.collection.updateOne(
+                filter,
+                [
+                  {
+                    $replaceWith: {
+                      $mergeObjects: [
+                        { $literal: document },
+                        Object.fromEntries(
+                          this.#readModelFields.map((field) => [
+                            field,
+                            `$${field}`,
+                          ]),
+                        ),
+                      ],
+                    },
+                  },
+                ],
+                { session: this.#session },
+              );
         if (result.matchedCount === 0) {
           throw new ConcurrencyConflictError(this.#aggregateType, id);
         }
@@ -102,5 +131,24 @@ export class VersionedCollection<D extends VersionedDocument> {
       throw error;
     }
     return version;
+  }
+
+  /**
+   * Writes read model fields of an existing document without checking or
+   * changing `version`; `false` when the document does not exist.
+   */
+  async setUnversioned(id: string, fields: Partial<D>): Promise<boolean> {
+    const unknown = Object.keys(fields).filter(
+      (field) => !this.#readModelFields.includes(field),
+    );
+    if (unknown.length > 0) {
+      throw new Error(`not read model fields: ${unknown.join(", ")}`);
+    }
+    const result = await this.collection.updateOne(
+      { _id: id } as Filter<D>,
+      { $set: fields } as never,
+      { session: this.#session },
+    );
+    return result.matchedCount > 0;
   }
 }

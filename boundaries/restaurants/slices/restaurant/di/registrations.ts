@@ -10,9 +10,11 @@ import type { Clock } from "../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type {
+  KitchenConfig,
   ReconcilerConfig,
   SpiceDbEnabledConfig,
   ValkeyEnabledConfig,
+  WaitTimeConfig,
 } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
@@ -33,6 +35,7 @@ import { ListRestaurantsHandler } from "../applications/list-restaurants/list-re
 import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
+import { WaitTimePolicy } from "../domains/restaurant/wait-time.ts";
 import { CachedRestaurantCatalog } from "../infrastructure/cache/restaurants.ts";
 import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";
 import { RelationshipReconciler } from "../infrastructure/reconcile/reconcile.ts";
@@ -41,6 +44,7 @@ import {
   DatabaseRestaurantCatalog,
   DatabaseRestaurantMemberships,
   DatabaseRestaurantRepository,
+  DatabaseRestaurantWaitTimes,
   type RestaurantDocument,
   type RestaurantSaved,
 } from "../infrastructure/repository/restaurants.ts";
@@ -64,6 +68,8 @@ export interface RestaurantDependencies {
   readonly spicedb: RelationshipsClient;
   readonly spicedbConfig: SpiceDbEnabledConfig;
   readonly reconcilerConfig: ReconcilerConfig;
+  readonly kitchenConfig: KitchenConfig;
+  readonly waitTimeConfig: WaitTimeConfig;
   readonly logger: Logger;
 }
 
@@ -83,6 +89,10 @@ export interface RestaurantCradle {
    */
   readonly restaurants: DatabaseRestaurantRepository;
   readonly restaurantMemberships: DatabaseRestaurantMemberships;
+  /** Baseline, current wait and level of the Wait Time Statistics (FR-645). */
+  readonly waitTimePolicy: WaitTimePolicy;
+  /** Wait Time Statistics kept in the restaurant documents (FR-644). */
+  readonly restaurantWaitTimes: DatabaseRestaurantWaitTimes;
   readonly restaurantCatalog: DatabaseRestaurantCatalog;
   /** Get Restaurant and List Restaurants through the Valkey read cache (ADR 43). */
   readonly cachedRestaurantCatalog: CachedRestaurantCatalog;
@@ -115,9 +125,23 @@ export const registerRestaurant = (
       ({ restaurantCollection }: Cradle) =>
         new DatabaseRestaurantMemberships(restaurantCollection),
     ).singleton(),
-    restaurantCatalog: asFunction(
+    waitTimePolicy: asFunction(
+      ({ waitTimeConfig, kitchenConfig }: Cradle) =>
+        new WaitTimePolicy({
+          ...waitTimeConfig,
+          preparationTimeMs: kitchenConfig.preparationTimeMs,
+        }),
+    ).singleton(),
+    restaurantWaitTimes: asFunction(
       ({ restaurantCollection }: Cradle) =>
-        new DatabaseRestaurantCatalog(restaurantCollection),
+        new DatabaseRestaurantWaitTimes(restaurantCollection),
+    ).singleton(),
+    restaurantCatalog: asFunction(
+      ({ restaurantCollection, waitTimePolicy, clock }: Cradle) =>
+        new DatabaseRestaurantCatalog(restaurantCollection, {
+          policy: waitTimePolicy,
+          now: () => clock.now(),
+        }),
     ).singleton(),
     cachedRestaurantCatalog: asFunction(
       ({ restaurantCatalog, valkey, valkeyConfig, cacheMetrics }: Cradle) =>

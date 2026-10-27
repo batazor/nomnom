@@ -15,8 +15,14 @@ env:
   SIMULATOR__INTERVAL: 5s
   SIMULATOR__MIN_DELAY: 30s
   SIMULATOR__MAX_DELAY: 2m
-  # Демо идёт в темпе Simulator (минуты, не десятки минут): начальный expected_ready_at.
+  # Демо идёт в темпе Simulator (минуты, не десятки минут): базовое время ожидания, пока
+  # выборка Wait Time Statistics не набрана (FR-645). Совпадает с restaurants-consumer.
   KITCHEN__PREPARATION_TIME: 1m
+  # Wait Time Statistics (FR-645, FR-657): оценка в каталоге и expected_ready_at; те же значения у consumer.
+  WAIT_TIME__SAMPLE_SIZE: "50"
+  WAIT_TIME__RECENT_WINDOW: 30m
+  WAIT_TIME__ELEVATED_FACTOR: "1.5"
+  WAIT_TIME__NORMAL_FACTOR: "1.2"
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.

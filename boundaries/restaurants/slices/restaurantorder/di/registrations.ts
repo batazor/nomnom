@@ -13,7 +13,9 @@ import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
 import type { DatabaseUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
 import type { MenuRepository } from "../../menu/domains/menu/menu.ts";
+import type { WaitTimeStatisticsStore } from "../../restaurant/applications/record-wait-time/record-wait-time.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
+import type { WaitTimePolicy } from "../../restaurant/domains/restaurant/wait-time.ts";
 import {
   type AcceptanceConditionsProvider,
   type AcceptanceFactsReader,
@@ -41,10 +43,8 @@ import {
   StartPreparationHandler,
 } from "../applications/start-preparation/start-preparation.ts";
 import type { RestaurantOrderRepository } from "../domains/restaurantorder/restaurantorder.ts";
-import {
-  FixedPreparationTimeEstimator,
-  UnconstrainedAcceptanceConditions,
-} from "../infrastructure/acceptance/mvp.ts";
+import { UnconstrainedAcceptanceConditions } from "../infrastructure/acceptance/mvp.ts";
+import { WaitTimeReadyTimeEstimator } from "../infrastructure/acceptance/wait-time.ts";
 import type { KitchenChangeNotifier } from "../infrastructure/integration/kitchen-changes.ts";
 import { restaurantOrderEventMapper } from "../infrastructure/integration/restaurant-order-events.ts";
 import { FifoKitchenQueueOrdering } from "../infrastructure/kitchen-queue/mvp.ts";
@@ -86,6 +86,9 @@ export interface RestaurantOrderDependencies {
   readonly kitchenConfig: KitchenConfig;
   /** Cook Pool of the `cook` slice: Start Preparation assigns a free cook. */
   readonly cookAssigner: CookAssigner;
+  /** Wait Time Statistics of the `restaurant` slice: initial `expected_ready_at`. */
+  readonly restaurantWaitTimes: Pick<WaitTimeStatisticsStore, "load">;
+  readonly waitTimePolicy: WaitTimePolicy;
   /**
    * Business and FSM metrics; the process also decorates its Unit of Work
    * and Outbox.
@@ -168,8 +171,11 @@ export const registerRestaurantOrder = (
       () => new UnconstrainedAcceptanceConditions(),
     ).singleton(),
     readyTimeEstimator: asFunction(
-      ({ kitchenConfig }: Cradle) =>
-        new FixedPreparationTimeEstimator(kitchenConfig.preparationTimeMs),
+      ({ restaurantWaitTimes, waitTimePolicy }: Cradle) =>
+        new WaitTimeReadyTimeEstimator({
+          store: restaurantWaitTimes,
+          policy: waitTimePolicy,
+        }),
     ).singleton(),
     receiveOrderRequest: asFunction(
       ({

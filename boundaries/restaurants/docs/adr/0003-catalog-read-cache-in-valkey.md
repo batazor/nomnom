@@ -23,9 +23,9 @@ Order и так читает каталог до своей транзакции
 
 | Чтение | Ключ Valkey | Обновляется сразу по |
 | --- | --- | --- |
-| `GetRestaurant` (`RestaurantView`) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed` |
+| `GetRestaurant` (`RestaurantView` с ожиданием) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed`, `RestaurantWaitLevelChanged` |
 | `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` |
-| `ListRestaurants` (страница) | `restaurants:list:<поколение Market>:<marketId>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed` (новое поколение Market ресторана) |
+| `ListRestaurants` (страница) | `restaurants:list:<поколение Market>:<marketId>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed`, `RestaurantWaitLevelChanged` (новое поколение Market ресторана) |
 
 `ListOwnedRestaurants`, кухонные чтения и команды кеш не используют. Отсутствующий ресторан или
 меню (`NOT_FOUND`) не кешируется.
@@ -37,7 +37,8 @@ Order и так читает каталог до своей транзакции
 
 Открытие, закрытие, новое блюдо, цену, название и доступность блюда пользователь должен видеть
 сразу, поэтому кеш обновляется по Integration Events, которые `restaurants` публикует через
-Outbox и Debezium: `RestaurantOpened`/`RestaurantClosed` (`restaurants.v1.restaurant-events`) и
+Outbox и Debezium: `RestaurantOpened`/`RestaurantClosed` и смену уровня ожидания
+`RestaurantWaitLevelChanged` (`restaurants.v1.restaurant-events`) и
 `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` (`restaurants.v1.menu-events`;
 `MenuItemAdded` и `MenuItemUpdated` добавлены в контракт ради этого, FR-613). `restaurants-consumer` читает их
 своей consumer group `CACHE__REFRESH_GROUP` (`restaurants-cache`, новая группа начинает с конца
@@ -49,6 +50,11 @@ Market входит в ключ и в поколение, поэтому стр�
 ресторана сбрасывает только страницы его Market): страницу, где ресторан
 лежит, по одному ключу не найти, а страницы старого поколения больше не читаются и истекают по
 TTL.
+
+Минуты ожидания в представлении ресторана считаются при чтении из Wait Time Statistics
+(`docs/kitchen.md#wait-time-statistics`), поэтому в кеше они устаревают не больше чем на
+`CACHE__TTL`; сразу обновляется только смена уровня. Запись без ожидания, закешированная до
+него, — промах, как запись без Market.
 
 Гонка «чтение началось до изменения» безопасна без версий:
 

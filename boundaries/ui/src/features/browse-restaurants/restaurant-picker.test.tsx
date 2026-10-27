@@ -78,6 +78,19 @@ describe("restaurant picker", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("FR-648 marks a restaurant with a longer wait than usual", async () => {
+    renderPicker();
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Кухня №8.*Повышенное время ожидания/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Пельменная «Север»/ }),
+    ).not.toHaveTextContent("Повышенное время ожидания");
+  });
+
   it("hands the chosen restaurant to the board", async () => {
     const user = userEvent.setup();
     const { onSelect } = renderPicker();

@@ -70,6 +70,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-
 
 - `restaurants(first, after)` → `ListRestaurants` только открытых ресторанов (`include_closed = false`); `first` — 1..100, иначе error `INVALID_ARGUMENT`; `after` и `pageInfo.endCursor` — `next_page_token` `restaurants` как есть, cursor ребра — id ресторана (тот же ключ курсора), на последней странице `endCursor` — cursor последнего ребра, на пустой — `null`; `menu` каждого ресторана страницы читается из `GetMenu` параллельно (ресторан без меню — `null`, любая другая ошибка роняет запрос): customer UI показывает превью блюд на карточке ресторана.
 - `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; `acceptingOrders` — `is_open`, пустое описание позиции — `null`.
+- `waitTime { elevated, expectedWaitMinutes }` (FR-647) — `wait_time` из `GetRestaurant`/`ListRestaurants`: уровень ожидания и минуты на момент чтения `restaurants`. Заполняют только `restaurants` и `restaurant`; в заказе, на кухне и в `myRestaurants` — `null`, как `menu`. Ответ `restaurants` без `wait_time` — ошибка запроса, а не нули.
 - Без gateway или identity — error `UNAVAILABLE` (`catalog operations are not available`); остальные сбои `restaurants` — error `UNAVAILABLE` без внутренних деталей.
 
 ### Слайс `checkout`

@@ -240,3 +240,24 @@ test("kitchen tunables reject malformed values", () => {
     /KITCHEN__CANCELLATION_DURING_PREPARATION/,
   );
 });
+
+test("FR-657 reads the wait time parameters and rejects inverted thresholds", () => {
+  assert.deepEqual(loadConfig({}).waitTime, {
+    sampleSize: 50,
+    recentWindowMs: 30 * 60_000,
+    elevatedFactor: 1.5,
+    normalFactor: 1.2,
+  });
+  assert.equal(
+    loadConfig({ WAIT_TIME__RECENT_WINDOW: "1h" }).waitTime.recentWindowMs,
+    3_600_000,
+  );
+  assert.throws(() =>
+    loadConfig({
+      WAIT_TIME__ELEVATED_FACTOR: "1.2",
+      WAIT_TIME__NORMAL_FACTOR: "1.2",
+    }),
+  );
+  assert.throws(() => loadConfig({ WAIT_TIME__SAMPLE_SIZE: "0" }));
+  assert.throws(() => loadConfig({ WAIT_TIME__ELEVATED_FACTOR: "fast" }));
+});

@@ -34,6 +34,13 @@ export declare type RestaurantOrderAccepted = Message<"nomnom.restaurants.v1.Res
    * @generated from field: string market_id = 3;
    */
   marketId: string;
+
+  /**
+   * Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+   *
+   * @generated from field: string restaurant_id = 4;
+   */
+  restaurantId: string;
 };
 
 /**
@@ -149,6 +156,13 @@ export declare type PreparationFailed = Message<"nomnom.restaurants.v1.Preparati
    * @generated from field: string market_id = 3;
    */
   marketId: string;
+
+  /**
+   * Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+   *
+   * @generated from field: string restaurant_id = 4;
+   */
+  restaurantId: string;
 };
 
 /**
@@ -174,6 +188,13 @@ export declare type RestaurantOrderReady = Message<"nomnom.restaurants.v1.Restau
    * @generated from field: string market_id = 2;
    */
   marketId: string;
+
+  /**
+   * Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+   *
+   * @generated from field: string restaurant_id = 3;
+   */
+  restaurantId: string;
 };
 
 /**
@@ -210,6 +231,13 @@ export declare type RestaurantOrderCancelled = Message<"nomnom.restaurants.v1.Re
    * @generated from field: string market_id = 4;
    */
   marketId: string;
+
+  /**
+   * Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+   *
+   * @generated from field: string restaurant_id = 5;
+   */
+  restaurantId: string;
 };
 
 /**
@@ -268,6 +296,38 @@ export declare type RestaurantClosed = Message<"nomnom.restaurants.v1.Restaurant
  * Use `create(RestaurantClosedSchema)` to create a new message.
  */
 export declare const RestaurantClosedSchema: GenMessage<RestaurantClosed>;
+
+/**
+ * Уровень ожидания ресторана сменился (Wait Time Statistics, FR-646):
+ * elevated — текущее ожидание повышено относительно базового времени ресторана.
+ * aggregate_type RestaurantWaitTime, aggregate_id — restaurant_id.
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantWaitLevelChanged
+ */
+export declare type RestaurantWaitLevelChanged = Message<"nomnom.restaurants.v1.RestaurantWaitLevelChanged"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * Market of the restaurant (ADR 41).
+   *
+   * @generated from field: string market_id = 2;
+   */
+  marketId: string;
+
+  /**
+   * @generated from field: bool elevated = 3;
+   */
+  elevated: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantWaitLevelChanged.
+ * Use `create(RestaurantWaitLevelChangedSchema)` to create a new message.
+ */
+export declare const RestaurantWaitLevelChangedSchema: GenMessage<RestaurantWaitLevelChanged>;
 
 /**
  * В меню добавлен Menu Item (Add Menu Item). Состав и цену соседи читают через
