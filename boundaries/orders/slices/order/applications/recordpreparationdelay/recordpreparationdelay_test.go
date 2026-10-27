@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
@@ -14,7 +15,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -28,9 +29,16 @@ func delay(eventID string, readyAt time.Time) recordpreparationdelay.Input {
 // replaces Order.expected_ready_at; the workflow gets the new time too.
 func TestDelayReplacesExpectedReadyTime(t *testing.T) {
 	store := repositorytest.Open(t)
-	workflow := fake.NewWorkflow()
+	workflow := mocks.NewMockNotifier(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	accepted, delayed := occurredAt.Add(12*time.Minute), occurredAt.Add(20*time.Minute)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "accepted", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "delayed", Kind: fulfillment.KindPreparationDelayed,
+		OccurredAt: occurredAt.Add(5 * time.Minute), ExpectedReadyAt: delayed,
+	}).Return(nil).Once()
 	_, err := confirmorder.NewHandler(store, store, store, workflow).Handle(context.Background(), confirmorder.Input{
 		EventID: "accepted", OrderID: "order-1", OccurredAt: occurredAt, ExpectedReadyAt: accepted,
 	})
@@ -43,17 +51,18 @@ func TestDelayReplacesExpectedReadyTime(t *testing.T) {
 	snapshot, _ := store.Snapshot("order-1")
 	assert.Equal(t, order.ExpectedTimes{ReadyAt: delayed}, snapshot.Expected)
 	assert.Equal(t, order.StateConfirmed, snapshot.State)
-	assert.Equal(t, fulfillment.Notification{
-		OrderID: "order-1", EventID: "delayed", Kind: fulfillment.KindPreparationDelayed,
-		OccurredAt: occurredAt.Add(5 * time.Minute), ExpectedReadyAt: delayed,
-	}, workflow.Notifications()[1])
 }
 
 func TestDelayOfFinalOrderIsLate(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateCompleted))))
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed,
+		OccurredAt: occurredAt.Add(5 * time.Minute), ExpectedReadyAt: occurredAt.Add(time.Hour),
+	}).Return(nil).Once()
 
-	result, err := recordpreparationdelay.NewHandler(store, store, store, fake.NewWorkflow()).Handle(context.Background(), delay("event-1", occurredAt.Add(time.Hour)))
+	result, err := recordpreparationdelay.NewHandler(store, store, store, workflow).Handle(context.Background(), delay("event-1", occurredAt.Add(time.Hour)))
 
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeIgnoredLate, result.Outcome)
@@ -65,7 +74,12 @@ func TestDelayOfFinalOrderIsLate(t *testing.T) {
 func TestDuplicateDelayIsNotAppliedAgain(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordpreparationdelay.NewHandler(store, store, store, fake.NewWorkflow())
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed,
+		OccurredAt: occurredAt.Add(5 * time.Minute), ExpectedReadyAt: occurredAt.Add(time.Hour),
+	}).Return(nil).Times(2)
+	handler := recordpreparationdelay.NewHandler(store, store, store, workflow)
 	_, err := handler.Handle(context.Background(), delay("event-1", occurredAt.Add(time.Hour)))
 	require.NoError(t, err)
 
@@ -78,7 +92,7 @@ func TestDuplicateDelayIsNotAppliedAgain(t *testing.T) {
 }
 
 func TestDelayRequiresExpectedReadyTime(t *testing.T) {
-	_, err := recordpreparationdelay.NewHandler(nil, nil, nil, fake.NewWorkflow()).Handle(context.Background(), delay("event-1", time.Time{}))
+	_, err := recordpreparationdelay.NewHandler(nil, nil, nil, mocks.NewMockNotifier(t)).Handle(context.Background(), delay("event-1", time.Time{}))
 
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 }

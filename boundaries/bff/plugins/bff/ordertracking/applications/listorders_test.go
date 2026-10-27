@@ -11,14 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// historyAnswering expects one history read of customer-1 answered with page
-// and err.
-func historyAnswering(t *testing.T, size int, cursor string, page HistoryPage, err error) *MockOrderHistory {
-	history := NewMockOrderHistory(t)
-	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", size, cursor).Return(page, err).Once()
-	return history
-}
-
 func entry(id, restaurantID, cursor string) HistoryEntry {
 	order := snapshot("placed")
 	order.ID, order.RestaurantID = id, restaurantID
@@ -34,12 +26,16 @@ func list(history OrderHistory, catalog Catalog) ListCustomerOrders {
 // The history carries the full card of each Order: one restaurants read per
 // distinct restaurant of the page and no GetOrder per Order.
 func TestCustomerOrdersAreFullOrderViewsWithTheirCursors(t *testing.T) {
-	history := historyAnswering(t, 3, "c4", HistoryPage{
+	history := NewMockOrderHistory(t)
+	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 3, "c4").Return(HistoryPage{
 		Entries:    []HistoryEntry{entry("order-3", "restaurant-1", "c3"), entry("order-2", "restaurant-2", "c2"), entry("order-1", "restaurant-1", "c1")},
 		NextCursor: "c1",
-	}, nil)
+	}, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-2").Return(Restaurant{ID: "restaurant-2", Name: "Кухня №8", IsOpen: true}, nil).Once()
 
-	page, err := list(history, catalogReading(t, "restaurant-1", "restaurant-2")).Handle(context.Background(), "customer-1", 3, "c4")
+	page, err := list(history, catalog).Handle(context.Background(), "customer-1", 3, "c4")
 
 	require.NoError(t, err)
 	require.Len(t, page.Edges, 3)
@@ -53,13 +49,18 @@ func TestCustomerOrdersAreFullOrderViewsWithTheirCursors(t *testing.T) {
 }
 
 func TestLastHistoryPage(t *testing.T) {
-	history := historyAnswering(t, 10, "", HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil)
-	page, err := list(history, catalogReading(t, "restaurant-1")).Handle(context.Background(), "customer-1", 10, "")
+	history := NewMockOrderHistory(t)
+	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 10, "").Return(HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	page, err := list(history, catalog).Handle(context.Background(), "customer-1", 10, "")
 	require.NoError(t, err)
 	assert.False(t, page.HasNextPage)
 	assert.Equal(t, "c1", page.EndCursor)
 
-	empty, err := list(historyAnswering(t, 10, "", HistoryPage{}, nil), NewMockCatalog(t)).Handle(context.Background(), "customer-1", 10, "")
+	none := NewMockOrderHistory(t)
+	none.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 10, "").Return(HistoryPage{}, nil).Once()
+	empty, err := list(none, NewMockCatalog(t)).Handle(context.Background(), "customer-1", 10, "")
 	require.NoError(t, err)
 	assert.Equal(t, OrderPage{Edges: []OrderEdge{}}, empty)
 }
@@ -70,11 +71,14 @@ func TestCustomerOrdersRefusals(t *testing.T) {
 		_, err := h.Handle(context.Background(), "customer-1", first, "")
 		assert.ErrorIs(t, err, ErrInvalidPageSize)
 	}
-	_, err := list(historyAnswering(t, 1, "x", HistoryPage{}, ErrInvalidCursor), NewMockCatalog(t)).Handle(context.Background(), "customer-1", 1, "x")
+	invalid := NewMockOrderHistory(t)
+	invalid.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 1, "x").Return(HistoryPage{}, ErrInvalidCursor).Once()
+	_, err := list(invalid, NewMockCatalog(t)).Handle(context.Background(), "customer-1", 1, "x")
 	assert.ErrorIs(t, err, ErrInvalidCursor)
 
 	down := errors.New("restaurants is down")
-	history := historyAnswering(t, 1, "", HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil)
+	history := NewMockOrderHistory(t)
+	history.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 1, "").Return(HistoryPage{Entries: []HistoryEntry{entry("order-1", "restaurant-1", "c1")}}, nil).Once()
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{}, down).Once()
 	_, err = list(history, catalog).Handle(context.Background(), "customer-1", 1, "")
@@ -82,6 +86,10 @@ func TestCustomerOrdersRefusals(t *testing.T) {
 
 	broken := entry("order-1", "restaurant-1", "c1")
 	broken.Order.State = "lost"
-	_, err = list(historyAnswering(t, 1, "", HistoryPage{Entries: []HistoryEntry{broken}}, nil), catalogReading(t, "restaurant-1")).Handle(context.Background(), "customer-1", 1, "")
+	brokenHistory := NewMockOrderHistory(t)
+	brokenHistory.EXPECT().ListCustomerOrders(mock.Anything, "customer-1", 1, "").Return(HistoryPage{Entries: []HistoryEntry{broken}}, nil).Once()
+	brokenCatalog := NewMockCatalog(t)
+	brokenCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	_, err = list(brokenHistory, brokenCatalog).Handle(context.Background(), "customer-1", 1, "")
 	assert.Error(t, err, "an unknown state fails the page instead of being guessed")
 }

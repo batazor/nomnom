@@ -29,6 +29,7 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -85,7 +86,7 @@ type e2e struct {
 	client     ordersv1.OrdersServiceClient
 	vectors    userVectors
 	store      *repositorytest.Store
-	authorizer *fake.Authorizer
+	authorizer *mocks.MockAuthorizer
 }
 
 func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
@@ -112,11 +113,15 @@ func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
 		restaurantsv1.RegisterRestaurantsServiceServer(s, restaurantsServer{MockRestaurantsServiceServer: restaurants})
 	},
 		grpc.WithUnaryInterceptor(gateway.ServiceToken(tokens)))
-	ports := newCommandPorts()
+	ports := commandPorts{
+		workflow: mocks.NewMockCancellationRequester(t),
+		clock:    fake.NewClock(ordertest.PlacedAt),
+	}
 	ports.catalog = catalog.New(gatewayConn,
 		catalog.Limits{MinimumTotal: decimal.RequireFromString("0"), MaximumTotal: decimal.RequireFromString("100")}, time.Second)
 
-	store, authorizer := repositorytest.Open(t), fake.NewAuthorizer()
+	// Place Order checks no permission: the authorizer expects no call.
+	store, authorizer := repositorytest.Open(t), mocks.NewMockAuthorizer(t)
 	return e2e{
 		client:     newClientWithPorts(t, resolver, store, authorizer, ports),
 		vectors:    v,
@@ -134,40 +139,24 @@ func asBFF(token string, assertion string) context.Context {
 	return metadata.NewOutgoingContext(context.Background(), md)
 }
 
-// expectRestaurant expects one GetRestaurant, made with ctx, of a Restaurant
-// in berlin.
-func expectRestaurant(restaurants *MockRestaurantsServiceServer, ctx any, open bool) {
-	restaurants.EXPECT().GetRestaurant(ctx, mock.Anything).RunAndReturn(
-		func(_ context.Context, r *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
-			return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: open, MarketId: "berlin"}}, nil
-		}).Once()
-}
-
-// openMenu expects the Restaurant to be read with ctx as open and its menu once.
-func openMenu(restaurants *MockRestaurantsServiceServer, ctx any) {
-	expectRestaurant(restaurants, ctx, true)
-	restaurants.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
-		{MenuItemId: "pizza", Name: "Pizza", Price: &restaurantsv1.Money{Amount: "12.50", Currency: "EUR"}, Available: true},
-		{MenuItemId: "gyoza", Name: "Gyoza", Price: &restaurantsv1.Money{Amount: "4", Currency: "EUR"}, Available: false},
-	}}, nil).Once()
-}
-
-// restaurantFails expects one GetRestaurant answering err.
-func restaurantFails(err error) func(*MockRestaurantsServiceServer) {
-	return func(restaurants *MockRestaurantsServiceServer) {
-		restaurants.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(nil, err).Once()
-	}
-}
+// menu is the restaurants menu of restaurant-1: pizza is available, gyoza is not.
+var menu = &restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
+	{MenuItemId: "pizza", Name: "Pizza", Price: &restaurantsv1.Money{Amount: "12.50", Currency: "EUR"}, Available: true},
+	{MenuItemId: "gyoza", Name: "Gyoza", Price: &restaurantsv1.Money{Amount: "4", Currency: "EUR"}, Available: false},
+}}
 
 // AC-508, AC-525: the customer delegated by the BFF places an Order priced from
 // the restaurants menu read through the gateway with the orders service token.
 func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
 	restaurants := NewMockRestaurantsServiceServer(t)
 	// restaurants sees the orders service token, not the BFF one.
-	openMenu(restaurants, mock.MatchedBy(func(ctx context.Context) bool {
+	restaurants.EXPECT().GetRestaurant(mock.MatchedBy(func(ctx context.Context) bool {
 		md, _ := metadata.FromIncomingContext(ctx)
 		return assert.ObjectsAreEqual([]string{"Bearer orders-token"}, md.Get("authorization"))
-	}))
+	}), mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+		Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: "berlin"}}, nil).Once()
+	restaurants.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+		Return(menu, nil).Once()
 	env := newE2E(t, restaurants)
 
 	response, err := env.client.PlaceOrder(asBFF(env.vectors.DelegateToken, env.vectors.Tokens["valid"]), placeRequest())
@@ -195,16 +184,30 @@ func TestPlaceOrderEndToEndRefusals(t *testing.T) {
 		// AC-510: the BFF without a user assertion is a service, not a Customer.
 		"bff without assertion": {func(*MockRestaurantsServiceServer) {}, nil,
 			func(v userVectors) context.Context { return asBFF(v.DelegateToken, "") }, codes.PermissionDenied, "OPERATION_NOT_ALLOWED"},
-		"restaurants unavailable": {restaurantFails(status.Error(codes.Unavailable, "down")), nil,
-			nil, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
-		"unknown restaurant": {restaurantFails(status.Error(codes.NotFound, "no restaurant")), nil,
-			nil, codes.NotFound, "RESTAURANT_NOT_FOUND"},
-		"closed restaurant": {func(r *MockRestaurantsServiceServer) { expectRestaurant(r, mock.Anything, false) }, nil,
-			nil, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
-		"unknown menu item": {func(r *MockRestaurantsServiceServer) { openMenu(r, mock.Anything) }, func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "missing" },
-			nil, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
-		"unavailable menu item": {func(r *MockRestaurantsServiceServer) { openMenu(r, mock.Anything) }, func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "gyoza" },
-			nil, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
+		"restaurants unavailable": {func(r *MockRestaurantsServiceServer) {
+			r.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(nil, status.Error(codes.Unavailable, "down")).Once()
+		}, nil, nil, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
+		"unknown restaurant": {func(r *MockRestaurantsServiceServer) {
+			r.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(nil, status.Error(codes.NotFound, "no restaurant")).Once()
+		}, nil, nil, codes.NotFound, "RESTAURANT_NOT_FOUND"},
+		"closed restaurant": {func(r *MockRestaurantsServiceServer) {
+			r.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: false, MarketId: "berlin"}}, nil).Once()
+		}, nil, nil, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
+		"unknown menu item": {func(r *MockRestaurantsServiceServer) {
+			r.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: "berlin"}}, nil).Once()
+			r.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(menu, nil).Once()
+		}, func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "missing" }, nil, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
+		"unavailable menu item": {func(r *MockRestaurantsServiceServer) {
+			r.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: "berlin"}}, nil).Once()
+			r.EXPECT().GetMenu(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetMenuRequest) bool { return r.GetRestaurantId() == "restaurant-1" })).
+				Return(menu, nil).Once()
+		}, func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "gyoza" }, nil, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			restaurants := NewMockRestaurantsServiceServer(t)

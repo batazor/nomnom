@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,8 +22,15 @@ import (
 type orderCouriers struct {
 	deliveryv1.UnimplementedDeliveryServiceServer
 	response *deliveryv1.GetOrderCourierResponse
+	tracking *deliveryv1.GetOrderTrackingResponse
 	err      error
 	asserted bool
+}
+
+func (s *orderCouriers) GetOrderTracking(ctx context.Context, _ *deliveryv1.GetOrderTrackingRequest) (*deliveryv1.GetOrderTrackingResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.asserted = len(md.Get(identity.AssertionMetadata)) == 1
+	return s.tracking, s.err
 }
 
 func (s *orderCouriers) GetOrderCourier(ctx context.Context, _ *deliveryv1.GetOrderCourierRequest) (*deliveryv1.GetOrderCourierResponse, error) {
@@ -56,4 +64,48 @@ func TestCourierOfTheOrderIsReadForTheCustomer(t *testing.T) {
 	server.err = status.Error(codes.Unavailable, "down")
 	_, err = couriersOver(t, server).CourierOf(customerContext(), "order-1")
 	assert.Error(t, err)
+}
+
+// AC-884, AC-886: the tracking is read on behalf of the customer; an empty
+// answer is no tracking, an incomplete one is an error.
+func TestTrackingOfTheOrderIsReadForTheCustomer(t *testing.T) {
+	point := func(latitude, longitude float64) *deliveryv1.GeoPoint {
+		return &deliveryv1.GeoPoint{Latitude: latitude, Longitude: longitude}
+	}
+	server := &orderCouriers{tracking: &deliveryv1.GetOrderTrackingResponse{
+		TrackingChannel: "cd",
+		City:            &deliveryv1.VirtualCity{Origin: point(52.515, 13.385), Blocks: 12, BlockMeters: 150},
+		Pickup:          point(52.52, 13.39),
+		Dropoff:         point(52.525, 13.40),
+		CourierPosition: &deliveryv1.CourierLocation{Latitude: 52.521, Longitude: 13.392, RecordedAtEpochSeconds: 1_793_100_000},
+	}}
+
+	tracking, err := couriersOver(t, server).TrackingOf(customerContext(), "order-1")
+
+	require.NoError(t, err)
+	assert.True(t, server.asserted)
+	assert.Equal(t, &applications.Tracking{
+		Channel: "cd",
+		City: applications.VirtualCity{
+			Origin:      applications.GeoPoint{Latitude: 52.515, Longitude: 13.385},
+			Blocks:      12,
+			BlockMeters: 150,
+		},
+		Pickup:  applications.GeoPoint{Latitude: 52.52, Longitude: 13.39},
+		Dropoff: applications.GeoPoint{Latitude: 52.525, Longitude: 13.40},
+		CourierPosition: &applications.CourierPosition{
+			Channel:    "cd",
+			Point:      applications.GeoPoint{Latitude: 52.521, Longitude: 13.392},
+			RecordedAt: time.Unix(1_793_100_000, 0).UTC(),
+		},
+	}, tracking)
+
+	server.tracking = &deliveryv1.GetOrderTrackingResponse{}
+	tracking, err = couriersOver(t, server).TrackingOf(customerContext(), "order-1")
+	require.NoError(t, err)
+	assert.Nil(t, tracking, "an empty answer is no tracking")
+
+	server.tracking = &deliveryv1.GetOrderTrackingResponse{TrackingChannel: "cd"}
+	_, err = couriersOver(t, server).TrackingOf(customerContext(), "order-1")
+	assert.Error(t, err, "a channel without the city is a broken contract")
 }

@@ -41,19 +41,6 @@ type restaurantsServer struct {
 	unimplementedRestaurants
 }
 
-// expectRestaurant expects one GetRestaurant of restaurant-1 answering its
-// Market and whether it is open.
-func expectRestaurant(server *MockRestaurantsServiceServer, market string, open bool) {
-	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
-		return r.GetRestaurantId() == "restaurant-1"
-	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: open, MarketId: market}}, nil).Once()
-}
-
-// expectMenu expects one GetMenu answering items.
-func expectMenu(server *MockRestaurantsServiceServer, items ...*restaurantsv1.MenuItem) {
-	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: items}, nil).Once()
-}
-
 func item(id, amount, currency string, available bool) *restaurantsv1.MenuItem {
 	return &restaurantsv1.MenuItem{
 		MenuItemId: id,
@@ -90,12 +77,14 @@ func newCatalog(t *testing.T, server *MockRestaurantsServiceServer) *catalog.Cat
 
 func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 	server := NewMockRestaurantsServiceServer(t)
-	expectRestaurant(server, ordertest.Market, true)
-	expectMenu(server,
+	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+		return r.GetRestaurantId() == "restaurant-1"
+	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
+	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
 		item("pizza", "12.50", "EUR", true),
 		item("gyoza", "6", "EUR", false),
 		item("soup", "4", "EUR", true),
-	)
+	}}, nil).Once()
 
 	snapshot, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza", "gyoza", "missing"})
 	require.NoError(t, err)
@@ -116,8 +105,10 @@ func TestSnapshotRefusesItemWithoutName(t *testing.T) {
 	nameless := item("pizza", "12.50", "EUR", true)
 	nameless.Name = ""
 	server := NewMockRestaurantsServiceServer(t)
-	expectRestaurant(server, ordertest.Market, true)
-	expectMenu(server, nameless)
+	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+		return r.GetRestaurantId() == "restaurant-1"
+	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
+	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{nameless}}, nil).Once()
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 	require.ErrorContains(t, err, "has no name")
@@ -130,7 +121,9 @@ func TestSnapshotRefusesRestaurantWithoutMarket(t *testing.T) {
 	for name, market := range map[string]string{"missing": "", "malformed": "Berlin"} {
 		t.Run(name, func(t *testing.T) {
 			server := NewMockRestaurantsServiceServer(t)
-			expectRestaurant(server, market, true)
+			server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+				return r.GetRestaurantId() == "restaurant-1"
+			})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: market}}, nil).Once()
 			// No GetMenu expectation: the menu is not read.
 
 			_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
@@ -144,7 +137,9 @@ func TestSnapshotRefusesRestaurantWithoutMarket(t *testing.T) {
 // AC-566: a closed restaurant is refused before the menu is read.
 func TestSnapshotRefusesClosedRestaurant(t *testing.T) {
 	server := NewMockRestaurantsServiceServer(t)
-	expectRestaurant(server, ordertest.Market, false)
+	server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+		return r.GetRestaurantId() == "restaurant-1"
+	})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: false, MarketId: ordertest.Market}}, nil).Once()
 	// No GetMenu expectation: the menu is not read.
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
@@ -153,48 +148,44 @@ func TestSnapshotRefusesClosedRestaurant(t *testing.T) {
 
 func TestSnapshotMapsErrors(t *testing.T) {
 	for name, tc := range map[string]struct {
-		expect func(server *MockRestaurantsServiceServer)
-		want   error
+		restaurantErr error
+		menuErr       error
+		items         []*restaurantsv1.MenuItem
+		want          error
 	}{
-		"restaurant not found": {restaurantFails(status.Error(codes.NotFound, "no restaurant")), placeorder.ErrUnknownRestaurant},
-		"menu not found":       {menuFails(status.Error(codes.NotFound, "no menu")), placeorder.ErrUnknownRestaurant},
-		"empty menu":           {menu(), placeorder.ErrUnknownRestaurant},
-		"invalid argument":     {restaurantFails(status.Error(codes.InvalidArgument, "bad id")), application.ErrInvalidInput},
-		"unavailable":          {restaurantFails(status.Error(codes.Unavailable, "down")), application.ErrDependencyUnavailable},
-		"unauthenticated":      {restaurantFails(status.Error(codes.Unauthenticated, "who")), application.ErrDependencyUnavailable},
-		"route not registered": {menuFails(status.Error(codes.Unimplemented, "404")), application.ErrDependencyUnavailable},
-		"mixed currencies": {menu(
+		"restaurant not found": {restaurantErr: status.Error(codes.NotFound, "no restaurant"), want: placeorder.ErrUnknownRestaurant},
+		"menu not found":       {menuErr: status.Error(codes.NotFound, "no menu"), want: placeorder.ErrUnknownRestaurant},
+		"empty menu":           {want: placeorder.ErrUnknownRestaurant},
+		"invalid argument":     {restaurantErr: status.Error(codes.InvalidArgument, "bad id"), want: application.ErrInvalidInput},
+		"unavailable":          {restaurantErr: status.Error(codes.Unavailable, "down"), want: application.ErrDependencyUnavailable},
+		"unauthenticated":      {restaurantErr: status.Error(codes.Unauthenticated, "who"), want: application.ErrDependencyUnavailable},
+		"route not registered": {menuErr: status.Error(codes.Unimplemented, "404"), want: application.ErrDependencyUnavailable},
+		"mixed currencies": {items: []*restaurantsv1.MenuItem{
 			item("pizza", "12.50", "EUR", true), item("soup", "4", "USD", true),
-		), vo.ErrInvalidValue},
-		"invalid price": {menu(item("pizza", "twelve", "EUR", true)), vo.ErrInvalidValue},
+		}, want: vo.ErrInvalidValue},
+		"invalid price": {items: []*restaurantsv1.MenuItem{item("pizza", "twelve", "EUR", true)}, want: vo.ErrInvalidValue},
 	} {
 		t.Run(name, func(t *testing.T) {
 			server := NewMockRestaurantsServiceServer(t)
-			tc.expect(server)
+			switch {
+			case tc.restaurantErr != nil:
+				// No GetMenu expectation: the menu is not read.
+				server.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(nil, tc.restaurantErr).Once()
+			case tc.menuErr != nil:
+				server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+					return r.GetRestaurantId() == "restaurant-1"
+				})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
+				server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(nil, tc.menuErr).Once()
+			default:
+				server.EXPECT().GetRestaurant(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.GetRestaurantRequest) bool {
+					return r.GetRestaurantId() == "restaurant-1"
+				})).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
+				server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: tc.items}, nil).Once()
+			}
 
 			_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 			require.ErrorIs(t, err, tc.want)
 		})
-	}
-}
-
-func restaurantFails(err error) func(*MockRestaurantsServiceServer) {
-	return func(server *MockRestaurantsServiceServer) {
-		server.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(nil, err).Once()
-	}
-}
-
-func menuFails(err error) func(*MockRestaurantsServiceServer) {
-	return func(server *MockRestaurantsServiceServer) {
-		expectRestaurant(server, ordertest.Market, true)
-		server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(nil, err).Once()
-	}
-}
-
-func menu(items ...*restaurantsv1.MenuItem) func(*MockRestaurantsServiceServer) {
-	return func(server *MockRestaurantsServiceServer) {
-		expectRestaurant(server, ordertest.Market, true)
-		expectMenu(server, items...)
 	}
 }
 
@@ -220,7 +211,7 @@ func TestSnapshotCallsCarryServiceToken(t *testing.T) {
 		md, _ := metadata.FromIncomingContext(ctx)
 		return assert.ObjectsAreEqual([]string{"Bearer token-1"}, md.Get("authorization"))
 	}), mock.Anything).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market}}, nil).Once()
-	expectMenu(server, item("pizza", "12.50", "EUR", true))
+	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{item("pizza", "12.50", "EUR", true)}}, nil).Once()
 	adapter := catalog.New(dial(t, server, grpc.WithUnaryInterceptor(gateway.ServiceToken(dir))), limits, time.Second)
 
 	_, err := adapter.Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})

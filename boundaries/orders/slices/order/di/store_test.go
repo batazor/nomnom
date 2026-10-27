@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
@@ -38,11 +40,22 @@ func TestExpectedTimeChangesAreAnnounced(t *testing.T) {
 	at := ordertest.PlacedAt.Add(time.Minute)
 	require.NoError(t, store.Do(ctx, func(ctx context.Context) error { return store.Add(ctx, ordertest.New(t, "order-1")) }))
 
-	_, err := recordpreparationdelay.NewHandler(store, store, store, fake.NewWorkflow()).Handle(ctx, recordpreparationdelay.Input{
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "delayed", Kind: fulfillment.KindPreparationDelayed, OccurredAt: at, ExpectedReadyAt: at.Add(20 * time.Minute),
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "assigned-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: at,
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "assigned-3", Kind: fulfillment.KindCourierAssigned, OccurredAt: at,
+	}).Return(nil).Once()
+
+	_, err := recordpreparationdelay.NewHandler(store, store, store, workflow).Handle(ctx, recordpreparationdelay.Input{
 		EventID: "delayed", OrderID: "order-1", OccurredAt: at, ExpectedReadyAt: at.Add(20 * time.Minute),
 	})
 	require.NoError(t, err)
-	assign := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, store)
+	assign := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 	for _, version := range []uint64{2, 3} {
 		_, err := assign.Handle(ctx, recordcourierassignment.Input{
 			EventID: fmt.Sprintf("assigned-%d", version), OrderID: "order-1", OccurredAt: at, DeliveryVersion: version,

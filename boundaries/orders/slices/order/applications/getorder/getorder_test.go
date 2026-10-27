@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
@@ -16,6 +17,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -27,15 +29,15 @@ var (
 
 const window = 5 * time.Minute
 
-func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
+func setup(t *testing.T, seeded ...*order.Order) (getorder.Handler, *mocks.MockAuthorizer) {
 	t.Helper()
 	return setupWithPolicy(t, fixedWindow(t, window), seeded...)
 }
 
-func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *fake.Authorizer) {
+func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seeded ...*order.Order) (getorder.Handler, *mocks.MockAuthorizer) {
 	t.Helper()
 	store := repositorytest.Open(t)
-	authorizer := fake.NewAuthorizer()
+	authorizer := mocks.NewMockAuthorizer(t)
 	for _, o := range seeded {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
@@ -74,21 +76,33 @@ func TestGetOrderReturnsView(t *testing.T) {
 // AC-127: denial does not depend on existence; NOT_FOUND only for an authorized subject.
 func TestGetOrderAuthorizesBeforeReading(t *testing.T) {
 	handler, authorizer := setup(t, ordertest.New(t, "order-1"))
-	authorizer.Allow(support, getorder.PermissionView, application.Resource{Type: getorder.ResourceOrder, ID: "missing"})
 
 	tests := []struct {
 		name    string
 		subject application.Subject
 		orderID order.ID
-		wantErr error
+		// checked is whether the view permission is checked; checkErr is its result.
+		checked  bool
+		checkErr error
+		wantErr  error
 	}{
-		{name: "stranger and existing order", subject: stranger, orderID: "order-1", wantErr: application.ErrPermissionDenied},
-		{name: "stranger and missing order", subject: stranger, orderID: "missing", wantErr: application.ErrPermissionDenied},
-		{name: "authorized and missing order", subject: support, orderID: "missing", wantErr: order.ErrOrderNotFound},
+		{name: "stranger and existing order", subject: stranger, orderID: "order-1", checked: true, checkErr: application.ErrPermissionDenied, wantErr: application.ErrPermissionDenied},
+		{name: "stranger and missing order", subject: stranger, orderID: "missing", checked: true, checkErr: application.ErrPermissionDenied, wantErr: application.ErrPermissionDenied},
+		{name: "authorized and missing order", subject: support, orderID: "missing", checked: true, wantErr: order.ErrOrderNotFound},
 		{name: "invalid subject", subject: application.Subject{}, orderID: "order-1", wantErr: application.ErrInvalidInput},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.checked {
+				authorizer.EXPECT().
+					Check(mock.Anything, application.AccessCheck{
+						Subject:    tt.subject,
+						Permission: getorder.PermissionView,
+						Resource:   application.Resource{Type: getorder.ResourceOrder, ID: string(tt.orderID)},
+					}).
+					Return(tt.checkErr).
+					Once()
+			}
 			_, err := handler.Handle(context.Background(), getorder.Query{Subject: tt.subject, OrderID: tt.orderID})
 			require.ErrorIs(t, err, tt.wantErr)
 		})
@@ -98,19 +112,25 @@ func TestGetOrderAuthorizesBeforeReading(t *testing.T) {
 // The Customer reads the own Order by customer_id, before orders-consumer
 // synced order#customer (ADR 18): no permission check is made.
 func TestGetOrderLetsTheCustomerReadTheOwnOrderWithoutSpiceDB(t *testing.T) {
-	handler, authorizer := setup(t, ordertest.New(t, "order-1"))
-	authorizer.FailChecks(errors.New("spicedb unavailable"))
+	// The authorizer has no expectation: any permission check fails the test.
+	handler, _ := setup(t, ordertest.New(t, "order-1"))
 
 	view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
 
 	require.NoError(t, err)
 	assert.Equal(t, order.ID("order-1"), view.OrderID)
-	assert.Empty(t, authorizer.Checks())
 }
 
 func TestGetOrderFailsClosed(t *testing.T) {
 	handler, authorizer := setup(t, ordertest.New(t, "order-1"))
-	authorizer.FailChecks(errors.New("spicedb unavailable"))
+	authorizer.EXPECT().
+		Check(mock.Anything, application.AccessCheck{
+			Subject:    support,
+			Permission: getorder.PermissionView,
+			Resource:   application.Resource{Type: getorder.ResourceOrder, ID: "order-1"},
+		}).
+		Return(errors.New("spicedb unavailable")).
+		Once()
 
 	_, err := handler.Handle(context.Background(), getorder.Query{Subject: support, OrderID: "order-1"})
 

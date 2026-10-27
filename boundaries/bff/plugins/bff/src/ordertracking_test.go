@@ -23,22 +23,6 @@ import (
 
 const fixtures = "../../../../../tests/identity/fixtures"
 
-// onBehalfOf matches a context that carries the verified user userID.
-func onBehalfOf(userID string) any {
-	return mock.MatchedBy(func(ctx context.Context) bool {
-		user, ok := identity.UserFrom(ctx)
-		return ok && user.ID == userID
-	})
-}
-
-// withUser matches a context that carries a verified user.
-func withUser() any {
-	return mock.MatchedBy(func(ctx context.Context) bool {
-		user, ok := identity.UserFrom(ctx)
-		return ok && user.ID != ""
-	})
-}
-
 func accessToken(t *testing.T) (verifier *identity.AccessTokenVerifier, token string) {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(fixtures, "idp-vectors.json"))
@@ -81,7 +65,10 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 	ready := placed.Add(12 * time.Minute)
 	getOrder := newMockGetOrderHandler(t)
 	// orders is called on behalf of the customer.
-	getOrder.EXPECT().Handle(onBehalfOf("customer-1"), "order-1").Return(applications.OrderView{
+	getOrder.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool {
+		user, ok := identity.UserFrom(ctx)
+		return ok && user.ID == "customer-1"
+	}), "order-1").Return(applications.OrderView{
 		ID: "order-1", Status: applications.StatusPreparing,
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
 		Items: []applications.ItemView{{MenuItemID: "menu-tea", Name: "Чай", Quantity: 3,
@@ -123,10 +110,16 @@ func TestQueryOrderNotFoundIsNull(t *testing.T) {
 func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
 	delivered := time.Date(2026, 10, 25, 12, 30, 0, 0, time.UTC)
 	getOrder := newMockGetOrderHandler(t)
-	getOrder.EXPECT().Handle(onBehalfOf("customer-1"), "order-1").Return(applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp,
+	getOrder.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool {
+		user, ok := identity.UserFrom(ctx)
+		return ok && user.ID == "customer-1"
+	}), "order-1").Return(applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp,
 		Total:     applications.Money{Amount: "0.30", Currency: "EUR"},
 		Deadlines: applications.Deadlines{ExpectedDeliveredAt: &delivered}}, nil).Once()
-	getOrder.EXPECT().Handle(onBehalfOf("customer-1"), "order-1").Return(applications.OrderView{}, applications.ErrOrderNotFound).Once()
+	getOrder.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool {
+		user, ok := identity.UserFrom(ctx)
+		return ok && user.ID == "customer-1"
+	}), "order-1").Return(applications.OrderView{}, applications.ErrOrderNotFound).Once()
 	svc, ctx := newService(t, getOrder, newMockRequestCancellationHandler(t))
 	request := &service.LookupOrderByIdRequest{Keys: []*service.LookupOrderByIdRequestKey{{Id: "order-1"}}}
 

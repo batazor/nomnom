@@ -69,3 +69,25 @@ packages:
           - dir: infrastructure/grpc
             filename: mocks_test.go
             pkgname: grpcadapter_test
+  # Shared mocks of the order slice ports, used by tests of many packages.
+  nomnom/orders/slices/order/applications/getorder:
+    config: &shared
+      dir: slices/order/infrastructure/mocks
+      filename: "{{.SrcPackageName}}.go"
+      pkgname: mocks
+    interfaces:
+      Authorizer: {}
+  nomnom/orders/slices/order/applications/placeorder:
+    config: *shared
+    interfaces:
+      Catalog: {}
+  nomnom/orders/slices/order/applications/fulfillment:
+    config: *shared
+    interfaces:
+      CancellationRequester: {}
+      Notifier: {}
+      Starter: {}
+  nomnom/orders/slices/order/applications/syncorderrelationships:
+    config: *shared
+    interfaces:
+      Relationships: {}

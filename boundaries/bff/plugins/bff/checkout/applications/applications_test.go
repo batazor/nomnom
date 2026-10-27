@@ -18,19 +18,14 @@ var input = Input{
 	IdempotencyKey: "attempt-1",
 }
 
-// placing expects one Place Order of input answered with orderID and err.
-func placing(t *testing.T, orderID string, err error) *MockOrderPlacer {
-	orders := NewMockOrderPlacer(t)
-	orders.EXPECT().PlaceOrder(mock.Anything, input).Return(orderID, err).Once()
-	return orders
-}
-
 // AC-570: a placed Order comes back as the order tracking view.
 func TestPlaceOrderReturnsThePlacedOrder(t *testing.T) {
+	orders := NewMockOrderPlacer(t)
+	orders.EXPECT().PlaceOrder(mock.Anything, input).Return("order-1", nil).Once()
 	views := NewMockOrderViews(t)
 	views.EXPECT().Handle(mock.Anything, "order-1").Return(tracking.OrderView{ID: "order-1", Status: tracking.StatusReceived}, nil).Once()
 
-	result, err := NewPlaceOrder(placing(t, "order-1", nil), views).Handle(context.Background(), input)
+	result, err := NewPlaceOrder(orders, views).Handle(context.Background(), input)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.Order)
@@ -62,8 +57,11 @@ func TestPlaceOrderTurnsRefusalsIntoProblems(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			orders := NewMockOrderPlacer(t)
+			orders.EXPECT().PlaceOrder(mock.Anything, input).Return("", tc.refused).Once()
+
 			// No order to read: views expects no call.
-			result, err := NewPlaceOrder(placing(t, "", tc.refused), NewMockOrderViews(t)).Handle(context.Background(), input)
+			result, err := NewPlaceOrder(orders, NewMockOrderViews(t)).Handle(context.Background(), input)
 
 			require.NoError(t, err)
 			assert.Nil(t, result.Order)
@@ -74,15 +72,21 @@ func TestPlaceOrderTurnsRefusalsIntoProblems(t *testing.T) {
 
 func TestPlaceOrderKeepsUnnamedRefusalsAndFailuresAsErrors(t *testing.T) {
 	unknown := PlacementRefused{Reason: "ORDER_NOT_ORDERABLE", Codes: []string{"SOMETHING_NEW"}}
-	_, err := NewPlaceOrder(placing(t, "", unknown), NewMockOrderViews(t)).Handle(context.Background(), input)
+	refusing := NewMockOrderPlacer(t)
+	refusing.EXPECT().PlaceOrder(mock.Anything, input).Return("", unknown).Once()
+	_, err := NewPlaceOrder(refusing, NewMockOrderViews(t)).Handle(context.Background(), input)
 	assert.ErrorAs(t, err, new(PlacementRefused))
 
-	_, err = NewPlaceOrder(placing(t, "", ErrRestaurantNotFound), NewMockOrderViews(t)).Handle(context.Background(), input)
+	missing := NewMockOrderPlacer(t)
+	missing.EXPECT().PlaceOrder(mock.Anything, input).Return("", ErrRestaurantNotFound).Once()
+	_, err = NewPlaceOrder(missing, NewMockOrderViews(t)).Handle(context.Background(), input)
 	assert.ErrorIs(t, err, ErrRestaurantNotFound)
 
 	unreadable := errors.New("orders unavailable")
 	views := NewMockOrderViews(t)
 	views.EXPECT().Handle(mock.Anything, "order-1").Return(tracking.OrderView{}, unreadable).Once()
-	_, err = NewPlaceOrder(placing(t, "order-1", nil), views).Handle(context.Background(), input)
+	placed := NewMockOrderPlacer(t)
+	placed.EXPECT().PlaceOrder(mock.Anything, input).Return("order-1", nil).Once()
+	_, err = NewPlaceOrder(placed, views).Handle(context.Background(), input)
 	assert.ErrorIs(t, err, unreadable)
 }

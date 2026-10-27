@@ -14,6 +14,7 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	tracking "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
@@ -45,7 +46,10 @@ func TestPlaceOrderReturnsTheOrder(t *testing.T) {
 	placed := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	placeOrder := newMockPlaceOrderHandler(t)
 	// orders is called on behalf of the customer.
-	placeOrder.EXPECT().Handle(onBehalfOf("customer-1"), applications.Input{
+	placeOrder.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool {
+		user, ok := identity.UserFrom(ctx)
+		return ok && user.ID == "customer-1"
+	}), applications.Input{
 		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
 		IdempotencyKey: "attempt-1",
 	}).Return(applications.Result{Order: &tracking.OrderView{

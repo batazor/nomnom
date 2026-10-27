@@ -6,22 +6,23 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
-func setup(t *testing.T, state order.State) (confirmorder.Handler, *repositorytest.Store, *fake.Workflow) {
+func setup(t *testing.T, state order.State) (confirmorder.Handler, *repositorytest.Store, *mocks.MockNotifier) {
 	t.Helper()
 	store := repositorytest.Open(t)
-	workflow := fake.NewWorkflow()
+	workflow := mocks.NewMockNotifier(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
 	return confirmorder.NewHandler(store, store, store, workflow), store, workflow
 }
@@ -45,6 +46,12 @@ func TestConfirmOrderByState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler, store, workflow := setup(t, tt.state)
+			workflow.EXPECT().
+				Notify(mock.Anything, fulfillment.Notification{
+					OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+				}).
+				Return(nil).
+				Once()
 
 			result, err := handler.Handle(context.Background(), input("event-1"))
 
@@ -52,9 +59,6 @@ func TestConfirmOrderByState(t *testing.T) {
 			assert.Equal(t, confirmorder.Result{Outcome: tt.outcome, WorkflowNotified: true}, result)
 			snapshot, _ := store.Snapshot("order-1")
 			assert.Equal(t, tt.wantState, snapshot.State)
-			assert.Equal(t, []fulfillment.Notification{{
-				OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
-			}}, workflow.Notifications())
 			assert.Empty(t, store.OutboxRecords())
 		})
 	}
@@ -62,7 +66,13 @@ func TestConfirmOrderByState(t *testing.T) {
 
 // AC-563: the moment of Order Acceptance is kept as the restaurant_accepted fact.
 func TestConfirmOrderRecordsAcceptanceMoment(t *testing.T) {
-	handler, store, _ := setup(t, order.StatePlaced)
+	handler, store, workflow := setup(t, order.StatePlaced)
+	workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Once()
 
 	_, err := handler.Handle(context.Background(), input("event-1"))
 
@@ -74,6 +84,19 @@ func TestConfirmOrderRecordsAcceptanceMoment(t *testing.T) {
 // confirmorder.feature @AC-003: acceptance received again has no additional business effect.
 func TestConfirmOrderReceivedAgainHasNoAdditionalEffect(t *testing.T) {
 	handler, store, workflow := setup(t, order.StatePlaced)
+	// Every delivery notifies the workflow; the workflow deduplicates by event_id.
+	workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Times(2)
+	workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Once()
 
 	_, err := handler.Handle(context.Background(), input("event-1"))
 	require.NoError(t, err)
@@ -87,14 +110,19 @@ func TestConfirmOrderReceivedAgainHasNoAdditionalEffect(t *testing.T) {
 	snapshot, _ := store.Snapshot("order-1")
 	assert.Equal(t, order.StateConfirmed, snapshot.State)
 	assert.Equal(t, uint64(2), snapshot.Version, "only the first event saves the Order")
-	assert.Len(t, workflow.Notifications(), 3, "the workflow deduplicates by event_id")
 }
 
 // FR-611: acceptance stores the ready time named by the restaurant.
 func TestConfirmOrderStoresExpectedReadyTime(t *testing.T) {
-	handler, store, _ := setup(t, order.StatePlaced)
+	handler, store, workflow := setup(t, order.StatePlaced)
 	in := input("event-1")
 	in.ExpectedReadyAt = occurredAt.Add(12 * time.Minute)
+	workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Once()
 
 	_, err := handler.Handle(context.Background(), in)
 

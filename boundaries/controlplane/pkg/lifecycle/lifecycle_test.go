@@ -21,35 +21,6 @@ func testConfig() Config {
 	}
 }
 
-// newServingWorker возвращает MockWorker, который обслуживает работу до
-// Shutdown: started закрывается после успешного Start, отправка в runExit
-// завершает Run.
-func newServingWorker(t *testing.T) (*MockWorker, chan struct{}, chan error) {
-	worker := NewMockWorker(t)
-	started := make(chan struct{})
-	runExit := make(chan error, 1)
-	worker.EXPECT().Start(mock.Anything).RunAndReturn(func(context.Context) error {
-		close(started)
-		return nil
-	}).Once()
-	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
-	return worker, started, runExit
-}
-
-// expectDrain ожидает Shutdown, который завершает начатую работу за drain
-// и затем останавливает Run.
-func expectDrain(worker *MockWorker, runExit chan error, drain time.Duration) {
-	worker.EXPECT().Shutdown(mock.Anything).RunAndReturn(func(ctx context.Context) error {
-		defer func() { runExit <- nil }()
-		select {
-		case <-time.After(drain):
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}).Once()
-}
-
 func runAsync(rt *Runtime, ctx context.Context, w Worker) chan error {
 	result := make(chan error, 1)
 	go func() { result <- rt.Run(ctx, w) }()
@@ -58,8 +29,18 @@ func runAsync(rt *Runtime, ctx context.Context, w Worker) chan error {
 
 func TestRunMarksReadyAndShutsDownGracefully(t *testing.T) {
 	rt := New(testConfig())
-	worker, started, runExit := newServingWorker(t)
-	expectDrain(worker, runExit, 0)
+	worker := NewMockWorker(t)
+	started := make(chan struct{})
+	runExit := make(chan error, 1)
+	worker.EXPECT().Start(mock.Anything).RunAndReturn(func(context.Context) error {
+		close(started)
+		return nil
+	}).Once()
+	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
+	worker.EXPECT().Shutdown(mock.Anything).RunAndReturn(func(context.Context) error {
+		runExit <- nil
+		return nil
+	}).Once()
 	ctx, cancel := context.WithCancel(context.Background())
 	result := runAsync(rt, ctx, worker)
 
@@ -75,8 +56,18 @@ func TestRunWaitsReadinessDelayBeforeShutdown(t *testing.T) {
 	cfg := testConfig()
 	cfg.ReadinessDelay = 150 * time.Millisecond
 	rt := New(cfg)
-	worker, started, runExit := newServingWorker(t)
-	expectDrain(worker, runExit, 0)
+	worker := NewMockWorker(t)
+	started := make(chan struct{})
+	runExit := make(chan error, 1)
+	worker.EXPECT().Start(mock.Anything).RunAndReturn(func(context.Context) error {
+		close(started)
+		return nil
+	}).Once()
+	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
+	worker.EXPECT().Shutdown(mock.Anything).RunAndReturn(func(context.Context) error {
+		runExit <- nil
+		return nil
+	}).Once()
 	ctx, cancel := context.WithCancel(context.Background())
 	result := runAsync(rt, ctx, worker)
 	<-started
@@ -90,8 +81,23 @@ func TestRunWaitsReadinessDelayBeforeShutdown(t *testing.T) {
 
 func TestRunFailsWhenDrainTimeoutExceeded(t *testing.T) {
 	rt := New(testConfig())
-	worker, started, runExit := newServingWorker(t)
-	expectDrain(worker, runExit, time.Hour)
+	worker := NewMockWorker(t)
+	started := make(chan struct{})
+	runExit := make(chan error, 1)
+	worker.EXPECT().Start(mock.Anything).RunAndReturn(func(context.Context) error {
+		close(started)
+		return nil
+	}).Once()
+	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
+	worker.EXPECT().Shutdown(mock.Anything).RunAndReturn(func(ctx context.Context) error {
+		defer func() { runExit <- nil }()
+		select {
+		case <-time.After(time.Hour):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}).Once()
 	ctx, cancel := context.WithCancel(context.Background())
 	result := runAsync(rt, ctx, worker)
 	<-started
@@ -113,7 +119,14 @@ func TestRunFailsWithoutReadyWhenStartFails(t *testing.T) {
 
 func TestRunFailsWhenWorkerStopsOnItsOwn(t *testing.T) {
 	rt := New(testConfig())
-	worker, started, runExit := newServingWorker(t)
+	worker := NewMockWorker(t)
+	started := make(chan struct{})
+	runExit := make(chan error, 1)
+	worker.EXPECT().Start(mock.Anything).RunAndReturn(func(context.Context) error {
+		close(started)
+		return nil
+	}).Once()
+	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
 	result := runAsync(rt, context.Background(), worker)
 	<-started
 

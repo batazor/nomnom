@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
 
@@ -47,7 +48,7 @@ var received = applications.OrderView{
 func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
 	get := newMockGetKitchenHandler(t)
 	// the user reaches restaurants as a user assertion.
-	get.EXPECT().Handle(withUser(), "restaurant-1").Return(applications.KitchenView{
+	get.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool { user, ok := identity.UserFrom(ctx); return ok && user.ID != "" }), "restaurant-1").Return(applications.KitchenView{
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
 		Orders:     []applications.OrderView{preparing, received},
 	}, nil).Once()

@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -21,12 +22,12 @@ var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 
 type harness struct {
 	store    *repositorytest.Store
-	workflow *fake.Workflow
+	workflow *mocks.MockNotifier
 }
 
 func newHarness(t *testing.T, seeded ...*order.Order) harness {
 	t.Helper()
-	h := harness{store: repositorytest.Open(t), workflow: fake.NewWorkflow()}
+	h := harness{store: repositorytest.Open(t), workflow: mocks.NewMockNotifier(t)}
 	for _, o := range seeded {
 		require.NoError(t, h.store.Add(context.Background(), o))
 	}
@@ -58,6 +59,13 @@ func recordPickup(current *order.Order) error {
 // AC-106: the same event_id changes nothing and re-notifies the workflow.
 func TestDuplicateEventIsNoOpAndNotifiesAgain(t *testing.T) {
 	h := newHarness(t, ordertest.New(t, "order-1"))
+	// The duplicate notifies the workflow again with the same notification.
+	h.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Times(2)
 	reflector := h.reflector(nil)
 
 	first, err := reflector.Reflect(context.Background(), pickup("event-1"), recordPickup)
@@ -70,17 +78,23 @@ func TestDuplicateEventIsNoOpAndNotifiesAgain(t *testing.T) {
 	snapshot, _ := h.store.Snapshot("order-1")
 	assert.Equal(t, uint64(2), snapshot.Version, "the duplicate must not save the Order")
 	assert.Equal(t, 1, h.store.InboxSize())
-	notifications := h.workflow.Notifications()
-	require.Len(t, notifications, 2)
-	assert.Equal(t, notifications[0], notifications[1])
-	assert.Equal(t, fulfillment.Notification{
-		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
-	}, notifications[0])
 }
 
 // AC-107: the same fact under a new event_id has no second business effect.
 func TestRepeatedFactWithNewEventIDIsAlreadyApplied(t *testing.T) {
 	h := newHarness(t, ordertest.New(t, "order-1"))
+	h.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Once()
+	h.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Once()
 	reflector := h.reflector(nil)
 
 	_, err := reflector.Reflect(context.Background(), pickup("event-1"), recordPickup)
@@ -93,8 +107,6 @@ func TestRepeatedFactWithNewEventIDIsAlreadyApplied(t *testing.T) {
 	assert.Equal(t, uint64(2), snapshot.Version)
 	assert.Len(t, snapshot.Facts, 1)
 	assert.Equal(t, 2, h.store.InboxSize())
-	require.Len(t, h.workflow.Notifications(), 2)
-	assert.Equal(t, "event-2", h.workflow.Notifications()[1].EventID)
 }
 
 // AC-112: a fact for a final Order is recorded in the Inbox and ignored.
@@ -102,7 +114,13 @@ func TestLateFactForFinalOrderIsIgnored(t *testing.T) {
 	for _, state := range []order.State{order.StateCompleted, order.StateCancelled} {
 		t.Run(string(state), func(t *testing.T) {
 			h := newHarness(t, ordertest.New(t, "order-1", ordertest.WithState(state)))
-			h.workflow.Close("order-1")
+			// The workflow of a final Order is closed.
+			h.workflow.EXPECT().
+				Notify(mock.Anything, fulfillment.Notification{
+					OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+				}).
+				Return(fulfillment.ErrWorkflowNotFound).
+				Once()
 
 			reflection, err := h.reflector(nil).Reflect(context.Background(), pickup("event-1"), recordPickup)
 
@@ -120,7 +138,18 @@ func TestLateFactForFinalOrderIsIgnored(t *testing.T) {
 func TestFailedNotificationIsReturnedAndRepairedByRedelivery(t *testing.T) {
 	h := newHarness(t, ordertest.New(t, "order-1"))
 	reflector := h.reflector(nil)
-	h.workflow.FailNotify(errors.New("temporal unavailable"))
+	h.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+		}).
+		Return(errors.New("temporal unavailable")).
+		Once()
+	h.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+		}).
+		Return(nil).
+		Once()
 
 	reflection, err := reflector.Reflect(context.Background(), pickup("event-1"), recordPickup)
 
@@ -130,11 +159,9 @@ func TestFailedNotificationIsReturnedAndRepairedByRedelivery(t *testing.T) {
 	assert.Len(t, snapshot.Facts, 1, "local changes stay committed")
 	assert.Equal(t, 1, h.store.InboxSize())
 
-	h.workflow.FailNotify(nil)
 	redelivered, err := reflector.Reflect(context.Background(), pickup("event-1"), recordPickup)
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.Reflection{Outcome: fulfillment.OutcomeDuplicate, WorkflowNotified: true}, redelivered)
-	require.Len(t, h.workflow.Notifications(), 1)
 }
 
 type failingSave struct {
@@ -187,6 +214,7 @@ func TestFailedTransactionRollsBackWithoutNotification(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// The notifier has no expectation: a notification fails the test.
 			h := newHarness(t, ordertest.New(t, "order-1"))
 			before, _ := h.store.Snapshot("order-1")
 
@@ -196,12 +224,12 @@ func TestFailedTransactionRollsBackWithoutNotification(t *testing.T) {
 			after, _ := h.store.Snapshot("order-1")
 			assert.Equal(t, before, after)
 			assert.Zero(t, h.store.InboxSize())
-			assert.Empty(t, h.workflow.Notifications())
 		})
 	}
 }
 
 func TestReflectRejectsInvalidInputAndUnknownOrders(t *testing.T) {
+	// The notifier has no expectation: a notification fails the test.
 	h := newHarness(t, ordertest.New(t, "order-1"))
 	reflector := h.reflector(nil)
 
@@ -230,5 +258,4 @@ func TestReflectRejectsInvalidInputAndUnknownOrders(t *testing.T) {
 	var invalidTransition order.InvalidTransition
 	require.ErrorAs(t, err, &invalidTransition)
 	assert.Zero(t, h.store.InboxSize())
-	assert.Empty(t, h.workflow.Notifications())
 }

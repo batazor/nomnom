@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications"
 )
 
@@ -30,7 +31,7 @@ func simulatorService(t *testing.T, get *mockGetSimulatorHandler, set *mockSetSi
 func TestSimulatorRunsOnBehalfOfTheUser(t *testing.T) {
 	get := newMockGetSimulatorHandler(t)
 	// the user reaches the contexts as a user assertion.
-	get.EXPECT().Handle(withUser()).Return(true, nil).Once()
+	get.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool { user, ok := identity.UserFrom(ctx); return ok && user.ID != "" })).Return(true, nil).Once()
 	svc, ctx := simulatorService(t, get, newMockSetSimulatorEnabledHandler(t))
 
 	response, err := svc.QuerySimulator(ctx, &service.QuerySimulatorRequest{})
@@ -42,7 +43,7 @@ func TestSimulatorRunsOnBehalfOfTheUser(t *testing.T) {
 // AC-766: the operator switches the Simulator on.
 func TestSetSimulatorEnabledAnswersTheNewState(t *testing.T) {
 	set := newMockSetSimulatorEnabledHandler(t)
-	set.EXPECT().Handle(withUser(), true).Return(true, nil).Once()
+	set.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool { user, ok := identity.UserFrom(ctx); return ok && user.ID != "" }), true).Return(true, nil).Once()
 	svc, ctx := simulatorService(t, newMockGetSimulatorHandler(t), set)
 
 	response, err := svc.MutationSetSimulatorEnabled(ctx, &service.MutationSetSimulatorEnabledRequest{Enabled: true})

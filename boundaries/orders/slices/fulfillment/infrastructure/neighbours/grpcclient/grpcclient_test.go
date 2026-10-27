@@ -75,16 +75,6 @@ func serve(t *testing.T) (*grpc.ClientConn, *MockPaymentsServiceServer, *MockRes
 	return conn, payments, restaurants, delivery
 }
 
-func operation(status paymentsv1.PaymentOperationStatus) *paymentsv1.PaymentOperation {
-	return &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: status, DeclineReason: "card_declined"}
-}
-
-// expectCreatePayment expects times Payment creations, each answering payment-1.
-func expectCreatePayment(payments *MockPaymentsServiceServer, times int) {
-	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
-		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Times(times)
-}
-
 var payment = neighbours.PaymentRequest{
 	OrderID: "order-1", MarketID: "berlin", Amount: "20", Currency: "EUR", IdempotencyKey: "order:order-1:authorize_payment",
 }
@@ -97,7 +87,7 @@ func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
 	})).Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
 	payments.EXPECT().AuthorizePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.AuthorizePaymentRequest) bool {
 		return r.GetPaymentId() == "payment-1" && r.GetIdempotencyKey() == payment.IdempotencyKey
-	})).Return(&paymentsv1.AuthorizePaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED)}, nil).Once()
+	})).Return(&paymentsv1.AuthorizePaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED, DeclineReason: "card_declined"}}, nil).Once()
 
 	d, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
 
@@ -108,9 +98,10 @@ func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
 // AC-457: a provider decline is a business decision, not an error.
 func TestPaymentsDeclineIsDecision(t *testing.T) {
 	conn, payments, _, _ := serve(t)
-	expectCreatePayment(payments, 1)
+	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
 	payments.EXPECT().CapturePayment(mock.Anything, mock.Anything).
-		Return(&paymentsv1.CapturePaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED)}, nil).Once()
+		Return(&paymentsv1.CapturePaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED, DeclineReason: "card_declined"}}, nil).Once()
 
 	d, err := grpcclient.NewPayments(conn).Capture(context.Background(), payment)
 
@@ -121,9 +112,10 @@ func TestPaymentsDeclineIsDecision(t *testing.T) {
 // AC-458: a pending operation is retried by the Activity with the same key.
 func TestPaymentsPendingIsRetryable(t *testing.T) {
 	conn, payments, _, _ := serve(t)
-	expectCreatePayment(payments, 1)
+	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
 	payments.EXPECT().AuthorizePayment(mock.Anything, mock.Anything).
-		Return(&paymentsv1.AuthorizePaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_PENDING)}, nil).Once()
+		Return(&paymentsv1.AuthorizePaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_PENDING, DeclineReason: "card_declined"}}, nil).Once()
 
 	_, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
 
@@ -133,11 +125,12 @@ func TestPaymentsPendingIsRetryable(t *testing.T) {
 
 func TestPaymentsDeclinedCompensationIsError(t *testing.T) {
 	conn, payments, _, _ := serve(t)
-	expectCreatePayment(payments, 2)
+	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Times(2)
 	payments.EXPECT().RefundPayment(mock.Anything, mock.Anything).
-		Return(&paymentsv1.RefundPaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED)}, nil).Once()
+		Return(&paymentsv1.RefundPaymentResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED, DeclineReason: "card_declined"}}, nil).Once()
 	payments.EXPECT().CancelAuthorization(mock.Anything, mock.Anything).
-		Return(&paymentsv1.CancelAuthorizationResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED)}, nil).Once()
+		Return(&paymentsv1.CancelAuthorizationResponse{Operation: &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED, DeclineReason: "card_declined"}}, nil).Once()
 
 	require.Error(t, grpcclient.NewPayments(conn).Refund(context.Background(), payment))
 	require.NoError(t, grpcclient.NewPayments(conn).CancelAuthorization(context.Background(), payment))

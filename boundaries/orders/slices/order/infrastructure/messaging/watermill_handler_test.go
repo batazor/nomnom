@@ -12,6 +12,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -33,10 +34,10 @@ import (
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -45,35 +46,36 @@ var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 type consumer struct {
 	pubSub        *gochannel.GoChannel
 	store         *repositorytest.Store
-	workflow      *fake.Workflow
-	relationships *fake.RelationshipSync
+	starter       *mocks.MockStarter
+	notifier      *mocks.MockNotifier
+	relationships *mocks.MockRelationships
 	poison        chan *message.Message
 }
 
 // startConsumer wires the order slice streams to gochannel: the same router
-// policy as orders-consumer, without Kafka.
+// policy as orders-consumer, without Kafka. The workflow and relationship
+// ports expect no call until a test sets its expectations.
 func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 	t.Helper()
 	store := repositorytest.Open(t)
 	for _, o := range orders {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
-	workflow := fake.NewWorkflow()
-	relationships := fake.NewRelationshipSync()
+	starter, notifier, relationships := mocks.NewMockStarter(t), mocks.NewMockNotifier(t), mocks.NewMockRelationships(t)
 	handlers := ordermessaging.Handlers{
-		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
-		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
-		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
-		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
-		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, workflow),
-		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, store),
+		ConfirmOrder:             confirmorder.NewHandler(store, store, store, notifier),
+		RejectOrder:              rejectorder.NewHandler(store, store, store, notifier),
+		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, notifier),
+		RecordOrderReady:         recordorderready.NewHandler(store, store, store, notifier),
+		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, notifier),
+		RelayPreparationIssue:    relaypreparationissue.NewHandler(notifier),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, notifier, store, store),
 		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store),
-		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
-		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
-		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
+		RecordPickup:             recordpickup.NewHandler(store, store, store, notifier),
+		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, notifier),
+		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, notifier),
 		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, relationships, store),
-		StartFulfillment:         startfulfillment.NewHandler(store, store, store, workflow),
+		StartFulfillment:         startfulfillment.NewHandler(store, store, store, starter),
 	}
 
 	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
@@ -101,7 +103,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		_ = router.Close()
 	})
 	<-router.Running()
-	return consumer{pubSub: pubSub, store: store, workflow: workflow, relationships: relationships, poison: poison}
+	return consumer{pubSub: pubSub, store: store, starter: starter, notifier: notifier, relationships: relationships, poison: poison}
 }
 
 func (c consumer) publish(t *testing.T, topic, eventID string, event proto.Message) {
@@ -150,47 +152,40 @@ func (c consumer) noPoison(t *testing.T) {
 	}
 }
 
-func kinds(notifications []fulfillment.Notification) []fulfillment.Kind {
-	result := make([]fulfillment.Kind, 0, len(notifications))
-	for _, n := range notifications {
-		result = append(result, n.Kind)
-	}
-	return result
-}
-
 func TestRestaurantOrderAcceptedConfirmsOrder(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
+	c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+	}).Return(nil).Once()
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.RestaurantOrderAccepted{OrderId: "order-1"})
 
 	snapshot, _ := c.store.Snapshot("order-1")
 	assert.Equal(t, order.StateConfirmed, snapshot.State)
 	assert.Equal(t, 1, c.store.InboxSize())
-	assert.Equal(t, []fulfillment.Notification{{
-		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
-	}}, c.workflow.Notifications())
 	c.noPoison(t)
 }
 
 // FR-638: the own OrderPlaced starts the workflow of the Order.
 func TestOrderPlacedStartsWorkflow(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
+	c.starter.EXPECT().Start(mock.Anything, fulfillment.StartRequest{OrderID: "order-1", EventID: "event-placed", OccurredAt: occurredAt}).
+		Return(nil).Once()
 
 	c.publish(t, outbound.OrderEventsTopic, "event-placed", &ordersv1.OrderPlaced{OrderId: "order-1"})
 
-	assert.Equal(t, []fulfillment.StartRequest{{OrderID: "order-1", EventID: "event-placed", OccurredAt: occurredAt}}, c.workflow.Starts())
 	assert.Equal(t, 1, c.store.InboxSize())
 	c.noPoison(t)
 }
 
 // AC-822: own OrderCompleted and OrderCancelled are acknowledged without a dead letter.
 func TestOwnFinalEventsAreAcknowledged(t *testing.T) {
+	// The workflow is not started: c.starter expects no call.
 	c := startConsumer(t)
 
 	c.publish(t, outbound.OrderEventsTopic, "event-completed", &ordersv1.OrderCompleted{OrderId: "order-1"})
 	c.publish(t, outbound.OrderEventsTopic, "event-cancelled", &ordersv1.OrderCancelled{OrderId: "order-1"})
 
-	assert.Empty(t, c.workflow.Starts())
 	assert.Zero(t, c.store.InboxSize())
 	c.noPoison(t)
 }
@@ -198,25 +193,35 @@ func TestOwnFinalEventsAreAcknowledged(t *testing.T) {
 func TestRedeliveryIsAckedAsDuplicate(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
 	accepted := &restaurantsv1.RestaurantOrderAccepted{OrderId: "order-1"}
+	// The duplicate re-notifies the workflow with the same event_id.
+	c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+	}).Return(nil).Times(2)
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", accepted)
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", accepted)
 
 	assert.Equal(t, 1, c.store.InboxSize())
-	assert.Len(t, c.workflow.Notifications(), 2, "duplicate re-notifies the workflow with the same event_id")
 	c.noPoison(t)
 }
 
 func TestDeliveryStreamKeepsOrderOfOneAggregate(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed)))
+	assigned := c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	pickedUp := c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindPickedUp, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	pickedUp.NotBefore(assigned)
+	c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-3", Kind: fulfillment.KindDeliveryCompleted, OccurredAt: occurredAt,
+	}).Return(nil).Once().NotBefore(pickedUp)
 
 	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-1", &deliveryv1.CourierAssignedToDelivery{OrderId: "order-1"})
 	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-2", &deliveryv1.DeliveryPickedUp{OrderId: "order-1"})
 	c.publish(t, ordermessaging.DeliveryEventsTopic, "event-3", &deliveryv1.DeliveryCompleted{OrderId: "order-1"})
 
-	assert.Equal(t, []fulfillment.Kind{
-		fulfillment.KindCourierAssigned, fulfillment.KindPickedUp, fulfillment.KindDeliveryCompleted,
-	}, kinds(c.workflow.Notifications()))
 	assert.Equal(t, 3, c.store.InboxSize())
 	c.noPoison(t)
 }
@@ -234,6 +239,10 @@ func linkedDelivery(c consumer) string {
 func TestCourierEventsKeepDeliveryLink(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed)))
 	assigned := &deliveryv1.CourierAssignedToDelivery{OrderId: "order-1", DeliveryId: "delivery-1", CourierId: "courier-1"}
+	// Only the assignment notifies the workflow.
+	c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
 
 	c.publishVersion(t, ordermessaging.DeliveryEventsTopic, "event-1", 1, assigned)
 	require.Equal(t, "delivery-1", linkedDelivery(c))
@@ -249,7 +258,6 @@ func TestCourierEventsKeepDeliveryLink(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, order.CourierAssignment{AssignedAt: occurredAt, DeliveryVersion: 3}, stored, "aggregate_version orders courier events")
-	assert.Equal(t, []fulfillment.Kind{fulfillment.KindCourierAssigned}, kinds(c.workflow.Notifications()))
 	assert.Equal(t, 3, c.store.InboxSize())
 	c.noPoison(t)
 }
@@ -257,14 +265,14 @@ func TestCourierEventsKeepDeliveryLink(t *testing.T) {
 func TestPreparationDelayedIsRelayedToWorkflow(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
 	expected := occurredAt.Add(15 * time.Minute)
+	c.notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed, OccurredAt: occurredAt, ExpectedReadyAt: expected,
+	}).Return(nil).Once()
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &restaurantsv1.PreparationDelayed{
 		OrderId: "order-1", ExpectedReadyAt: timestamppb.New(expected),
 	})
 
-	assert.Equal(t, []fulfillment.Notification{{
-		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindPreparationDelayed, OccurredAt: occurredAt, ExpectedReadyAt: expected,
-	}}, c.workflow.Notifications())
 	assert.Equal(t, 1, c.store.InboxSize())
 	c.noPoison(t)
 }
@@ -276,6 +284,16 @@ func TestEventsCarryExpectedTimesIntoOrder(t *testing.T) {
 	readyAt, delayedAt := occurredAt.Add(12*time.Minute), occurredAt.Add(20*time.Minute)
 	firstPickup, secondPickup := occurredAt.Add(25*time.Minute), occurredAt.Add(30*time.Minute)
 	deliveredAt := occurredAt.Add(45 * time.Minute)
+	for eventID, notification := range map[string]fulfillment.Notification{
+		"accepted":   {Kind: fulfillment.KindRestaurantAccepted},
+		"delayed":    {Kind: fulfillment.KindPreparationDelayed, ExpectedReadyAt: delayedAt},
+		"assigned-1": {Kind: fulfillment.KindCourierAssigned},
+		"assigned-2": {Kind: fulfillment.KindCourierAssigned},
+		"picked-up":  {Kind: fulfillment.KindPickedUp},
+	} {
+		notification.OrderID, notification.EventID, notification.OccurredAt = "order-1", eventID, occurredAt
+		c.notifier.EXPECT().Notify(mock.Anything, notification).Return(nil).Once()
+	}
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "accepted", &restaurantsv1.RestaurantOrderAccepted{
 		OrderId: "order-1", ExpectedReadyAt: timestamppb.New(readyAt),
@@ -312,8 +330,8 @@ func TestEventOfAnotherStreamGoesToDLQ(t *testing.T) {
 
 	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-1", &deliveryv1.DeliveryPickedUp{OrderId: "order-1"})
 
+	// The workflow is not notified: c.notifier expects no call.
 	assert.Equal(t, ordermessaging.RestaurantOrderEventsTopic, c.poisoned(t).Metadata.Get(messaging.TopicDeadLetteredMetadata))
-	assert.Empty(t, c.workflow.Notifications())
 }
 
 func TestInvalidCommandGoesToDLQ(t *testing.T) {
@@ -328,16 +346,16 @@ func TestInvalidCommandGoesToDLQ(t *testing.T) {
 // of the Order from its stored state, without the Inbox.
 func TestRelationshipsChangedSyncsTheOrderState(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
+	c.relationships.EXPECT().SyncOrderRelationships(mock.Anything, order.ID("order-1"),
+		syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}).
+		Return(application.AuthorizationRevision("zedtoken-1"), nil).Once()
 
 	c.publish(t, outbound.OrderRelationshipsTopic, "event-1", &ordersv1.OrderRelationshipsChanged{OrderId: "order-1"})
 
-	synced, ok := c.relationships.Synced("order-1")
-	require.True(t, ok)
-	assert.Equal(t, syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}, synced)
 	revision, found, err := c.store.Revision(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, application.AuthorizationRevision("fake:order-1:1"), revision)
+	assert.Equal(t, application.AuthorizationRevision("zedtoken-1"), revision)
 	assert.Equal(t, 0, c.store.InboxSize())
 	c.noPoison(t)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
@@ -15,7 +16,7 @@ import (
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -30,7 +31,7 @@ const assignedVersion = 2
 type world struct {
 	store    *repositorytest.Store
 	changes  *failingChanges
-	workflow *fake.Workflow
+	workflow *mocks.MockNotifier
 	assign   recordcourierassignment.Handler
 	release  recordcourierrelease.Handler
 }
@@ -50,15 +51,23 @@ func newWorld(t *testing.T) world {
 func newUnassignedWorld(t *testing.T) world {
 	t.Helper()
 	store := repositorytest.Open(t)
-	w := world{store: store, changes: &failingChanges{Store: store}, workflow: fake.NewWorkflow()}
+	w := world{store: store, changes: &failingChanges{Store: store}, workflow: mocks.NewMockNotifier(t)}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
 	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.changes)
 	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.changes)
 	return w
 }
 
+// assignCourier hands the assignment to the workflow exactly once; the release
+// handler never notifies it, so these are the only notifications of a test.
 func (w world) assignCourier(t *testing.T, eventID, courierID string, version uint64, at time.Time) {
 	t.Helper()
+	w.workflow.EXPECT().
+		Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-1", EventID: eventID, Kind: fulfillment.KindCourierAssigned, OccurredAt: at,
+		}).
+		Return(nil).
+		Once()
 	_, err := w.assign.Handle(context.Background(), recordcourierassignment.Input{
 		EventID: eventID, OrderID: "order-1", OccurredAt: at, DeliveryVersion: version, DeliveryID: "delivery-1", CourierID: courierID,
 	})
@@ -120,8 +129,8 @@ func TestUnassignmentClearsCourierOnly(t *testing.T) {
 	assert.Equal(t, recordcourierrelease.OutcomeReleased, result.Outcome)
 	assert.Len(t, w.store.RelationshipChanges(), 1, "no RelationshipsChanged")
 	assert.Equal(t, "delivery-1", w.linkedDelivery())
+	// Only the assignment notified the workflow: the release has no expectation.
 	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
-	assert.Len(t, w.workflow.Notifications(), 1, "only the assignment notified the workflow")
 }
 
 // AC-535: the cancellation clears the courier and the delivery and records

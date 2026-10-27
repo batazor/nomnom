@@ -15,22 +15,6 @@ var placedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 
 func at(minutes int) time.Time { return placedAt.Add(time.Duration(minutes) * time.Minute) }
 
-// orderReading expects one read of order.
-func orderReading(t *testing.T, order OrderSnapshot) *MockOrderReader {
-	orders := NewMockOrderReader(t)
-	orders.EXPECT().GetOrder(mock.Anything, order.ID).Return(order, nil).Once()
-	return orders
-}
-
-// catalogReading expects exactly one read of each restaurant.
-func catalogReading(t *testing.T, restaurantIDs ...string) *MockCatalog {
-	catalog := NewMockCatalog(t)
-	for _, id := range restaurantIDs {
-		catalog.EXPECT().Restaurant(mock.Anything, id).Return(Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil).Once()
-	}
-	return catalog
-}
-
 func snapshot(state string, facts ...Fact) OrderSnapshot {
 	return OrderSnapshot{
 		ID: "order-1", RestaurantID: "restaurant-1", State: state,
@@ -38,19 +22,6 @@ func snapshot(state string, facts ...Fact) OrderSnapshot {
 		Total:    Money{Amount: "0.30", Currency: "EUR"},
 		PlacedAt: placedAt, Facts: facts,
 	}
-}
-
-func view(t *testing.T, order OrderSnapshot, now time.Time) OrderView {
-	t.Helper()
-	// The courier rules are TestCourierIsNamedOnceAssigned's: here delivery
-	// names one whenever it is asked.
-	couriers := NewMockCouriers(t)
-	couriers.EXPECT().CourierOf(mock.Anything, order.ID).Return(&Courier{Name: "Тимур"}, nil).Maybe()
-	h := NewGetOrder(orderReading(t, order), catalogReading(t, order.RestaurantID), couriers)
-	h.now = func() time.Time { return now }
-	result, err := h.Handle(context.Background(), order.ID)
-	require.NoError(t, err)
-	return result
 }
 
 func TestStatusFollowsStateAndFacts(t *testing.T) {
@@ -77,13 +48,26 @@ func TestStatusFollowsStateAndFacts(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, view(t, tt.order, at(1)).Status)
+			orders := NewMockOrderReader(t)
+			orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(tt.order, nil).Once()
+			catalog := NewMockCatalog(t)
+			catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+			h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+			h.now = func() time.Time { return at(1) }
+			got, err := h.Handle(context.Background(), "order-1")
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, got.Status)
 		})
 	}
 }
 
 func TestUnknownStateIsAnError(t *testing.T) {
-	h := NewGetOrder(orderReading(t, snapshot("lost")), catalogReading(t, "restaurant-1"), NewMockCouriers(t))
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(snapshot("lost"), nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
 	_, err := h.Handle(context.Background(), "order-1")
 	assert.Error(t, err)
 }
@@ -100,16 +84,39 @@ func TestEndReasonByReasonCode(t *testing.T) {
 	} {
 		order := snapshot("cancelled")
 		order.Cancellation = &Cancellation{Outcome: "failure", ReasonCode: code, CancelledAt: at(5)}
-		assert.Equal(t, want, view(t, order, at(6)).EndReason, code)
+		orders := NewMockOrderReader(t)
+		orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
+		catalog := NewMockCatalog(t)
+		catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+		h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+		h.now = func() time.Time { return at(6) }
+		got, err := h.Handle(context.Background(), "order-1")
+		require.NoError(t, err)
+		assert.Equal(t, want, got.EndReason, code)
 	}
-	assert.Empty(t, view(t, snapshot("placed"), at(1)).EndReason)
+
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(snapshot("placed"), nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+	h.now = func() time.Time { return at(1) }
+	placed, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.Empty(t, placed.EndReason)
 }
 
 // AC-831: the payment moment is the PAID milestone after PLACED.
 func TestPaymentIsPaidMilestone(t *testing.T) {
 	order := snapshot("placed", Fact{"payment_authorized", at(1)})
-
-	got := view(t, order, at(2))
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+	h.now = func() time.Time { return at(2) }
+	got, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
 
 	assert.Equal(t, []Milestone{{MilestonePlaced, placedAt}, {MilestonePaid, at(1)}}, got.Milestones)
 }
@@ -117,8 +124,14 @@ func TestPaymentIsPaidMilestone(t *testing.T) {
 // AC-564: the acceptance moment becomes CONFIRMED between PLACED and later facts.
 func TestRestaurantAcceptanceIsConfirmedMilestone(t *testing.T) {
 	order := snapshot("confirmed", Fact{"preparation_started", at(4)}, Fact{"restaurant_accepted", at(3)})
-
-	got := view(t, order, at(5))
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+	h.now = func() time.Time { return at(5) }
+	got, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
 
 	assert.Equal(t, []Milestone{
 		{MilestonePlaced, placedAt},
@@ -130,8 +143,17 @@ func TestRestaurantAcceptanceIsConfirmedMilestone(t *testing.T) {
 // AC-557: preparing with a courier assigned; milestones in time order.
 func TestPreparingOrderWithCourierMilestones(t *testing.T) {
 	order := snapshot("confirmed", Fact{"courier_assigned", at(8)}, Fact{"preparation_started", at(3)})
-
-	got := view(t, order, at(9))
+	couriers := NewMockCouriers(t)
+	couriers.EXPECT().CourierOf(mock.Anything, "order-1").Return(&Courier{Name: "Тимур"}, nil).Once()
+	couriers.EXPECT().TrackingOf(mock.Anything, "order-1").Return(nil, nil).Once()
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, couriers)
+	h.now = func() time.Time { return at(9) }
+	got, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
 
 	assert.Equal(t, StatusPreparing, got.Status)
 	assert.Equal(t, []Milestone{
@@ -147,7 +169,12 @@ func TestCourierIsNamedOnceAssigned(t *testing.T) {
 	assigned := snapshot("confirmed", Fact{"courier_assigned", at(8)})
 	couriers := NewMockCouriers(t)
 	couriers.EXPECT().CourierOf(mock.Anything, assigned.ID).Return(&Courier{Name: "Тимур"}, nil).Once()
-	h := NewGetOrder(orderReading(t, assigned), catalogReading(t, "restaurant-1"), couriers)
+	couriers.EXPECT().TrackingOf(mock.Anything, assigned.ID).Return(nil, nil).Once()
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(assigned, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, couriers)
 
 	got, err := h.Handle(context.Background(), assigned.ID)
 
@@ -156,15 +183,63 @@ func TestCourierIsNamedOnceAssigned(t *testing.T) {
 
 	// Delivery is not asked: the couriers expect no call.
 	waiting := snapshot("confirmed")
-	got, err = NewGetOrder(orderReading(t, waiting), catalogReading(t, "restaurant-1"), NewMockCouriers(t)).Handle(context.Background(), waiting.ID)
+	waitingOrders := NewMockOrderReader(t)
+	waitingOrders.EXPECT().GetOrder(mock.Anything, "order-1").Return(waiting, nil).Once()
+	waitingCatalog := NewMockCatalog(t)
+	waitingCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	got, err = NewGetOrder(waitingOrders, waitingCatalog, NewMockCouriers(t)).Handle(context.Background(), waiting.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got.Courier)
 
 	down := errors.New("delivery down")
 	failing := NewMockCouriers(t)
 	failing.EXPECT().CourierOf(mock.Anything, assigned.ID).Return(nil, down).Once()
-	_, err = NewGetOrder(orderReading(t, assigned), catalogReading(t, "restaurant-1"), failing).Handle(context.Background(), assigned.ID)
+	failingOrders := NewMockOrderReader(t)
+	failingOrders.EXPECT().GetOrder(mock.Anything, "order-1").Return(assigned, nil).Once()
+	failingCatalog := NewMockCatalog(t)
+	failingCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	_, err = NewGetOrder(failingOrders, failingCatalog, failing).Handle(context.Background(), assigned.ID)
 	assert.ErrorIs(t, err, down)
+}
+
+// AC-884, AC-886: an active Order with an Assignment carries the tracking
+// delivery returns; a delivered Order does not ask for it.
+func TestTrackingOfActiveAssignedOrder(t *testing.T) {
+	pickedUp := snapshot("confirmed", Fact{"courier_assigned", at(8)}, Fact{"picked_up", at(9)})
+	tracking := &Tracking{
+		Channel: "cd",
+		City:    VirtualCity{Origin: GeoPoint{Latitude: 52.515, Longitude: 13.385}, Blocks: 12, BlockMeters: 150},
+		Pickup:  GeoPoint{Latitude: 52.52, Longitude: 13.39},
+		Dropoff: GeoPoint{Latitude: 52.525, Longitude: 13.40},
+		CourierPosition: &CourierPosition{
+			Channel:    "cd",
+			Point:      GeoPoint{Latitude: 52.521, Longitude: 13.392},
+			RecordedAt: at(10),
+		},
+	}
+	couriers := NewMockCouriers(t)
+	couriers.EXPECT().CourierOf(mock.Anything, pickedUp.ID).Return(&Courier{Name: "Тимур"}, nil).Once()
+	couriers.EXPECT().TrackingOf(mock.Anything, pickedUp.ID).Return(tracking, nil).Once()
+
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(pickedUp, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	got, err := NewGetOrder(orders, catalog, couriers).Handle(context.Background(), pickedUp.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, tracking, got.Tracking)
+
+	delivered := snapshot("completed", Fact{"courier_assigned", at(8)}, Fact{"delivery_completed", at(20)})
+	final := NewMockCouriers(t)
+	final.EXPECT().CourierOf(mock.Anything, delivered.ID).Return(&Courier{Name: "Тимур"}, nil).Once()
+	deliveredOrders := NewMockOrderReader(t)
+	deliveredOrders.EXPECT().GetOrder(mock.Anything, "order-1").Return(delivered, nil).Once()
+	deliveredCatalog := NewMockCatalog(t)
+	deliveredCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	got, err = NewGetOrder(deliveredOrders, deliveredCatalog, final).Handle(context.Background(), delivered.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.Tracking, "a final Order has no tracking")
 }
 
 // AC-558: the window is offered only while it is open and the Order is active.
@@ -173,8 +248,14 @@ func TestViewCarriesDeadlines(t *testing.T) {
 	ready, pickup := at(12), at(15)
 	order := snapshot("confirmed", Fact{Kind: "restaurant_accepted", OccurredAt: at(1)})
 	order.Deadlines = Deadlines{ExpectedReadyAt: &ready, ExpectedPickupAt: &pickup}
-
-	got := view(t, order, at(2))
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+	h.now = func() time.Time { return at(2) }
+	got, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
 
 	assert.Equal(t, Deadlines{ExpectedReadyAt: &ready, ExpectedPickupAt: &pickup}, got.Deadlines)
 }
@@ -183,17 +264,44 @@ func TestCancellationAvailability(t *testing.T) {
 	order := snapshot("placed")
 	order.Window = &CancellationWindow{OpensAt: placedAt, ClosesAt: at(5)}
 
-	assert.Equal(t, at(5), *view(t, order, at(2)).AvailableUntil)
-	assert.Nil(t, view(t, order, at(6)).AvailableUntil, "after closes_at")
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Twice()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Twice()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+	h.now = func() time.Time { return at(2) }
+	open, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.Equal(t, at(5), *open.AvailableUntil)
+	h.now = func() time.Time { return at(6) }
+	closed, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.Nil(t, closed.AvailableUntil, "after closes_at")
 
 	delivered := snapshot("completed")
 	delivered.Window = order.Window
-	assert.Nil(t, view(t, delivered, at(2)).AvailableUntil, "final order")
+	finalOrders := NewMockOrderReader(t)
+	finalOrders.EXPECT().GetOrder(mock.Anything, "order-1").Return(delivered, nil).Once()
+	finalCatalog := NewMockCatalog(t)
+	finalCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	final := NewGetOrder(finalOrders, finalCatalog, NewMockCouriers(t))
+	final.now = func() time.Time { return at(2) }
+	got, err := final.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.Nil(t, got.AvailableUntil, "final order")
 }
 
 // AC-559: line totals are exact decimals with the scale of the unit price.
 func TestLineTotalIsExact(t *testing.T) {
-	got := view(t, snapshot("placed"), at(1)).Items
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(snapshot("placed"), nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
+	h.now = func() time.Time { return at(1) }
+	placed, err := h.Handle(context.Background(), "order-1")
+	require.NoError(t, err)
+	got := placed.Items
 
 	require.Len(t, got, 1)
 	assert.Equal(t, "Чай", got[0].Name)
@@ -209,7 +317,11 @@ func TestLineTotalIsExact(t *testing.T) {
 func TestItemNameComesFromTheOrder(t *testing.T) {
 	order := snapshot("placed")
 	order.Items[0].Name = ""
-	h := NewGetOrder(orderReading(t, order), catalogReading(t, "restaurant-1"), NewMockCouriers(t))
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	h := NewGetOrder(orders, catalog, NewMockCouriers(t))
 	got, err := h.Handle(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Empty(t, got.Items[0].Name)
@@ -223,24 +335,23 @@ func TestCancellationRefusalsBecomeProblems(t *testing.T) {
 		"CANCELLATION_WINDOW_EXPIRED":  ProblemWindowExpired,
 		"ORDER_STATE_CONFLICT":         ProblemOrderAlreadyFinal,
 	} {
-		h := NewRequestCancellation(cancelling(t, request, "", CancellationRefused{Reason: reason}))
+		orders := NewMockCancellationRequester(t)
+		orders.EXPECT().RequestCancellation(mock.Anything, request).Return("", CancellationRefused{Reason: reason}).Once()
+		h := NewRequestCancellation(orders)
 		got, err := h.Handle(context.Background(), request)
 		require.NoError(t, err, reason)
 		assert.Equal(t, CancellationResult{Problem: want}, got, reason)
 	}
 
-	got, err := NewRequestCancellation(cancelling(t, request, OutcomeRequested, nil)).Handle(context.Background(), request)
+	requested := NewMockCancellationRequester(t)
+	requested.EXPECT().RequestCancellation(mock.Anything, request).Return(OutcomeRequested, nil).Once()
+	got, err := NewRequestCancellation(requested).Handle(context.Background(), request)
 	require.NoError(t, err)
 	assert.Equal(t, CancellationResult{Outcome: OutcomeRequested}, got)
 
 	unavailable := errors.New("unavailable")
-	_, err = NewRequestCancellation(cancelling(t, CancellationRequest{}, "", unavailable)).Handle(context.Background(), CancellationRequest{})
+	failing := NewMockCancellationRequester(t)
+	failing.EXPECT().RequestCancellation(mock.Anything, CancellationRequest{}).Return("", unavailable).Once()
+	_, err = NewRequestCancellation(failing).Handle(context.Background(), CancellationRequest{})
 	assert.ErrorIs(t, err, unavailable)
-}
-
-// cancelling expects one Cancellation Request answered with outcome and err.
-func cancelling(t *testing.T, request CancellationRequest, outcome CancellationOutcome, err error) *MockCancellationRequester {
-	orders := NewMockCancellationRequester(t)
-	orders.EXPECT().RequestCancellation(mock.Anything, request).Return(outcome, err).Once()
-	return orders
 }

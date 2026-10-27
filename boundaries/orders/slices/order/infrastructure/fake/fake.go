@@ -1,6 +1,6 @@
-// Package fake holds in-process stand-ins for the systems around the order
-// slice that are not its database: SpiceDB, the restaurants catalog, the
-// Temporal fulfillment workflow, the clock and the order id generator. State
+// Package fake holds in-process stand-ins with behaviour of their own: the
+// clock, the order id generator and an open cancellation window. Ports the
+// tests only assert calls on are mockery mocks (infrastructure/mocks). State
 // of orders itself lives only in PostgreSQL (repository/repositorytest).
 package fake
 

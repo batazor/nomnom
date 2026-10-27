@@ -7,14 +7,18 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
@@ -87,38 +91,30 @@ func (k *keys) NewKey() string {
 }
 
 type harness struct {
-	customer *customersimulator.Customer
-	store    *repositorytest.Store
-	workflow *fake.Workflow
-	catalog  *catalogStub
-	random   *scriptedRandom
-	switcher *switchStub
+	customer         *customersimulator.Customer
+	store            *repositorytest.Store
+	placementCatalog *mocks.MockCatalog
+	workflow         *mocks.MockCancellationRequester
+	catalog          *catalogStub
+	random           *scriptedRandom
+	switcher         *switchStub
 }
 
 // newHarness wires the simulated customer to the real order use cases on
-// PostgreSQL; the catalog of Place Order serves restaurant-1.
+// PostgreSQL. The catalog of Place Order and the workflow expect no call until
+// a test sets its expectations; the simulated customer touches only its own
+// Orders, so no permission is checked.
 func newHarness(t *testing.T) harness {
 	t.Helper()
 	store := repositorytest.Open(t)
-	placementCatalog := fake.NewCatalog()
-	placementCatalog.Put("restaurant-1", placeorder.CatalogSnapshot{
-		MarketID: ordertest.MarketID(t),
-		Currency: "EUR",
-		Items: map[order.MenuItemID]placeorder.CatalogItem{
-			"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-			"soup":  {UnitPrice: ordertest.Money(t, "6.00"), Available: true},
-			"tea":   {UnitPrice: ordertest.Money(t, "2.00"), Available: true},
-		},
-		MinimumTotal: ordertest.Money(t, "0"),
-		MaximumTotal: ordertest.Money(t, "1000"),
-	})
+	placementCatalog := mocks.NewMockCatalog(t)
 	policy, err := cancellationpolicy.NewFixed(time.Hour)
 	require.NoError(t, err)
-	workflow := fake.NewWorkflow()
+	workflow := mocks.NewMockCancellationRequester(t)
 	module := orderdi.NewModule(orderdi.Dependencies{
 		Commands:   store,
 		ReadModels: store,
-		Authorizer: fake.NewAuthorizer(),
+		Authorizer: mocks.NewMockAuthorizer(t),
 		Policy:     policy,
 		Catalog:    placementCatalog,
 		Workflow:   workflow,
@@ -127,11 +123,12 @@ func newHarness(t *testing.T) harness {
 		Telemetry:  observability.UseCases(),
 	})
 	h := harness{
-		store:    store,
-		workflow: workflow,
-		catalog:  &catalogStub{restaurants: []order.RestaurantID{"restaurant-1"}, menu: []order.MenuItemID{"pizza", "soup", "tea"}},
-		random:   &scriptedRandom{t: t},
-		switcher: &switchStub{enabled: true},
+		store:            store,
+		placementCatalog: placementCatalog,
+		workflow:         workflow,
+		catalog:          &catalogStub{restaurants: []order.RestaurantID{"restaurant-1"}, menu: []order.MenuItemID{"pizza", "soup", "tea"}},
+		random:           &scriptedRandom{t: t},
+		switcher:         &switchStub{enabled: true},
 	}
 	h.customer = customersimulator.New(customersimulator.Dependencies{
 		Switch:              h.switcher,
@@ -157,7 +154,19 @@ func TestCustomerPlacesOrderAfterRandomDelay(t *testing.T) {
 	h.customer.Tick(ctx, start.Add(89*time.Second))
 	assert.Zero(t, h.catalog.calls, "nothing is due before the delay")
 
-	// Due: next delay, restaurant 0, 2 items (tea ×2, soup ×1), no cancellation.
+	// Due: next delay, restaurant 0, 2 items (tea ×2, soup ×1), no cancellation:
+	// the workflow expects no call.
+	h.placementCatalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"tea", "soup"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID: ordertest.MarketID(t),
+			Currency: "EUR",
+			Items: map[order.MenuItemID]placeorder.CatalogItem{
+				"soup": {UnitPrice: ordertest.Money(t, "6.00"), Available: true},
+				"tea":  {UnitPrice: ordertest.Money(t, "2.00"), Available: true},
+			},
+			MinimumTotal: ordertest.Money(t, "0"),
+			MaximumTotal: ordertest.Money(t, "1000"),
+		}, nil).Once()
 	h.random.delays = []int64{0}
 	h.random.ints = []int{0, 1, 2, 1, 0, 0}
 	h.random.floats = []float64{0.5}
@@ -174,7 +183,6 @@ func TestCustomerPlacesOrderAfterRandomDelay(t *testing.T) {
 		quantities[item.MenuItemID()] = item.Quantity().Value()
 	}
 	assert.Equal(t, map[order.MenuItemID]int{"tea": 2, "soup": 1}, quantities)
-	assert.Empty(t, h.workflow.Cancellations())
 }
 
 func TestCustomerCancelsPlacedOrderAfterDelay(t *testing.T) {
@@ -183,23 +191,41 @@ func TestCustomerCancelsPlacedOrderAfterDelay(t *testing.T) {
 	h.random.delays = []int64{0}
 	h.customer.Tick(ctx, start)
 
-	// Placement with the 10% cancellation branch, cancellation due in MinDelay + 1m.
+	// Placement of pizza ×1 with the 10% cancellation branch, cancellation due
+	// in MinDelay + 1m.
+	h.placementCatalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID:     ordertest.MarketID(t),
+			Currency:     "EUR",
+			Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+			MinimumTotal: ordertest.Money(t, "0"),
+			MaximumTotal: ordertest.Money(t, "1000"),
+		}, nil).Once()
 	h.random.delays = []int64{int64(5 * time.Minute), int64(time.Minute)}
 	h.random.ints = []int{0, 0, 0, 0}
 	h.random.floats = []float64{0.05}
 	h.customer.Tick(ctx, start.Add(minDelay))
 	require.Len(t, h.placedOrders(), 1)
 
+	// The cancellation is not due yet: the workflow expects no call.
 	h.customer.Tick(ctx, start.Add(minDelay+time.Minute))
-	assert.Empty(t, h.workflow.Cancellations(), "cancellation is not due yet")
 
+	cancelled := make(chan struct{}, 1)
+	h.workflow.EXPECT().RequestCancellation(mock.Anything, fulfillment.CancellationRequest{
+		OrderID:     h.placedOrders()[0],
+		RequestID:   "key-2",
+		RequestedBy: application.Subject{Kind: application.SubjectUser, ID: customerID},
+		RequestedAt: start,
+		Reason:      "simulated customer changed their mind",
+	}).RunAndReturn(func(context.Context, fulfillment.CancellationRequest) error {
+		cancelled <- struct{}{}
+		return nil
+	}).Once()
 	h.customer.Tick(ctx, start.Add(minDelay+2*time.Minute))
-	cancellations := h.workflow.Cancellations()
-	require.Len(t, cancellations, 1)
-	assert.Equal(t, h.placedOrders()[0], cancellations[0].OrderID)
+	require.Len(t, cancelled, 1, "the due cancellation is requested")
 
+	// Each cancellation is attempted once: Once() fails a second request.
 	h.customer.Tick(ctx, start.Add(minDelay+2*time.Minute+time.Second))
-	assert.Len(t, h.workflow.Cancellations(), 1, "each cancellation is attempted once")
 }
 
 // AC-764: a disabled Simulator does nothing and enabling it starts a fresh delay.
@@ -232,6 +258,8 @@ func TestCustomerContinuesAfterFailedPlacement(t *testing.T) {
 	assert.Equal(t, 1, h.catalog.calls)
 
 	h.catalog.restaurants = []order.RestaurantID{"unknown-restaurant"}
+	h.placementCatalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("unknown-restaurant"), []order.MenuItemID{"pizza"}).
+		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("%w: %q", placeorder.ErrUnknownRestaurant, "unknown-restaurant")).Once()
 	h.random.delays = []int64{0}
 	h.random.ints = []int{0, 0, 0, 0}
 	h.customer.Tick(ctx, start.Add(2*minDelay))

@@ -15,21 +15,14 @@ var (
 	ramen = Restaurant{ID: "restaurant-2", Name: "Ramen Bar", IsOpen: true}
 )
 
-// menusOf expects one menu read per restaurant of menus.
-func menusOf(t *testing.T, menus map[string][]MenuItem) *MockRestaurantReader {
-	reader := NewMockRestaurantReader(t)
-	for restaurantID, menu := range menus {
-		reader.EXPECT().Menu(mock.Anything, restaurantID).Return(menu, nil).Once()
-	}
-	return reader
-}
-
 func TestListRestaurantsPassesTheCursorThrough(t *testing.T) {
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 1, Cursor: "restaurant-0"}).
 		Return(Page{Restaurants: []Restaurant{pho}, NextCursor: "restaurant-1"}, nil).Once()
+	menus := NewMockRestaurantReader(t)
+	menus.EXPECT().Menu(mock.Anything, pho.ID).Return(nil, nil).Once()
 
-	page, err := NewListRestaurants(restaurants, menusOf(t, map[string][]MenuItem{pho.ID: nil})).Handle(context.Background(), 1, "restaurant-0")
+	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 1, "restaurant-0")
 
 	require.NoError(t, err)
 	assert.Equal(t, RestaurantPage{
@@ -43,7 +36,9 @@ func TestListRestaurantsLastPageEndsAtItsLastEdge(t *testing.T) {
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{Restaurants: []Restaurant{pho, ramen}}, nil).Once()
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{}, nil).Once()
-	menus := menusOf(t, map[string][]MenuItem{pho.ID: nil, ramen.ID: nil})
+	menus := NewMockRestaurantReader(t)
+	menus.EXPECT().Menu(mock.Anything, pho.ID).Return(nil, nil).Once()
+	menus.EXPECT().Menu(mock.Anything, ramen.ID).Return(nil, nil).Once()
 
 	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 
@@ -111,7 +106,8 @@ func TestListRestaurantsCarriesEachMenu(t *testing.T) {
 	soup := MenuItem{ID: "menu-1", Name: "Фо бо", Price: Money{Amount: "450", Currency: "RUB"}, Available: true}
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{Restaurants: []Restaurant{pho}}, nil).Once()
-	menus := menusOf(t, map[string][]MenuItem{pho.ID: {soup}})
+	menus := NewMockRestaurantReader(t)
+	menus.EXPECT().Menu(mock.Anything, pho.ID).Return([]MenuItem{soup}, nil).Once()
 
 	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 

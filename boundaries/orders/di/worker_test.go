@@ -20,16 +20,6 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-// expectStart expects the OrderFulfillment workflow and 12 Activities to be
-// registered, then Start returning startErr.
-func expectStart(runner *mockRunner, startErr error) {
-	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
-		return options.Name == "OrderFulfillment"
-	})).Return().Once()
-	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
-	runner.EXPECT().Start().Return(startErr).Once()
-}
-
 func testConfig() config.Config {
 	return config.Config{
 		Temporal: config.TemporalConfig{
@@ -65,7 +55,11 @@ func newTestWorker(t *testing.T, cfg config.Config, poller *mockRunner) (*Tempor
 
 func TestTemporalWorkerStartsAndStops(t *testing.T) {
 	runner := newMockRunner(t)
-	expectStart(runner, nil)
+	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
+		return options.Name == "OrderFulfillment"
+	})).Return().Once()
+	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	runner.EXPECT().Start().Return(nil).Once()
 	runner.EXPECT().Stop().Return().Once()
 	w, temporalClient, options := newTestWorker(t, testConfig(), runner)
 	temporalClient.On("Close").Return().Once()
@@ -85,10 +79,16 @@ func TestTemporalWorkerChecksSearchAttributeOnlyWhenPublishing(t *testing.T) {
 		cfg.Fulfillment.PublishStage = publish
 		runner := newMockRunner(t)
 		if !publish {
-			expectStart(runner, nil)
+			runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
+				return options.Name == "OrderFulfillment"
+			})).Return().Once()
+			runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+			runner.EXPECT().Start().Return(nil).Once()
 		}
 		w, temporalClient, _ := newTestWorker(t, cfg, runner)
-		temporalClient.On("Close").Return().Maybe()
+		if publish {
+			temporalClient.On("Close").Return().Once()
+		}
 		missing := errors.New("search attribute missing")
 		w.ensure = func(context.Context, client.Client) error { return missing }
 
@@ -107,7 +107,11 @@ func TestTemporalWorkerChecksSearchAttributeOnlyWhenPublishing(t *testing.T) {
 func TestTemporalWorkerStartFailureClosesClient(t *testing.T) {
 	startErr := errors.New("namespace not found")
 	runner := newMockRunner(t)
-	expectStart(runner, startErr)
+	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
+		return options.Name == "OrderFulfillment"
+	})).Return().Once()
+	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	runner.EXPECT().Start().Return(startErr).Once()
 	w, temporalClient, _ := newTestWorker(t, testConfig(), runner)
 	temporalClient.On("Close").Return().Once()
 
@@ -133,7 +137,11 @@ func TestTemporalWorkerDialFailureFailsStartup(t *testing.T) {
 
 func TestTemporalWorkerRunReturnsFatalError(t *testing.T) {
 	runner := newMockRunner(t)
-	expectStart(runner, nil)
+	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
+		return options.Name == "OrderFulfillment"
+	})).Return().Once()
+	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	runner.EXPECT().Start().Return(nil).Once()
 	w, _, options := newTestWorker(t, testConfig(), runner)
 	require.NoError(t, w.Start(context.Background()))
 
@@ -145,10 +153,14 @@ func TestTemporalWorkerRunReturnsFatalError(t *testing.T) {
 
 func TestTemporalWorkerShutdownRespectsDeadline(t *testing.T) {
 	runner := newMockRunner(t)
-	expectStart(runner, nil)
+	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
+		return options.Name == "OrderFulfillment"
+	})).Return().Once()
+	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	runner.EXPECT().Start().Return(nil).Once()
 	runner.EXPECT().Stop().RunAndReturn(func() { time.Sleep(200 * time.Millisecond) }).Once()
 	w, temporalClient, _ := newTestWorker(t, testConfig(), runner)
-	temporalClient.On("Close").Return().Maybe()
+	temporalClient.On("Close").Return().Once()
 	require.NoError(t, w.Start(context.Background()))
 	runErr := make(chan error, 1)
 	go func() { runErr <- w.Run() }()

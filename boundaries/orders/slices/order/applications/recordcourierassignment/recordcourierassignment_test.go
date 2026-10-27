@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -51,7 +52,10 @@ func TestHandleByOrderState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := repositorytest.Open(t)
-			workflow := fake.NewWorkflow()
+			workflow := mocks.NewMockNotifier(t)
+			workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+				OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+			}).Return(nil).Once()
 			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", tt.options...)))
 			handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 
@@ -62,9 +66,6 @@ func TestHandleByOrderState(t *testing.T) {
 			snapshot, _ := store.Snapshot("order-1")
 			assert.Equal(t, tt.wantState, snapshot.State)
 			assert.Equal(t, tt.wantFacts, snapshot.Facts)
-			assert.Equal(t, []fulfillment.Notification{{
-				OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
-			}}, workflow.Notifications())
 			assert.Equal(t, 1, store.InboxSize())
 		})
 	}
@@ -96,7 +97,11 @@ func linkedDelivery(t *testing.T, store *repositorytest.Store) string {
 func TestHandleLinksDelivery(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, store)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 
@@ -114,7 +119,17 @@ func TestHandleLinksDelivery(t *testing.T) {
 func TestHandleReassignment(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, store)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt.Add(time.Minute),
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-3", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt.Add(2 * time.Minute),
+	}).Return(nil).Once()
+	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.NoError(t, err)
 
@@ -140,7 +155,14 @@ func TestHandleReassignment(t *testing.T) {
 func TestHandleSkipsOutOfOrderAssignment(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, store)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt.Add(time.Minute),
+	}).Return(nil).Once()
+	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 
 	_, err := handler.Handle(context.Background(), assignment("event-2", "courier-2", 3, occurredAt))
 	require.NoError(t, err)
@@ -174,7 +196,7 @@ func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
 	changes := &failingChanges{Store: store, failing: true}
-	workflow := fake.NewWorkflow()
+	workflow := mocks.NewMockNotifier(t)
 	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, changes)
 
 	_, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
@@ -182,10 +204,13 @@ func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 	assert.Equal(t, 0, store.InboxSize())
 	snapshot, _ := store.Snapshot("order-1")
 	assert.Empty(t, snapshot.Facts)
-	assert.Empty(t, workflow.Notifications())
+	workflow.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
 	assert.Empty(t, linkedDelivery(t, store))
 
 	changes.failing = false
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
 	result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 	require.NoError(t, err)
 	assert.Equal(t, fulfillment.OutcomeApplied, result.Outcome)
@@ -198,7 +223,17 @@ func TestHandleRollsBackWithRelationshipsChange(t *testing.T) {
 func TestHandleReplacesExpectedPickupTime(t *testing.T) {
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	handler := recordcourierassignment.NewHandler(store, store, store, fake.NewWorkflow(), store, store)
+	workflow := mocks.NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-3", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 	expecting := func(in recordcourierassignment.Input, pickupAt time.Time) recordcourierassignment.Input {
 		in.ExpectedPickupAt = pickupAt
 		return in

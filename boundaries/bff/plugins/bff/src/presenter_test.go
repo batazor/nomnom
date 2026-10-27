@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,4 +81,34 @@ func TestUnknownValuesAreErrors(t *testing.T) {
 	assert.Error(t, err, "place order problem")
 	_, err = placeOrderPayload(checkoutapp.Result{Order: &tracking.OrderView{Status: "LOST"}})
 	assert.Error(t, err, "placed order")
+}
+
+// AC-884: Order.tracking carries the channel, the Virtual City, the points
+// and the courier position in RFC 3339.
+func TestTrackingMessage(t *testing.T) {
+	message := trackingMessage(tracking.Tracking{
+		Channel: "cd",
+		City: tracking.VirtualCity{
+			Origin:      tracking.GeoPoint{Latitude: 52.515, Longitude: 13.385},
+			Blocks:      12,
+			BlockMeters: 150,
+		},
+		Pickup:  tracking.GeoPoint{Latitude: 52.52, Longitude: 13.39},
+		Dropoff: tracking.GeoPoint{Latitude: 52.525, Longitude: 13.40},
+		CourierPosition: &tracking.CourierPosition{
+			Channel:    "cd",
+			Point:      tracking.GeoPoint{Latitude: 52.521, Longitude: 13.392},
+			RecordedAt: time.Date(2026, 10, 27, 11, 20, 0, 0, time.UTC),
+		},
+	})
+
+	assert.Equal(t, "cd", message.GetChannel())
+	assert.Equal(t, int32(12), message.GetCity().GetBlocks())
+	assert.InDelta(t, 52.515, message.GetCity().GetOrigin().GetLatitude(), 1e-12)
+	assert.InDelta(t, 13.40, message.GetDropoff().GetLongitude(), 1e-12)
+	assert.Equal(t, "cd", message.GetCourierPosition().GetChannel())
+	assert.Equal(t, "2026-10-27T11:20:00Z", message.GetCourierPosition().GetRecordedAt())
+
+	without := trackingMessage(tracking.Tracking{Channel: "cd"})
+	assert.Nil(t, without.GetCourierPosition())
 }

@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
 	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
@@ -26,8 +27,11 @@ var (
 // (a new adapter over the same database).
 func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 	store := repositorytest.Open(t)
-	authorizer := fake.NewAuthorizer()
-	authorizer.Allow(operator, switchsimulator.PermissionOperateSimulator, platform)
+	// Three reads and two writes, each checked in SpiceDB.
+	authorizer := mocks.NewMockAuthorizer(t)
+	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
+		Subject: operator, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
+	}).Return(nil).Times(5)
 	client := newClientWith(t, fixedSubject{subject: operator}, store, authorizer)
 	ctx := context.Background()
 
@@ -56,8 +60,11 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 // AC-762: a customer is denied and the state does not change.
 func TestSimulatorDeniesNonOperator(t *testing.T) {
 	store := repositorytest.Open(t)
-	authorizer := fake.NewAuthorizer()
 	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
+	authorizer := mocks.NewMockAuthorizer(t)
+	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
+		Subject: customer, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
+	}).Return(application.ErrPermissionDenied).Times(2)
 	client := newClientWith(t, fixedSubject{subject: customer}, store, authorizer)
 	ctx := context.Background()
 

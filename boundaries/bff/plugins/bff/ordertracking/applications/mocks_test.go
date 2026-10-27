@@ -318,6 +318,74 @@ func (_c *MockCouriers_CourierOf_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// TrackingOf provides a mock function for the type MockCouriers
+func (_mock *MockCouriers) TrackingOf(ctx context.Context, orderID string) (*Tracking, error) {
+	ret := _mock.Called(ctx, orderID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for TrackingOf")
+	}
+
+	var r0 *Tracking
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*Tracking, error)); ok {
+		return returnFunc(ctx, orderID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *Tracking); ok {
+		r0 = returnFunc(ctx, orderID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*Tracking)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, orderID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCouriers_TrackingOf_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TrackingOf'
+type MockCouriers_TrackingOf_Call struct {
+	*mock.Call
+}
+
+// TrackingOf is a helper method to define mock.On call
+//   - ctx context.Context
+//   - orderID string
+func (_e *MockCouriers_Expecter) TrackingOf(ctx any, orderID any) *MockCouriers_TrackingOf_Call {
+	return &MockCouriers_TrackingOf_Call{Call: _e.mock.On("TrackingOf", ctx, orderID)}
+}
+
+func (_c *MockCouriers_TrackingOf_Call) Run(run func(ctx context.Context, orderID string)) *MockCouriers_TrackingOf_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCouriers_TrackingOf_Call) Return(tracking *Tracking, err error) *MockCouriers_TrackingOf_Call {
+	_c.Call.Return(tracking, err)
+	return _c
+}
+
+func (_c *MockCouriers_TrackingOf_Call) RunAndReturn(run func(ctx context.Context, orderID string) (*Tracking, error)) *MockCouriers_TrackingOf_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockCatalog creates a new instance of MockCatalog. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockCatalog(t interface {

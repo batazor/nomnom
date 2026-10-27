@@ -10,40 +10,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// simulatorThatIs expects one read of a Simulator that is on or off.
-func simulatorThatIs(t *testing.T, enabled bool) *MockSimulator {
-	simulator := NewMockSimulator(t)
-	simulator.EXPECT().Enabled(mock.Anything).Return(enabled, nil).Once()
-	return simulator
-}
-
-// switching expects one switch of a Simulator on, answered with err.
-func switching(t *testing.T, err error) *MockSimulator {
-	simulator := NewMockSimulator(t)
-	simulator.EXPECT().SetEnabled(mock.Anything, true).Return(err == nil, err).Once()
-	return simulator
-}
-
 func TestGetSimulatorIsOnOnlyWhenOnEverywhere(t *testing.T) {
-	enabled, err := NewGetSimulator(simulatorThatIs(t, true), simulatorThatIs(t, true), simulatorThatIs(t, true)).Handle(context.Background())
+	orders, restaurants, delivery := NewMockSimulator(t), NewMockSimulator(t), NewMockSimulator(t)
+	orders.EXPECT().Enabled(mock.Anything).Return(true, nil).Once()
+	restaurants.EXPECT().Enabled(mock.Anything).Return(true, nil).Once()
+	delivery.EXPECT().Enabled(mock.Anything).Return(true, nil).Once()
+	enabled, err := NewGetSimulator(orders, restaurants, delivery).Handle(context.Background())
 	require.NoError(t, err)
 	assert.True(t, enabled)
 
-	enabled, err = NewGetSimulator(simulatorThatIs(t, true), simulatorThatIs(t, false), simulatorThatIs(t, true)).Handle(context.Background())
+	on, off, alsoOn := NewMockSimulator(t), NewMockSimulator(t), NewMockSimulator(t)
+	on.EXPECT().Enabled(mock.Anything).Return(true, nil).Once()
+	off.EXPECT().Enabled(mock.Anything).Return(false, nil).Once()
+	alsoOn.EXPECT().Enabled(mock.Anything).Return(true, nil).Once()
+	enabled, err = NewGetSimulator(on, off, alsoOn).Handle(context.Background())
 	require.NoError(t, err)
 	assert.False(t, enabled)
 }
 
 func TestGetSimulatorFailsOnAnyFailure(t *testing.T) {
+	on := NewMockSimulator(t)
+	on.EXPECT().Enabled(mock.Anything).Return(true, nil).Once()
 	denied := NewMockSimulator(t)
 	denied.EXPECT().Enabled(mock.Anything).Return(false, ErrNotPermitted).Once()
-	_, err := NewGetSimulator(simulatorThatIs(t, true), denied).Handle(context.Background())
+	_, err := NewGetSimulator(on, denied).Handle(context.Background())
 	assert.ErrorIs(t, err, ErrNotPermitted)
 }
 
 // AC-766: the switch reaches all three contexts.
 func TestSetSimulatorEnabledSwitchesEveryContext(t *testing.T) {
-	enabled, err := NewSetSimulatorEnabled(switching(t, nil), switching(t, nil), switching(t, nil)).Handle(context.Background(), true)
+	orders, restaurants, delivery := NewMockSimulator(t), NewMockSimulator(t), NewMockSimulator(t)
+	orders.EXPECT().SetEnabled(mock.Anything, true).Return(true, nil).Once()
+	restaurants.EXPECT().SetEnabled(mock.Anything, true).Return(true, nil).Once()
+	delivery.EXPECT().SetEnabled(mock.Anything, true).Return(true, nil).Once()
+	enabled, err := NewSetSimulatorEnabled(orders, restaurants, delivery).Handle(context.Background(), true)
 
 	require.NoError(t, err)
 	assert.True(t, enabled)
@@ -51,6 +51,10 @@ func TestSetSimulatorEnabledSwitchesEveryContext(t *testing.T) {
 
 func TestSetSimulatorEnabledFailsOnAnyFailure(t *testing.T) {
 	down := errors.New("delivery is down")
-	_, err := NewSetSimulatorEnabled(switching(t, nil), switching(t, nil), switching(t, down)).Handle(context.Background(), true)
+	orders, restaurants, delivery := NewMockSimulator(t), NewMockSimulator(t), NewMockSimulator(t)
+	orders.EXPECT().SetEnabled(mock.Anything, true).Return(true, nil).Once()
+	restaurants.EXPECT().SetEnabled(mock.Anything, true).Return(true, nil).Once()
+	delivery.EXPECT().SetEnabled(mock.Anything, true).Return(false, down).Once()
+	_, err := NewSetSimulatorEnabled(orders, restaurants, delivery).Handle(context.Background(), true)
 	assert.ErrorIs(t, err, down)
 }

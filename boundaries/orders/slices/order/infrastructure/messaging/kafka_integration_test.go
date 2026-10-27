@@ -3,7 +3,6 @@ package messaging_test
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	watermillkafka "github.com/ThreeDotsLabs/watermill-kafka/v3/pkg/kafka"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -33,41 +33,12 @@ import (
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
-	"nomnom/orders/slices/order/infrastructure/fake"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
 	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
-
-// flakyWorkflow fails the first failures notifications of selected Orders, as a
-// temporarily unavailable Temporal does.
-type flakyWorkflow struct {
-	*fake.Workflow
-	mu       sync.Mutex
-	failures map[order.ID]int
-}
-
-func (w *flakyWorkflow) Notify(ctx context.Context, n fulfillment.Notification) error {
-	w.mu.Lock()
-	if w.failures[n.OrderID] > 0 {
-		w.failures[n.OrderID]--
-		w.mu.Unlock()
-		return errors.New("temporal unavailable")
-	}
-	w.mu.Unlock()
-	return w.Workflow.Notify(ctx, n)
-}
-
-func (w *flakyWorkflow) kindsOf(id order.ID) []fulfillment.Kind {
-	var result []fulfillment.Kind
-	for _, n := range w.Notifications() {
-		if n.OrderID == id {
-			result = append(result, n.Kind)
-		}
-	}
-	return result
-}
 
 // TestKafkaConsumerAgainstKafka: Kafka → Watermill → EventGroupProcessor → Inbox →
 // handler на реальном брокере: ack после commit, повторная доставка, порядок по
@@ -96,7 +67,9 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	} {
 		require.NoError(t, store.Add(ctx, o))
 	}
-	workflow := &flakyWorkflow{Workflow: fake.NewWorkflow(), failures: map[order.ID]int{"order-retry": 2}}
+	// The workflow is started by no event of the test and no relationships
+	// change: starter and relationships expect no call.
+	notifier := mocks.NewMockNotifier(t)
 
 	logger := watermill.NopLogger{}
 	subscriber, err := messaging.NewSubscriber(cfg, logger)
@@ -107,7 +80,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		ConsumerGroup: cfg.ConsumerGroup,
 		Retry:         messaging.RetryPolicy{MaxRetries: 3, InitialInterval: 10 * time.Millisecond, MaxInterval: 50 * time.Millisecond},
 		CloseTimeout:  10 * time.Second,
-	}, subscriber, poisonPublisher, ordermessaging.Streams(handlersOf(store, workflow)), logger)
+	}, subscriber, poisonPublisher, ordermessaging.Streams(handlersOf(store, notifier, mocks.NewMockStarter(t), mocks.NewMockRelationships(t))), logger)
 	require.NoError(t, err)
 	runCtx, cancel := context.WithCancel(ctx)
 	go func() { _ = router.Run(runCtx) }()
@@ -122,17 +95,52 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	publish := publisher(t, brokers)
 
 	t.Run("event is applied once and redelivery is a duplicate", func(t *testing.T) {
+		// The redelivery re-notifies the workflow with the same event_id.
+		notified := make(chan struct{}, 2)
+		notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-accepted", EventID: "event-accepted", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+		}).RunAndReturn(func(context.Context, fulfillment.Notification) error {
+			notified <- struct{}{}
+			return nil
+		}).Times(2)
+
 		accepted := &restaurantsv1.RestaurantOrderAccepted{OrderId: "order-accepted"}
 		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-accepted", "event-accepted", accepted)
 		eventually(t, func() bool { return state(store, "order-accepted") == order.StateConfirmed })
 
 		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-accepted", "event-accepted", accepted)
-		eventually(t, func() bool { return len(workflow.kindsOf("order-accepted")) == 2 })
+		await(t, notified, 2)
 		assert.Equal(t, order.StateConfirmed, state(store, "order-accepted"))
 		assert.Equal(t, 1, store.InboxSize(), "redelivery is not recorded twice")
 	})
 
 	t.Run("events of one aggregate keep their order across partitions", func(t *testing.T) {
+		// Each Order expects its facts in the published order: NotBefore fails
+		// the test on a fact that overtakes the previous one.
+		notified := make(chan struct{}, 6)
+		for _, id := range []order.ID{"order-b", "order-c"} {
+			var previous *mock.Call
+			for _, fact := range []struct {
+				eventID string
+				kind    fulfillment.Kind
+			}{
+				{"assigned", fulfillment.KindCourierAssigned},
+				{"picked-up", fulfillment.KindPickedUp},
+				{"completed", fulfillment.KindDeliveryCompleted},
+			} {
+				call := notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+					OrderID: id, EventID: string(id) + "-" + fact.eventID, Kind: fact.kind, OccurredAt: occurredAt,
+				}).RunAndReturn(func(context.Context, fulfillment.Notification) error {
+					notified <- struct{}{}
+					return nil
+				}).Once()
+				if previous != nil {
+					call.NotBefore(previous)
+				}
+				previous = call
+			}
+		}
+
 		for _, step := range []struct {
 			eventID string
 			event   func(id string) proto.Message
@@ -145,21 +153,35 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 				publish(ordermessaging.DeliveryEventsTopic, "delivery-"+id, id+"-"+step.eventID, step.event(id))
 			}
 		}
-		want := []fulfillment.Kind{fulfillment.KindCourierAssigned, fulfillment.KindPickedUp, fulfillment.KindDeliveryCompleted}
-		eventually(t, func() bool {
-			return len(workflow.kindsOf("order-b")) == 3 && len(workflow.kindsOf("order-c")) == 3
-		})
-		assert.Equal(t, want, workflow.kindsOf("order-b"))
-		assert.Equal(t, want, workflow.kindsOf("order-c"))
+		await(t, notified, 6)
 	})
 
 	t.Run("transient failure is retried until applied", func(t *testing.T) {
+		// A temporarily unavailable Temporal fails the first two notifications.
+		ready := fulfillment.Notification{
+			OrderID: "order-retry", EventID: "event-retry", Kind: fulfillment.KindReadyForPickup, OccurredAt: occurredAt,
+		}
+		notifier.EXPECT().Notify(mock.Anything, ready).Return(errors.New("temporal unavailable")).Times(2)
+		notified := make(chan struct{}, 1)
+		notifier.EXPECT().Notify(mock.Anything, ready).RunAndReturn(func(context.Context, fulfillment.Notification) error {
+			notified <- struct{}{}
+			return nil
+		}).Once()
+
 		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-retry", "event-retry", &restaurantsv1.RestaurantOrderReady{OrderId: "order-retry"})
 
-		eventually(t, func() bool { return len(workflow.kindsOf("order-retry")) == 1 })
+		await(t, notified, 1)
 	})
 
 	t.Run("broken record goes to the DLQ without blocking its partition", func(t *testing.T) {
+		notified := make(chan struct{}, 1)
+		notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+			OrderID: "order-after-broken", EventID: "event-after-broken", Kind: fulfillment.KindReadyForPickup, OccurredAt: occurredAt,
+		}).RunAndReturn(func(context.Context, fulfillment.Notification) error {
+			notified <- struct{}{}
+			return nil
+		}).Once()
+
 		raw(t, brokers, ordermessaging.RestaurantOrderEventsTopic, "kitchen-broken", []byte{0xff, 0x00})
 		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-broken", "event-after-broken", &restaurantsv1.RestaurantOrderReady{OrderId: "order-after-broken"})
 
@@ -170,7 +192,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		case <-time.After(30 * time.Second):
 			t.Fatal("broken record is not in the DLQ")
 		}
-		eventually(t, func() bool { return len(workflow.kindsOf("order-after-broken")) == 1 })
+		await(t, notified, 1)
 	})
 
 	t.Run("unknown event type goes to the DLQ", func(t *testing.T) {
@@ -192,24 +214,21 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	}
 }
 
-func handlersOf(store *repositorytest.Store, workflow interface {
-	fulfillment.Notifier
-	fulfillment.Starter
-}) ordermessaging.Handlers {
+func handlersOf(store *repositorytest.Store, notifier fulfillment.Notifier, starter fulfillment.Starter, relationships syncorderrelationships.Relationships) ordermessaging.Handlers {
 	return ordermessaging.Handlers{
-		ConfirmOrder:             confirmorder.NewHandler(store, store, store, workflow),
-		RejectOrder:              rejectorder.NewHandler(store, store, store, workflow),
-		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, workflow),
-		RecordOrderReady:         recordorderready.NewHandler(store, store, store, workflow),
-		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, workflow),
-		RelayPreparationIssue:    relaypreparationissue.NewHandler(workflow),
-		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, workflow, store, store),
+		ConfirmOrder:             confirmorder.NewHandler(store, store, store, notifier),
+		RejectOrder:              rejectorder.NewHandler(store, store, store, notifier),
+		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, notifier),
+		RecordOrderReady:         recordorderready.NewHandler(store, store, store, notifier),
+		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, notifier),
+		RelayPreparationIssue:    relaypreparationissue.NewHandler(notifier),
+		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, notifier, store, store),
 		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store),
-		RecordPickup:             recordpickup.NewHandler(store, store, store, workflow),
-		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, workflow),
-		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, workflow),
-		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, fake.NewRelationshipSync(), store),
-		StartFulfillment:         startfulfillment.NewHandler(store, store, store, workflow),
+		RecordPickup:             recordpickup.NewHandler(store, store, store, notifier),
+		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, notifier),
+		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, notifier),
+		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, relationships, store),
+		StartFulfillment:         startfulfillment.NewHandler(store, store, store, starter),
 	}
 }
 
@@ -236,7 +255,6 @@ func publisher(t *testing.T, brokers []string) func(topic, aggregateID, eventID 
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
 
-	occurredAt := time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)
 	return func(topic, aggregateID, eventID string, event proto.Message) {
 		t.Helper()
 		msg, err := messaging.NewIntegrationEventMessage(messaging.Envelope{
@@ -285,6 +303,18 @@ func consumePoison(t *testing.T, cfg config.KafkaConfig) <-chan *message.Message
 func state(store *repositorytest.Store, id order.ID) order.State {
 	snapshot, _ := store.Snapshot(id)
 	return snapshot.State
+}
+
+// await waits for n signals of the mocked workflow.
+func await(t *testing.T, signals <-chan struct{}, n int) {
+	t.Helper()
+	for i := range n {
+		select {
+		case <-signals:
+		case <-time.After(60 * time.Second):
+			t.Fatalf("got %d of %d workflow calls", i, n)
+		}
+	}
 }
 
 func eventually(t *testing.T, condition func() bool) {

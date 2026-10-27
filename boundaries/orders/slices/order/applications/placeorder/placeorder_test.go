@@ -2,10 +2,12 @@ package placeorder_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
@@ -14,6 +16,7 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -23,7 +26,7 @@ var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-
 
 type env struct {
 	store   *repositorytest.Store
-	catalog *fake.Catalog
+	catalog *mocks.MockCatalog
 	handler placeorder.Handler
 }
 
@@ -31,19 +34,8 @@ func newEnv(t *testing.T) env {
 	t.Helper()
 	e := env{
 		store:   repositorytest.Open(t),
-		catalog: fake.NewCatalog(),
+		catalog: mocks.NewMockCatalog(t),
 	}
-	e.catalog.Put("restaurant-1", placeorder.CatalogSnapshot{
-		MarketID: ordertest.MarketID(t),
-		Currency: "EUR",
-		Items: map[order.MenuItemID]placeorder.CatalogItem{
-			"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-			"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
-			"cake":  {UnitPrice: ordertest.Money(t, "6.00"), Available: false},
-		},
-		MinimumTotal: ordertest.Money(t, "10"),
-		MaximumTotal: ordertest.Money(t, "100"),
-	})
 	e.handler = placeorder.NewHandler(placeorder.Dependencies{
 		UnitOfWork:      e.store,
 		Orders:          e.store,
@@ -69,6 +61,19 @@ func validInput() placeorder.Input {
 // AC-100: the Order is placed from snapshot prices with OrderPlaced in the same transaction.
 func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 	e := newEnv(t)
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID: ordertest.MarketID(t),
+			Currency: "EUR",
+			Items: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
+			},
+			MinimumTotal: ordertest.Money(t, "10"),
+			MaximumTotal: ordertest.Money(t, "100"),
+		}, nil).
+		Once()
 
 	result, err := e.handler.Handle(context.Background(), validInput())
 
@@ -102,12 +107,15 @@ func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
 // snapshot without one places nothing and is not invalid input of the Customer.
 func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
 	e := newEnv(t)
-	e.catalog.Put("restaurant-2", placeorder.CatalogSnapshot{
-		Currency:     "EUR",
-		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
-		MinimumTotal: ordertest.Money(t, "10"),
-		MaximumTotal: ordertest.Money(t, "100"),
-	})
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-2"), []order.MenuItemID{"pizza"}).
+		Return(placeorder.CatalogSnapshot{
+			Currency:     "EUR",
+			Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+			MinimumTotal: ordertest.Money(t, "10"),
+			MaximumTotal: ordertest.Money(t, "100"),
+		}, nil).
+		Once()
 	input := validInput()
 	input.RestaurantID = "restaurant-2"
 	input.Items = []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}}
@@ -126,32 +134,60 @@ func TestPlaceOrderRejectsNotOrderableItems(t *testing.T) {
 	tests := []struct {
 		name    string
 		items   []placeorder.ItemInput
+		catalog map[order.MenuItemID]placeorder.CatalogItem
 		reasons []order.PolicyReasonCode
 	}{
 		{
-			name:    "unavailable item",
-			items:   []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}, {MenuItemID: "cake", Quantity: 1}},
+			name:  "unavailable item",
+			items: []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}, {MenuItemID: "cake", Quantity: 1}},
+			catalog: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+				"cake":  {UnitPrice: ordertest.Money(t, "6.00"), Available: false},
+			},
 			reasons: []order.PolicyReasonCode{order.OrderItemUnavailable},
 		},
 		{
-			name:    "unknown item",
-			items:   []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}, {MenuItemID: "ghost", Quantity: 1}},
+			name:  "unknown item",
+			items: []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}, {MenuItemID: "ghost", Quantity: 1}},
+			catalog: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+			},
 			reasons: []order.PolicyReasonCode{order.OrderItemUnavailable},
 		},
 		{
-			name:    "below minimum",
-			items:   []placeorder.ItemInput{{MenuItemID: "soup", Quantity: 1}},
+			name:  "below minimum",
+			items: []placeorder.ItemInput{{MenuItemID: "soup", Quantity: 1}},
+			catalog: map[order.MenuItemID]placeorder.CatalogItem{
+				"soup": {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
+			},
 			reasons: []order.PolicyReasonCode{order.OrderTotalBelowMinimum},
 		},
 		{
-			name:    "above maximum",
-			items:   []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 9}},
+			name:  "above maximum",
+			items: []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 9}},
+			catalog: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+			},
 			reasons: []order.PolicyReasonCode{order.OrderTotalAboveMaximum},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newEnv(t)
+			menuItemIDs := make([]order.MenuItemID, 0, len(tt.items))
+			for _, item := range tt.items {
+				menuItemIDs = append(menuItemIDs, item.MenuItemID)
+			}
+			e.catalog.EXPECT().
+				Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), menuItemIDs).
+				Return(placeorder.CatalogSnapshot{
+					MarketID:     ordertest.MarketID(t),
+					Currency:     "EUR",
+					Items:        tt.catalog,
+					MinimumTotal: ordertest.Money(t, "10"),
+					MaximumTotal: ordertest.Money(t, "100"),
+				}, nil).
+				Once()
 			in := validInput()
 			in.Items = tt.items
 
@@ -206,7 +242,7 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 			_, err := e.handler.Handle(context.Background(), in)
 
 			require.ErrorIs(t, err, tt.wantErr)
-			assert.Zero(t, e.catalog.Calls())
+			// The catalog mock has no expectation: any read fails the test.
 			assertNothingPlaced(t, e)
 		})
 	}
@@ -215,6 +251,20 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 // AC-103: a repeated request returns the same Order.
 func TestPlaceOrderIsIdempotentByKey(t *testing.T) {
 	e := newEnv(t)
+	// A replay does not read the catalog again: one read for key-1, one for key-2.
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID: ordertest.MarketID(t),
+			Currency: "EUR",
+			Items: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
+			},
+			MinimumTotal: ordertest.Money(t, "10"),
+			MaximumTotal: ordertest.Money(t, "100"),
+		}, nil).
+		Times(2)
 
 	first, err := e.handler.Handle(context.Background(), validInput())
 	require.NoError(t, err)
@@ -223,7 +273,6 @@ func TestPlaceOrderIsIdempotentByKey(t *testing.T) {
 
 	assert.Equal(t, placeorder.Result{OrderID: first.OrderID, Replayed: true}, second)
 	assert.Len(t, e.store.OutboxRecords(), 1)
-	assert.Equal(t, 1, e.catalog.Calls(), "a replay does not read the catalog again")
 
 	other := validInput()
 	other.IdempotencyKey = "key-2"
@@ -236,6 +285,10 @@ func TestPlaceOrderPropagatesCatalogFailure(t *testing.T) {
 	e := newEnv(t)
 	in := validInput()
 	in.RestaurantID = "restaurant-unknown"
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-unknown"), []order.MenuItemID{"pizza", "soup"}).
+		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("%w: %q", placeorder.ErrUnknownRestaurant, "restaurant-unknown")).
+		Once()
 
 	_, err := e.handler.Handle(context.Background(), in)
 
@@ -284,6 +337,19 @@ func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler
 // replays the committed Order instead of failing.
 func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
 	e := newEnv(t)
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID: ordertest.MarketID(t),
+			Currency: "EUR",
+			Items: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
+			},
+			MinimumTotal: ordertest.Money(t, "10"),
+			MaximumTotal: ordertest.Money(t, "100"),
+		}, nil).
+		Once()
 	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
 	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
 
@@ -309,6 +375,19 @@ func (takenKeys) RememberOrder(context.Context, order.CustomerID, string, order.
 // retryable concurrency conflict, not an internal error.
 func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
 	e := newEnv(t)
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID: ordertest.MarketID(t),
+			Currency: "EUR",
+			Items: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
+			},
+			MinimumTotal: ordertest.Money(t, "10"),
+			MaximumTotal: ordertest.Money(t, "100"),
+		}, nil).
+		Once()
 
 	_, err := e.handlerWithKeys(takenKeys{Store: e.store}).Handle(context.Background(), validInput())
 
@@ -317,6 +396,19 @@ func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
 
 func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
 	e := newEnv(t)
+	e.catalog.EXPECT().
+		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
+		Return(placeorder.CatalogSnapshot{
+			MarketID: ordertest.MarketID(t),
+			Currency: "EUR",
+			Items: map[order.MenuItemID]placeorder.CatalogItem{
+				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
+				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
+			},
+			MinimumTotal: ordertest.Money(t, "10"),
+			MaximumTotal: ordertest.Money(t, "100"),
+		}, nil).
+		Once()
 	require.NoError(t, e.store.Add(context.Background(), ordertest.New(t, "order-0")))
 	require.NoError(t, e.store.RememberOrder(context.Background(), "customer-1", "key-1", "order-0"))
 	handler := e.handlerWithKeys(&racingKeys{Store: e.store})

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
@@ -16,6 +17,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -23,8 +25,8 @@ var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-
 
 type env struct {
 	store      *repositorytest.Store
-	authorizer *fake.Authorizer
-	workflow   *fake.Workflow
+	authorizer *mocks.MockAuthorizer
+	workflow   *mocks.MockCancellationRequester
 	clock      *fake.Clock
 	handler    requestordercancellation.Handler
 }
@@ -33,8 +35,8 @@ func newEnv(t *testing.T, state order.State, policy requestordercancellation.Can
 	t.Helper()
 	e := env{
 		store:      repositorytest.Open(t),
-		authorizer: fake.NewAuthorizer(),
-		workflow:   fake.NewWorkflow(),
+		authorizer: mocks.NewMockAuthorizer(t),
+		workflow:   mocks.NewMockCancellationRequester(t),
 		clock:      fake.NewClock(ordertest.PlacedAt.Add(5 * time.Minute)),
 	}
 	ctx := context.Background()
@@ -58,18 +60,21 @@ func TestRequestCancellationIsHandedToWorkflow(t *testing.T) {
 	for _, state := range []order.State{order.StatePlaced, order.StateConfirmed} {
 		t.Run(string(state), func(t *testing.T) {
 			e := newEnv(t, state, fake.AlwaysOpen{})
+			e.workflow.EXPECT().
+				RequestCancellation(mock.Anything, fulfillment.CancellationRequest{
+					OrderID:     "order-1",
+					RequestID:   "cancel-1",
+					RequestedBy: customer,
+					RequestedAt: e.clock.Now(),
+					Reason:      "changed_mind",
+				}).
+				Return(nil).
+				Once()
 
 			result, err := e.handler.Handle(context.Background(), input(customer))
 
 			require.NoError(t, err)
 			assert.Equal(t, requestordercancellation.Result{Outcome: requestordercancellation.OutcomeRequested}, result)
-			assert.Equal(t, []fulfillment.CancellationRequest{{
-				OrderID:     "order-1",
-				RequestID:   "cancel-1",
-				RequestedBy: customer,
-				RequestedAt: e.clock.Now(),
-				Reason:      "changed_mind",
-			}}, e.workflow.Cancellations())
 			snapshot, _ := e.store.Snapshot("order-1")
 			assert.Equal(t, state, snapshot.State)
 			assert.Empty(t, e.store.OutboxRecords())
@@ -81,27 +86,42 @@ func TestRequestCancellationIsHandedToWorkflow(t *testing.T) {
 func TestRequestCancellationRequiresPermission(t *testing.T) {
 	stranger := application.Subject{Kind: application.SubjectUser, ID: "customer-2"}
 	tests := []struct {
-		name    string
-		subject application.Subject
-		failure error
+		name     string
+		subject  application.Subject
+		checkErr error
 	}{
-		{name: "another customer", subject: stranger},
-		{name: "authorization unavailable", subject: stranger, failure: errors.New("spicedb timeout")},
+		{name: "another customer", subject: stranger, checkErr: application.ErrPermissionDenied},
+		{name: "authorization unavailable", subject: stranger, checkErr: errors.New("spicedb timeout")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// The workflow has no expectation: a cancellation request fails the test.
 			e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
-			e.authorizer.FailChecks(tt.failure)
+			e.authorizer.EXPECT().
+				Check(mock.Anything, application.AccessCheck{
+					Subject:    tt.subject,
+					Permission: requestordercancellation.PermissionCancel,
+					Resource:   application.Resource{Type: requestordercancellation.ResourceOrder, ID: "order-1"},
+				}).
+				Return(tt.checkErr).
+				Once()
 
 			_, err := e.handler.Handle(context.Background(), input(tt.subject))
 
 			require.ErrorIs(t, err, application.ErrPermissionDenied)
-			assert.Empty(t, e.workflow.Cancellations())
 		})
 	}
 
 	// A denied subject learns nothing about a missing Order either.
 	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
+	e.authorizer.EXPECT().
+		Check(mock.Anything, application.AccessCheck{
+			Subject:    stranger,
+			Permission: requestordercancellation.PermissionCancel,
+			Resource:   application.Resource{Type: requestordercancellation.ResourceOrder, ID: "missing"},
+		}).
+		Return(application.ErrPermissionDenied).
+		Once()
 	missing := input(stranger)
 	missing.OrderID = "missing"
 	_, err := e.handler.Handle(context.Background(), missing)
@@ -111,14 +131,23 @@ func TestRequestCancellationRequiresPermission(t *testing.T) {
 // The Customer cancels the own Order by customer_id, before orders-consumer
 // synced order#customer (ADR 18): no permission check is made.
 func TestRequestCancellationLetsTheCustomerCancelWithoutSpiceDB(t *testing.T) {
+	// The authorizer has no expectation: any permission check fails the test.
 	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
-	e.authorizer.FailChecks(errors.New("spicedb unavailable"))
+	e.workflow.EXPECT().
+		RequestCancellation(mock.Anything, fulfillment.CancellationRequest{
+			OrderID:     "order-1",
+			RequestID:   "cancel-1",
+			RequestedBy: customer,
+			RequestedAt: e.clock.Now(),
+			Reason:      "changed_mind",
+		}).
+		Return(nil).
+		Once()
 
 	result, err := e.handler.Handle(context.Background(), input(customer))
 
 	require.NoError(t, err)
 	assert.Equal(t, requestordercancellation.OutcomeRequested, result.Outcome)
-	assert.Empty(t, e.authorizer.Checks())
 }
 
 // AC-117, AC-118, AC-119: the Order and the cancellation window decide admissibility.
@@ -159,13 +188,13 @@ func TestRequestCancellationRespectsDomainDecision(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// The workflow has no expectation: a cancellation request fails the test.
 			e := newEnv(t, tt.state, tt.policy)
 
 			result, err := e.handler.Handle(context.Background(), input(customer))
 
 			tt.check(t, err)
 			assert.Equal(t, tt.outcome, result.Outcome)
-			assert.Empty(t, e.workflow.Cancellations())
 		})
 	}
 }
@@ -173,7 +202,16 @@ func TestRequestCancellationRespectsDomainDecision(t *testing.T) {
 func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) {
 	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
 	refusal := errors.New("already picked up")
-	e.workflow.FailCancellation(refusal)
+	e.workflow.EXPECT().
+		RequestCancellation(mock.Anything, fulfillment.CancellationRequest{
+			OrderID:     "order-1",
+			RequestID:   "cancel-1",
+			RequestedBy: customer,
+			RequestedAt: e.clock.Now(),
+			Reason:      "changed_mind",
+		}).
+		Return(refusal).
+		Once()
 
 	_, err := e.handler.Handle(context.Background(), input(customer))
 	require.ErrorIs(t, err, refusal)
@@ -181,8 +219,9 @@ func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) 
 	noRequestID := input(customer)
 	noRequestID.RequestID = ""
 	_, err = e.handler.Handle(context.Background(), noRequestID)
+	// The authorizer has no expectation: the Customer is not checked; invalid
+	// input is rejected before any read.
 	require.ErrorIs(t, err, application.ErrInvalidInput)
-	assert.Empty(t, e.authorizer.Checks(), "the Customer is not checked; invalid input is rejected before any read")
 }
 
 // fixedWindow is the production cancellation policy with the given window.

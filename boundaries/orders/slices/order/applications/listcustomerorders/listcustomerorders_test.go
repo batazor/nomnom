@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/application"
@@ -14,7 +15,7 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
-	"nomnom/orders/slices/order/infrastructure/fake"
+	"nomnom/orders/slices/order/infrastructure/mocks"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
@@ -27,7 +28,7 @@ var (
 	support  = application.Subject{Kind: application.SubjectService, ID: "support-console"}
 )
 
-func setup(t *testing.T) (listcustomerorders.Handler, *fake.Authorizer) {
+func setup(t *testing.T) (listcustomerorders.Handler, *mocks.MockAuthorizer) {
 	t.Helper()
 	store := repositorytest.Open(t)
 	ctx := context.Background()
@@ -39,7 +40,7 @@ func setup(t *testing.T) (listcustomerorders.Handler, *fake.Authorizer) {
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-x", ordertest.WithCustomer("customer-2"))))
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-h", ordertest.WithMarket("hamburg"),
 		ordertest.WithPlacedAt(ordertest.PlacedAt.Add(time.Hour+30*time.Minute)))))
-	authorizer := fake.NewAuthorizer()
+	authorizer := mocks.NewMockAuthorizer(t)
 	policy, err := cancellationpolicy.NewFixed(window)
 	require.NoError(t, err)
 	return listcustomerorders.NewHandler(authorizer, store, policy), authorizer
@@ -55,7 +56,8 @@ func ids(page listcustomerorders.Page) []order.ID {
 
 // AC-128: the Customer reads only own orders, newest first, without the authorization graph.
 func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
-	handler, authorizer := setup(t)
+	// The authorizer has no expectation: any permission check fails the test.
+	handler, _ := setup(t)
 
 	first, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: customer, CustomerID: "customer-1", MarketID: ordertest.Market, Limit: 2})
 	require.NoError(t, err)
@@ -84,14 +86,27 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 		},
 		CancellationWindow: &order.CancellationWindow{OpensAt: ordertest.PlacedAt, ClosesAt: ordertest.PlacedAt.Add(window)},
 	}}, last, "the history carries the full card with its Cancellation Window")
-	assert.Empty(t, authorizer.Checks())
 }
 
 // AC-129: another subject needs the permission to view the Customer's orders.
 func TestListOtherCustomerOrdersRequiresPermission(t *testing.T) {
 	handler, authorizer := setup(t)
-	authorizer.Allow(support, listcustomerorders.PermissionViewOrders,
-		application.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"})
+	authorizer.EXPECT().
+		Check(mock.Anything, application.AccessCheck{
+			Subject:    stranger,
+			Permission: listcustomerorders.PermissionViewOrders,
+			Resource:   application.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"},
+		}).
+		Return(application.ErrPermissionDenied).
+		Once()
+	authorizer.EXPECT().
+		Check(mock.Anything, application.AccessCheck{
+			Subject:    support,
+			Permission: listcustomerorders.PermissionViewOrders,
+			Resource:   application.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"},
+		}).
+		Return(nil).
+		Once()
 
 	_, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: stranger, CustomerID: "customer-1", MarketID: ordertest.Market})
 	require.ErrorIs(t, err, application.ErrPermissionDenied)

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
@@ -35,7 +36,7 @@ func TestOpenRestaurantRunsOnBehalfOfTheUser(t *testing.T) {
 	opened.IsOpen = true
 	open := newMockOpeningHandler(t)
 	// the user reaches restaurants as a user assertion.
-	open.EXPECT().Handle(withUser(), nightBakery.ID).Return(applications.OpeningResult{Restaurant: opened, Changed: true}, nil).Once()
+	open.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool { user, ok := identity.UserFrom(ctx); return ok && user.ID != "" }), nightBakery.ID).Return(applications.OpeningResult{Restaurant: opened, Changed: true}, nil).Once()
 	svc, ctx := managementService(t, open, newMockOpeningHandler(t))
 
 	response, err := svc.MutationOpenRestaurant(ctx, &service.MutationOpenRestaurantRequest{RestaurantId: nightBakery.ID})
@@ -105,7 +106,7 @@ func TestOpeningMapsRefusalsToErrors(t *testing.T) {
 func TestMyRestaurantsListsRestaurantsOfTheUser(t *testing.T) {
 	owned := newMockOwnedRestaurantsHandler(t)
 	// the user reaches restaurants as a user assertion.
-	owned.EXPECT().Handle(withUser(), 10, "restaurant-0").Return(applications.RestaurantPage{
+	owned.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool { user, ok := identity.UserFrom(ctx); return ok && user.ID != "" }), 10, "restaurant-0").Return(applications.RestaurantPage{
 		Edges:       []applications.RestaurantEdge{{Cursor: nightBakery.ID, Restaurant: nightBakery}},
 		HasNextPage: true,
 		EndCursor:   nightBakery.ID,
