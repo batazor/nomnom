@@ -17,6 +17,9 @@ plugins:
     out: gen
     opt:
       - paths=source_relative
+      # orders только вызывает эти API; без mustEmbedUnimplemented* серверный
+      # интерфейс реализуют mockery-моки в тестах с bufconn.
+      - require_unimplemented_servers=false
 inputs:
   - directory: ../../../payments/infrastructure/grpc
   - directory: ../../../restaurants/infrastructure/grpc

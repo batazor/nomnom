@@ -110,7 +110,7 @@ func (c *paymentsServiceClient) RefundPayment(ctx context.Context, in *RefundPay
 }
 
 // PaymentsServiceServer is the server API for PaymentsService service.
-// All implementations must embed UnimplementedPaymentsServiceServer
+// All implementations should embed UnimplementedPaymentsServiceServer
 // for forward compatibility.
 type PaymentsServiceServer interface {
 	GetPaymentStatus(context.Context, *GetPaymentStatusRequest) (*GetPaymentStatusResponse, error)
@@ -121,10 +121,9 @@ type PaymentsServiceServer interface {
 	CapturePayment(context.Context, *CapturePaymentRequest) (*CapturePaymentResponse, error)
 	CancelAuthorization(context.Context, *CancelAuthorizationRequest) (*CancelAuthorizationResponse, error)
 	RefundPayment(context.Context, *RefundPaymentRequest) (*RefundPaymentResponse, error)
-	mustEmbedUnimplementedPaymentsServiceServer()
 }
 
-// UnimplementedPaymentsServiceServer must be embedded to have
+// UnimplementedPaymentsServiceServer should be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
@@ -149,8 +148,7 @@ func (UnimplementedPaymentsServiceServer) CancelAuthorization(context.Context, *
 func (UnimplementedPaymentsServiceServer) RefundPayment(context.Context, *RefundPaymentRequest) (*RefundPaymentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RefundPayment not implemented")
 }
-func (UnimplementedPaymentsServiceServer) mustEmbedUnimplementedPaymentsServiceServer() {}
-func (UnimplementedPaymentsServiceServer) testEmbeddedByValue()                         {}
+func (UnimplementedPaymentsServiceServer) testEmbeddedByValue() {}
 
 // UnsafePaymentsServiceServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to PaymentsServiceServer will

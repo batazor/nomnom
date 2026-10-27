@@ -24,36 +24,6 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// The generated server mocks declare mustEmbedUnimplemented… in the test
-// package; the Unimplemented server sits one level deeper, so the mock methods
-// win the embedding resolution.
-type unimplementedPayments struct {
-	paymentsv1.UnimplementedPaymentsServiceServer
-}
-
-type paymentsServer struct {
-	*MockPaymentsServiceServer
-	unimplementedPayments
-}
-
-type unimplementedRestaurants struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
-}
-
-type restaurantsServer struct {
-	*MockRestaurantsServiceServer
-	unimplementedRestaurants
-}
-
-type unimplementedDelivery struct {
-	deliveryv1.UnimplementedDeliveryServiceServer
-}
-
-type deliveryServer struct {
-	*MockDeliveryServiceServer
-	unimplementedDelivery
-}
-
 // serve runs the mocked neighbours behind one in-process endpoint, like the internal gateway.
 func serve(t *testing.T) (*grpc.ClientConn, *MockPaymentsServiceServer, *MockRestaurantsServiceServer, *MockDeliveryServiceServer) {
 	t.Helper()
@@ -62,9 +32,9 @@ func serve(t *testing.T) (*grpc.ClientConn, *MockPaymentsServiceServer, *MockRes
 	delivery := NewMockDeliveryServiceServer(t)
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer()
-	paymentsv1.RegisterPaymentsServiceServer(server, paymentsServer{MockPaymentsServiceServer: payments})
-	restaurantsv1.RegisterRestaurantsServiceServer(server, restaurantsServer{MockRestaurantsServiceServer: restaurants})
-	deliveryv1.RegisterDeliveryServiceServer(server, deliveryServer{MockDeliveryServiceServer: delivery})
+	paymentsv1.RegisterPaymentsServiceServer(server, payments)
+	restaurantsv1.RegisterRestaurantsServiceServer(server, restaurants)
+	deliveryv1.RegisterDeliveryServiceServer(server, delivery)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 

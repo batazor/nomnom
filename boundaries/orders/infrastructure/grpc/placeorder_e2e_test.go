@@ -49,18 +49,6 @@ type userVectors struct {
 	Tokens           map[string]string `json:"tokens"`
 }
 
-// The generated server mock declares mustEmbedUnimplemented… in the test
-// package; the Unimplemented server sits one level deeper, so the mock methods
-// win the embedding resolution.
-type unimplementedRestaurants struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
-}
-
-type restaurantsServer struct {
-	*MockRestaurantsServiceServer
-	unimplementedRestaurants
-}
-
 func bufconnClient(t *testing.T, register func(*grpc.Server), options ...grpc.DialOption) *grpc.ClientConn {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
@@ -109,7 +97,7 @@ func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
 	tokens := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tokens, "nomnom.restaurants"), []byte("orders-token\n"), 0o600))
 	gatewayConn := bufconnClient(t, func(s *grpc.Server) {
-		restaurantsv1.RegisterRestaurantsServiceServer(s, restaurantsServer{MockRestaurantsServiceServer: restaurants})
+		restaurantsv1.RegisterRestaurantsServiceServer(s, restaurants)
 	},
 		grpc.WithUnaryInterceptor(gateway.ServiceToken(tokens)))
 	ports := commandPorts{

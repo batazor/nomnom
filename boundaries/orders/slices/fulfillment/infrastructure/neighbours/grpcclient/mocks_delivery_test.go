@@ -1270,36 +1270,3 @@ func (_c *MockDeliveryServiceServer_UpdateCourierLocation_Call) RunAndReturn(run
 	_c.Call.Return(run)
 	return _c
 }
-
-// mustEmbedUnimplementedDeliveryServiceServer provides a mock function for the type MockDeliveryServiceServer
-func (_mock *MockDeliveryServiceServer) mustEmbedUnimplementedDeliveryServiceServer() {
-	_mock.Called()
-	return
-}
-
-// MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'mustEmbedUnimplementedDeliveryServiceServer'
-type MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call struct {
-	*mock.Call
-}
-
-// mustEmbedUnimplementedDeliveryServiceServer is a helper method to define mock.On call
-func (_e *MockDeliveryServiceServer_Expecter) mustEmbedUnimplementedDeliveryServiceServer() *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call {
-	return &MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call{Call: _e.mock.On("mustEmbedUnimplementedDeliveryServiceServer")}
-}
-
-func (_c *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call) Run(run func()) *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call) Return() *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call) RunAndReturn(run func()) *MockDeliveryServiceServer_mustEmbedUnimplementedDeliveryServiceServer_Call {
-	_c.Run(run)
-	return _c
-}

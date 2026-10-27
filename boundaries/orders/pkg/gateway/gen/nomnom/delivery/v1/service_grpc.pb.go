@@ -278,7 +278,7 @@ func (c *deliveryServiceClient) SetSimulatorEnabled(ctx context.Context, in *Set
 }
 
 // DeliveryServiceServer is the server API for DeliveryService service.
-// All implementations must embed UnimplementedDeliveryServiceServer
+// All implementations should embed UnimplementedDeliveryServiceServer
 // for forward compatibility.
 type DeliveryServiceServer interface {
 	// Courier view of its work: current status and the assigned or picked up
@@ -325,10 +325,9 @@ type DeliveryServiceServer interface {
 	// Demo Simulator of couriers (FR-604): requires platform#operate_simulator.
 	GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error)
 	SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error)
-	mustEmbedUnimplementedDeliveryServiceServer()
 }
 
-// UnimplementedDeliveryServiceServer must be embedded to have
+// UnimplementedDeliveryServiceServer should be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
@@ -389,8 +388,7 @@ func (UnimplementedDeliveryServiceServer) GetSimulator(context.Context, *GetSimu
 func (UnimplementedDeliveryServiceServer) SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetSimulatorEnabled not implemented")
 }
-func (UnimplementedDeliveryServiceServer) mustEmbedUnimplementedDeliveryServiceServer() {}
-func (UnimplementedDeliveryServiceServer) testEmbeddedByValue()                         {}
+func (UnimplementedDeliveryServiceServer) testEmbeddedByValue() {}
 
 // UnsafeDeliveryServiceServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to DeliveryServiceServer will

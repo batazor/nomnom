@@ -527,7 +527,7 @@ func (c *restaurantsServiceClient) SetSimulatorEnabled(ctx context.Context, in *
 }
 
 // RestaurantsServiceServer is the server API for RestaurantsService service.
-// All implementations must embed UnimplementedRestaurantsServiceServer
+// All implementations should embed UnimplementedRestaurantsServiceServer
 // for forward compatibility.
 type RestaurantsServiceServer interface {
 	GetRestaurant(context.Context, *GetRestaurantRequest) (*GetRestaurantResponse, error)
@@ -636,10 +636,9 @@ type RestaurantsServiceServer interface {
 	// require platform#operate_simulator, otherwise PERMISSION_DENIED.
 	GetSimulator(context.Context, *GetSimulatorRequest) (*GetSimulatorResponse, error)
 	SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error)
-	mustEmbedUnimplementedRestaurantsServiceServer()
 }
 
-// UnimplementedRestaurantsServiceServer must be embedded to have
+// UnimplementedRestaurantsServiceServer should be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
@@ -751,8 +750,7 @@ func (UnimplementedRestaurantsServiceServer) GetSimulator(context.Context, *GetS
 func (UnimplementedRestaurantsServiceServer) SetSimulatorEnabled(context.Context, *SetSimulatorEnabledRequest) (*SetSimulatorEnabledResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetSimulatorEnabled not implemented")
 }
-func (UnimplementedRestaurantsServiceServer) mustEmbedUnimplementedRestaurantsServiceServer() {}
-func (UnimplementedRestaurantsServiceServer) testEmbeddedByValue()                            {}
+func (UnimplementedRestaurantsServiceServer) testEmbeddedByValue() {}
 
 // UnsafeRestaurantsServiceServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to RestaurantsServiceServer will

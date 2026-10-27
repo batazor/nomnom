@@ -2426,36 +2426,3 @@ func (_c *MockRestaurantsServiceServer_UpdateRestaurant_Call) RunAndReturn(run f
 	_c.Call.Return(run)
 	return _c
 }
-
-// mustEmbedUnimplementedRestaurantsServiceServer provides a mock function for the type MockRestaurantsServiceServer
-func (_mock *MockRestaurantsServiceServer) mustEmbedUnimplementedRestaurantsServiceServer() {
-	_mock.Called()
-	return
-}
-
-// MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'mustEmbedUnimplementedRestaurantsServiceServer'
-type MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call struct {
-	*mock.Call
-}
-
-// mustEmbedUnimplementedRestaurantsServiceServer is a helper method to define mock.On call
-func (_e *MockRestaurantsServiceServer_Expecter) mustEmbedUnimplementedRestaurantsServiceServer() *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call {
-	return &MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call{Call: _e.mock.On("mustEmbedUnimplementedRestaurantsServiceServer")}
-}
-
-func (_c *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call) Run(run func()) *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call) Return() *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call) RunAndReturn(run func()) *MockRestaurantsServiceServer_mustEmbedUnimplementedRestaurantsServiceServer_Call {
-	_c.Run(run)
-	return _c
-}

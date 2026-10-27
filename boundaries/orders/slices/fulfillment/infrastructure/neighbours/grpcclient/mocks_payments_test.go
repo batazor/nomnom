@@ -454,36 +454,3 @@ func (_c *MockPaymentsServiceServer_RefundPayment_Call) RunAndReturn(run func(co
 	_c.Call.Return(run)
 	return _c
 }
-
-// mustEmbedUnimplementedPaymentsServiceServer provides a mock function for the type MockPaymentsServiceServer
-func (_mock *MockPaymentsServiceServer) mustEmbedUnimplementedPaymentsServiceServer() {
-	_mock.Called()
-	return
-}
-
-// MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'mustEmbedUnimplementedPaymentsServiceServer'
-type MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call struct {
-	*mock.Call
-}
-
-// mustEmbedUnimplementedPaymentsServiceServer is a helper method to define mock.On call
-func (_e *MockPaymentsServiceServer_Expecter) mustEmbedUnimplementedPaymentsServiceServer() *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call {
-	return &MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call{Call: _e.mock.On("mustEmbedUnimplementedPaymentsServiceServer")}
-}
-
-func (_c *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call) Run(run func()) *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call) Return() *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call) RunAndReturn(run func()) *MockPaymentsServiceServer_mustEmbedUnimplementedPaymentsServiceServer_Call {
-	_c.Run(run)
-	return _c
-}

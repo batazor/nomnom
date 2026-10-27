@@ -29,18 +29,6 @@ import (
 	"nomnom/orders/slices/order/infrastructure/catalog"
 )
 
-// The generated server mock declares mustEmbedUnimplemented… in the test
-// package; the Unimplemented server sits one level deeper, so the mock methods
-// win the embedding resolution.
-type unimplementedRestaurants struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
-}
-
-type restaurantsServer struct {
-	*MockRestaurantsServiceServer
-	unimplementedRestaurants
-}
-
 func item(id, amount, currency string, available bool) *restaurantsv1.MenuItem {
 	return &restaurantsv1.MenuItem{
 		MenuItemId: id,
@@ -54,7 +42,7 @@ func dial(t *testing.T, server *MockRestaurantsServiceServer, options ...grpc.Di
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, restaurantsServer{MockRestaurantsServiceServer: server})
+	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 
