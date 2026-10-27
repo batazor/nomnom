@@ -1750,6 +1750,13 @@ export enum RestaurantOrderState {
    * @generated from enum value: RESTAURANT_ORDER_STATE_FAILED = 9;
    */
   FAILED = 9,
+
+  /**
+   * The courier took a READY order (DeliveryPickedUp of delivery); off the kitchen board.
+   *
+   * @generated from enum value: RESTAURANT_ORDER_STATE_PICKED_UP = 10;
+   */
+  PICKED_UP = 10,
 }
 
 /**

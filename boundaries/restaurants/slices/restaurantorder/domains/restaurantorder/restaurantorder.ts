@@ -61,6 +61,8 @@ export type RestaurantOrderTimeline = Readonly<{
   preparationStartedAt?: Date;
   expectedReadyAt?: Date;
   readyAt?: Date;
+  /** Since schemaVersion 4: the courier took the order (Pickup). */
+  pickedUpAt?: Date;
 }>;
 
 export type RestaurantOrderSnapshot = Readonly<{
@@ -412,6 +414,19 @@ export class RestaurantOrder {
     this.record(
       { type: "RestaurantOrderReady", readyAt: input.readyAt },
       input.readyAt,
+    );
+  }
+
+  /**
+   * The courier took a `READY` order (Pickup, reported by `delivery`): the
+   * kitchen is done with it. A local fact, not published.
+   */
+  recordPickup(input: { pickedUpAt: Date }): void {
+    this.apply({ trigger: "RecordPickup" });
+    this.extendTimeline({ pickedUpAt: input.pickedUpAt });
+    this.record(
+      { type: "RestaurantOrderPickedUp", pickedUpAt: input.pickedUpAt },
+      input.pickedUpAt,
     );
   }
 

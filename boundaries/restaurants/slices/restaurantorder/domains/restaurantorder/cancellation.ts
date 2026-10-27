@@ -40,6 +40,8 @@ export const TERMINAL_CANCELLATION_REJECTIONS: Partial<
   Record<RestaurantOrderState, CancellationRejectionReason>
 > = {
   [RestaurantOrderState.Ready]: CancellationRejectionReason.AlreadyReady,
+  // Picked up means ready first: the kitchen finished it.
+  [RestaurantOrderState.PickedUp]: CancellationRejectionReason.AlreadyReady,
   [RestaurantOrderState.Rejected]: CancellationRejectionReason.AlreadyRejected,
   [RestaurantOrderState.Failed]: CancellationRejectionReason.AlreadyFailed,
 };

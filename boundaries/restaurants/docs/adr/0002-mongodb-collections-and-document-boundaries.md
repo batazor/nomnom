@@ -83,6 +83,8 @@ API и consumer стартуют одновременно. Lock migrate-mongo �
 
 Market (ADR 41) введён так: миграции `restaurants/0003-market`, `menus/0002-market` и `restaurant_orders/0003-market` сначала явно проставляют `marketId: "berlin"` документам без поля (данные до Market принадлежат стартовому Market), затем validator требует `marketId` (slug `^[a-z][a-z0-9-]{1,31}$`); `schemaVersion` — 2, 2 и 3. Читатель документа без `marketId` не допускает: после миграции таких нет, а подстановка Market в коде была бы скрытым выбором. `restaurants/0003-market` заменяет индексы `restaurants_open_by_id` и `restaurants_owner` индексами с ведущим `marketId`. Индексы `menus` и `restaurant_orders` не меняются: они читаются по ресторану или состоянию, а у ресторана один Market.
 
+Pickup введён так: `restaurant_orders/0004-picked-up` (`schemaVersion` 4) только расширяет validator — состояние `PICKED_UP` и `timeline.pickedUpAt`; сохранённые документы остаются валидными, индексы не меняются.
+
 ### Атомарность
 
 - Изменение одного aggregate без событий (Register Restaurant, Assign/Revoke Staff, запись ZedToken reconciler'ом) опирается на single-document atomicity и `version`.

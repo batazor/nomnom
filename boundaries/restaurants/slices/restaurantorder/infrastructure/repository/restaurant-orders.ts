@@ -49,7 +49,7 @@ import {
 import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
 
 export const RESTAURANT_ORDERS_COLLECTION = "restaurant_orders";
-export const RESTAURANT_ORDER_SCHEMA_VERSION = 3;
+export const RESTAURANT_ORDER_SCHEMA_VERSION = 4;
 
 /**
  * One document per Restaurant Order with its Preparation Items and timeline
@@ -71,6 +71,8 @@ export type RestaurantOrderDocument = VersionedDocument & {
     preparationStartedAt?: Date;
     expectedReadyAt?: Date;
     readyAt?: Date;
+    /** Since schemaVersion 4. */
+    pickedUpAt?: Date;
   };
   /** Since schemaVersion 2; required in `PREPARING` and `ASSEMBLED`. */
   cookId?: string;

@@ -58,6 +58,7 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "invalid",
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: "invalid",
     ReportFailure: "invalid",
     Cancel: S.Cancelled,
@@ -69,6 +70,7 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "invalid",
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: "invalid",
     ReportFailure: "invalid",
     Cancel: S.Cancelled,
@@ -80,6 +82,7 @@ const EXPECTED: Record<
     StartPreparation: S.Preparing,
     MarkAssembled: "invalid",
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: S.Queued,
     ReportFailure: "invalid",
     Cancel: S.Cancelled,
@@ -91,6 +94,7 @@ const EXPECTED: Record<
     StartPreparation: "already",
     MarkAssembled: S.Assembled,
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: S.Preparing,
     ReportFailure: S.Failed,
     Cancel: S.Cancelled,
@@ -102,6 +106,7 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "already",
     MarkReady: S.Ready,
+    RecordPickup: "invalid",
     ReportDelay: S.Assembled,
     ReportFailure: S.Failed,
     Cancel: S.Cancelled,
@@ -113,6 +118,19 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "invalid",
     MarkReady: "already",
+    RecordPickup: S.PickedUp,
+    ReportDelay: "invalid",
+    ReportFailure: "invalid",
+    Cancel: "invalid",
+  },
+  PICKED_UP: {
+    Accept: "invalid",
+    Reject: "invalid",
+    Queue: "invalid",
+    StartPreparation: "invalid",
+    MarkAssembled: "invalid",
+    MarkReady: "invalid",
+    RecordPickup: "already",
     ReportDelay: "invalid",
     ReportFailure: "invalid",
     Cancel: "invalid",
@@ -124,6 +142,7 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "invalid",
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: "invalid",
     ReportFailure: "invalid",
     Cancel: "invalid",
@@ -135,6 +154,7 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "invalid",
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: "invalid",
     ReportFailure: "invalid",
     Cancel: "already",
@@ -146,6 +166,7 @@ const EXPECTED: Record<
     StartPreparation: "invalid",
     MarkAssembled: "invalid",
     MarkReady: "invalid",
+    RecordPickup: "invalid",
     ReportDelay: "invalid",
     ReportFailure: "already",
     Cancel: "invalid",
@@ -153,8 +174,8 @@ const EXPECTED: Record<
 };
 
 test("every state × trigger pair has the expected explicit outcome", () => {
-  assert.equal(ALL_STATES.length, 9);
-  assert.equal(ALL_TRIGGERS.length, 9);
+  assert.equal(ALL_STATES.length, 10);
+  assert.equal(ALL_TRIGGERS.length, 10);
   for (const state of ALL_STATES) {
     for (const trigger of ALL_TRIGGERS) {
       const expected = EXPECTED[state][trigger];
@@ -291,6 +312,7 @@ test("compound states group the expected leaf states", () => {
   assert.deepEqual(leavesOf(C.ActivePreparation), [S.Preparing, S.Assembled]);
   assert.deepEqual(leavesOf(C.Closed), [
     S.Ready,
+    S.PickedUp,
     S.Rejected,
     S.Cancelled,
     S.Failed,

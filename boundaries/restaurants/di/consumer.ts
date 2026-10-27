@@ -64,9 +64,19 @@ import {
   DatabaseRestaurantCatalog,
   DatabaseRestaurantRepository,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
-import type { FulfillmentCoordinatorAccess } from "../slices/restaurantorder/applications/access-control.ts";
+import type {
+  FulfillmentCoordinatorAccess,
+  PickupWitnessAccess,
+} from "../slices/restaurantorder/applications/access-control.ts";
 import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import { RecordPickupHandler } from "../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
 import type { RestaurantOrderRepository } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import {
+  createDeliveryPickedUpHandler,
+  DELIVERY_EVENTS_TOPIC,
+  DELIVERY_PICKED_UP_CONSUMER,
+  DeliveryEventSourceAccessControl,
+} from "../slices/restaurantorder/infrastructure/integration/delivery-picked-up.ts";
 import {
   type KitchenChangeNotifier,
   kitchenChangeNotifier,
@@ -138,8 +148,14 @@ export interface ConsumerCradle {
   readonly consumerMetrics: ConsumerMetrics;
   readonly orderPlaced: EventHandler;
   readonly messageProcessor: MessageProcessor;
+  /** Allows only Record Pickup from the delivery event stream. */
+  readonly pickupWitnessAccess: PickupWitnessAccess;
+  readonly recordPickup: RecordPickupHandler;
+  readonly deliveryPickedUp: EventHandler;
+  readonly deliveryEventsProcessor: MessageProcessor;
   /**
-   * Consumer group of `orders.v1.order-events` and the cache refresh group of
+   * Consumer group of `orders.v1.order-events` and
+   * `delivery.v1.delivery-events` and the cache refresh group of
    * `restaurants.v1.restaurant-events` and `restaurants.v1.menu-events`, run
    * by the Lifecycle.
    */
@@ -264,6 +280,52 @@ export const createConsumerContainer = (
         });
       },
     ).singleton(),
+    pickupWitnessAccess: asFunction(
+      () => new DeliveryEventSourceAccessControl(),
+    ).singleton(),
+    recordPickup: asFunction(
+      ({ pickupWitnessAccess, unitOfWork, restaurantOrders }: ConsumerCradle) =>
+        new RecordPickupHandler({
+          accessControl: pickupWitnessAccess,
+          unitOfWork,
+          restaurantOrders,
+        }),
+    ).singleton(),
+    deliveryPickedUp: asFunction(({ recordPickup }: ConsumerCradle) =>
+      createDeliveryPickedUpHandler({ recordPickup }),
+    ).singleton(),
+    // Own Inbox name: the handler of the delivery stream is a consumer of its
+    // own (ADR 11), in the same consumer group.
+    deliveryEventsProcessor: asFunction(
+      ({
+        consumerConfig,
+        deliveryPickedUp,
+        inbox,
+        deadLetters,
+        consumerMetrics,
+        logger,
+      }: ConsumerCradle) => {
+        const log = logger.child({
+          operation: "kafka.consume",
+          "messaging.consumer.group.name": consumerConfig.groupId,
+        });
+        return new MessageProcessor({
+          consumer: DELIVERY_PICKED_UP_CONSUMER,
+          group: consumerConfig.groupId,
+          handlers: [deliveryPickedUp],
+          inbox,
+          deadLetters,
+          retry: {
+            maxRetries: consumerConfig.maxRetries,
+            initialIntervalMs: consumerConfig.retryInitialIntervalMs,
+            maxIntervalMs: consumerConfig.retryMaxIntervalMs,
+          },
+          metrics: consumerMetrics,
+          log: log.info,
+          warn: log.warn,
+        });
+      },
+    ).singleton(),
     cacheRefresh: asFunction(
       ({
         db,
@@ -311,6 +373,7 @@ export const createConsumerContainer = (
       ({
         kafkaConsumer,
         messageProcessor,
+        deliveryEventsProcessor,
         consumerConfig,
         cacheRefreshConsumer,
         cacheRefresh,
@@ -319,8 +382,20 @@ export const createConsumerContainer = (
         new ParallelWorkers([
           new KafkaConsumerWorker({
             client: kafkaConsumer,
-            topics: [ORDER_EVENTS_TOPIC],
-            handler: messageProcessor,
+            topics: [ORDER_EVENTS_TOPIC, DELIVERY_EVENTS_TOPIC],
+            // Each stream goes to the processor of its consumer.
+            handler: {
+              process: (message, signal) => {
+                const processor = {
+                  [ORDER_EVENTS_TOPIC]: messageProcessor,
+                  [DELIVERY_EVENTS_TOPIC]: deliveryEventsProcessor,
+                }[message.topic];
+                if (processor === undefined) {
+                  throw new Error(`no processor for topic ${message.topic}`);
+                }
+                return processor.process(message, signal);
+              },
+            },
             groupId: consumerConfig.groupId,
           }),
           new KafkaConsumerWorker({

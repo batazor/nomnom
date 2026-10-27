@@ -7,7 +7,7 @@
 #
 #   orders.v1.order-events.dlq               — группа restaurants
 #   restaurants.v1.restaurant-order-events.dlq — группа orders
-#   delivery.v1.delivery-events.dlq          — группа orders
+#   delivery.v1.delivery-events.dlq          — группы orders и restaurants
 #   orders.v1.order-relationships.dlq        — группа orders (внутренний стрим, ADR 18)
 apiVersion: batch/v1
 kind: Job

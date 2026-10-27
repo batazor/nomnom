@@ -35,21 +35,24 @@ const (
 	RestaurantOrderState_RESTAURANT_ORDER_STATE_REJECTED    RestaurantOrderState = 7
 	RestaurantOrderState_RESTAURANT_ORDER_STATE_CANCELLED   RestaurantOrderState = 8
 	RestaurantOrderState_RESTAURANT_ORDER_STATE_FAILED      RestaurantOrderState = 9
+	// The courier took a READY order (DeliveryPickedUp of delivery); off the kitchen board.
+	RestaurantOrderState_RESTAURANT_ORDER_STATE_PICKED_UP RestaurantOrderState = 10
 )
 
 // Enum value maps for RestaurantOrderState.
 var (
 	RestaurantOrderState_name = map[int32]string{
-		0: "RESTAURANT_ORDER_STATE_UNSPECIFIED",
-		1: "RESTAURANT_ORDER_STATE_RECEIVED",
-		2: "RESTAURANT_ORDER_STATE_ACCEPTED",
-		3: "RESTAURANT_ORDER_STATE_QUEUED",
-		4: "RESTAURANT_ORDER_STATE_PREPARING",
-		5: "RESTAURANT_ORDER_STATE_ASSEMBLED",
-		6: "RESTAURANT_ORDER_STATE_READY",
-		7: "RESTAURANT_ORDER_STATE_REJECTED",
-		8: "RESTAURANT_ORDER_STATE_CANCELLED",
-		9: "RESTAURANT_ORDER_STATE_FAILED",
+		0:  "RESTAURANT_ORDER_STATE_UNSPECIFIED",
+		1:  "RESTAURANT_ORDER_STATE_RECEIVED",
+		2:  "RESTAURANT_ORDER_STATE_ACCEPTED",
+		3:  "RESTAURANT_ORDER_STATE_QUEUED",
+		4:  "RESTAURANT_ORDER_STATE_PREPARING",
+		5:  "RESTAURANT_ORDER_STATE_ASSEMBLED",
+		6:  "RESTAURANT_ORDER_STATE_READY",
+		7:  "RESTAURANT_ORDER_STATE_REJECTED",
+		8:  "RESTAURANT_ORDER_STATE_CANCELLED",
+		9:  "RESTAURANT_ORDER_STATE_FAILED",
+		10: "RESTAURANT_ORDER_STATE_PICKED_UP",
 	}
 	RestaurantOrderState_value = map[string]int32{
 		"RESTAURANT_ORDER_STATE_UNSPECIFIED": 0,
@@ -62,6 +65,7 @@ var (
 		"RESTAURANT_ORDER_STATE_REJECTED":    7,
 		"RESTAURANT_ORDER_STATE_CANCELLED":   8,
 		"RESTAURANT_ORDER_STATE_FAILED":      9,
+		"RESTAURANT_ORDER_STATE_PICKED_UP":   10,
 	}
 )
 
@@ -4240,7 +4244,7 @@ const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
 	"\aon_line\x18\x02 \x01(\x05R\x06onLine\x12\x12\n" +
 	"\x04busy\x18\x03 \x01(\x05R\x04busy\x12\x16\n" +
 	"\x06queued\x18\x04 \x01(\x05R\x06queued\x121\n" +
-	"\x05cooks\x18\x05 \x03(\v2\x1b.nomnom.restaurants.v1.CookR\x05cooks*\x87\x03\n" +
+	"\x05cooks\x18\x05 \x03(\v2\x1b.nomnom.restaurants.v1.CookR\x05cooks*\xad\x03\n" +
 	"\x14RestaurantOrderState\x12&\n" +
 	"\"RESTAURANT_ORDER_STATE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fRESTAURANT_ORDER_STATE_RECEIVED\x10\x01\x12#\n" +
@@ -4251,7 +4255,9 @@ const file_nomnom_restaurants_v1_service_proto_rawDesc = "" +
 	"\x1cRESTAURANT_ORDER_STATE_READY\x10\x06\x12#\n" +
 	"\x1fRESTAURANT_ORDER_STATE_REJECTED\x10\a\x12$\n" +
 	" RESTAURANT_ORDER_STATE_CANCELLED\x10\b\x12!\n" +
-	"\x1dRESTAURANT_ORDER_STATE_FAILED\x10\t2\xe4\x1d\n" +
+	"\x1dRESTAURANT_ORDER_STATE_FAILED\x10\t\x12$\n" +
+	" RESTAURANT_ORDER_STATE_PICKED_UP\x10\n" +
+	"2\xe4\x1d\n" +
 	"\x12RestaurantsService\x12j\n" +
 	"\rGetRestaurant\x12+.nomnom.restaurants.v1.GetRestaurantRequest\x1a,.nomnom.restaurants.v1.GetRestaurantResponse\x12X\n" +
 	"\aGetMenu\x12%.nomnom.restaurants.v1.GetMenuRequest\x1a&.nomnom.restaurants.v1.GetMenuResponse\x12p\n" +

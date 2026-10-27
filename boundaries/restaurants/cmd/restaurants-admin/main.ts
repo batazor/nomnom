@@ -26,12 +26,13 @@ import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
 import { DEAD_LETTER_HEADERS } from "../../pkg/infrastructure/messaging/processor.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
+import { DELIVERY_EVENTS_TOPIC } from "../../slices/restaurantorder/infrastructure/integration/delivery-picked-up.ts";
 import { ORDER_EVENTS_TOPIC } from "../../slices/restaurantorder/infrastructure/integration/order-placed.ts";
 
 const SERVICE_NAME = "restaurants-admin";
 
 /** Topics restaurants-consumer dead-letters; only their DLQs are its own. */
-const STREAMS: readonly string[] = [ORDER_EVENTS_TOPIC];
+const STREAMS: readonly string[] = [ORDER_EVENTS_TOPIC, DELIVERY_EVENTS_TOPIC];
 
 const USAGE = `usage:
   restaurants-admin dlq list --stream <topic>

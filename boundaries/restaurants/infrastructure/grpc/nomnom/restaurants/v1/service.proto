@@ -192,6 +192,8 @@ enum RestaurantOrderState {
   RESTAURANT_ORDER_STATE_REJECTED = 7;
   RESTAURANT_ORDER_STATE_CANCELLED = 8;
   RESTAURANT_ORDER_STATE_FAILED = 9;
+  // The courier took a READY order (DeliveryPickedUp of delivery); off the kitchen board.
+  RESTAURANT_ORDER_STATE_PICKED_UP = 10;
 }
 
 // Restaurant Order after a kitchen command or in the Kitchen Queue.

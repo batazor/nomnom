@@ -243,6 +243,7 @@ Topic и партиционирование новой версии опреде
 | `PreparationItemStarted`, `PreparationItemCompleted` | 1 → 0 | — | — |
 | `RestaurantOrderAssembled` | 1 → 0 | — | — |
 | `RestaurantOrderReady` | 1 → 1 | `RestaurantOrderReady` | `orders`; потенциально `delivery` |
+| `RestaurantOrderPickedUp` | 1 → 0 | — | — (Record Pickup по `DeliveryPickedUp`; заказ уходит с kitchen board) |
 | `PreparationDelayed` | 1 → 1 | `PreparationDelayed` | `orders`; потенциально `delivery` |
 | `RestaurantOrderCancelled` | 1 → 1 | `RestaurantOrderCancelled` | `orders` (подтверждение синхронного результата) |
 | `RestaurantOrderFailed` | 1 → 1, переименование в mapper | `PreparationFailed` | `orders` |
@@ -282,7 +283,7 @@ Domain Events, которые application-слой передаёт в Outbox po
 | `orders` | `OrderCancelled` | Fail or Cancel Order | Содержит вид итога (Cancellation или Failure) и код причины |
 | `delivery` | `CourierAssignedToDelivery` | Accept Delivery Offer | Источник relation `delivery#courier` по [security](security.md#relationship-lifecycle) |
 | `delivery` | `CourierUnassignedFromDelivery` | Reassign Courier | Опубликован как `nomnom.delivery.v1.CourierUnassignedFromDelivery`; `orders` удаляет `order#courier` (Record Courier Release) |
-| `delivery` | `DeliveryPickedUp` | Confirm Pickup | |
+| `delivery` | `DeliveryPickedUp` | Confirm Pickup | Опубликован как `nomnom.delivery.v1.DeliveryPickedUp`; `orders` записывает Pickup, `restaurants-consumer` переводит `READY` Restaurant Order в `PICKED_UP` (Record Pickup, Inbox `restaurants.delivery-picked-up`) |
 | `delivery` | `DeliveryCompleted` | Confirm Delivery | |
 | `delivery` | `DeliveryFailed` | Report Delivery Failure | Опубликован как `nomnom.delivery.v1.DeliveryFailed`: `reason` — код каталога Delivery Failure Reason, `detail` — необязательное пояснение; retryability не классифицируется |
 | `delivery` | `DeliveryOfferExpired` | Expire Delivery Offers | Внутренний: не публикуется, только метрика `nomnom.delivery.offers{nomnom.outcome="expired"}` |

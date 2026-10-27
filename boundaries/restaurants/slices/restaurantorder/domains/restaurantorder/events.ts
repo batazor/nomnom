@@ -36,6 +36,8 @@ export type RestaurantOrderAssembled = EventBase &
   Readonly<{ type: "RestaurantOrderAssembled" }>;
 export type RestaurantOrderReady = EventBase &
   Readonly<{ type: "RestaurantOrderReady"; readyAt: Date }>;
+export type RestaurantOrderPickedUp = EventBase &
+  Readonly<{ type: "RestaurantOrderPickedUp"; pickedUpAt: Date }>;
 export type PreparationDelayed = EventBase &
   Readonly<{
     type: "PreparationDelayed";
@@ -65,6 +67,7 @@ export type RestaurantOrderEvent =
   | PreparationStarted
   | RestaurantOrderAssembled
   | RestaurantOrderReady
+  | RestaurantOrderPickedUp
   | PreparationDelayed
   | RestaurantOrderFailed
   | RestaurantOrderCancelled;

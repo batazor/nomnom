@@ -54,6 +54,7 @@ const STATE_MESSAGES: Readonly<
   PREPARING: RestaurantOrderState.PREPARING,
   ASSEMBLED: RestaurantOrderState.ASSEMBLED,
   READY: RestaurantOrderState.READY,
+  PICKED_UP: RestaurantOrderState.PICKED_UP,
   REJECTED: RestaurantOrderState.REJECTED,
   CANCELLED: RestaurantOrderState.CANCELLED,
   FAILED: RestaurantOrderState.FAILED,

@@ -16,3 +16,7 @@ inputs:
     paths:
       - ../../../orders/infrastructure/grpc/nomnom/orders/v1/events.proto
       - ../../../orders/infrastructure/grpc/nomnom/orders/v1/orders.proto
+  # Integration Events стрима delivery.v1.delivery-events для consumer DeliveryPickedUp.
+  - directory: ../../../delivery/infrastructure/grpc
+    paths:
+      - ../../../delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto

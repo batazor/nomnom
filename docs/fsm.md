@@ -271,7 +271,7 @@ Compound states:
 | `OPEN` | `RECEIVED`, `ACCEPTED`, `IN_KITCHEN` | Работа кухни над заказом не завершена; заказ можно отменить |
 | `IN_KITCHEN` | `QUEUED`, `ACTIVE_PREPARATION` | Заказ принят в Kitchen Queue и имеет `expected_ready_at`; кухня может сообщить о задержке |
 | `ACTIVE_PREPARATION` | `PREPARING`, `ASSEMBLED` | Ресурсы кухни уже тратятся (List Active Preparations); возможна неудача приготовления, отмена — по политике |
-| `CLOSED` | `READY`, `REJECTED`, `CANCELLED`, `FAILED` | Terminal states |
+| `CLOSED` | `READY`, `PICKED_UP`, `REJECTED`, `CANCELLED`, `FAILED` | Работа кухни закончена; из них только `READY` ещё переходит в `PICKED_UP` |
 
 ```mermaid
 stateDiagram-v2
@@ -288,12 +288,14 @@ stateDiagram-v2
     }
     state CLOSED {
         READY
+        PICKED_UP
         REJECTED
         CANCELLED
         FAILED
     }
     RECEIVED --> REJECTED: Reject
     ASSEMBLED --> READY: MarkReady
+    READY --> PICKED_UP: RecordPickup
     OPEN --> CANCELLED: Cancel
     ACTIVE_PREPARATION --> CANCELLED: Cancel [policy]
     ACTIVE_PREPARATION --> FAILED: ReportFailure
@@ -301,7 +303,7 @@ stateDiagram-v2
     CLOSED --> [*]
 ```
 
-`IN_KITCHEN × ReportDelay` — targetless (`stay`): заказ остаётся в своём leaf state. `READY` — успешное завершение работы кухни. После `READY` Pickup принадлежит `delivery`; нужен ли `restaurants` собственный state передачи заказа — открытый вопрос.
+`IN_KITCHEN × ReportDelay` — targetless (`stay`): заказ остаётся в своём leaf state. `READY` — успешное завершение работы кухни: заказ ждёт курьера на kitchen board. Pickup принадлежит `delivery`; `restaurants` узнаёт о нём из Integration Event `DeliveryPickedUp` (Record Pickup) и переводит заказ в `PICKED_UP` — он уходит с kitchen board. Pickup раньше `READY` (Delivery создаётся сразу после Acceptance) — `InvalidTransition`: consumer подтверждает событие как бизнес-исход, заказ остаётся в своём state.
 
 | source | trigger | guard | target | failure |
 | --- | --- | --- | --- | --- |
@@ -312,6 +314,7 @@ stateDiagram-v2
 | `PREPARING` | `ChangeItem` | Переход позиции допустим по таблице Preparation Item | `stay` | Ошибка таблицы позиции |
 | `PREPARING` | `MarkAssembled` | Все required items в `READY` (только item-level model) | `ASSEMBLED` | `GuardFailed{RequiredItemsNotPrepared}` |
 | `ASSEMBLED` | `MarkReady` | — | `READY` | — |
+| `READY` | `RecordPickup` | — | `PICKED_UP` | — |
 | `OPEN` | `Cancel` | — | `CANCELLED` | — |
 | `IN_KITCHEN` | `ReportDelay` | Новое `expected_ready_at` позже текущего и позже `now` | `stay` | `GuardFailed{NotLater}` |
 | `ACTIVE_PREPARATION` | `ReportFailure` | — | `FAILED` | — |
@@ -326,6 +329,7 @@ stateDiagram-v2
 | `PREPARING` | `StartPreparation` | `AlreadyInState{PREPARING}` |
 | `ASSEMBLED` | `MarkAssembled` | `AlreadyInState{ASSEMBLED}` |
 | `READY` | `MarkReady` | `AlreadyInState{READY}` |
+| `PICKED_UP` | `RecordPickup` | `AlreadyInState{PICKED_UP}` — Record Pickup отвечает no-op |
 | `REJECTED` | `Reject` | `AlreadyInState{REJECTED}` |
 | `CANCELLED` | `Cancel` | `AlreadyInState{CANCELLED}` |
 | `FAILED` | `ReportFailure` | `AlreadyInState{FAILED}` |
@@ -335,7 +339,7 @@ stateDiagram-v2
 - `PREPARING × MarkReady` — заказ не становится Ready, минуя Assembly;
 - `ACCEPTED/QUEUED × Reject` — Reject After Acceptance не разрешён до продуктового решения; при решении строки добавляются в таблицу, а не обходятся в handler;
 - `QUEUED × Accept` и последующие States — `InvalidTransition`; так как в MVP Queue выполняется в одной UoW с Accept, повтор Accept Order почти всегда встретит `QUEUED`, и UI показывает актуальное состояние заказа;
-- `READY × Cancel` — application сопоставляет ошибку с бизнес-результатом `CancellationRejected{ALREADY_READY}`, который Activity `orders` не повторяет как technical failure.
+- `READY × Cancel` и `PICKED_UP × Cancel` — application сопоставляет ошибку с бизнес-результатом `CancellationRejected{ALREADY_READY}`, который Activity `orders` не повторяет как technical failure.
 
 Интерпретация `AlreadyInState` — application layer ([Transition table и результат](#transition-table-и-результат)). Предложение для kitchen board: Start Preparation и Mark Ready for Pickup превращают повтор в успешный no-op без нового Domain Event; Cancel Restaurant Order возвращает сохранённый результат отмены. Политика остаётся предложением до подтверждения продуктом.
 

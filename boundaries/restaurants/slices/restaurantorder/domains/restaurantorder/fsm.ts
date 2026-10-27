@@ -14,6 +14,7 @@ export const RestaurantOrderState = {
   Preparing: "PREPARING",
   Assembled: "ASSEMBLED",
   Ready: "READY",
+  PickedUp: "PICKED_UP",
   Rejected: "REJECTED",
   Cancelled: "CANCELLED",
   Failed: "FAILED",
@@ -29,6 +30,7 @@ export const RestaurantOrderTrigger = {
   StartPreparation: "StartPreparation",
   MarkAssembled: "MarkAssembled",
   MarkReady: "MarkReady",
+  RecordPickup: "RecordPickup",
   ReportDelay: "ReportDelay",
   ReportFailure: "ReportFailure",
   Cancel: "Cancel",
@@ -83,6 +85,7 @@ export const PARENT: Readonly<
   [S.Preparing]: C.ActivePreparation,
   [S.Assembled]: C.ActivePreparation,
   [S.Ready]: C.Closed,
+  [S.PickedUp]: C.Closed,
   [S.Rejected]: C.Closed,
   [S.Cancelled]: C.Closed,
   [S.Failed]: C.Closed,
@@ -148,6 +151,7 @@ export type TransitionRequest =
   | Readonly<{ trigger: "StartPreparation" }>
   | Readonly<{ trigger: "MarkAssembled" }>
   | Readonly<{ trigger: "MarkReady" }>
+  | Readonly<{ trigger: "RecordPickup" }>
   | Readonly<{
       trigger: "ReportDelay";
       now: Date;
@@ -203,6 +207,9 @@ export const TRANSITIONS: readonly TransitionRow[] = [
   { source: S.Queued, trigger: T.StartPreparation, target: S.Preparing },
   { source: S.Preparing, trigger: T.MarkAssembled, target: S.Assembled },
   { source: S.Assembled, trigger: T.MarkReady, target: S.Ready },
+  // The courier took the order (DeliveryPickedUp of delivery): it leaves the
+  // kitchen board.
+  { source: S.Ready, trigger: T.RecordPickup, target: S.PickedUp },
   { source: C.Open, trigger: T.Cancel, target: S.Cancelled },
   {
     source: C.InKitchen,
@@ -232,6 +239,7 @@ export const REPEATS: readonly Readonly<{
   { state: S.Preparing, trigger: T.StartPreparation },
   { state: S.Assembled, trigger: T.MarkAssembled },
   { state: S.Ready, trigger: T.MarkReady },
+  { state: S.PickedUp, trigger: T.RecordPickup },
   { state: S.Rejected, trigger: T.Reject },
   { state: S.Cancelled, trigger: T.Cancel },
   { state: S.Failed, trigger: T.ReportFailure },

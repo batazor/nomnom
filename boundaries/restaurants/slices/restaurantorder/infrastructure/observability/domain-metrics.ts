@@ -95,6 +95,7 @@ const TRIGGER_BY_EVENT: Readonly<
   PreparationStarted: RestaurantOrderTrigger.StartPreparation,
   RestaurantOrderAssembled: RestaurantOrderTrigger.MarkAssembled,
   RestaurantOrderReady: RestaurantOrderTrigger.MarkReady,
+  RestaurantOrderPickedUp: RestaurantOrderTrigger.RecordPickup,
   PreparationDelayed: RestaurantOrderTrigger.ReportDelay,
   RestaurantOrderFailed: RestaurantOrderTrigger.ReportFailure,
   RestaurantOrderCancelled: RestaurantOrderTrigger.Cancel,

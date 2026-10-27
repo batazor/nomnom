@@ -24,3 +24,8 @@ export interface RestaurantOrderViewAccess {
     restaurantId: string,
   ): Promise<boolean>;
 }
+
+/** Source of Pickup facts: the `service` identity behind `delivery` events. */
+export interface PickupWitnessAccess {
+  canRecordPickup(subject: Subject): Promise<boolean>;
+}
