@@ -121,7 +121,7 @@ Usage: {{ include "orders.otelEnv" (dict "context" $ "serviceName" "") }}
 {{- define "orders.otelEnv" -}}
 {{- $values := .context.Values -}}
 {{- $serviceName := .serviceName | default $values.telemetry.serviceName | required "telemetry.serviceName is required" -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" $values.image.tag)) -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "latest" $values.image.tag)) -}}
 {{- range $key, $value := $values.telemetry.resourceAttributes }}
 {{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
 {{- end }}

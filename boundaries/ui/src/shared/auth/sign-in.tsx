@@ -1,11 +1,4 @@
 import {
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuItems,
-  MenuSeparator,
-} from "@headlessui/react";
-import {
   createContext,
   type ReactNode,
   useContext,
@@ -17,7 +10,14 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { useI18n } from "../i18n/i18n";
-import { Button } from "../ui";
+import {
+  Button,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItems,
+  MenuSeparator,
+} from "../ui";
 import {
   beginLogin,
   completeLogin,

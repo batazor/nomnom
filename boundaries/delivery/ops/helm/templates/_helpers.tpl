@@ -132,7 +132,7 @@ image.tag, остальные атрибуты окружения — telemetry.
 приоритет над envFrom, поэтому OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
 */}}
 {{- define "delivery.otelEnv" -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" .Values.image.tag)) -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "latest" .Values.image.tag)) -}}
 {{- range $key, $value := .Values.telemetry.resourceAttributes }}
 {{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
 {{- end }}

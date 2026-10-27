@@ -154,7 +154,7 @@ Usage: {{ include "payments.otelEnv" . }}
 */}}
 {{- define "payments.otelEnv" -}}
 {{- with .Values.telemetry }}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "unknown" $.Values.image.tag)) -}}
+{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "latest" $.Values.image.tag)) -}}
 {{- range $key, $value := .resourceAttributes }}
 {{- $attrs = append $attrs (printf "%s=%s" $key (toString $value)) -}}
 {{- end }}

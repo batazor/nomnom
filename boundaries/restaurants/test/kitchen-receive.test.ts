@@ -6,10 +6,8 @@ import {
   NotFoundError,
   PermissionDeniedError,
 } from "../pkg/application/errors.ts";
-import { InvalidMarketIdError } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
   InvalidRestaurantOrderError,
-  MarketMismatchError,
   RestaurantOrder,
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { cook, createKitchenWorld, ordersService } from "./support/kitchen.ts";
@@ -51,7 +49,6 @@ test("ADR 41 a received order takes the Market of its restaurant", async () => {
     restaurantId,
     orderId: "order-named",
     items: [{ menuItemId: phoId, quantity: 1 }],
-    marketId: "berlin",
   });
   await world.receive.execute({
     subject: ordersService,
@@ -66,41 +63,6 @@ test("ADR 41 a received order takes the Market of its restaurant", async () => {
     assert.equal(order?.marketId.value, "berlin");
     assert.equal(order?.toSnapshot().marketId, "berlin");
   }
-});
-
-test("ADR 41 a request naming another Market than the restaurant's is rejected", async () => {
-  const world = await createKitchenWorld();
-  const { restaurantId, phoId } = await world.givenKitchen();
-  const request = {
-    subject: ordersService,
-    restaurantId,
-    orderId: "order-42",
-    items: [{ menuItemId: phoId, quantity: 1 }],
-  };
-
-  await assert.rejects(
-    world.receive.execute({ ...request, marketId: "hamburg" }),
-    (error: unknown) =>
-      error instanceof MarketMismatchError &&
-      error.expectedMarketId === "berlin" &&
-      error.requestedMarketId === "hamburg",
-  );
-  await assert.rejects(
-    world.receive.execute({ ...request, marketId: "Hamburg" }),
-    InvalidMarketIdError,
-  );
-  assert.equal((await world.orderStore.find({})).length, 0);
-
-  // A repeat of a received order is checked against the order's Market.
-  await world.receive.execute(request);
-  await assert.rejects(
-    world.receive.execute({ ...request, marketId: "hamburg" }),
-    MarketMismatchError,
-  );
-  assert.equal(
-    (await world.receive.execute({ ...request, marketId: "berlin" })).created,
-    false,
-  );
 });
 
 test("AC-243 a repeated receive returns the existing order", async () => {

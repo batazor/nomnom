@@ -6,10 +6,9 @@ import {
 import type { IdGenerator } from "../../../../pkg/application/id-generator.ts";
 import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
-import { MarketId } from "../../../restaurant/domains/restaurant/restaurant.ts";
+import type { MarketId } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   DuplicateOrderIdError,
-  MarketMismatchError,
   type PreparationItemInput,
   RestaurantOrder,
   type RestaurantOrderRepository,
@@ -27,13 +26,6 @@ export type ReceiveOrderRequest = Readonly<{
   /** Contract `Order ID` from `orders`; one Restaurant Order per Order. */
   orderId: string;
   items: readonly PreparationItemInput[];
-  /**
-   * Market the caller expects the order in (`OrderPlaced.market_id`), when it
-   * names one. The Restaurant Order always takes the Market of its
-   * restaurant (ADR 41); a different named Market is a
-   * {@link MarketMismatchError}, never resolved by picking one of them.
-   */
-  marketId?: string;
 }>;
 
 /** Market of a registered restaurant; `undefined` when it is not registered. */
@@ -85,11 +77,8 @@ export class ReceiveOrderRequestHandler {
       ),
       "receive order request",
     );
-    const requestedMarket =
-      command.marketId === undefined
-        ? undefined
-        : MarketId.of(command.marketId);
-    const existing = await this.#existing(command, requestedMarket);
+    // The Restaurant Order takes the Market of its restaurant (ADR 41).
+    const existing = await this.#existing(command);
     if (existing !== undefined) {
       return existing;
     }
@@ -97,7 +86,6 @@ export class ReceiveOrderRequestHandler {
     if (marketId === undefined) {
       throw new NotFoundError("Restaurant", command.restaurantId);
     }
-    requireSameMarket(command.orderId, marketId, requestedMarket);
     const order = RestaurantOrder.receive({
       id: this.#ids.next(),
       orderId: command.orderId,
@@ -115,7 +103,7 @@ export class ReceiveOrderRequestHandler {
       };
     } catch (error) {
       if (error instanceof DuplicateOrderIdError) {
-        const concurrent = await this.#existing(command, requestedMarket);
+        const concurrent = await this.#existing(command);
         if (concurrent !== undefined) {
           return concurrent;
         }
@@ -126,7 +114,6 @@ export class ReceiveOrderRequestHandler {
 
   async #existing(
     command: ReceiveOrderRequest,
-    requestedMarket: MarketId | undefined,
   ): Promise<ReceiveOrderRequestResult | undefined> {
     const existing = await this.#restaurantOrders.findByOrderId(
       command.orderId,
@@ -134,25 +121,9 @@ export class ReceiveOrderRequestHandler {
     if (existing === undefined) {
       return undefined;
     }
-    requireSameMarket(command.orderId, existing.marketId, requestedMarket);
     if (!existing.matchesRequest(command)) {
       throw new AlreadyExistsError("RestaurantOrder", command.orderId);
     }
     return { restaurantOrder: toRestaurantOrderView(existing), created: false };
   }
 }
-
-/** A named Market must be the Market of the restaurant or received order. */
-const requireSameMarket = (
-  orderId: string,
-  marketId: MarketId,
-  requested: MarketId | undefined,
-): void => {
-  if (requested !== undefined && !requested.equals(marketId)) {
-    throw new MarketMismatchError({
-      orderId,
-      expectedMarketId: marketId.value,
-      requestedMarketId: requested.value,
-    });
-  }
-};
