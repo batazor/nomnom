@@ -30,7 +30,7 @@ Authentication устанавливает identity вызывающей стор
 
 BFF проверяет внешнюю identity и может выполнять coarse-grained проверки. Subject передаётся bounded context через проверяемый механизм — propagated access token или signed internal identity, а не через доверенный клиентский header. Каждый bounded context выполняет authoritative check перед защищённым use case, после чего доменная модель отдельно проверяет текущее состояние и инварианты. Temporal Activities, consumers и background jobs используют собственную `service` identity без impersonation пользователя.
 
-Единая будущая schema будет храниться в `authorization/schema.zed`; на текущем шаге она не создаётся. Authorization port размещается в `applications/`, SpiceDB adapter — в `infrastructure/`, а `domains/` не зависит от SpiceDB. Полный contract, consistency, lifecycle relationships, failure policy и testing описаны в [документации security](docs/security.md), решение — в [ADR 18](docs/adr/0018-spicedb-for-authorization.md).
+Единая schema хранится в [`authorization/schema.zed`](authorization/schema.zed), grants развёртывания — в [`authorization/bootstrap.yaml`](authorization/bootstrap.yaml), assertions путей пользовательских прав — в [`authorization/validation.yaml`](authorization/validation.yaml); проверка — `make authz-validate`, локальный SpiceDB — `make spicedb-dev`. Authorization port размещается в `applications/`, SpiceDB adapter — в `infrastructure/`, а `domains/` не зависит от SpiceDB. Полный contract, consistency, lifecycle relationships, failure policy и testing описаны в [документации security](docs/security.md), решение — в [ADR 18](docs/adr/0018-spicedb-for-authorization.md).
 
 ## Синхронное взаимодействие
 

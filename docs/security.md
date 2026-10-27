@@ -1,6 +1,6 @@
 # Security: authentication and authorization
 
-Документ определяет общесистемный contract authentication context и authorization в nomnom. Архитектурное решение зафиксировано в [ADR 18](adr/0018-spicedb-for-authorization.md). Конкретная `.zed` schema, deployment SpiceDB, datastore, SDK-интеграция и manifests относятся к следующим шагам.
+Документ определяет общесистемный contract authentication context и authorization в nomnom. Архитектурное решение зафиксировано в [ADR 18](adr/0018-spicedb-for-authorization.md). Schema, grants развёртывания и assertions лежат в [`authorization/`](../authorization/schema.zed); SpiceDB-адаптеры — в `infrastructure/` bounded contexts; SpiceDB тестового окружения разворачивается в kind (`ops/kind/bootstrap/templates/authz.yaml`, memory datastore). Production datastore, deployment topology и HA не выбраны.
 
 ## Разделение ответственности
 
@@ -84,16 +84,19 @@ Naming convention:
 - permissions — глаголы из SDD use cases: `view`, `cancel`, `accept`, `assign`;
 - роли не передаются вручную по цепочке вызовов, если выражаются graph relations/permissions.
 
-Начальное направление моделирования, не готовая schema:
+Definitions и relations [`authorization/schema.zed`](../authorization/schema.zed):
 
 ```text
 user, service
+platform: fulfillment (service), operator (user), dispatcher (user)
+order: customer, restaurant, delivery
+customer: self
 restaurant: owner, staff
-order: customer, restaurant
-delivery: courier, order
+courier: self
+delivery: courier
 ```
 
-Definitions и permissions проектируются по согласованным SDD use cases. Текущие спецификации описывают инфраструктурные сценарии и не дают достаточного набора доменных use cases для окончательной schema.
+Новые definitions и permissions добавляются по SDD use cases, которым они нужны.
 
 ## Schema как shared contract
 
@@ -105,9 +108,9 @@ Definitions и permissions проектируются по согласован�
 | --- | --- |
 | `restaurant` | `restaurants` |
 | `order` | `orders` |
-| `delivery` | `delivery` |
+| `courier`, `delivery` | `delivery` |
 | `customer` | `orders`; permission `view_orders` защищает историю заказов Customer, id совпадает с id `user` |
-| `payment` | `payments`; permissions application-слоя: `create`, `authorize`, `capture`, `cancel_authorization`, `refund`, `view`, `view_operations` |
+| `platform` | Shared contract; grants `service` identities — `authorization/bootstrap.yaml`, `operator`/`dispatcher` — bootstrap окружения (`ops/kind/authz/bootstrap-kind.yaml`). |
 | `user`, `service` | Общесистемный identity contract; lifecycle определяется вместе с authentication/workload identity. |
 
 Порты authorization контекстов (SpiceDB-адаптеры переводят их в definitions `schema.zed`):
@@ -119,13 +122,12 @@ Definitions и permissions проектируются по согласован�
 | `delivery` | Ports `CourierAuthorization`, `DeliveryAuthorization` с enum permissions по use cases | Resources `Platform`, `Courier(id)`, `Delivery(id)`. Команды курьера — `courier#act`; принадлежность доставки проверяет домен. Действие диспетчера (Report Delivery Failure на `Delivery(id)`) — `platform:nomnom#dispatch_delivery` (`operator`), а не `delivery#act_as_courier`, которое есть только у назначенного курьера. |
 | `payments` | `PaymentPermission` и `PaymentPermissionChecker` в `slices/payment/applications/ports.py` | Permissions из строки `payment` выше над `PaymentResource(payment_id)` |
 
-Сопоставление с definitions `schema.zed` выполняется при её создании. Provider callback и operation result в `payments` не проходят SpiceDB-проверку: actor не является subject authorization graph, подлинность callback проверяет infrastructure (service-path; см. [design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md)). Решения по каждому контексту — в design.md changes `implement-{orders,restaurants,delivery,payments}-application-layer`.
+Definition `payment` нет: fulfillment-команды адресуют платёж по `order_id` раньше любых resource-level связей, поэтому `create`, `authorize`, `capture`, `cancel_authorization`, `refund` проверяются как `platform:nomnom#manage_payments`, `view` и `view_operations` — как `platform:nomnom#view_payments` (`boundaries/payments/infrastructure/authorization/spicedb.py`). Provider callback и operation result в `payments` не проходят SpiceDB-проверку: actor не является subject authorization graph, подлинность callback проверяет infrastructure (service-path; см. [design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md)). Решения по каждому контексту — в design.md changes `implement-{orders,restaurants,delivery,payments}-application-layer`.
 
-Изменения schema проходят review с участием владельцев затронутых definitions и consumers permissions. CI должен выполнять:
+Изменения schema проходят review с участием владельцев затронутых definitions и consumers permissions. Проверки:
 
-- `zed validate authorization/schema.zed`;
-- assertions для granted и denied paths;
-- regression cases для permissions, используемых приложениями.
+- `make authz-validate` — `zed validate` для `bootstrap.yaml` (grants развёртывания) и `validation.yaml` (granted и denied paths пользовательских прав); в CI пока не запускается;
+- integration-тесты контекстов против SpiceDB с `authorization/bootstrap.yaml` — regression cases для permissions, используемых приложениями.
 
 Удаление или изменение relation/permission — breaking change. Процесс аналогичен Protobuf evolution:
 
@@ -215,7 +217,7 @@ Business storage bounded context остаётся source of truth; SpiceDB — �
 | Rollback/compensation | Что происходит с relationship при неуспехе или компенсации. |
 | Consistency window | Синхронно либо документированная eventual consistency. |
 
-Предварительный lifecycle для направляющей модели:
+Lifecycle relations schema:
 
 | Relation | Source of truth / writer | Create/delete и отказ |
 | --- | --- | --- |
@@ -224,9 +226,8 @@ Business storage bounded context остаётся source of truth; SpiceDB — �
 | `order#delivery@delivery` | `Order.delivery_id` в `orders` из `delivery.v1` `CourierAssignedToDelivery` и `DeliveryCancelled`; Record Courier Assignment (новая Delivery) и Record Courier Release (`DeliveryCancelled`) кладут `OrderRelationshipsChanged` в Outbox своей Inbox-транзакции, writer — Sync Order Relationships. | Синхронизация по состоянию: `delivery_id` строки становится единственной `order#delivery`, `NULL` — связи нет; переназначение в пределах той же Delivery событие не пишет. Событие с Delivery `aggregate_version` ниже сохранённого назначения или снятия пропускается (FR-564). Relation `order#courier` нет: кто курьер сейчас, решает только `delivery` через `delivery#courier`, а `order#view` курьера идёт стрелкой `delivery->act_as_courier`. |
 | `restaurant#staff@user` | `Restaurant.staff` в `restaurants`; writer — use cases Assign Staff / Revoke Staff. | Синхронный `TOUCH`/`DELETE` до сохранения; расхождение исправляет reconciliation `restaurants` (missing — после двух проходов с интервалом не меньше grace, чтобы не вернуть доступ по документу, прочитанному до сохранения Revoke Staff). |
 | `delivery#courier@user` | Активное назначение в `delivery`: `Delivery.courier_id` у доставки в состоянии assigned или picked up (`Delivery::active_courier`, FR-444). `courier_id` доставленной или неуспешной доставки остаётся фактом «кто вёз» и доступа не даёт. Writers — Accept Delivery Offer (`TOUCH`); Reassign Courier, Replan Delivery, Cancel Delivery, Confirm Delivery, Report Delivery Failure (`DELETE`). | Синхронный `TOUCH`/`DELETE` до commit с сохранением revision; неудачный `DELETE` откатывает use case. Reconciliation `delivery` строит ожидаемые связи из активных назначений: связь закрытой доставки удаляется как stale и не восстанавливается (FR-563). |
-| `delivery#order@order` | Delivery association в `delivery`; writer `delivery`. | Стратегия определяется use case: sync at creation when required immediately, otherwise Outbox. |
 
-Таблица не фиксирует окончательную schema: names и exact triggers подтверждаются SDD use cases.
+`courier#self@user` — `TOUCH` в Register Courier (`delivery`), reconciliation — как у `delivery#courier`. `customer#self@user` в runtime не пишется: свою историю Customer читает по `customer_id` без graph, другому subject `view_orders` не выдаётся (связь есть только в `validation.yaml`). `platform#*` задаёт bootstrap развёртывания.
 
 ### Dual write rules
 
@@ -341,13 +342,11 @@ Kubernetes/NetworkPolicy and E2E scenarios run in kind.
 
 ## Открытые вопросы
 
-- definitions, relations and permissions after domain SDD use cases are agreed;
 - production identity provider (kind uses Dex with authorization code + PKCE, ADR 35; user subject propagation is decided by ADR 32);
 - exact local field, serialization and gRPC metadata key for ZedToken;
 - SpiceDB datastore, deployment topology, backups and HA;
 - reconciliation ownership, schedule, batching, repair policy and drift SLO;
 - concrete timeout/retry/circuit-breaker values and read-only degradation policies;
-- precise lifecycle contract for every finalized relationship.
 
 ## References
 

@@ -20,7 +20,7 @@ Authentication и authorization являются разными ответств
 
 Отдельно требуется согласовать централизованный authorization graph с локальными транзакциями bounded contexts. SpiceDB и business storage не участвуют в одной атомарной транзакции. Проверки после изменения relationship требуют явной consistency, consumers и Temporal Activities выполняются без интерактивного пользователя, а недоступность общей authorization-системы не должна приводить к несанкционированному изменению состояния.
 
-На этом шаге фиксируется архитектурное решение. `.zed` schema, SDK-интеграция, deployment SpiceDB, datastore, credentials, NetworkPolicy manifests и реализация reconciliation не создаются.
+ADR фиксирует архитектурное решение. Schema, grants и assertions лежат в `authorization/`, SpiceDB-адаптеры — в `infrastructure/` bounded contexts, SpiceDB тестового окружения разворачивается в kind (`ops/kind/bootstrap/templates/authz.yaml`, memory datastore с bootstrap из `authorization/bootstrap.yaml`). Production datastore, deployment topology и HA не выбраны.
 
 ## Decision
 
@@ -67,9 +67,9 @@ Authorization port располагается в `applications/` рядом с �
 
 ### Shared schema contract
 
-В системе будет одна schema по пути `authorization/schema.zed`. Каждый resource definition имеет owner — bounded context, владеющий этим resource. Initial direction для последующего моделирования: `user`, `service`, `restaurant`, `order`, `delivery`; relations `owner`, `staff`, `customer`, `restaurant`, `courier`, `order`. Это не фиксирует definitions до анализа SDD use cases.
+В системе одна schema — `authorization/schema.zed`. Каждый resource definition имеет owner — bounded context, владеющий этим resource; owner указан в комментарии definition. Definitions: `user`, `service`, синглтон `platform` (capabilities Order Fulfillment Workflow, оператора и диспетчера), `order`, `customer`, `restaurant`, `courier`, `delivery`. Grants `service` identities — в `authorization/bootstrap.yaml`, assertions путей пользовательских прав — в `authorization/validation.yaml`. Модель и соответствие портов permissions — в [security](../security.md#schema-как-shared-contract).
 
-Schema изменяется через review. CI выполняет `zed validate` и assertions с granted/denied cases. Удаление или изменение relation/permission считается breaking change и проходит управляемую миграцию, аналогичную эволюции Protobuf-контрактов: сначала добавление и dual-compatible rollout, затем перенос relationships и callers, и только потом удаление. Сам `.zed`-файл этим ADR не создаётся.
+Schema изменяется через review; `zed validate` и assertions с granted/denied cases запускает `make authz-validate` (`bootstrap.yaml`, `validation.yaml`), в CI он пока не подключён. Удаление или изменение relation/permission считается breaking change и проходит управляемую миграцию, аналогичную эволюции Protobuf-контрактов: сначала добавление и dual-compatible rollout, затем перенос relationships и callers, и только потом удаление.
 
 ### Lists
 
@@ -99,7 +99,7 @@ Schema изменяется через review. CI выполняет `zed valida
 
 Предпочтительный путь — **синхронизация по состоянию через Outbox**, без dual write. Use case не пишет SpiceDB: в транзакции изменения он кладёт в Outbox внутреннее событие «связи resource изменились» (только id). Consumer владельца читает текущие субъекты resource из business storage под row lock и одной записью приводит связи resource в SpiceDB ровно к ним (`TOUCH` нужных, `DELETE` остальных), затем сохраняет ZedToken как authorization revision. Синхронизация зависит только от состояния, поэтому повтор, опоздание и redrive дают тот же результат, Inbox не нужен, расхождение — только отставание до доставки события, и reconciliation не требуется. Немедленный доступ создателя, которому связь нужна сразу после commit, даёт проверка владения по business storage (owner fast path): владелец, известный самому resource, проходит без SpiceDB. После потери данных SpiceDB связи восстанавливает разовая команда пересинхронизации всех resources. Так устроены связи `order` в `orders`; `restaurants` и `delivery` пока используют механизмы 1–3.
 
-Каждый relationship в будущей schema получает lifecycle contract: owner definition; business source of truth; кто и по какому command/event создаёт relationship; кто и когда удаляет; поведение при rollback/compensation; допустимая consistency lag. Writes идемпотентны: upsert использует `TOUCH`, удаление принимает отсутствие как успешный результат. При удалении или архивации resource его relationships удаляются по resource filter.
+Каждый relationship в schema получает lifecycle contract: owner definition; business source of truth; кто и по какому command/event создаёт relationship; кто и когда удаляет; поведение при rollback/compensation; допустимая consistency lag. Writes идемпотентны: upsert использует `TOUCH`, удаление принимает отсутствие как успешный результат. При удалении или архивации resource его relationships удаляются по resource filter.
 
 ### Network и runtime
 
