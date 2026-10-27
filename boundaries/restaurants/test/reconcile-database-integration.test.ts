@@ -66,14 +66,12 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
 
   before(async () => {
     database = await connectDatabase({
-      enabled: true,
       uri: databaseUri(),
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,
     });
     await migrateRestaurantsDatabase(database.db);
     spicedb = createSpiceDbClient({
-      enabled: true,
       endpoint,
       presharedKey: "devkey",
       insecure: true,

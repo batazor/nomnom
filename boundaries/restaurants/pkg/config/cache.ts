@@ -9,9 +9,8 @@ import {
 } from "./env.ts";
 import { durationSchema } from "./schemas.ts";
 
-/** Кеш чтения каталога в Valkey (ADR 43, локальный ADR 3), когда задан `VALKEY__URL`. */
-export type ValkeyEnabledConfig = Readonly<{
-  enabled: true;
+/** Кеш чтения каталога в Valkey (ADR 43, локальный ADR 3); `VALKEY__URL` обязателен. */
+export type ValkeyConfig = Readonly<{
   /** `redis://` или `rediss://` с ACL-пользователем контекста; приходит из Secret. */
   url: string;
   /**
@@ -28,17 +27,15 @@ export type ValkeyEnabledConfig = Readonly<{
   refreshGroup: string;
 }>;
 
-/**
- * `enabled: false` при пустом `VALKEY__URL`; процессы `restaurants` и
- * `restaurants-consumer` в этом случае не стартуют.
- */
-export type ValkeyConfig = Readonly<{ enabled: false }> | ValkeyEnabledConfig;
-
 export function loadValkeyConfig(
   environment: Record<string, string | undefined>,
 ): ValkeyConfig {
   const url = environment[VALKEY_URL_ENV]?.trim() ?? "";
-  if (url === "") return Object.freeze({ enabled: false });
+  if (url === "") {
+    throw new Error(
+      `${VALKEY_URL_ENV} is required: restaurants caches catalog reads in Valkey`,
+    );
+  }
   if (!/^rediss?:\/\/[^/]/.test(url)) {
     throw new Error(
       `${VALKEY_URL_ENV} must be a redis:// or rediss:// connection string`,
@@ -56,7 +53,6 @@ export function loadValkeyConfig(
   const refreshGroup =
     environment[CACHE_REFRESH_GROUP_ENV]?.trim() || DEFAULT_CACHE_REFRESH_GROUP;
   return Object.freeze({
-    enabled: true,
     url,
     commandTimeoutMs,
     ttlMs,

@@ -88,7 +88,6 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
 
   before(async () => {
     client = createSpiceDbClient({
-      enabled: true,
       endpoint,
       presharedKey: "devkey",
       insecure: true,

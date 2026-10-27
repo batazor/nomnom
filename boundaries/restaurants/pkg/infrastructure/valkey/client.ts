@@ -4,7 +4,7 @@
 // offline queue, no per-request retries), so readers go to MongoDB instead.
 import { Valkey } from "iovalkey";
 
-import type { ValkeyEnabledConfig } from "../../config/config.ts";
+import type { ValkeyConfig } from "../../config/config.ts";
 import type { Logger } from "../../telemetry/logger.ts";
 
 /** Reconnect backoff after a lost connection. */
@@ -21,7 +21,7 @@ export type ValkeyConnection = Readonly<{
  * Logs only availability changes, not every failed reconnect.
  */
 export function connectValkey(
-  config: Pick<ValkeyEnabledConfig, "url" | "commandTimeoutMs">,
+  config: Pick<ValkeyConfig, "url" | "commandTimeoutMs">,
   options: Readonly<{ connectionName: string; logger: Logger }>,
 ): ValkeyConnection {
   const client = new Valkey(config.url, {

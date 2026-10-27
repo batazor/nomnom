@@ -13,7 +13,7 @@ import {
 import type { PermissionsClient } from "../infrastructure/spicedb/client.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { Subject } from "../pkg/application/subject.ts";
-import { loadConfig } from "../pkg/config/config.ts";
+import { loadSpiceDbConfig } from "../pkg/config/config.ts";
 
 const { HAS_PERMISSION, NO_PERMISSION, CONDITIONAL_PERMISSION } =
   v1.CheckPermissionResponse_Permissionship;
@@ -232,41 +232,40 @@ test("a check exceeding the timeout fails closed", async () => {
   );
 });
 
-test("SpiceDB is disabled without an endpoint", () => {
-  assert.deepEqual(loadConfig({}).spicedb, { enabled: false });
-  assert.deepEqual(loadConfig({ SPICEDB__ENDPOINT: " " }).spicedb, {
-    enabled: false,
-  });
+test("SpiceDB is required: an empty endpoint stops startup", () => {
+  assert.throws(() => loadSpiceDbConfig({}), /SPICEDB__ENDPOINT is required/);
+  assert.throws(
+    () => loadSpiceDbConfig({ SPICEDB__ENDPOINT: " " }),
+    /SPICEDB__ENDPOINT is required/,
+  );
 });
 
 test("reads SpiceDB settings with a 2s default timeout", () => {
   assert.deepEqual(
-    loadConfig({
+    loadSpiceDbConfig({
       SPICEDB__ENDPOINT: "spicedb.nomnom-authz:50051",
       SPICEDB__PRESHARED_KEY: "secret",
-    }).spicedb,
+    }),
     {
-      enabled: true,
       endpoint: "spicedb.nomnom-authz:50051",
       presharedKey: "secret",
       insecure: false,
       timeoutMs: 2000,
     },
   );
-  const local = loadConfig({
+  const local = loadSpiceDbConfig({
     SPICEDB__ENDPOINT: "localhost:50051",
     SPICEDB__PRESHARED_KEY: "devkey",
     SPICEDB__INSECURE: "true",
     SPICEDB__TIMEOUT: "500ms",
-  }).spicedb;
-  assert.ok(local.enabled);
+  });
   assert.equal(local.insecure, true);
   assert.equal(local.timeoutMs, 500);
 });
 
 test("rejects an endpoint without a preshared key", () => {
   assert.throws(
-    () => loadConfig({ SPICEDB__ENDPOINT: "localhost:50051" }),
+    () => loadSpiceDbConfig({ SPICEDB__ENDPOINT: "localhost:50051" }),
     /SPICEDB__PRESHARED_KEY must not be empty/,
   );
 });
@@ -276,9 +275,9 @@ test("rejects invalid SpiceDB insecure flag and timeout", () => {
     SPICEDB__ENDPOINT: "localhost:50051",
     SPICEDB__PRESHARED_KEY: "devkey",
   };
-  assert.throws(() => loadConfig({ ...base, SPICEDB__INSECURE: "yes" }));
-  assert.throws(() => loadConfig({ ...base, SPICEDB__TIMEOUT: "0s" }));
-  assert.throws(() => loadConfig({ ...base, SPICEDB__TIMEOUT: "2" }));
+  assert.throws(() => loadSpiceDbConfig({ ...base, SPICEDB__INSECURE: "yes" }));
+  assert.throws(() => loadSpiceDbConfig({ ...base, SPICEDB__TIMEOUT: "0s" }));
+  assert.throws(() => loadSpiceDbConfig({ ...base, SPICEDB__TIMEOUT: "2" }));
 });
 
 const atLeastAsFresh = (token: string) => ({

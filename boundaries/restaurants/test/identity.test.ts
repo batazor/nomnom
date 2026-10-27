@@ -180,7 +180,7 @@ test("an allowlisted token for another audience is rejected (AC-460)", async () 
   );
 });
 
-test("requires issuer, audience and JWKS (AC-462)", async () => {
+test("requires issuer, audience and JWKS (AC-462)", () => {
   for (const missing of [
     "IDENTITY__ISSUER",
     "IDENTITY__AUDIENCE",
@@ -192,8 +192,8 @@ test("requires issuer, audience and JWKS (AC-462)", async () => {
       delete environment.IDENTITY__SERVICE_ACCOUNTS;
     }
 
-    await assert.rejects(
-      createSubjectResolver(loadIdentityConfig(environment), silent),
+    assert.throws(
+      () => loadIdentityConfig(environment),
       /are required/,
       missing,
     );
@@ -207,7 +207,6 @@ test("parses the ServiceAccount allowlist", () => {
       " nomnom/orders-worker=orders-worker , nomnom/orders-api=orders ",
   });
 
-  assert.ok(config.enabled);
   assert.deepEqual(
     [...config.serviceAccounts],
     [
@@ -217,17 +216,13 @@ test("parses the ServiceAccount allowlist", () => {
   );
 });
 
-test("rejects an empty allowlist when the issuer is set", () => {
+test("rejects an empty allowlist", () => {
   assert.throws(
     () =>
       loadIdentityConfig({
         ...identityEnvironment,
         IDENTITY__SERVICE_ACCOUNTS: "",
       }),
-    /IDENTITY__SERVICE_ACCOUNTS/,
-  );
-  assert.throws(
-    () => loadIdentityConfig({ IDENTITY__ISSUER: vectors.issuer }),
     /IDENTITY__SERVICE_ACCOUNTS/,
   );
 });

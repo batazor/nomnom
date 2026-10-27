@@ -85,12 +85,8 @@ async function deadLetters(
   }
   const bound = throughFlag(values.partition, values.through);
 
+  // KAFKA__BROKERS is required: restaurants-admin reads the DLQ from Kafka.
   const kafkaConfig = loadKafkaConfig(process.env);
-  if (!kafkaConfig.enabled) {
-    throw new Error(
-      "KAFKA__BROKERS is required: restaurants-admin reads the DLQ from Kafka",
-    );
-  }
   const { groupId } = loadConsumerConfig(process.env);
   const log = logger.child({
     operation: "dlq",

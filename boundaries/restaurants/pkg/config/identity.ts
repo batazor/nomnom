@@ -10,21 +10,17 @@ import {
 
 /**
  * Проверка service identity по projected ServiceAccount token (ADR 27) и user
- * assertions BFF (ADR 32). `enabled: false`, пока не заданы issuer, audience и
- * JWKS: процесс с gRPC API без них не стартует (`createSubjectResolver`). С
- * ними user-настройки обязательны: пустая — ошибка старта.
+ * assertions BFF (ADR 32). Issuer, audience, JWKS, allowlist и user-настройки
+ * обязательны: пустое значение — ошибка старта процесса с gRPC API.
  */
-export type IdentityConfig =
-  | Readonly<{ enabled: false }>
-  | Readonly<{
-      enabled: true;
-      issuer: string;
-      audience: string;
-      jwksFile: string;
-      /** `system:serviceaccount:<namespace>:<name>` → имя сервиса. */
-      serviceAccounts: ReadonlyMap<string, string>;
-      user: UserIdentityConfig;
-    }>;
+export type IdentityConfig = Readonly<{
+  issuer: string;
+  audience: string;
+  jwksFile: string;
+  /** `system:serviceaccount:<namespace>:<name>` → имя сервиса. */
+  serviceAccounts: ReadonlyMap<string, string>;
+  user: UserIdentityConfig;
+}>;
 
 /** Проверка user assertion BFF (ADR 32). */
 export type UserIdentityConfig = Readonly<{
@@ -49,16 +45,15 @@ export function loadIdentityConfig(
     environment[IDENTITY_SERVICE_ACCOUNTS_ENV] ?? "",
   );
 
-  if (issuer !== "" && serviceAccounts.size === 0) {
+  if (issuer === "" || audience === "" || jwksFile === "") {
     throw new Error(
-      `${IDENTITY_SERVICE_ACCOUNTS_ENV} must not be empty when ${IDENTITY_ISSUER_ENV} is set`,
+      `${IDENTITY_ISSUER_ENV}, ${IDENTITY_AUDIENCE_ENV} and ${IDENTITY_JWKS_FILE_ENV} are required`,
     );
   }
-  if (issuer === "" || audience === "" || jwksFile === "") {
-    return Object.freeze({ enabled: false });
+  if (serviceAccounts.size === 0) {
+    throw new Error(`${IDENTITY_SERVICE_ACCOUNTS_ENV} must not be empty`);
   }
   return Object.freeze({
-    enabled: true,
     issuer,
     audience,
     jwksFile,

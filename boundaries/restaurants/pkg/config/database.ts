@@ -26,8 +26,7 @@ import { durationSchema } from "./schemas.ts";
 export type Process = "api" | "consumer";
 
 /** Подключение к MongoDB (ADR 8, локальный ADR 1), когда задан `MONGODB__URI`. */
-export type EnabledConfig = Readonly<{
-  enabled: true;
+export type Config = Readonly<{
   /** Connection string replica set; приходит из Secret, не из values. */
   uri: string;
   database: string;
@@ -53,12 +52,6 @@ export type PoolConfig = Readonly<{
   maxConnecting: number;
 }>;
 
-/**
- * `enabled: false` при пустом `MONGODB__URI`; процессы `restaurants` и
- * `restaurants-consumer` в этом случае не стартуют.
- */
-export type Config = Readonly<{ enabled: false }> | EnabledConfig;
-
 const MONGODB_DATABASE_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
 export function load(
@@ -67,7 +60,9 @@ export function load(
 ): Config {
   const uri = environment[MONGODB_URI_ENV]?.trim() ?? "";
   if (uri === "") {
-    return Object.freeze({ enabled: false });
+    throw new Error(
+      `${MONGODB_URI_ENV} is required: restaurants stores its data in MongoDB`,
+    );
   }
   if (!/^mongodb(\+srv)?:\/\//.test(uri)) {
     throw new Error(
@@ -85,7 +80,6 @@ export function load(
     .refine((value) => value > 0, "MongoDB timeout must be positive")
     .parse(environment[MONGODB_TIMEOUT_ENV]?.trim() || DEFAULT_MONGODB_TIMEOUT);
   return Object.freeze({
-    enabled: true,
     uri,
     database,
     timeoutMs,

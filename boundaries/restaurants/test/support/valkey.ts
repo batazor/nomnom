@@ -1,10 +1,9 @@
 import { Valkey } from "iovalkey";
 
-import type { ValkeyEnabledConfig } from "../../pkg/config/config.ts";
+import type { ValkeyConfig } from "../../pkg/config/config.ts";
 
 /** Config of the read cache in tests; the URL decides which Valkey it reaches. */
-export const testValkeyConfig = (url: string): ValkeyEnabledConfig => ({
-  enabled: true,
+export const testValkeyConfig = (url: string): ValkeyConfig => ({
   url,
   commandTimeoutMs: 200,
   ttlMs: 60_000,

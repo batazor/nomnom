@@ -47,7 +47,6 @@ after(async () => {
 /** One client per test process; databases isolate the test worlds. */
 const sharedConnection = (): Promise<DatabaseConnection> => {
   connection ??= connectDatabase({
-    enabled: true,
     uri: databaseUri(),
     database: "restaurants_test",
     timeoutMs: 10_000,

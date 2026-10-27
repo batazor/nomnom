@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadConfig } from "../pkg/config/config.ts";
+import { database, loadConfig, loadKafkaConfig } from "../pkg/config/config.ts";
 
 test("SERVER__PORT takes precedence over PORT", () => {
   const config = loadConfig({
@@ -41,19 +41,18 @@ test("rejects a management port equal to the server port", () => {
   assert.throws(() => loadConfig({ MANAGEMENT__PORT: "8082" }));
 });
 
-test("MongoDB is disabled without MONGODB__URI", () => {
-  assert.deepEqual(loadConfig({}).database, { enabled: false });
-  assert.deepEqual(loadConfig({ MONGODB__URI: "  " }).database, {
-    enabled: false,
-  });
+test("MongoDB is required: an empty MONGODB__URI stops startup", () => {
+  assert.throws(() => database.load({}), /MONGODB__URI is required/);
+  assert.throws(
+    () => database.load({ MONGODB__URI: "  " }),
+    /MONGODB__URI is required/,
+  );
 });
 
 test("MongoDB config defaults the database and timeout", () => {
   assert.deepEqual(
-    loadConfig({ MONGODB__URI: "mongodb://mongo:27017/?replicaSet=rs0" })
-      .database,
+    database.load({ MONGODB__URI: "mongodb://mongo:27017/?replicaSet=rs0" }),
     {
-      enabled: true,
       uri: "mongodb://mongo:27017/?replicaSet=rs0",
       database: "restaurants",
       timeoutMs: 5000,
@@ -71,16 +70,15 @@ test("MongoDB config defaults the database and timeout", () => {
 test("MongoDB pool defaults depend on the process", () => {
   const environment = { MONGODB__URI: "mongodb://m" };
   const maxPoolSize = (process?: "api" | "consumer") => {
-    const { database } = loadConfig(environment, { process });
-    assert.ok(database.enabled);
-    return [database.pool.maxPoolSize, database.pool.maxConnecting];
+    const { pool } = database.load(environment, process);
+    return [pool.maxPoolSize, pool.maxConnecting];
   };
   assert.deepEqual(maxPoolSize(), [20, 2]);
   assert.deepEqual(maxPoolSize("consumer"), [5, 2]);
 });
 
 test("MongoDB pool reads MONGODB__* overrides", () => {
-  const { database } = loadConfig({
+  const mongodb = database.load({
     MONGODB__URI: "mongodb://m",
     MONGODB__MAX_POOL_SIZE: "8",
     MONGODB__MIN_POOL_SIZE: "1",
@@ -88,8 +86,7 @@ test("MongoDB pool reads MONGODB__* overrides", () => {
     MONGODB__WAIT_QUEUE_TIMEOUT: "750ms",
     MONGODB__MAX_CONNECTING: "4",
   });
-  assert.ok(database.enabled);
-  assert.deepEqual(database.pool, {
+  assert.deepEqual(mongodb.pool, {
     maxPoolSize: 8,
     minPoolSize: 1,
     maxIdleTimeMs: 60_000,
@@ -97,11 +94,10 @@ test("MongoDB pool reads MONGODB__* overrides", () => {
     maxConnecting: 4,
   });
   // The default maxConnecting never exceeds a one-connection pool.
-  const single = loadConfig({
+  const single = database.load({
     MONGODB__URI: "mongodb://m",
     MONGODB__MAX_POOL_SIZE: "1",
-  }).database;
-  assert.ok(single.enabled);
+  });
   assert.equal(single.pool.maxConnecting, 1);
 });
 
@@ -121,7 +117,7 @@ test("MongoDB pool rejects values out of range at startup", () => {
   ];
   for (const overrides of invalid) {
     assert.throws(
-      () => loadConfig({ MONGODB__URI: "mongodb://m", ...overrides }),
+      () => database.load({ MONGODB__URI: "mongodb://m", ...overrides }),
       /MONGODB__/,
       JSON.stringify(overrides),
     );
@@ -129,12 +125,12 @@ test("MongoDB pool rejects values out of range at startup", () => {
 });
 
 test("MongoDB config rejects malformed values", () => {
-  assert.throws(() => loadConfig({ MONGODB__URI: "http://mongo" }));
+  assert.throws(() => database.load({ MONGODB__URI: "http://mongo" }));
   assert.throws(() =>
-    loadConfig({ MONGODB__URI: "mongodb://m", MONGODB__DATABASE: "a/b" }),
+    database.load({ MONGODB__URI: "mongodb://m", MONGODB__DATABASE: "a/b" }),
   );
   assert.throws(() =>
-    loadConfig({ MONGODB__URI: "mongodb://m", MONGODB__TIMEOUT: "0s" }),
+    database.load({ MONGODB__URI: "mongodb://m", MONGODB__TIMEOUT: "0s" }),
   );
 });
 
@@ -150,21 +146,20 @@ test("durations accept hours and days", () => {
   assert.throws(() => loadConfig({ RECONCILER__GRACE: "7w" }));
 });
 
-test("Kafka is disabled without KAFKA__BROKERS", () => {
-  assert.deepEqual(loadConfig({}).kafka, { enabled: false });
+test("Kafka is required: an empty KAFKA__BROKERS stops startup", () => {
+  assert.throws(() => loadKafkaConfig({}), /KAFKA__BROKERS is required/);
 });
 
 test("Kafka config parses brokers and rejects malformed ones", () => {
   assert.deepEqual(
-    loadConfig({ KAFKA__BROKERS: " kafka-0:9092, kafka-1:9092 " }).kafka,
+    loadKafkaConfig({ KAFKA__BROKERS: " kafka-0:9092, kafka-1:9092 " }),
     {
-      enabled: true,
       brokers: ["kafka-0:9092", "kafka-1:9092"],
       clientId: "restaurants-consumer",
     },
   );
-  assert.throws(() => loadConfig({ KAFKA__BROKERS: "kafka-0" }));
-  assert.throws(() => loadConfig({ KAFKA__BROKERS: "a:1,,b:2" }));
+  assert.throws(() => loadKafkaConfig({ KAFKA__BROKERS: "kafka-0" }));
+  assert.throws(() => loadKafkaConfig({ KAFKA__BROKERS: "a:1,,b:2" }));
 });
 
 test("the consumer reads its group from the oldest offset with bounded retries by default", () => {

@@ -98,7 +98,7 @@ export class KafkaDeadLetters {
 
   /** `publisher` redrives the dead letters; the caller closes it. */
   static async connect(
-    config: Extract<KafkaConfig, { enabled: true }>,
+    config: KafkaConfig,
     group: string,
     publisher: KafkaPublisher,
   ): Promise<KafkaDeadLetters> {

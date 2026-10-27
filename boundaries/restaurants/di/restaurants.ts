@@ -33,8 +33,8 @@ import type {
   ReconcilerConfig,
   ServerConfig,
   SimulatorConfig,
-  SpiceDbEnabledConfig,
-  ValkeyEnabledConfig,
+  SpiceDbConfig,
+  ValkeyConfig,
   WaitTimeConfig,
 } from "../pkg/config/config.ts";
 import {
@@ -103,13 +103,13 @@ const RECONCILER_FIRST_PASS_MS = 10_000;
 /** Configuration and resources the composition root hands to the container. */
 export type RestaurantsResources = Readonly<{
   server: ServerConfig;
-  spicedb: SpiceDbEnabledConfig;
+  spicedb: SpiceDbConfig;
   reconciler: ReconcilerConfig;
   kitchen: KitchenConfig;
   waitTime: WaitTimeConfig;
   simulator: SimulatorConfig;
   database: DatabaseConnection;
-  valkeyConfig: ValkeyEnabledConfig;
+  valkeyConfig: ValkeyConfig;
   /** Opened by cmd/restaurants; reads bypass the cache while it is down. */
   valkey: Valkey;
   subjects: SubjectResolver;
@@ -119,14 +119,14 @@ export type RestaurantsResources = Readonly<{
 /** Shared clients and ports of the process. */
 export interface InfrastructureCradle {
   readonly serverConfig: ServerConfig;
-  readonly spicedbConfig: SpiceDbEnabledConfig;
+  readonly spicedbConfig: SpiceDbConfig;
   readonly reconcilerConfig: ReconcilerConfig;
   readonly kitchenConfig: KitchenConfig;
   readonly waitTimeConfig: WaitTimeConfig;
   readonly simulatorConfig: SimulatorConfig;
   readonly databaseClient: MongoClient;
   readonly db: Db;
-  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly valkeyConfig: ValkeyConfig;
   readonly valkey: Valkey;
   readonly cacheMetrics: CacheMetrics;
   readonly clock: Clock;

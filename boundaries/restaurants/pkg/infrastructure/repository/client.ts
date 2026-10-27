@@ -12,7 +12,7 @@ export type DatabaseConnection = Readonly<{
 }>;
 
 /** Config without `pool` (tests) gets the defaults of the API process. */
-export type DatabaseConnectConfig = Omit<database.EnabledConfig, "pool"> & {
+export type DatabaseConnectConfig = Omit<database.Config, "pool"> & {
   readonly pool?: database.PoolConfig;
 };
 

@@ -12,8 +12,8 @@ import type { Outbox } from "../../../pkg/application/outbox.ts";
 import type {
   KitchenConfig,
   ReconcilerConfig,
-  SpiceDbEnabledConfig,
-  ValkeyEnabledConfig,
+  SpiceDbConfig,
+  ValkeyConfig,
   WaitTimeConfig,
 } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
@@ -62,13 +62,13 @@ export interface RestaurantDependencies {
   readonly kitchenChanges: RestaurantSaved;
   /** ADR 43: Get Restaurant and List Restaurants are cached for `valkeyConfig.ttlMs`. */
   readonly valkey: Valkey;
-  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly valkeyConfig: ValkeyConfig;
   readonly cacheMetrics: CacheMetrics;
   readonly restaurantAccessControl: RestaurantAccessControl;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
   readonly spicedb: RelationshipsClient;
-  readonly spicedbConfig: SpiceDbEnabledConfig;
+  readonly spicedbConfig: SpiceDbConfig;
   readonly reconcilerConfig: ReconcilerConfig;
   readonly kitchenConfig: KitchenConfig;
   readonly waitTimeConfig: WaitTimeConfig;

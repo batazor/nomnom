@@ -16,7 +16,13 @@ import {
   createConsumerContainer,
 } from "../../di/consumer.ts";
 import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
-import { loadConfig, loadLocalEnv } from "../../pkg/config/config.ts";
+import {
+  database as databaseConfig,
+  loadConfig,
+  loadKafkaConfig,
+  loadLocalEnv,
+  loadValkeyConfig,
+} from "../../pkg/config/config.ts";
 import {
   type ConsumerClient,
   createConsumerClient,
@@ -34,32 +40,19 @@ const SERVICE_NAME = "restaurants-consumer";
 loadLocalEnv();
 const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
 logUncaughtErrors(logger);
-const config = loadConfig(process.env, { process: "consumer" });
-// MongoDB and Kafka are required: without them the process does not start.
-// Collections and indexes, the Inbox included, are migrated by the process
-// itself before it consumes (local ADR 2).
-if (!config.database.enabled) {
-  throw new Error(
-    "MONGODB__URI is required: restaurants-consumer writes the Inbox and Restaurant Orders to MongoDB",
-  );
-}
-if (!config.kafka.enabled) {
-  throw new Error(
-    "KAFKA__BROKERS is required: restaurants-consumer reads Integration Events from Kafka",
-  );
-}
-// Valkey (ADR 43) is required: the consumer refreshes the catalog read cache
-// by restaurant-events and menu-events. While Valkey is down the refresh
+const config = loadConfig(process.env);
+// Required infrastructure: an empty or invalid value stops startup. MongoDB
+// holds the Inbox and Restaurant Orders; collections and indexes, the Inbox
+// included, are migrated by the process itself before it consumes (local
+// ADR 2). Kafka carries the Integration Events (ADR 28). Valkey (ADR 43) is
+// the catalog read cache the consumer refreshes; while it is down the refresh
 // waits and its offsets stay uncommitted.
-if (!config.valkey.enabled) {
-  throw new Error(
-    "VALKEY__URL is required: restaurants-consumer refreshes the catalog read cache in Valkey",
-  );
-}
-const valkeyConfig = config.valkey;
+const mongodb = databaseConfig.load(process.env, "consumer");
+const kafka = loadKafkaConfig(process.env);
+const valkeyConfig = loadValkeyConfig(process.env);
 
 const telemetry = startTelemetry(SERVICE_NAME);
-const database = await connectDatabase(config.database);
+const database = await connectDatabase(mongodb);
 const valkey = connectValkey(valkeyConfig, {
   connectionName: SERVICE_NAME,
   logger: logger.child({ operation: "valkey" }),
@@ -75,20 +68,20 @@ try {
     database.db,
     logger.child({ operation: "migrate" }).info,
   );
-  deadLetters = await KafkaPublisher.connect(config.kafka, {
+  deadLetters = await KafkaPublisher.connect(kafka, {
     allowAutoTopicCreation: true,
   });
   kafkaConsumer = createConsumerClient({
-    brokers: config.kafka.brokers,
-    clientId: config.kafka.clientId,
+    brokers: kafka.brokers,
+    clientId: kafka.clientId,
     groupId: config.consumer.groupId,
     fromBeginning: config.consumer.fromBeginning,
   });
   // A new refresh group starts at the end of the streams: older changes are
   // already in MongoDB, a miss reads them.
   cacheRefreshConsumer = createConsumerClient({
-    brokers: config.kafka.brokers,
-    clientId: config.kafka.clientId,
+    brokers: kafka.brokers,
+    clientId: kafka.clientId,
     groupId: valkeyConfig.refreshGroup,
     fromBeginning: false,
   });

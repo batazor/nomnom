@@ -1,12 +1,4 @@
 import { loadEnvFile } from "node:process";
-import { loadValkeyConfig, type ValkeyConfig } from "./cache.ts";
-import {
-  type KafkaConfig,
-  loadKafkaConfig,
-  loadSpiceDbConfig,
-  type SpiceDbConfig,
-} from "./connections.ts";
-import * as database from "./database.ts";
 import {
   DEFAULT_DRAIN_TIMEOUT,
   DEFAULT_MANAGEMENT_PORT,
@@ -19,7 +11,6 @@ import {
   READINESS_DELAY_ENV,
   TELEMETRY_FLUSH_TIMEOUT_ENV,
 } from "./env.ts";
-import { type IdentityConfig, loadIdentityConfig } from "./identity.ts";
 import { type KitchenConfig, loadKitchenConfig } from "./kitchen.ts";
 import { durationSchema, portSchema } from "./schemas.ts";
 import { loadWaitTimeConfig, type WaitTimeConfig } from "./wait-time.ts";
@@ -56,18 +47,18 @@ export interface ShutdownConfig {
   readonly telemetryFlushTimeoutMs: number;
 }
 
+/**
+ * Tunables of the processes with explicit defaults. Required infrastructure
+ * (MongoDB, Valkey, SpiceDB, Kafka, identity) is loaded by each process that
+ * needs it with its own loader, which stops startup on an empty value.
+ */
 export interface AppConfig {
   readonly server: ServerConfig;
   readonly management: ManagementConfig;
   readonly shutdown: ShutdownConfig;
-  readonly identity: IdentityConfig;
-  readonly spicedb: SpiceDbConfig;
-  readonly database: database.Config;
-  readonly valkey: ValkeyConfig;
   readonly reconciler: ReconcilerConfig;
   readonly kitchen: KitchenConfig;
   readonly waitTime: WaitTimeConfig;
-  readonly kafka: KafkaConfig;
   readonly consumer: ConsumerConfig;
 }
 
@@ -83,14 +74,8 @@ export function loadLocalEnv(path = ".env"): void {
   }
 }
 
-export type LoadConfigOptions = Readonly<{
-  /** Процесс, по которому выбирается default `MONGODB__MAX_POOL_SIZE`. */
-  process?: database.Process;
-}>;
-
 export function loadConfig(
   environment: Record<string, string | undefined> = process.env,
-  options: LoadConfigOptions = {},
 ): AppConfig {
   const server = loadServerConfig(environment);
   const management = Object.freeze({
@@ -107,14 +92,9 @@ export function loadConfig(
     server,
     management,
     shutdown: loadShutdownConfig(environment),
-    identity: loadIdentityConfig(environment),
-    spicedb: loadSpiceDbConfig(environment),
-    database: database.load(environment, options.process),
-    valkey: loadValkeyConfig(environment),
     reconciler: loadReconcilerConfig(environment),
     kitchen: loadKitchenConfig(environment),
     waitTime: loadWaitTimeConfig(environment),
-    kafka: loadKafkaConfig(environment),
     consumer: loadConsumerConfig(environment),
   });
 }

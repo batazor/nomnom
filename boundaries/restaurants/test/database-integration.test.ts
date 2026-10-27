@@ -87,7 +87,6 @@ describe("startup migration", () => {
 
   before(async () => {
     database = await connectDatabase({
-      enabled: true,
       uri,
       database: "restaurants_test",
       timeoutMs: 5000,
@@ -217,7 +216,6 @@ describe("startup migration", () => {
       import { connectDatabase } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/repository/client.ts"))};
       import { migrateRestaurantsDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/repository/migrate.ts"))};
       const database = await connectDatabase({
-        enabled: true,
         uri: process.env.MONGODB_URI,
         database: process.env.MIGRATE_DATABASE,
         timeoutMs: 10000,
@@ -485,7 +483,6 @@ describe("MongoDB storage", () => {
 
   before(async () => {
     database = await connectDatabase({
-      enabled: true,
       uri,
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,

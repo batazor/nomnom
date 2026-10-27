@@ -64,7 +64,6 @@ describe("Restaurant and Menu Integration Events are written to the Outbox", () 
 
   before(async () => {
     database = await connectDatabase({
-      enabled: true,
       uri,
       database: `restaurants_events_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,

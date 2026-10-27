@@ -142,11 +142,6 @@ export async function createSubjectResolver(
   log: (message: string) => void = () => {},
   options: CreateSubjectResolverOptions = {},
 ): Promise<SubjectResolver> {
-  if (!identity.enabled) {
-    throw new Error(
-      "IDENTITY__ISSUER, IDENTITY__AUDIENCE and IDENTITY__JWKS_FILE are required",
-    );
-  }
   return new ServiceTokenSubjectResolver({
     issuer: identity.issuer,
     audience: identity.audience,

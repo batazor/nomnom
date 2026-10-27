@@ -6,7 +6,7 @@ import {
   type SpiceDbClient,
 } from "../infrastructure/spicedb/client.ts";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
-import type { SpiceDbEnabledConfig } from "../pkg/config/config.ts";
+import type { SpiceDbConfig } from "../pkg/config/config.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 
 // Runs against SpiceDB bootstrapped with authorization/bootstrap.yaml
@@ -16,10 +16,9 @@ const endpoint = spiceDbEndpoint();
 const clients: SpiceDbClient[] = [];
 
 function accessControl(
-  config: Partial<SpiceDbEnabledConfig> = {},
+  config: Partial<SpiceDbConfig> = {},
 ): SpiceDbAccessControl {
-  const resolved: SpiceDbEnabledConfig = {
-    enabled: true,
+  const resolved: SpiceDbConfig = {
     endpoint,
     presharedKey: "devkey",
     insecure: true,

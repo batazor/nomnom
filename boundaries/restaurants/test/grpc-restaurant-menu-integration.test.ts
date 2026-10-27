@@ -84,7 +84,6 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
       },
     );
     database = await connectDatabase({
-      enabled: true,
       uri,
       database: `restaurants_commands_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,

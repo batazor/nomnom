@@ -230,7 +230,6 @@ test("loads the user assertion settings", () => {
     IDENTITY__USER_DELEGATES: " bff , support-console ",
   });
 
-  assert.ok(config.enabled);
   assert.equal(config.user.issuer, "nomnom-bff");
   assert.equal(config.user.jwksFile, BFF_JWKS_FILE);
   assert.deepEqual([...config.user.delegates], ["bff", "support-console"]);

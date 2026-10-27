@@ -27,7 +27,7 @@ export class KafkaPublisher implements MessagePublisher {
   }
 
   static async connect(
-    config: Extract<KafkaConfig, { enabled: true }>,
+    config: KafkaConfig,
     options: {
       /**
        * Разрешить брокеру создать topic при первой публикации, если это

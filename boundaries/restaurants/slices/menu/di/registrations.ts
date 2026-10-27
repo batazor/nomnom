@@ -8,7 +8,7 @@ import type { Db } from "mongodb";
 import type { Clock } from "../../../pkg/application/clock.ts";
 import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
 import type { Outbox } from "../../../pkg/application/outbox.ts";
-import type { ValkeyEnabledConfig } from "../../../pkg/config/config.ts";
+import type { ValkeyConfig } from "../../../pkg/config/config.ts";
 import type { Registrations } from "../../../pkg/di/container.ts";
 import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
 import type { DatabaseUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
@@ -42,7 +42,7 @@ export interface MenuDependencies {
   readonly restaurants: RestaurantRepository;
   /** ADR 43: Get Menu is cached in Valkey for `valkeyConfig.ttlMs`. */
   readonly valkey: Valkey;
-  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly valkeyConfig: ValkeyConfig;
   readonly cacheMetrics: CacheMetrics;
 }
 

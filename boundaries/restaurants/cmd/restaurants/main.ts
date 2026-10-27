@@ -6,9 +6,13 @@ import { createRestaurantsContainer } from "../../di/restaurants.ts";
 import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
 import {
+  database as databaseConfig,
   loadConfig,
+  loadIdentityConfig,
   loadLocalEnv,
   loadSimulatorConfig,
+  loadSpiceDbConfig,
+  loadValkeyConfig,
 } from "../../pkg/config/config.ts";
 import { connectDatabase } from "../../pkg/infrastructure/repository/client.ts";
 import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
@@ -28,27 +32,17 @@ const config = loadConfig();
 // Demo Simulator (FR-606): required in this process; an empty or invalid
 // value or MIN_DELAY > MAX_DELAY stops startup.
 const simulator = loadSimulatorConfig(process.env);
-// MongoDB (ADR 8, local ADR 1) is required; the process migrates its
-// collections, validators and indexes itself before serving (local ADR 2).
-if (!config.database.enabled) {
-  throw new Error(
-    "MONGODB__URI is required: restaurants stores its data in MongoDB",
-  );
-}
-// SpiceDB (ADR 18) is required; errors and timeouts fail closed as
-// UNAVAILABLE. Without SPICEDB__ENDPOINT the process does not start.
-if (!config.spicedb.enabled) {
-  throw new Error(
-    "SPICEDB__ENDPOINT is required: restaurants checks permissions in SpiceDB",
-  );
-}
-// Valkey (ADR 43, local ADR 3) caches Get Restaurant and Get Menu. The URL is
-// required; an unreachable Valkey only makes reads bypass the cache.
-if (!config.valkey.enabled) {
-  throw new Error(
-    "VALKEY__URL is required: restaurants caches catalog reads in Valkey",
-  );
-}
+// Required infrastructure: an empty or invalid value stops startup.
+// MongoDB (ADR 8, local ADR 1): the process migrates its collections,
+// validators and indexes itself before serving (local ADR 2).
+const mongodb = databaseConfig.load(process.env, "api");
+// SpiceDB (ADR 18): errors and timeouts fail closed as UNAVAILABLE.
+const spicedb = loadSpiceDbConfig(process.env);
+// Valkey (ADR 43, local ADR 3) caches Get Restaurant and Get Menu; an
+// unreachable Valkey only makes reads bypass the cache.
+const valkeyConfig = loadValkeyConfig(process.env);
+// Projected ServiceAccount tokens (ADR 27) and BFF user assertions (ADR 32).
+const identity = loadIdentityConfig(process.env);
 // Telemetry starts before the application (docs/cloud-native-runtime.md):
 // OTLP metrics and traces are exported only with OTEL_EXPORTER_OTLP_*.
 const telemetry = startTelemetry(SERVICE_NAME);
@@ -56,25 +50,23 @@ const telemetry = startTelemetry(SERVICE_NAME);
 // assertions (ADR 32). Missing issuer, audience or JWKS, an invalid JWKS or
 // allowlist stops startup.
 const identityLog = logger.child({ operation: "identity" });
-const subjects = await createSubjectResolver(
-  config.identity,
-  identityLog.warn,
-  { audit: identityLog.info },
-);
-const database = await connectDatabase(config.database);
-const valkey = connectValkey(config.valkey, {
+const subjects = await createSubjectResolver(identity, identityLog.warn, {
+  audit: identityLog.info,
+});
+const database = await connectDatabase(mongodb);
+const valkey = connectValkey(valkeyConfig, {
   connectionName: SERVICE_NAME,
   logger: logger.child({ operation: "valkey" }),
 });
 const container = createRestaurantsContainer({
   server: config.server,
-  spicedb: config.spicedb,
+  spicedb,
   reconciler: config.reconciler,
   kitchen: config.kitchen,
   waitTime: config.waitTime,
   simulator,
   database,
-  valkeyConfig: config.valkey,
+  valkeyConfig,
   valkey: valkey.client,
   subjects,
   logger,

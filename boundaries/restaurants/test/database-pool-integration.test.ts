@@ -44,7 +44,6 @@ describe("MongoDB connection pool metrics", () => {
   before(async () => {
     database = await connectDatabase(
       {
-        enabled: true,
         uri,
         database: databaseName,
         timeoutMs: 5000,

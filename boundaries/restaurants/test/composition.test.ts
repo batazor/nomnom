@@ -14,6 +14,7 @@ import {
   type AppConfig,
   loadConfig,
   loadSimulatorConfig,
+  loadSpiceDbConfig,
 } from "../pkg/config/config.ts";
 import {
   connectDatabase,
@@ -47,10 +48,9 @@ const resourcesOf = (
   config: AppConfig,
   database: DatabaseConnection,
 ): RestaurantsResources => {
-  if (!config.spicedb.enabled) throw new Error("SpiceDB must be configured");
   return {
     server: config.server,
-    spicedb: config.spicedb,
+    spicedb: loadSpiceDbConfig(environment),
     reconciler: config.reconciler,
     kitchen: config.kitchen,
     waitTime: config.waitTime,
@@ -227,7 +227,6 @@ describe("composed processes against MongoDB", () => {
 
   before(async () => {
     database = await connectDatabase({
-      enabled: true,
       uri,
       database: `restaurants_test_${randomUUID().slice(0, 8)}`,
       timeoutMs: 5000,

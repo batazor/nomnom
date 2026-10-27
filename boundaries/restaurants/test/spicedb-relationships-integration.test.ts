@@ -43,7 +43,6 @@ describe("SpiceDB restaurant relationships", () => {
   let client: SpiceDbClient | undefined;
   const spicedb = (): SpiceDbClient => {
     client ??= createSpiceDbClient({
-      enabled: true,
       endpoint,
       presharedKey: "devkey",
       insecure: true,

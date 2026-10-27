@@ -3,7 +3,7 @@
 // access-control, relationship and reconciliation adapters share it.
 import { deadlineInterceptor, v1 } from "@authzed/authzed-node";
 
-import type { SpiceDbEnabledConfig } from "../../pkg/config/config.ts";
+import type { SpiceDbConfig } from "../../pkg/config/config.ts";
 import {
   clientTelemetryInterceptor,
   grpcPeer,
@@ -44,9 +44,7 @@ export interface SpiceDbClient extends PermissionsClient, RelationshipsClient {
  * context in its metadata and `rpc.client.call.duration`; the span covers the
  * deadline interceptor.
  */
-export function createSpiceDbClient(
-  config: SpiceDbEnabledConfig,
-): SpiceDbClient {
+export function createSpiceDbClient(config: SpiceDbConfig): SpiceDbClient {
   const client = v1.NewClient(
     config.presharedKey,
     config.endpoint,

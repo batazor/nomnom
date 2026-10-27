@@ -14,7 +14,7 @@ import type { Clock } from "../pkg/application/clock.ts";
 import type {
   ConsumerConfig,
   KitchenConfig,
-  ValkeyEnabledConfig,
+  ValkeyConfig,
   WaitTimeConfig,
 } from "../pkg/config/config.ts";
 import {
@@ -111,7 +111,7 @@ export type ConsumerResources = Readonly<{
   kafkaConsumer: ConsumerClient;
   /** Consumer of the cache refresh group, not yet connected either. */
   cacheRefreshConsumer: ConsumerClient;
-  valkeyConfig: ValkeyEnabledConfig;
+  valkeyConfig: ValkeyConfig;
   /** Opened by cmd/restaurants-consumer. */
   valkey: Valkey;
   /** Producer of `<stream>.dlq` dead letters. */
@@ -125,7 +125,7 @@ export interface ConsumerCradle {
   readonly db: Db;
   readonly kafkaConsumer: ConsumerClient;
   readonly cacheRefreshConsumer: ConsumerClient;
-  readonly valkeyConfig: ValkeyEnabledConfig;
+  readonly valkeyConfig: ValkeyConfig;
   readonly valkey: Valkey;
   readonly cacheMetrics: CacheMetrics;
   /** ADR 43: opening and availability events rewrite the read cache keys. */
