@@ -1,5 +1,6 @@
 # Политики Envoy Proxy public gateway: ingress из любого источника на HTTPS listener,
-# egress только к портам webhooks прикладных pod, Cosmo Router BFF (публичный API, ADR 41),
+# egress только к портам webhooks прикладных pod, nginx customer UI,
+# Cosmo Router BFF (публичный API, ADR 41),
 # faro.receiver Alloy, DNS и xDS controller.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -72,6 +73,17 @@ spec:
       ports:
         - protocol: TCP
           port: 3010
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nomnom-ui
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ui
+              app.kubernetes.io/instance: ui
+      ports:
+        - protocol: TCP
+          port: 8080
     - to:
         - namespaceSelector:
             matchLabels:

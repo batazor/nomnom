@@ -1,0 +1,27 @@
+# Values тестового kind-окружения для chart boundaries/ui/ops/helm (ADR 12, локальный ADR 2 UI).
+# image.repository и image.tag задаёт Skaffold (setValueTemplates) тегом локальной сборки.
+# Браузер открывает https://app.nomnom.localhost:18085 (listener app публичного gateway,
+# manifests/gateway/public-gateway.yaml; корень доверия — make kind-local-ca).
+image:
+  # Образ загружен через kind load; Never гарантирует запуск именно собранной версии.
+  pullPolicy: Never
+
+# HTTPRoute ui публичного gateway — в nomnom-gateway.
+publicGateway:
+  namespace: nomnom-gateway
+
+config:
+  # Публичный gateway kind (ADR 41): GET /markets и /m/{market}/graphql.
+  publicApiUrl: https://api.nomnom.localhost:18085
+  locale: ru
+  deploymentEnvironment: kind
+  # ADR 35. ТОЛЬКО для kind: Dex виден браузеру через
+  #   kubectl -n nomnom-data port-forward svc/dex 5556
+  # (issuer — localhost, на него завязана проверка tokens BFF); redirect URI и origin
+  # https://app.nomnom.localhost:18085 разрешены в chart ops/kind/bootstrap (dex).
+  oidc:
+    issuer: http://localhost:5556/dex
+    clientId: nomnom-ui
+    audience: nomnom-bff
+    demoEmailDomain: nomnom.test
+    demoPassword: nomnom

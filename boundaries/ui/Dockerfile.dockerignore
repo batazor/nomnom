@@ -1,0 +1,9 @@
+# Build context of ui/Dockerfile is boundaries/: only the UI sources and the client schema
+# of BFF reach the build.
+*
+!ui/
+!bff/client-schema.graphql
+ui/node_modules
+ui/dist
+ui/.env*
+ui/*.tsbuildinfo

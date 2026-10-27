@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+# Customer UI за публичным gateway (локальный ADR 2 UI): listener app (app.nomnom.localhost)
+# отдаёт статику nginx release ui. Клиент — net-probe в nomnom-outsider, как в cell-routing:
+# HTTPS на Service public-gateway, сертификат проверяется корнем локального CA.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: customer-ui
+spec:
+  description: >
+    index.html и любой путь SPA отдаются с Content-Security-Policy, connect-src которой
+    разрешает публичный API и Dex окружения, и без кеша; hashed assets — immutable;
+    /config.js — окружение kind из ConfigMap, без кеша; список Market отвечает на CORS preflight.
+  steps:
+    - name: policies applied
+      use:
+        template: ../templates/netpol-applied.yaml
+    - name: UI through the public gateway
+      try:
+        - script:
+            timeout: 3m
+            content: |
+              set -eu
+              ca="$(kubectl -n cert-manager get secret nomnom-local-ca -o jsonpath='{.data.ca\.crt}' | base64 -d)"
+              get() {
+                kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
+                  printf "%s" "$0" > /tmp/nomnom-ca.crt
+                  curl -sS --fail-with-body --max-time 10 --cacert /tmp/nomnom-ca.crt -D - \
+                    --connect-to app.nomnom.localhost:443:public-gateway.envoy-gateway-system.svc.cluster.local:8443 \
+                    "https://app.nomnom.localhost$1"
+                ' "$ca" "$1"
+              }
+              header() { printf '%s' "$1" | tr -d '\r' | grep -i "^$2:" | cut -d' ' -f2-; }
+              deadline=$(($(date +%s) + 120))
+              until index="$(get /)"; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "UI is not served: $index" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+              csp="$(header "$index" content-security-policy)"
+              printf '%s' "$csp" | grep -q "script-src 'self';" || { echo "CSP: $csp" >&2; exit 1; }
+              printf '%s' "$csp" | grep -q "connect-src 'self' https://api.nomnom.localhost:18085 http://localhost:5556;" ||
+                { echo "CSP connect-src: $csp" >&2; exit 1; }
+              printf '%s' "$csp" | grep -q "frame-ancestors 'none'" || { echo "CSP: $csp" >&2; exit 1; }
+              allowlist="$(header "$index" connection-allowlist)"
+              [ "$allowlist" = '("https://api.nomnom.localhost:18085/*" "http://localhost:5556/*" response-origin)' ] ||
+                { echo "Connection-Allowlist: $allowlist" >&2; exit 1; }
+              [ "$(header "$index" cache-control)" = no-cache ] || { echo "index cache: $index" >&2; exit 1; }
+              printf '%s' "$index" | grep -q '<script src="/config.js"></script>' || { echo "index: $index" >&2; exit 1; }
+
+              # SPA: неизвестный путь — тот же index.html.
+              deep="$(get /auth/callback)"
+              printf '%s' "$deep" | grep -q '<div id="root"></div>' || { echo "deep path: $deep" >&2; exit 1; }
+
+              asset="$(printf '%s' "$index" | grep -oE '/assets/[^"]+\.js' | head -1)"
+              asset_response="$(get "$asset")"
+              [ "$(header "$asset_response" cache-control)" = "public, max-age=31536000, immutable" ] ||
+                { echo "asset cache: $(header "$asset_response" cache-control)" >&2; exit 1; }
+
+              config="$(get /config.js)"
+              [ "$(header "$config" cache-control)" = no-store ] || { echo "config cache: $config" >&2; exit 1; }
+              printf '%s' "$config" | grep -q '"VITE_PUBLIC_API_URL":"https://api.nomnom.localhost:18085"' ||
+                { echo "config.js: $config" >&2; exit 1; }
+              printf '%s' "$config" | grep -q '"VITE_ENABLE_MOCKS":"false"' || { echo "config.js: $config" >&2; exit 1; }
+              # Список Market страница читает с другого origin (api.nomnom.localhost): ответ
+              # Envoy (direct response) несёт CORS-заголовки, которые ставит control plane.
+              markets="$(kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
+                printf "%s" "$0" > /tmp/nomnom-ca.crt
+                curl -sS --fail-with-body --max-time 10 --cacert /tmp/nomnom-ca.crt -D - -o /dev/null -X OPTIONS \
+                  -H "Origin: https://app.nomnom.localhost:18085" -H "Access-Control-Request-Method: GET" \
+                  --connect-to api.nomnom.localhost:443:public-gateway.envoy-gateway-system.svc.cluster.local:8443 \
+                  https://api.nomnom.localhost/markets
+              ' "$ca")"
+              [ "$(header "$markets" access-control-allow-origin)" = "*" ] || { echo "markets CORS: $markets" >&2; exit 1; }
+              echo "customer UI served: $asset"
+            check:
+              ($error): ~

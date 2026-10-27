@@ -1,0 +1,107 @@
+# Values по умолчанию chart customer UI (ADR 12, локальный ADR 2 UI). Окружение задаёт свои
+# values: обязательные поля config пусты, и chart без них не рендерится.
+
+replicaCount: 1
+
+image:
+  registry: ""
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+global: {}
+component: web
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # Pod не обращается к Kubernetes API.
+  automount: false
+
+podAnnotations: {}
+podLabels: {}
+
+# nginx-unprivileged: пользователь nginx (101).
+podSecurityContext:
+  runAsUser: 101
+  runAsGroup: 101
+  seccompProfile:
+    type: RuntimeDefault
+
+# nginx при старте пишет конфигурацию из шаблонов в /etc/nginx/conf.d и временные файлы в
+# /tmp, поэтому корневая ФС не read-only.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  portName: http
+  annotations: {}
+
+resources:
+  requests:
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 1
+  failureThreshold: 1
+
+# Окружение приложения: /config.js (window.__NOMNOM_CONFIG__ с ключами VITE_*, те же
+# правила, что у .env.local; src/shared/config/runtime-config.ts). Из тех же адресов chart
+# строит connect-src Content-Security-Policy.
+config:
+  # Базовый адрес публичного API (ADR 41): GET /markets и /m/{market}/graphql. Обязателен.
+  publicApiUrl: ""
+  # ru или en. Обязателен.
+  locale: ""
+  # Обязателен.
+  deploymentEnvironment: ""
+  # Faro collector; пусто — browser telemetry выключена. С ним обязателен appVersion.
+  faroUrl: ""
+  appVersion: ""
+  # Вход в браузере через OIDC (ADR 35). Обязателен.
+  oidc:
+    issuer: ""
+    clientId: ""
+    audience: ""
+    # Демо-вход рядом с кнопкой входа; пусто — не показывается.
+    demoEmailDomain: ""
+    demoPassword: ""
+
+# Неймспейс HTTPRoute публичного gateway, который ведёт в Service UI (ReferenceGrant).
+publicGateway:
+  namespace: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

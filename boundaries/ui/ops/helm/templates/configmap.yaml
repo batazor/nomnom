@@ -1,0 +1,13 @@
+{{- /*
+/config.js приложения: окружение задаётся при деплое, образ один для всех окружений
+(локальный ADR 2 UI). nginx отдаёт его с Cache-Control: no-store.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  labels:
+    {{- include "ui.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+data:
+  config.js: |
+    window.__NOMNOM_CONFIG__ = Object.freeze({{ include "ui.runtimeConfig" . }});

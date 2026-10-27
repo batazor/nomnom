@@ -128,11 +128,18 @@ build:
       docker:
         dockerfile: ops/kind/e2e/probe/Dockerfile
         target: demo-seed
-    # Control plane (ADR 41): реестр Cell и Market. Последний artifact: индексы в patches
-    # профилей (1, 3, 5) не меняются.
+    # Control plane (ADR 41): реестр Cell и Market.
     - image: nomnom/controlplane
       context: ../../../boundaries/controlplane
       docker:
+        target: runtime
+    # Customer UI (локальный ADR 2 UI): vite build за nginx. Контекст — boundaries/ ради
+    # клиентской схемы BFF; лишнее отсекает ui/Dockerfile.dockerignore. Последний artifact:
+    # индексы в patches профилей (1, 3, 5) не меняются.
+    - image: nomnom/ui
+      context: ../../../boundaries
+      docker:
+        dockerfile: ui/Dockerfile
         target: runtime
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
@@ -173,6 +180,8 @@ deploy:
                   -l gateway.envoyproxy.io/owning-gateway-name=internal
                 k -n nomnom-gateway wait gateway/public --for=condition=Programmed --timeout=300s
                 k -n nomnom-gateway wait httproute/payments-provider-webhooks --timeout=300s \
+                  --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
+                k -n nomnom-gateway wait httproute/ui --timeout=300s \
                   --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=public
@@ -340,7 +349,7 @@ deploy:
           image.tag: "{{.IMAGE_TAG_nomnom_kafka_connect}}"
       # Control plane (ADR 41): глобальный реестр Cell, Market и Market Placement; БД и SpiceDB
       # готовит chart ../bootstrap. Cell cell-1 и Market berlin регистрирует Job chart ../demo.
-      # Последний release (индекс 11): индексы в patches профилей не меняются.
+      # Индекс 11 — в patches grafana-cloud.
       - name: controlplane
         chartPath: ../../../boundaries/controlplane/ops/helm
         namespace: nomnom-controlplane
@@ -349,6 +358,17 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_controlplane}}"
           image.tag: "{{.IMAGE_TAG_nomnom_controlplane}}"
+      # Customer UI (локальный ADR 2 UI): https://app.nomnom.localhost:18085, HTTPRoute ui —
+      # manifests/gateway/public-gateway.yaml. Последний release (индекс 12): индексы в
+      # patches профилей не меняются.
+      - name: ui
+        chartPath: ../../../boundaries/ui/ops/helm
+        namespace: nomnom-ui
+        createNamespace: true
+        valuesFiles: [../values/ui.yaml]
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_ui}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_ui}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
   # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.
@@ -407,6 +427,10 @@ profiles:
       - op: add
         path: /deploy/helm/releases/7/valuesFiles/-
         value: ../values/bff-grafana-cloud.yaml
+      # Customer UI (индекс 12): Faro collector публичного gateway.
+      - op: add
+        path: /deploy/helm/releases/12/valuesFiles/-
+        value: ../values/ui-grafana-cloud.yaml
   # make kind-dev: restaurants и payments собираются из stage dev и получают file sync —
   # правка исходников копируется в контейнер, процесс перезапускает node --watch / watchfiles.
   # Go и Rust компилируются (а orders на distroless без tar), поэтому идут через пересборку.

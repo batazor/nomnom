@@ -1,4 +1,5 @@
 # Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера),
+# customer UI (app.nomnom.localhost, локальный ADR 2 UI),
 # публичный API клиентов (api.nomnom.localhost — router ячеек, ADR 41) и browser telemetry
 # customer UI (telemetry.nomnom.localhost, route в manifests/observability/faro-route.yaml —
 # только с profile grafana-cloud).
@@ -8,7 +9,7 @@
 # Только HTTPS: TLS терминирует Envoy сертификатом, который cert-manager выпускает по
 # аннотации Gateway от локального CA (chart ops/kind/bootstrap, templates/certs.yaml) и продлевает сам.
 # kind: NodePort 30085 → host 127.0.0.1:${WEBHOOKS_HOST_PORT} (cluster.yaml); имена
-# webhooks.nomnom.localhost и api.nomnom.localhost резолвятся в 127.0.0.1.
+# webhooks.nomnom.localhost, app.nomnom.localhost и api.nomnom.localhost резолвятся в 127.0.0.1.
 #
 # Маршруты listener api (HTTPRoute market-<market_id> и список Market markets) пишет control
 # plane из своего реестра (server-side apply, ADR 41); здесь — только их политики.
@@ -90,6 +91,21 @@ spec:
         kinds:
           - group: gateway.networking.k8s.io
             kind: HTTPRoute
+    # Customer UI: статика nginx (chart boundaries/ui/ops/helm, release ui в nomnom-ui).
+    - name: app
+      protocol: HTTPS
+      port: 8443
+      hostname: app.nomnom.localhost
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: public-gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
     - name: telemetry
       protocol: HTTPS
       port: 8443
@@ -157,28 +173,9 @@ spec:
   connection:
     bufferLimit: 64Ki
 ---
-# CORS списка Market: Envoy отвечает на GET /markets сам (HTTPRouteFilter directResponse,
-# HTTPRoute markets пишет control plane), Cosmo Router CORS этого пути не видит. Как у Router —
-# любой origin; Faro добавляет W3C trace context ко всем запросам публичного API.
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: SecurityPolicy
-metadata:
-  name: public-gateway-markets-cors
-  namespace: nomnom-gateway
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      name: markets
-  cors:
-    allowOrigins:
-      - "*"
-    allowMethods:
-      - GET
-    allowHeaders:
-      - traceparent
-      - tracestate
----
+# CORS списка Market (GET /markets, Envoy отвечает сам через HTTPRouteFilter directResponse)
+# задаёт control plane заголовками ответа в HTTPRoute markets: CORS-политику Envoy берёт из
+# route entry, которого у direct response нет, поэтому SecurityPolicy cors здесь не действует.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -198,6 +195,27 @@ spec:
         - name: payments
           namespace: nomnom-payments
           port: 8085
+---
+# Customer UI: весь listener app — в nginx UI (SPA: любой путь отдаёт index.html).
+# ReferenceGrant — в chart UI.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ui
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: public
+      sectionName: app
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ui
+          namespace: nomnom-ui
+          port: 8080
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant

@@ -106,6 +106,18 @@ function parseOidc(env: RuntimeEnv): OidcConfig | undefined {
   });
 }
 
+// A built app reads its environment from /config.js, which the deployment
+// provides (ops/helm, ConfigMap): one image serves every environment. The
+// dev server and tests read the Vite env.
+declare global {
+  var __NOMNOM_CONFIG__: RuntimeEnv | undefined;
+}
+
 export function getRuntimeConfig(): RuntimeConfig {
-  return parseRuntimeConfig(import.meta.env);
+  if (!import.meta.env.PROD) return parseRuntimeConfig(import.meta.env);
+  const deployed = globalThis.__NOMNOM_CONFIG__;
+  if (deployed === undefined) {
+    throw new Error("/config.js of the deployment did not set __NOMNOM_CONFIG__");
+  }
+  return parseRuntimeConfig(deployed);
 }

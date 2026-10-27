@@ -1,0 +1,8 @@
+# Security headers of every response (AGENTS.md, Edge): the origin sends them, Cloudflare
+# does not rewrite them. UI__CONTENT_SECURITY_POLICY and UI__CONNECTION_ALLOWLIST come from
+# the chart, built from the same endpoints as config.js. add_header of a location drops the inherited ones, so every
+# location includes this file.
+add_header Content-Security-Policy "${UI__CONTENT_SECURITY_POLICY}" always;
+add_header Connection-Allowlist '${UI__CONNECTION_ALLOWLIST}' always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;

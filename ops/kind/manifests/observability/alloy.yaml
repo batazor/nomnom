@@ -39,8 +39,9 @@ data:
       server {
         listen_address           = "0.0.0.0"
         listen_port              = 12347
-        // Vite dev server customer UI (boundaries/ui, npm run dev).
-        cors_allowed_origins     = ["http://localhost:4173"]
+        // Vite dev server customer UI (boundaries/ui, npm run dev) и образ UI за публичным
+        // gateway (values/ui-grafana-cloud.yaml).
+        cors_allowed_origins     = ["http://localhost:4173", "https://app.nomnom.localhost:18085"]
         max_allowed_payload_size = "1MiB"
         rate_limiting {
           rate       = 50

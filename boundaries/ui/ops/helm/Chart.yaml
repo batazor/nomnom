@@ -1,0 +1,13 @@
+apiVersion: v2
+name: ui
+description: "Customer UI: статика vite build за nginx, конфигурация окружения в /config.js (локальный ADR 2 UI)."
+type: application
+# appVersion не задаётся: образ полностью описывается image.repository / image.tag в values.
+version: 0.1.0
+dependencies:
+  # Library chart: имена, labels, образ, рендер values и совместимость securityContext.
+  - name: common
+    version: 2.41.0
+    repository: oci://registry-1.docker.io/bitnamicharts
+    tags:
+      - bitnami-common

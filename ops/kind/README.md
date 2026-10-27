@@ -286,9 +286,13 @@ Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по а�
 `public` (`manifests/gateway/public-gateway.yaml`), только HTTPS:
 
 - `webhooks.nomnom.localhost` — только `POST /webhooks/provider` на порт `webhooks` payments;
+- `app.nomnom.localhost` — customer UI: весь listener в nginx release `ui` (неймспейс `nomnom-ui`,
+  chart `boundaries/ui/ops/helm`, values `values/ui.yaml`); браузер открывает
+  `https://app.nomnom.localhost:18085`, вход — через port-forward Dex (ADR 35);
 - `api.nomnom.localhost` — router ячеек ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)):
   `GET /markets` и `/m/<market_id>/…` в Cosmo Router Cell Market. Маршруты пишет control plane;
-  здесь — их политики: без request timeout (SSE-подписки) и CORS списка Market.
+  здесь — их политика: без request timeout (SSE-подписки). CORS списка Market control plane ставит
+  заголовками ответа маршрута `markets` (у direct response Envoy нет CORS-политики маршрута).
 
 Сертификат выпускает cert-manager (platform-модуль) по аннотации Gateway от локального CA
 (`bootstrap/templates/certs.yaml`: самоподписанный bootstrap → корень `nomnom-local-ca`) и
@@ -309,7 +313,8 @@ curl --cacert "$(make -s kind-local-ca)" --resolve api.nomnom.localhost:18085:12
 
 С profile `grafana-cloud` тот же gateway публикует на listener `telemetry.nomnom.localhost`
 `POST /collect` → `faro.receiver` Alloy (`manifests/observability/faro-route.yaml`). CORS
-разрешён только для `http://localhost:4173` (Vite dev server customer UI), rate limit 50 rps.
+разрешён для `http://localhost:4173` (Vite dev server customer UI) и `https://app.nomnom.localhost:18085`
+(развёрнутый UI, Faro включает `values/ui-grafana-cloud.yaml`), rate limit 50 rps.
 Traces браузера идут через тот же фильтр `service.namespace=nomnom`, логи и события Faro —
 в Loki с `service_name=customer-ui`. Для UI:
 `VITE_FARO_URL=https://telemetry.nomnom.localhost:18085/collect`; браузер должен доверять

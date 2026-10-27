@@ -10,6 +10,7 @@ resources:
   - namespaces/nomnom-payments
   - namespaces/nomnom-controlplane
   - namespaces/nomnom-bff
+  - namespaces/nomnom-ui
   - app-infrastructure.yaml
   - gateway.yaml
   - public-gateway.yaml

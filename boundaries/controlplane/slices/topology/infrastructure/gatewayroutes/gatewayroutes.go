@@ -126,13 +126,22 @@ func Build(cfg Config, routes []publishroutes.MarketRoute) ([]Resource, error) {
 					"type":     "ValueRef",
 					"valueRef": map[string]any{"group": "", "kind": "ConfigMap", "name": MarketsName},
 				},
+				// CORS of a public list without credentials, as the Router allows any
+				// origin. Envoy takes a CORS policy and route response headers from the
+				// route entry, which a direct response has not, so the headers are part of
+				// the response itself; Faro adds W3C trace context to every request.
+				"header": map[string]any{"set": []any{
+					map[string]any{"name": "Access-Control-Allow-Origin", "value": "*"},
+					map[string]any{"name": "Access-Control-Allow-Methods", "value": "GET"},
+					map[string]any{"name": "Access-Control-Allow-Headers", "value": "traceparent, tracestate"},
+				}},
 			}},
 		})},
 		{GVR: gvrHTTPRoute, Object: object("gateway.networking.k8s.io/v1", "HTTPRoute", cfg.Namespace, MarketsName, routeList, map[string]any{
 			"spec": map[string]any{
 				"parentRefs": parentRefs(cfg),
 				"rules": []any{map[string]any{
-					// OPTIONS reaches the CORS policy of the route for the preflight.
+					// The preflight OPTIONS gets the same answer with the CORS headers.
 					"matches": []any{methodMatch("GET"), methodMatch("OPTIONS")},
 					"filters": []any{map[string]any{
 						"type":         "ExtensionRef",

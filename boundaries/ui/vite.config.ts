@@ -30,7 +30,8 @@ function contentSecurityPolicy(origins: string[]): string {
   return [
     "default-src 'self'",
     "script-src 'self'",
-    // react-aria usePress prepends one fixed <style> with touch-action rules.
+    // react-aria usePress prepends one fixed <style> with touch-action rules;
+    // ops/helm (ui.contentSecurityPolicy) allows the same hash.
     "style-src 'self' 'sha256-38RhXrc7EdReTKsOm23ZPOCUgniTUUcjky8QOOrQx6o='",
     "img-src 'self' data:",
     "font-src 'self'",
@@ -49,33 +50,30 @@ function connectionAllowlist(origins: string[]): string {
   return `(${[...patterns, "response-origin"].join(" ")})`;
 }
 
-// The production build carries the CSP as a meta tag, because the hosting model
-// is not decided yet (ops/README.md). The dev server stays without it: React
-// Refresh injects an inline script. `vite preview` sends the real headers,
-// including those a meta tag cannot carry.
-function securityHeaders(mode: string): Plugin {
-  const origins = connectOrigins(loadEnv(mode, import.meta.dirname, "VITE_"));
+// The deployed origin sends these headers (nginx, ops/helm builds the same
+// policy; local ADR 2) and serves /config.js from a ConfigMap. `vite preview`
+// mirrors that origin from the Vite env, so a local build runs like the
+// deployed one. The dev server stays without them: React Refresh injects an
+// inline script.
+function previewOrigin(mode: string): Plugin {
+  const env = loadEnv(mode, import.meta.dirname, "VITE_");
+  const origins = connectOrigins(env);
   const csp = contentSecurityPolicy(origins);
 
   return {
-    name: "nomnom-security-headers",
-    transformIndexHtml: {
-      order: "post",
-      handler: (html, ctx) =>
-        ctx.server
-          ? html
-          : html.replace(
-              /<meta charset="UTF-8" \/>/,
-              `$&\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`,
-            ),
-    },
+    name: "nomnom-preview-origin",
     configurePreviewServer(server) {
-      server.middlewares.use((_req, res, next) => {
+      server.middlewares.use((req, res, next) => {
         res.setHeader(
           "Content-Security-Policy",
           `${csp}; frame-ancestors 'none'`,
         );
         res.setHeader("Connection-Allowlist", connectionAllowlist(origins));
+        if (req.url === "/config.js") {
+          res.setHeader("Content-Type", "text/javascript");
+          res.end(`window.__NOMNOM_CONFIG__ = Object.freeze(${JSON.stringify(env)});\n`);
+          return;
+        }
         next();
       });
     },
@@ -112,7 +110,7 @@ function kindApiProxy(): Record<string, ProxyOptions> {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), securityHeaders(mode)],
+  plugins: [react(), tailwindcss(), previewOrigin(mode)],
   resolve: {
     alias: [{ find: /^@public-schema(?=\?|$)/, replacement: publicSchemaPath }],
   },

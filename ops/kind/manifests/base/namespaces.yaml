@@ -52,6 +52,14 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: nomnom-ui
+  labels:
+    nomnom.dev/tier: app
+    nomnom.dev/app: ui
+---
+apiVersion: v1
+kind: Namespace
+metadata:
   name: nomnom-gateway
   labels:
     nomnom.dev/tier: gateway

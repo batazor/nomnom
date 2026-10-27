@@ -91,6 +91,12 @@ func TestTheMarketsListIsServedByTheGateway(t *testing.T) {
 	rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")
 	require.Len(t, rules, 1)
 	assert.NotContains(t, rules[0].(map[string]any), "backendRefs", "Envoy answers itself")
+	cors, _, _ := unstructured.NestedSlice(filter.Object, "spec", "directResponse", "header", "set")
+	assert.Equal(t, []any{
+		map[string]any{"name": "Access-Control-Allow-Origin", "value": "*"},
+		map[string]any{"name": "Access-Control-Allow-Methods", "value": "GET"},
+		map[string]any{"name": "Access-Control-Allow-Headers", "value": "traceparent, tracestate"},
+	}, cors, "a direct response gets no CORS policy of Envoy, so the headers are on the response")
 }
 
 func TestAnEmptyRegistryPublishesAnEmptyList(t *testing.T) {
