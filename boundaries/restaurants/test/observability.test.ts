@@ -147,6 +147,8 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
     const service = createRestaurantsService({
       getRestaurant: unused,
       getMenu: unused,
+      batchGetRestaurants: unused,
+      batchGetMenus: unused,
       listRestaurants: unused,
       listOwnedRestaurants: unused,
       receiveOrderRequest: unused,
@@ -162,6 +164,7 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
       reportPreparationDelay: unused,
       reportPreparationFailure: unused,
       registerRestaurant: unused,
+      updateRestaurant: unused,
       assignStaff: unused,
       revokeStaff: unused,
       openRestaurant: useCases.instrument(

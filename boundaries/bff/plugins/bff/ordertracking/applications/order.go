@@ -19,6 +19,14 @@ type Money struct {
 	Currency string
 }
 
+// Priority is the Premium Priority chosen at checkout (orders FR-650).
+type Priority string
+
+const (
+	PriorityStandard Priority = "standard"
+	PriorityPremium  Priority = "premium"
+)
+
 // OrderSnapshot is the Order as orders publishes it to an authorized customer.
 type OrderSnapshot struct {
 	ID           string
@@ -26,6 +34,10 @@ type OrderSnapshot struct {
 	State        string
 	Items        []OrderLine
 	Total        Money
+	// Priority is empty for a priority orders does not name.
+	Priority Priority
+	// PremiumFee is nil for a standard Order.
+	PremiumFee *Money
 	PlacedAt     time.Time
 	Facts        []Fact
 	// Cancellation is set only for a cancelled Order.

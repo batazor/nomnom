@@ -105,6 +105,13 @@ const restaurantSource = () => {
         const view = stored.get(id);
         return view === undefined ? undefined : catalogView(view);
       },
+      getMany: async (ids: readonly string[]) => {
+        reads += 1;
+        return ids.flatMap((id) => {
+          const view = stored.get(id);
+          return view === undefined ? [] : [catalogView(view)];
+        });
+      },
       list: async (criteria: { marketId: string; includeClosed: boolean }) => {
         reads += 1;
         return [...stored.values()]
@@ -177,6 +184,96 @@ describe("catalog read cache on Valkey (ADR 43)", () => {
     assert.equal(await cache.read(id, missing), undefined);
     assert.equal(reads, 2);
     assert.equal(await client.get(prefix + id), null);
+  });
+
+  test("readMany takes hits from one MGET and loads only the misses in one call", async () => {
+    const cache = cacheOf(60_000);
+    const [cachedId, missingId, unknownId] = [
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+    ];
+    const { load } = source("cached");
+    await cache.read(cachedId, load);
+    await stored(client, prefix + cachedId);
+    const batches: (readonly string[])[] = [];
+    const loadMany = async (missing: readonly string[]) => {
+      batches.push(missing);
+      return new Map(
+        missing
+          .filter((id) => id !== unknownId)
+          .map((id) => [id, { name: "loaded" }] as const),
+      );
+    };
+
+    const result = await cache.readMany(
+      [cachedId, missingId, unknownId],
+      loadMany,
+    );
+
+    assert.deepEqual(
+      result,
+      new Map([
+        [cachedId, { name: "cached" }],
+        [missingId, { name: "loaded" }],
+      ]),
+    );
+    assert.deepEqual(batches, [[missingId, unknownId]]);
+    await stored(client, prefix + missingId);
+    assert.equal(await client.get(prefix + unknownId), null);
+  });
+
+  test("readMany of keys all cached does not call the source", async () => {
+    const cache = cacheOf(60_000);
+    const ids = [randomUUID(), randomUUID()];
+    for (const id of ids) {
+      await cache.read(id, source(id).load);
+      await stored(client, prefix + id);
+    }
+
+    const result = await cache.readMany(ids, () =>
+      assert.fail("the source must not be read"),
+    );
+
+    assert.deepEqual([...result.keys()].sort(), [...ids].sort());
+  });
+});
+
+describe("Batch Get Restaurants through the cache (ADR 7, ADR 43)", () => {
+  let client: Valkey;
+
+  before(async () => {
+    client = new Valkey(valkeyUrl());
+    await ready(client);
+  });
+
+  after(() => client.quit());
+
+  test("a page of restaurants is one source read, the repeat is served by Valkey", async () => {
+    const world = restaurantSource();
+    const ids = [`r-${randomUUID()}`, `r-${randomUUID()}`];
+    for (const id of ids) {
+      world.stored.set(id, {
+        restaurantId: id,
+        name: id,
+        marketId: "berlin",
+        isOpen: true,
+      });
+    }
+    const catalog = new CachedRestaurantCatalog(world.source, {
+      client,
+      ttlMs: 60_000,
+      metrics: new CacheMetrics(),
+    });
+
+    const first = await catalog.getMany([...ids, "r-unknown"]);
+    assert.deepEqual(first.map((view) => view.restaurantId).sort(), ids.sort());
+    assert.equal(world.reads(), 1);
+    for (const id of ids) await stored(client, `restaurants:restaurant:${id}`);
+
+    const second = await catalog.getMany(ids);
+    assert.equal(second.length, 2);
+    assert.equal(world.reads(), 1);
   });
 });
 
@@ -485,7 +582,10 @@ describe("refresh by Integration Events (ADR 43)", () => {
       ],
     });
     const menus = new CachedMenuReader(
-      { getByRestaurantId: async () => menu() },
+      {
+        getByRestaurantId: async () => menu(),
+        getManyByRestaurantId: async () => [menu()],
+      },
       options(),
     );
     await menus.getByRestaurantId(restaurantId);
@@ -538,6 +638,16 @@ describe("catalog read cache without Valkey (ADR 43)", () => {
     assert.deepEqual(await cache.read("r-1", load), { name: "v1" });
     assert.deepEqual(await cache.read("r-1", load), { name: "v1" });
     assert.equal(state.reads, 2);
+  });
+
+  test("readMany bypasses the cache and loads every key from the source", async () => {
+    const batches: (readonly string[])[] = [];
+    const result = await cache.readMany(["r-1", "r-2"], async (missing) => {
+      batches.push(missing);
+      return new Map(missing.map((id) => [id, { name: id }] as const));
+    });
+    assert.deepEqual(batches, [["r-1", "r-2"]]);
+    assert.equal(result.size, 2);
   });
 
   test("a refresh keeps retrying until the consumer stops", async () => {

@@ -29,7 +29,10 @@ type Restaurant struct {
 	// Market of the Restaurant (ADR 41); immutable.
 	MarketId string `protobuf:"bytes,5,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	// Set by GetRestaurant and ListRestaurants only (FR-204).
-	WaitTime      *RestaurantWaitTime `protobuf:"bytes,6,opt,name=wait_time,json=waitTime,proto3" json:"wait_time,omitempty"`
+	WaitTime *RestaurantWaitTime `protobuf:"bytes,6,opt,name=wait_time,json=waitTime,proto3" json:"wait_time,omitempty"`
+	// Fee of Premium Priority in the currency of the restaurant (FR-202); unset
+	// when the restaurant offers no premium.
+	PremiumFee    *Money `protobuf:"bytes,7,opt,name=premium_fee,json=premiumFee,proto3" json:"premium_fee,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -95,6 +98,13 @@ func (x *Restaurant) GetMarketId() string {
 func (x *Restaurant) GetWaitTime() *RestaurantWaitTime {
 	if x != nil {
 		return x.WaitTime
+	}
+	return nil
+}
+
+func (x *Restaurant) GetPremiumFee() *Money {
+	if x != nil {
+		return x.PremiumFee
 	}
 	return nil
 }
@@ -288,14 +298,16 @@ var File_nomnom_restaurants_v1_restaurants_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_restaurants_proto_rawDesc = "" +
 	"\n" +
-	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"\xd2\x01\n" +
+	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"\x91\x02\n" +
 	"\n" +
 	"Restaurant\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
 	"\ais_open\x18\x03 \x01(\bR\x06isOpen\x12\x1b\n" +
 	"\tmarket_id\x18\x05 \x01(\tR\bmarketId\x12F\n" +
-	"\twait_time\x18\x06 \x01(\v2).nomnom.restaurants.v1.RestaurantWaitTimeR\bwaitTimeJ\x04\b\x04\x10\x05R\aaddress\"d\n" +
+	"\twait_time\x18\x06 \x01(\v2).nomnom.restaurants.v1.RestaurantWaitTimeR\bwaitTime\x12=\n" +
+	"\vpremium_fee\x18\a \x01(\v2\x1c.nomnom.restaurants.v1.MoneyR\n" +
+	"premiumFeeJ\x04\b\x04\x10\x05R\aaddress\"d\n" +
 	"\x12RestaurantWaitTime\x12\x1a\n" +
 	"\belevated\x18\x01 \x01(\bR\belevated\x122\n" +
 	"\x15expected_wait_minutes\x18\x02 \x01(\x05R\x13expectedWaitMinutes\";\n" +
@@ -332,12 +344,13 @@ var file_nomnom_restaurants_v1_restaurants_proto_goTypes = []any{
 }
 var file_nomnom_restaurants_v1_restaurants_proto_depIdxs = []int32{
 	1, // 0: nomnom.restaurants.v1.Restaurant.wait_time:type_name -> nomnom.restaurants.v1.RestaurantWaitTime
-	2, // 1: nomnom.restaurants.v1.MenuItem.price:type_name -> nomnom.restaurants.v1.Money
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2, // 1: nomnom.restaurants.v1.Restaurant.premium_fee:type_name -> nomnom.restaurants.v1.Money
+	2, // 2: nomnom.restaurants.v1.MenuItem.price:type_name -> nomnom.restaurants.v1.Money
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_restaurants_v1_restaurants_proto_init() }

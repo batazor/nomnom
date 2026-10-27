@@ -58,6 +58,8 @@ const startServer = async () => {
   const service = createRestaurantsService({
     getRestaurant: unused,
     getMenu: unused,
+    batchGetRestaurants: unused,
+    batchGetMenus: unused,
     listRestaurants: unused,
     listOwnedRestaurants: unused,
     receiveOrderRequest: unused,
@@ -73,6 +75,7 @@ const startServer = async () => {
     listIncomingOrders: unused,
     listActiveRestaurantOrders: unused,
     registerRestaurant: unused,
+    updateRestaurant: unused,
     assignStaff: unused,
     revokeStaff: unused,
     openRestaurant: world.open,

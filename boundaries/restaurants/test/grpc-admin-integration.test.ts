@@ -8,6 +8,7 @@ import {
   AssignStaffRequestSchema,
   RegisterRestaurantRequestSchema,
   RevokeStaffRequestSchema,
+  UpdateRestaurantRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { AUTHORIZATION_REVISION_HEADER } from "../infrastructure/grpc/service.ts";
 import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
@@ -21,6 +22,7 @@ import { AssignStaffHandler } from "../slices/restaurant/applications/assign-sta
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import { UpdateRestaurantHandler } from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,
@@ -171,6 +173,8 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
         }),
       }),
       getMenu: unused,
+      batchGetRestaurants: unused,
+      batchGetMenus: unused,
       listRestaurants: unused,
       listOwnedRestaurants: unused,
       receiveOrderRequest: unused,
@@ -190,6 +194,11 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
         ownerRelationships: writer,
         restaurants,
         ids: new SequentialIdGenerator(`${run}${scope}-restaurant`),
+        clock: new FixedClock(startOfDay),
+      }),
+      updateRestaurant: new UpdateRestaurantHandler({
+        accessControl,
+        restaurants,
         clock: new FixedClock(startOfDay),
       }),
       assignStaff: new AssignStaffHandler(staff),
@@ -310,5 +319,61 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
 
     assert.deepEqual((await restaurants.get(restaurantId))?.staff, []);
     assert.equal(await can("operate_kitchen", restaurantId, cook), false);
+  });
+
+  test("AC-852 AC-853 the owner sets the premium fee by UpdateRestaurant, a user without manage is PERMISSION_DENIED", async () => {
+    const { as, register, restaurants } = await world("update");
+    const restaurantId = (await register()).restaurant?.restaurantId ?? "";
+
+    const updated = await as(owner).updateRestaurant(
+      create(UpdateRestaurantRequestSchema, {
+        restaurantId,
+        name: "Pho",
+        premiumFee: { amount: "99.00", currency: "RUB" },
+      }),
+      context,
+    );
+
+    assert.equal(updated.changed, true);
+    assert.equal(updated.version, 2n);
+    assert.deepEqual(
+      [
+        updated.restaurant?.premiumFee?.amount,
+        updated.restaurant?.premiumFee?.currency,
+      ],
+      ["99.00", "RUB"],
+    );
+    await assert.rejects(
+      async () =>
+        as(stranger).updateRestaurant(
+          create(UpdateRestaurantRequestSchema, {
+            restaurantId,
+            name: "Pho",
+            clearPremiumFee: true,
+          }),
+          context,
+        ),
+      rejectsWith(Code.PermissionDenied),
+    );
+    await assert.rejects(
+      async () =>
+        as(owner).updateRestaurant(
+          create(UpdateRestaurantRequestSchema, {
+            restaurantId,
+            name: "Pho",
+            premiumFee: { amount: "10.00", currency: "RUB" },
+            clearPremiumFee: true,
+          }),
+          context,
+        ),
+      rejectsWith(Code.InvalidArgument),
+    );
+    assert.deepEqual(
+      (await restaurants.get(restaurantId))?.premiumFee?.toValue(),
+      {
+        amount: "99.00",
+        currency: "RUB",
+      },
+    );
   });
 });

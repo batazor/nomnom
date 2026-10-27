@@ -29,6 +29,8 @@ const createWorld = async () => {
   const service = createService({
     getRestaurant: unused,
     getMenu: world.getMenu,
+    batchGetRestaurants: unused,
+    batchGetMenus: unused,
     listRestaurants: unused,
     listOwnedRestaurants: unused,
     receiveOrderRequest: unused,
@@ -44,6 +46,7 @@ const createWorld = async () => {
     listIncomingOrders: unused,
     listActiveRestaurantOrders: unused,
     registerRestaurant: unused,
+    updateRestaurant: unused,
     assignStaff: unused,
     revokeStaff: unused,
     openRestaurant: world.open,

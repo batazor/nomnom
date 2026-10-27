@@ -28,6 +28,7 @@ import type {
   StaffRelationshipWriter,
 } from "../applications/access-control.ts";
 import { AssignStaffHandler } from "../applications/assign-staff/assign-staff.ts";
+import { BatchGetRestaurantsHandler } from "../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { CloseRestaurantHandler } from "../applications/close-restaurant/close-restaurant.ts";
 import { GetRestaurantHandler } from "../applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../applications/list-owned-restaurants/list-owned-restaurants.ts";
@@ -35,6 +36,7 @@ import { ListRestaurantsHandler } from "../applications/list-restaurants/list-re
 import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
+import { UpdateRestaurantHandler } from "../applications/update-restaurant/update-restaurant.ts";
 import { WaitTimePolicy } from "../domains/restaurant/wait-time.ts";
 import { CachedRestaurantCatalog } from "../infrastructure/cache/restaurants.ts";
 import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";
@@ -94,12 +96,14 @@ export interface RestaurantCradle {
   /** Wait Time Statistics kept in the restaurant documents (FR-644). */
   readonly restaurantWaitTimes: DatabaseRestaurantWaitTimes;
   readonly restaurantCatalog: DatabaseRestaurantCatalog;
-  /** Get Restaurant and List Restaurants through the Valkey read cache (ADR 43). */
+  /** Get, Batch Get and List Restaurants through the Valkey read cache (ADR 43). */
   readonly cachedRestaurantCatalog: CachedRestaurantCatalog;
   readonly getRestaurant: GetRestaurantHandler;
+  readonly batchGetRestaurants: BatchGetRestaurantsHandler;
   readonly listRestaurants: ListRestaurantsHandler;
   readonly listOwnedRestaurants: ListOwnedRestaurantsHandler;
   readonly registerRestaurant: RegisterRestaurantHandler;
+  readonly updateRestaurant: UpdateRestaurantHandler;
   readonly assignStaff: AssignStaffHandler;
   readonly revokeStaff: RevokeStaffHandler;
   readonly openRestaurant: OpenRestaurantHandler;
@@ -155,6 +159,10 @@ export const registerRestaurant = (
       ({ cachedRestaurantCatalog }: Cradle) =>
         new GetRestaurantHandler({ reader: cachedRestaurantCatalog }),
     ).singleton(),
+    batchGetRestaurants: asFunction(
+      ({ cachedRestaurantCatalog }: Cradle) =>
+        new BatchGetRestaurantsHandler({ reader: cachedRestaurantCatalog }),
+    ).singleton(),
     listRestaurants: asFunction(
       ({ cachedRestaurantCatalog }: Cradle) =>
         new ListRestaurantsHandler({ reader: cachedRestaurantCatalog }),
@@ -176,6 +184,14 @@ export const registerRestaurant = (
           ownerRelationships,
           restaurants,
           ids,
+          clock,
+        }),
+    ).singleton(),
+    updateRestaurant: asFunction(
+      ({ restaurantAccessControl, restaurants, clock }: Cradle) =>
+        new UpdateRestaurantHandler({
+          accessControl: restaurantAccessControl,
+          restaurants,
           clock,
         }),
     ).singleton(),

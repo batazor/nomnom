@@ -53,6 +53,7 @@ const REJECTED_CODES = new Set([
   "invalid_restaurant_order",
   "invalid_quantity",
   "invalid_page_size",
+  "invalid_batch",
   "invalid_transition",
   "guard_failed",
   "already_in_state",

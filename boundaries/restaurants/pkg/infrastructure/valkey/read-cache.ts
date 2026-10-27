@@ -34,8 +34,10 @@ export class CacheMetrics {
     });
   }
 
-  lookup(cache: string, result: CacheLookupResult): void {
-    this.#lookups.add(1, {
+  /** `count` keys of one read with the same result (a batch read). */
+  lookup(cache: string, result: CacheLookupResult, count = 1): void {
+    if (count === 0) return;
+    this.#lookups.add(count, {
       "nomnom.cache.name": cache,
       "nomnom.cache.result": result,
     });
@@ -131,6 +133,71 @@ export class ReadCache<T> {
         .catch(() => this.#metrics.error(this.#name, "set"));
     }
     return loaded;
+  }
+
+  /**
+   * The values of many keys in one MGET; the misses are read by one `load`
+   * call and each found value is stored with SET NX for `ttlMs`, like
+   * {@link read}. Missing source values are absent from the result and not
+   * cached. Valkey failures read every key through `load`.
+   */
+  async readMany(
+    keys: readonly string[],
+    load: (missing: readonly string[]) => Promise<ReadonlyMap<string, T>>,
+  ): Promise<Map<string, T>> {
+    if (!this.#available) {
+      this.#metrics.lookup(this.#name, "bypass", keys.length);
+      return new Map(await load(keys));
+    }
+    const fullKeys = keys.map((key) => this.#prefix + key);
+    let cached: (string | null)[];
+    try {
+      cached = await this.#client.mget(...fullKeys);
+    } catch {
+      this.#metrics.error(this.#name, "get");
+      this.#metrics.lookup(this.#name, "bypass", keys.length);
+      return new Map(await load(keys));
+    }
+    const result = new Map<string, T>();
+    const missing: string[] = [];
+    const outdated: string[] = [];
+    keys.forEach((key, index) => {
+      const entry = cached[index];
+      if (entry === null || entry === undefined) {
+        missing.push(key);
+        return;
+      }
+      const value = JSON.parse(entry) as T;
+      if (this.#isCurrent === undefined || this.#isCurrent(value)) {
+        result.set(key, value);
+        return;
+      }
+      missing.push(key);
+      outdated.push(this.#prefix + key);
+    });
+    this.#metrics.lookup(this.#name, "hit", result.size);
+    if (missing.length === 0) return result;
+    if (outdated.length > 0) {
+      // Outdated shapes: drop them so the NX stores below replace them.
+      try {
+        await this.#client.del(...outdated);
+      } catch {
+        this.#metrics.error(this.#name, "set");
+        this.#metrics.lookup(this.#name, "bypass", missing.length);
+        for (const [key, value] of await load(missing)) result.set(key, value);
+        return result;
+      }
+    }
+    this.#metrics.lookup(this.#name, "miss", missing.length);
+    const loaded = await load(missing);
+    for (const [key, value] of loaded) {
+      result.set(key, value);
+      // Not awaited, NX: as in read, a refresh that already wrote wins.
+      this.#client
+        .set(this.#prefix + key, JSON.stringify(value), "PX", this.#ttlMs, "NX")
+        .catch(() => this.#metrics.error(this.#name, "set"));
+    }
+    return result;
   }
 
   /**

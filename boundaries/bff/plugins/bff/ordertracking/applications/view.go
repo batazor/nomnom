@@ -68,6 +68,9 @@ type OrderView struct {
 	Restaurant Restaurant
 	Items      []ItemView
 	Total      Money
+	Priority   Priority
+	// PremiumFee is nil for a standard Order.
+	PremiumFee *Money
 	PlacedAt   time.Time
 	Milestones []Milestone
 	// AvailableUntil is set only while the customer may request cancellation.

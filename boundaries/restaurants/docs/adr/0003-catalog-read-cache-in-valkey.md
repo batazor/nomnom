@@ -23,8 +23,8 @@ Order и так читает каталог до своей транзакции
 
 | Чтение | Ключ Valkey | Обновляется сразу по |
 | --- | --- | --- |
-| `GetRestaurant` (`RestaurantView` с ожиданием) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed`, `RestaurantWaitLevelChanged` |
-| `GetMenu` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` |
+| `GetRestaurant`, `BatchGetRestaurants` (`RestaurantView` с ожиданием) | `restaurants:restaurant:<restaurantId>` | `RestaurantOpened`, `RestaurantClosed`, `RestaurantWaitLevelChanged` |
+| `GetMenu`, `BatchGetMenus` (`MenuView`) | `restaurants:menu:<restaurantId>` | `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` |
 | `ListRestaurants` (страница) | `restaurants:list:<поколение Market>:<marketId>:<open\|all>:<limit>:<after>` | `RestaurantOpened`, `RestaurantClosed`, `RestaurantWaitLevelChanged` (новое поколение Market ресторана) |
 
 `ListOwnedRestaurants`, кухонные чтения и команды кеш не используют. Отсутствующий ресторан или
@@ -34,6 +34,9 @@ Order и так читает каталог до своей транзакции
 
 `pkg/infrastructure/valkey/read-cache.ts`: промах читает MongoDB и кладёт JSON результата
 `SET NX` с `CACHE__TTL` (1m), не задерживая ответ.
+`BatchGetRestaurants` и `BatchGetMenus` (ADR 7) читают те же ключи одним `MGET` (`ReadCache.readMany`),
+все промахи пачки — одним запросом MongoDB по `$in`, и кладут каждый найденный результат `SET NX`
+с тем же TTL; пачка не читается ключ за ключом.
 
 Открытие, закрытие, новое блюдо, цену, название и доступность блюда пользователь должен видеть
 сразу, поэтому кеш обновляется по Integration Events, которые `restaurants` публикует через

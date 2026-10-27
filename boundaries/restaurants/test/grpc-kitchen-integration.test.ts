@@ -44,7 +44,7 @@ import { StartPreparationHandler } from "../slices/restaurantorder/applications/
 import { UnconstrainedAcceptanceConditions } from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
 import { WaitTimeReadyTimeEstimator } from "../slices/restaurantorder/infrastructure/acceptance/wait-time.ts";
 import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
-import { FifoKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
+import { PriorityKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/priority.ts";
 import {
   createRestaurantOrderCollection,
   DatabaseKitchenBoard,
@@ -150,6 +150,13 @@ describe("kitchen command RPCs over MongoDB", () => {
       outbox,
       clock,
     };
+    const ordering = new PriorityKitchenQueueOrdering({
+      store: new DatabaseRestaurantWaitTimes(
+        createRestaurantCollection(database.db, unitOfWork),
+      ),
+      policy: testWaitTimePolicy(),
+      agingFactor: 2,
+    });
     receive = new ReceiveOrderRequestHandler({
       accessControl,
       restaurants: new RepositoryRestaurantExistence(restaurants),
@@ -164,11 +171,14 @@ describe("kitchen command RPCs over MongoDB", () => {
       subjects: { resolve: async () => cook },
       getRestaurant: unused,
       getMenu: unused,
+      batchGetRestaurants: unused,
+      batchGetMenus: unused,
       listRestaurants: unused,
       listOwnedRestaurants: unused,
       receiveOrderRequest: unused,
       cancelRestaurantOrder: unused,
       registerRestaurant: unused,
+      updateRestaurant: unused,
       assignStaff: unused,
       revokeStaff: unused,
       openRestaurant: unused,
@@ -210,6 +220,9 @@ describe("kitchen command RPCs over MongoDB", () => {
       rejectRestaurantOrder: new RejectOrderHandler(commands),
       startPreparation: new StartPreparationHandler({
         ...commands,
+        started: board,
+        queue: board,
+        ordering,
         cooks: new PoolCookAssigner({ cooks, workload: board }),
         onRepeat: "succeed-without-event",
       }),
@@ -227,7 +240,8 @@ describe("kitchen command RPCs over MongoDB", () => {
       getKitchenQueue: new GetKitchenQueueHandler({
         accessControl,
         reader: board,
-        ordering: new FifoKitchenQueueOrdering(),
+        ordering,
+        clock,
       }),
       listIncomingOrders: new ListIncomingOrdersHandler({
         accessControl,
@@ -252,11 +266,37 @@ describe("kitchen command RPCs over MongoDB", () => {
       restaurantId,
       orderId,
       items: [{ menuItemId: "pho", quantity: 1 }],
+      priority: "STANDARD",
     });
     return {
       restaurantId,
       restaurantOrderId: restaurantOrder.restaurantOrderId,
     };
+  };
+
+  /**
+   * StartNextPreparation until `order` is started: the tests share one
+   * restaurant, so orders other tests left in the queue are taken first and
+   * finished to free their cooks.
+   */
+  const startHead = async (order: {
+    restaurantId: string;
+    restaurantOrderId: string;
+  }) => {
+    for (;;) {
+      const { restaurantOrder } = await service.startNextPreparation(
+        { restaurantId, requestId: randomUUID() },
+        context,
+      );
+      assert.ok(restaurantOrder, `${order.restaurantOrderId} is not queued`);
+      if (restaurantOrder.restaurantOrderId === order.restaurantOrderId) return;
+      const leftover = {
+        restaurantId,
+        restaurantOrderId: restaurantOrder.restaurantOrderId,
+      };
+      await service.markRestaurantOrderAssembled(leftover, context);
+      await service.markRestaurantOrderReady(leftover, context);
+    }
   };
 
   const outboxEventTypes = async (aggregateId: string) =>
@@ -272,7 +312,7 @@ describe("kitchen command RPCs over MongoDB", () => {
     const order = await received("order-flow");
 
     await service.acceptRestaurantOrder(order, context);
-    await service.startPreparation(order, context);
+    await startHead(order);
     await service.reportPreparationDelay(
       {
         ...order,
@@ -346,12 +386,13 @@ describe("kitchen command RPCs over MongoDB", () => {
     const waiting = await received("order-active-received");
     await delay(5);
     const rejected = await received("order-active-rejected");
-    await service.acceptRestaurantOrder(queued, context);
+    // Accepted after `ready` started: the queue head is never named.
     await service.acceptRestaurantOrder(ready, context);
-    await service.startPreparation(ready, context);
+    await startHead(ready);
     await service.markRestaurantOrderAssembled(ready, context);
     await service.markRestaurantOrderReady(ready, context);
     await service.rejectRestaurantOrder(rejected, context);
+    await service.acceptRestaurantOrder(queued, context);
     const ids = new Set(
       [queued, ready, waiting, rejected].map(
         (order) => order.restaurantOrderId,
@@ -401,7 +442,7 @@ describe("kitchen command RPCs over MongoDB", () => {
     );
     const failed = await received("order-failed");
     await service.acceptRestaurantOrder(failed, context);
-    await service.startPreparation(failed, context);
+    await startHead(failed);
     await service.reportPreparationFailure(
       { ...failed, reason: "ITEM_UNAVAILABLE" },
       context,

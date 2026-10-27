@@ -77,6 +77,101 @@ export declare type GetMenuResponse = Message<"nomnom.restaurants.v1.GetMenuResp
 export declare const GetMenuResponseSchema: GenMessage<GetMenuResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.BatchGetRestaurantsRequest
+ */
+export declare type BatchGetRestaurantsRequest = Message<"nomnom.restaurants.v1.BatchGetRestaurantsRequest"> & {
+  /**
+   * 1..100 ids; repeats are read once.
+   *
+   * @generated from field: repeated string restaurant_ids = 1;
+   */
+  restaurantIds: string[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.BatchGetRestaurantsRequest.
+ * Use `create(BatchGetRestaurantsRequestSchema)` to create a new message.
+ */
+export declare const BatchGetRestaurantsRequestSchema: GenMessage<BatchGetRestaurantsRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.BatchGetRestaurantsResponse
+ */
+export declare type BatchGetRestaurantsResponse = Message<"nomnom.restaurants.v1.BatchGetRestaurantsResponse"> & {
+  /**
+   * Found restaurants in no particular order.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.Restaurant restaurants = 1;
+   */
+  restaurants: Restaurant[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.BatchGetRestaurantsResponse.
+ * Use `create(BatchGetRestaurantsResponseSchema)` to create a new message.
+ */
+export declare const BatchGetRestaurantsResponseSchema: GenMessage<BatchGetRestaurantsResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.BatchGetMenusRequest
+ */
+export declare type BatchGetMenusRequest = Message<"nomnom.restaurants.v1.BatchGetMenusRequest"> & {
+  /**
+   * 1..100 ids; repeats are read once.
+   *
+   * @generated from field: repeated string restaurant_ids = 1;
+   */
+  restaurantIds: string[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.BatchGetMenusRequest.
+ * Use `create(BatchGetMenusRequestSchema)` to create a new message.
+ */
+export declare const BatchGetMenusRequestSchema: GenMessage<BatchGetMenusRequest>;
+
+/**
+ * Current menu of one restaurant.
+ *
+ * @generated from message nomnom.restaurants.v1.RestaurantMenu
+ */
+export declare type RestaurantMenu = Message<"nomnom.restaurants.v1.RestaurantMenu"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.MenuItem items = 2;
+   */
+  items: MenuItem[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RestaurantMenu.
+ * Use `create(RestaurantMenuSchema)` to create a new message.
+ */
+export declare const RestaurantMenuSchema: GenMessage<RestaurantMenu>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.BatchGetMenusResponse
+ */
+export declare type BatchGetMenusResponse = Message<"nomnom.restaurants.v1.BatchGetMenusResponse"> & {
+  /**
+   * Menus of the restaurants that have one, in no particular order.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.RestaurantMenu menus = 1;
+   */
+  menus: RestaurantMenu[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.BatchGetMenusResponse.
+ * Use `create(BatchGetMenusResponseSchema)` to create a new message.
+ */
+export declare const BatchGetMenusResponseSchema: GenMessage<BatchGetMenusResponse>;
+
+/**
  * @generated from message nomnom.restaurants.v1.ListRestaurantsRequest
  */
 export declare type ListRestaurantsRequest = Message<"nomnom.restaurants.v1.ListRestaurantsRequest"> & {
@@ -230,6 +325,13 @@ export declare type ReceiveOrderRequestRequest = Message<"nomnom.restaurants.v1.
    * @generated from field: repeated nomnom.restaurants.v1.OrderRequestItem items = 3;
    */
   items: OrderRequestItem[];
+
+  /**
+   * Required: the priority chosen at Place Order (FR-651).
+   *
+   * @generated from field: nomnom.restaurants.v1.OrderPriority priority = 4;
+   */
+  priority: OrderPriority;
 };
 
 /**
@@ -356,12 +458,17 @@ export declare type RestaurantOrder = Message<"nomnom.restaurants.v1.RestaurantO
   version: bigint;
 
   /**
-   * Cook assigned by StartPreparation; empty before it. Kept after the order
-   * is closed.
+   * Cook assigned by StartNextPreparation; empty before it. Kept after the
+   * order is closed.
    *
    * @generated from field: string cook_id = 7;
    */
   cookId: string;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.OrderPriority priority = 8;
+   */
+  priority: OrderPriority;
 };
 
 /**
@@ -460,41 +567,46 @@ export declare type RejectRestaurantOrderResponse = Message<"nomnom.restaurants.
 export declare const RejectRestaurantOrderResponseSchema: GenMessage<RejectRestaurantOrderResponse>;
 
 /**
- * @generated from message nomnom.restaurants.v1.StartPreparationRequest
+ * @generated from message nomnom.restaurants.v1.StartNextPreparationRequest
  */
-export declare type StartPreparationRequest = Message<"nomnom.restaurants.v1.StartPreparationRequest"> & {
+export declare type StartNextPreparationRequest = Message<"nomnom.restaurants.v1.StartNextPreparationRequest"> & {
   /**
    * @generated from field: string restaurant_id = 1;
    */
   restaurantId: string;
 
   /**
-   * @generated from field: string restaurant_order_id = 2;
+   * Chosen by the caller per attempt and reused on a manual retry: a repeat
+   * with it starts no other order.
+   *
+   * @generated from field: string request_id = 2;
    */
-  restaurantOrderId: string;
+  requestId: string;
 };
 
 /**
- * Describes the message nomnom.restaurants.v1.StartPreparationRequest.
- * Use `create(StartPreparationRequestSchema)` to create a new message.
+ * Describes the message nomnom.restaurants.v1.StartNextPreparationRequest.
+ * Use `create(StartNextPreparationRequestSchema)` to create a new message.
  */
-export declare const StartPreparationRequestSchema: GenMessage<StartPreparationRequest>;
+export declare const StartNextPreparationRequestSchema: GenMessage<StartNextPreparationRequest>;
 
 /**
- * @generated from message nomnom.restaurants.v1.StartPreparationResponse
+ * @generated from message nomnom.restaurants.v1.StartNextPreparationResponse
  */
-export declare type StartPreparationResponse = Message<"nomnom.restaurants.v1.StartPreparationResponse"> & {
+export declare type StartNextPreparationResponse = Message<"nomnom.restaurants.v1.StartNextPreparationResponse"> & {
   /**
+   * The started order; unset when the Kitchen Queue is empty.
+   *
    * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
    */
   restaurantOrder?: RestaurantOrder | undefined;
 };
 
 /**
- * Describes the message nomnom.restaurants.v1.StartPreparationResponse.
- * Use `create(StartPreparationResponseSchema)` to create a new message.
+ * Describes the message nomnom.restaurants.v1.StartNextPreparationResponse.
+ * Use `create(StartNextPreparationResponseSchema)` to create a new message.
  */
-export declare const StartPreparationResponseSchema: GenMessage<StartPreparationResponse>;
+export declare const StartNextPreparationResponseSchema: GenMessage<StartNextPreparationResponse>;
 
 /**
  * @generated from message nomnom.restaurants.v1.MarkRestaurantOrderAssembledRequest
@@ -939,6 +1051,70 @@ export declare type RegisterRestaurantResponse = Message<"nomnom.restaurants.v1.
  * Use `create(RegisterRestaurantResponseSchema)` to create a new message.
  */
 export declare const RegisterRestaurantResponseSchema: GenMessage<RegisterRestaurantResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.UpdateRestaurantRequest
+ */
+export declare type UpdateRestaurantRequest = Message<"nomnom.restaurants.v1.UpdateRestaurantRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Premium fee to set (FR-649); at most one of premium_fee and
+   * clear_premium_fee. Neither keeps the current fee.
+   *
+   * @generated from field: nomnom.restaurants.v1.Money premium_fee = 3;
+   */
+  premiumFee?: Money | undefined;
+
+  /**
+   * Removes the premium option of the restaurant.
+   *
+   * @generated from field: bool clear_premium_fee = 4;
+   */
+  clearPremiumFee: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.UpdateRestaurantRequest.
+ * Use `create(UpdateRestaurantRequestSchema)` to create a new message.
+ */
+export declare const UpdateRestaurantRequestSchema: GenMessage<UpdateRestaurantRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.UpdateRestaurantResponse
+ */
+export declare type UpdateRestaurantResponse = Message<"nomnom.restaurants.v1.UpdateRestaurantResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Restaurant restaurant = 1;
+   */
+  restaurant?: Restaurant | undefined;
+
+  /**
+   * @generated from field: int64 version = 2;
+   */
+  version: bigint;
+
+  /**
+   * False when the restaurant already had this data.
+   *
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.UpdateRestaurantResponse.
+ * Use `create(UpdateRestaurantResponseSchema)` to create a new message.
+ */
+export declare const UpdateRestaurantResponseSchema: GenMessage<UpdateRestaurantResponse>;
 
 /**
  * @generated from message nomnom.restaurants.v1.AssignStaffRequest
@@ -1765,6 +1941,33 @@ export enum RestaurantOrderState {
 export declare const RestaurantOrderStateSchema: GenEnum<RestaurantOrderState>;
 
 /**
+ * Premium Priority of the order (FR-651): a premium order is started first.
+ *
+ * @generated from enum nomnom.restaurants.v1.OrderPriority
+ */
+export enum OrderPriority {
+  /**
+   * @generated from enum value: ORDER_PRIORITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ORDER_PRIORITY_STANDARD = 1;
+   */
+  STANDARD = 1,
+
+  /**
+   * @generated from enum value: ORDER_PRIORITY_PREMIUM = 2;
+   */
+  PREMIUM = 2,
+}
+
+/**
+ * Describes the enum nomnom.restaurants.v1.OrderPriority.
+ */
+export declare const OrderPrioritySchema: GenEnum<OrderPriority>;
+
+/**
  * @generated from service nomnom.restaurants.v1.RestaurantsService
  */
 export declare const RestaurantsService: GenService<{
@@ -1786,6 +1989,32 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof GetMenuRequestSchema;
     output: typeof GetMenuResponseSchema;
+  },
+  /**
+   * Public data of up to 100 restaurants in one call for pages that show
+   * restaurants of many items (ADR 7): no authorization. An unknown id is
+   * absent from the response; the caller matches by restaurant_id, not by
+   * position. Empty or more than 100 ids is INVALID_ARGUMENT.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.BatchGetRestaurants
+   */
+  batchGetRestaurants: {
+    methodKind: "unary";
+    input: typeof BatchGetRestaurantsRequestSchema;
+    output: typeof BatchGetRestaurantsResponseSchema;
+  },
+  /**
+   * Current menus of up to 100 restaurants in one call (ADR 7): public data, no
+   * authorization. A restaurant without a menu is absent from the response;
+   * the caller matches by restaurant_id. Empty or more than 100 ids is
+   * INVALID_ARGUMENT.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.BatchGetMenus
+   */
+  batchGetMenus: {
+    methodKind: "unary";
+    input: typeof BatchGetMenusRequestSchema;
+    output: typeof BatchGetMenusResponseSchema;
   },
   /**
    * Restaurants available for selection: public data, no authorization
@@ -1834,11 +2063,8 @@ export declare const RestaurantsService: GenService<{
    * Kitchen commands of restaurant staff over one Restaurant Order addressed by
    * restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
    * an order of another restaurant is NOT_FOUND, a forbidden transition is
-   * FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
-   * succeeds without a new fact; other repeats are FAILED_PRECONDITION.
-   * StartPreparation assigns the free cook on line with the earliest last
-   * assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
-   * order stays QUEUED.
+   * FAILED_PRECONDITION. A repeated MarkRestaurantOrderReady succeeds without a
+   * new fact; other repeats are FAILED_PRECONDITION.
    *
    * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AcceptRestaurantOrder
    */
@@ -1856,12 +2082,22 @@ export declare const RestaurantsService: GenService<{
     output: typeof RejectRestaurantOrderResponseSchema;
   },
   /**
-   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.StartPreparation
+   * Starts the head of the Kitchen Queue of the restaurant (FR-225): the
+   * kitchen does not choose the order. The head is a premium order or a
+   * standard one waiting longer than the aging limit, then the other standard
+   * ones, FIFO by queued_at inside a class. It assigns the free cook on line
+   * with the earliest last assignment; without a free cook it is
+   * RESOURCE_EXHAUSTED and the queue stays as it was. An empty queue starts
+   * nothing: the response has no restaurant_order. A repeat with the same
+   * request_id starts no other order and answers with the order the first
+   * call started.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.StartNextPreparation
    */
-  startPreparation: {
+  startNextPreparation: {
     methodKind: "unary";
-    input: typeof StartPreparationRequestSchema;
-    output: typeof StartPreparationResponseSchema;
+    input: typeof StartNextPreparationRequestSchema;
+    output: typeof StartNextPreparationResponseSchema;
   },
   /**
    * @generated from rpc nomnom.restaurants.v1.RestaurantsService.MarkRestaurantOrderAssembled
@@ -1944,6 +2180,17 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof RegisterRestaurantRequestSchema;
     output: typeof RegisterRestaurantResponseSchema;
+  },
+  /**
+   * Name and premium fee of a restaurant (FR-202, FR-649); requires
+   * restaurant#manage. Publishes no business fact.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.UpdateRestaurant
+   */
+  updateRestaurant: {
+    methodKind: "unary";
+    input: typeof UpdateRestaurantRequestSchema;
+    output: typeof UpdateRestaurantResponseSchema;
   },
   /**
    * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AssignStaff

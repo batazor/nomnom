@@ -1,6 +1,6 @@
 // Awilix registrations of the `menu` slice (ADR 5): MongoDB adapters of its
-// ports, the Outbox mapper of the Menu aggregate, the public Get Menu query
-// and the menu management commands served by gRPC.
+// ports, the Outbox mapper of the Menu aggregate, the public Get Menu and
+// Batch Get Menus queries and the menu management commands served by gRPC.
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Valkey } from "iovalkey";
 import type { Db } from "mongodb";
@@ -16,6 +16,7 @@ import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { MenuAccessControl } from "../applications/access-control.ts";
 import { AddMenuItemHandler } from "../applications/add-menu-item/add-menu-item.ts";
+import { BatchGetMenusHandler } from "../applications/batch-get-menus/batch-get-menus.ts";
 import { CreateMenuHandler } from "../applications/create-menu/create-menu.ts";
 import { GetMenuHandler } from "../applications/get-menu/get-menu.ts";
 import { SetMenuItemAvailabilityHandler } from "../applications/set-menu-item-availability/set-menu-item-availability.ts";
@@ -53,7 +54,10 @@ export interface MenuCradle {
    */
   readonly menuOutboxEventMapper: OutboxEventMapper;
   readonly menus: MenuRepository;
+  /** Get Menu and Batch Get Menus through the Valkey read cache (ADR 43). */
+  readonly cachedMenuReader: CachedMenuReader;
   readonly getMenu: GetMenuHandler;
+  readonly batchGetMenus: BatchGetMenusHandler;
   readonly createMenu: CreateMenuHandler;
   readonly addMenuItem: AddMenuItemHandler;
   readonly updateMenuItem: UpdateMenuItemHandler;
@@ -69,7 +73,7 @@ export const registerMenu = (
       ({ db, unitOfWork }: MenuDependencies) =>
         new DatabaseMenuRepository(createMenuCollection(db, unitOfWork)),
     ).singleton(),
-    getMenu: asFunction(
+    cachedMenuReader: asFunction(
       ({
         db,
         unitOfWork,
@@ -77,16 +81,22 @@ export const registerMenu = (
         valkeyConfig,
         cacheMetrics,
       }: MenuDependencies) =>
-        new GetMenuHandler({
-          reader: new CachedMenuReader(
-            new DatabaseMenuReader(createMenuCollection(db, unitOfWork)),
-            {
-              client: valkey,
-              ttlMs: valkeyConfig.ttlMs,
-              metrics: cacheMetrics,
-            },
-          ),
-        }),
+        new CachedMenuReader(
+          new DatabaseMenuReader(createMenuCollection(db, unitOfWork)),
+          {
+            client: valkey,
+            ttlMs: valkeyConfig.ttlMs,
+            metrics: cacheMetrics,
+          },
+        ),
+    ).singleton(),
+    getMenu: asFunction(
+      ({ cachedMenuReader }: MenuCradle) =>
+        new GetMenuHandler({ reader: cachedMenuReader }),
+    ).singleton(),
+    batchGetMenus: asFunction(
+      ({ cachedMenuReader }: MenuCradle) =>
+        new BatchGetMenusHandler({ reader: cachedMenuReader }),
     ).singleton(),
     createMenu: asFunction(
       ({

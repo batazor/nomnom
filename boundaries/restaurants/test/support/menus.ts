@@ -2,6 +2,7 @@ import type { Outbox } from "../../pkg/application/outbox.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
 import type { MenuAccessControl } from "../../slices/menu/applications/access-control.ts";
 import { AddMenuItemHandler } from "../../slices/menu/applications/add-menu-item/add-menu-item.ts";
+import { BatchGetMenusHandler } from "../../slices/menu/applications/batch-get-menus/batch-get-menus.ts";
 import { CreateMenuHandler } from "../../slices/menu/applications/create-menu/create-menu.ts";
 import { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
 import { SetMenuItemAvailabilityHandler } from "../../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
@@ -64,6 +65,7 @@ export const createMenuWorld = async (
     clock: infrastructure.clock,
   });
   const getMenu = new GetMenuHandler({ reader });
+  const batchGetMenus = new BatchGetMenusHandler({ reader });
 
   /** Registers an open restaurant managed by {@link owner} with an empty menu. */
   const givenRestaurantWithMenu = async (
@@ -103,6 +105,7 @@ export const createMenuWorld = async (
     updateMenuItem,
     setAvailability,
     getMenu,
+    batchGetMenus,
     givenRestaurantWithMenu,
     givenMenuItem,
   };

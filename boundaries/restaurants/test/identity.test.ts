@@ -17,7 +17,10 @@ import {
 } from "@connectrpc/connect-node";
 import type { JSONWebKeySet } from "jose";
 
-import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import {
+  OrderPriority,
+  RestaurantsService,
+} from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import {
   createSubjectResolver,
@@ -27,6 +30,7 @@ import {
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { loadIdentityConfig } from "../pkg/config/config.ts";
+import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
@@ -337,6 +341,10 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
   const service = createRestaurantsService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
+    batchGetRestaurants: new BatchGetRestaurantsHandler({
+      reader: world.catalog,
+    }),
+    batchGetMenus: world.batchGetMenus,
     listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
     listOwnedRestaurants: new ListOwnedRestaurantsHandler({
       reader: world.catalog,
@@ -356,6 +364,7 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
       execute: async () => assert.fail("unexpected call"),
     },
     registerRestaurant: world.register,
+    updateRestaurant: world.update,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
     openRestaurant: world.open,
@@ -397,6 +406,7 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
       restaurantId,
       orderId: "order-42",
       items: [{ menuItemId: phoId, quantity: 1 }],
+      priority: OrderPriority.STANDARD,
     };
 
     await assert.rejects(client.receiveOrderRequest(request), unauthenticated);

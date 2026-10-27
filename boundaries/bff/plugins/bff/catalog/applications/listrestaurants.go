@@ -2,9 +2,7 @@ package applications
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
 )
 
 // RestaurantLister pages the public list of restaurants.
@@ -25,10 +23,12 @@ type Page struct {
 	NextCursor  string
 }
 
-// MenuReader reads the current menu of a restaurant.
-type MenuReader interface {
-	// Menu returns ErrMenuNotFound for a restaurant without a menu.
-	Menu(ctx context.Context, restaurantID string) ([]MenuItem, error)
+// MenuBatchReader reads the current menus of the restaurants of a page in one
+// call (ADR 7).
+type MenuBatchReader interface {
+	// Menus returns the menus of the restaurants that have one, by restaurant
+	// id; a restaurant without a menu is absent.
+	Menus(ctx context.Context, restaurantIDs []string) (map[string][]MenuItem, error)
 }
 
 // RestaurantEdge is one restaurant of a page with its opaque cursor and menu.
@@ -52,10 +52,10 @@ type RestaurantPage struct {
 // dishes on each restaurant card.
 type ListRestaurants struct {
 	restaurants RestaurantLister
-	menus       MenuReader
+	menus       MenuBatchReader
 }
 
-func NewListRestaurants(restaurants RestaurantLister, menus MenuReader) ListRestaurants {
+func NewListRestaurants(restaurants RestaurantLister, menus MenuBatchReader) ListRestaurants {
 	return ListRestaurants{restaurants: restaurants, menus: menus}
 }
 
@@ -87,25 +87,22 @@ func (h ListRestaurants) Handle(ctx context.Context, first int, after string) (R
 	return result, nil
 }
 
-// readMenus reads the menus of a page at once, one GetMenu per restaurant; any
-// failure but a missing menu fails the page.
+// readMenus reads the menus of a page in one call to restaurants; a
+// restaurant without a menu keeps a nil Menu.
 func (h ListRestaurants) readMenus(ctx context.Context, edges []RestaurantEdge) error {
-	errs := make([]error, len(edges))
-	var wg sync.WaitGroup
-	for i := range edges {
-		wg.Go(func() {
-			menu, err := h.menus.Menu(ctx, edges[i].Restaurant.ID)
-			switch {
-			case errors.Is(err, ErrMenuNotFound):
-			case err != nil:
-				errs[i] = fmt.Errorf("read menu of %s: %w", edges[i].Restaurant.ID, err)
-			case menu == nil:
-				edges[i].Menu = []MenuItem{}
-			default:
-				edges[i].Menu = menu
-			}
-		})
+	if len(edges) == 0 {
+		return nil
 	}
-	wg.Wait()
-	return errors.Join(errs...)
+	ids := make([]string, len(edges))
+	for i, edge := range edges {
+		ids[i] = edge.Restaurant.ID
+	}
+	menus, err := h.menus.Menus(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("read menus: %w", err)
+	}
+	for i := range edges {
+		edges[i].Menu = menus[edges[i].Restaurant.ID]
+	}
+	return nil
 }

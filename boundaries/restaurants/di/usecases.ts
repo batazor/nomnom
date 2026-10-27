@@ -16,14 +16,17 @@ import {
 /** Use cases of `cmd/restaurants` by cradle key. */
 export const RESTAURANTS_USE_CASES = {
   getRestaurant: query("get_restaurant"),
+  batchGetRestaurants: query("batch_get_restaurants"),
   listRestaurants: query("list_restaurants"),
   listOwnedRestaurants: query("list_owned_restaurants"),
   registerRestaurant: command("register_restaurant"),
+  updateRestaurant: command("update_restaurant"),
   assignStaff: command("assign_staff"),
   revokeStaff: command("revoke_staff"),
   openRestaurant: command("open_restaurant"),
   closeRestaurant: command("close_restaurant"),
   getMenu: query("get_menu"),
+  batchGetMenus: query("batch_get_menus"),
   createMenu: command("create_menu"),
   addMenuItem: command("add_menu_item"),
   updateMenuItem: command("update_menu_item"),

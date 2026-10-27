@@ -19,6 +19,7 @@ import {
   ReadCache,
 } from "../../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { CacheRefreshes } from "../../../../pkg/infrastructure/valkey/refresh.ts";
+import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
 import type { CatalogRestaurantView } from "../../applications/restaurant-view.ts";
@@ -44,14 +45,21 @@ const isCurrentView = (view: CatalogRestaurantView): boolean => {
 const listScope = (marketId: string): string => `pages:${marketId}`;
 
 export class CachedRestaurantCatalog
-  implements RestaurantPublicReader, RestaurantCatalogReader
+  implements
+    RestaurantPublicReader,
+    RestaurantBatchReader,
+    RestaurantCatalogReader
 {
-  readonly #source: RestaurantPublicReader & RestaurantCatalogReader;
+  readonly #source: RestaurantPublicReader &
+    RestaurantBatchReader &
+    RestaurantCatalogReader;
   readonly #restaurants: ReadCache<CatalogRestaurantView>;
   readonly #pages: ReadCache<readonly CatalogRestaurantView[]>;
 
   constructor(
-    source: RestaurantPublicReader & RestaurantCatalogReader,
+    source: RestaurantPublicReader &
+      RestaurantBatchReader &
+      RestaurantCatalogReader,
     options: CacheOptions,
   ) {
     this.#source = source;
@@ -76,6 +84,23 @@ export class CachedRestaurantCatalog
     return this.#restaurants.read(restaurantId, () =>
       this.#source.get(restaurantId),
     );
+  }
+
+  /** Batch Get Restaurants: the keys of `get` in one MGET, the misses in one read. */
+  async getMany(
+    restaurantIds: readonly string[],
+  ): Promise<readonly CatalogRestaurantView[]> {
+    const restaurants = await this.#restaurants.readMany(
+      restaurantIds,
+      async (missing) =>
+        new Map(
+          (await this.#source.getMany(missing)).map((restaurant) => [
+            restaurant.restaurantId,
+            restaurant,
+          ]),
+        ),
+    );
+    return [...restaurants.values()];
   }
 
   /** One key per page: Market, filter, cursor and page size. */

@@ -10,6 +10,16 @@ service RestaurantsService {
   // Current menu of a restaurant: public data, no authorization (FR-216). A
   // restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
   rpc GetMenu(GetMenuRequest) returns (GetMenuResponse);
+  // Public data of up to 100 restaurants in one call for pages that show
+  // restaurants of many items (ADR 7): no authorization. An unknown id is
+  // absent from the response; the caller matches by restaurant_id, not by
+  // position. Empty or more than 100 ids is INVALID_ARGUMENT.
+  rpc BatchGetRestaurants(BatchGetRestaurantsRequest) returns (BatchGetRestaurantsResponse);
+  // Current menus of up to 100 restaurants in one call (ADR 7): public data, no
+  // authorization. A restaurant without a menu is absent from the response;
+  // the caller matches by restaurant_id. Empty or more than 100 ids is
+  // INVALID_ARGUMENT.
+  rpc BatchGetMenus(BatchGetMenusRequest) returns (BatchGetMenusResponse);
   // Restaurants available for selection: public data, no authorization
   // (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
   // cursor ordered by restaurant id.
@@ -27,14 +37,20 @@ service RestaurantsService {
   // Kitchen commands of restaurant staff over one Restaurant Order addressed by
   // restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
   // an order of another restaurant is NOT_FOUND, a forbidden transition is
-  // FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
-  // succeeds without a new fact; other repeats are FAILED_PRECONDITION.
-  // StartPreparation assigns the free cook on line with the earliest last
-  // assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
-  // order stays QUEUED.
+  // FAILED_PRECONDITION. A repeated MarkRestaurantOrderReady succeeds without a
+  // new fact; other repeats are FAILED_PRECONDITION.
   rpc AcceptRestaurantOrder(AcceptRestaurantOrderRequest) returns (AcceptRestaurantOrderResponse);
   rpc RejectRestaurantOrder(RejectRestaurantOrderRequest) returns (RejectRestaurantOrderResponse);
-  rpc StartPreparation(StartPreparationRequest) returns (StartPreparationResponse);
+  // Starts the head of the Kitchen Queue of the restaurant (FR-225): the
+  // kitchen does not choose the order. The head is a premium order or a
+  // standard one waiting longer than the aging limit, then the other standard
+  // ones, FIFO by queued_at inside a class. It assigns the free cook on line
+  // with the earliest last assignment; without a free cook it is
+  // RESOURCE_EXHAUSTED and the queue stays as it was. An empty queue starts
+  // nothing: the response has no restaurant_order. A repeat with the same
+  // request_id starts no other order and answers with the order the first
+  // call started.
+  rpc StartNextPreparation(StartNextPreparationRequest) returns (StartNextPreparationResponse);
   rpc MarkRestaurantOrderAssembled(MarkRestaurantOrderAssembledRequest) returns (MarkRestaurantOrderAssembledResponse);
   rpc MarkRestaurantOrderReady(MarkRestaurantOrderReadyRequest) returns (MarkRestaurantOrderReadyResponse);
   rpc ReportPreparationDelay(ReportPreparationDelayRequest) returns (ReportPreparationDelayResponse);
@@ -59,6 +75,9 @@ service RestaurantsService {
   // and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
   // and write restaurant#staff before saving. Staff commands are idempotent.
   rpc RegisterRestaurant(RegisterRestaurantRequest) returns (RegisterRestaurantResponse);
+  // Name and premium fee of a restaurant (FR-202, FR-649); requires
+  // restaurant#manage. Publishes no business fact.
+  rpc UpdateRestaurant(UpdateRestaurantRequest) returns (UpdateRestaurantResponse);
   rpc AssignStaff(AssignStaffRequest) returns (AssignStaffResponse);
   rpc RevokeStaff(RevokeStaffRequest) returns (RevokeStaffResponse);
 
@@ -119,6 +138,32 @@ message GetMenuResponse {
   repeated MenuItem items = 1;
 }
 
+message BatchGetRestaurantsRequest {
+  // 1..100 ids; repeats are read once.
+  repeated string restaurant_ids = 1;
+}
+
+message BatchGetRestaurantsResponse {
+  // Found restaurants in no particular order.
+  repeated Restaurant restaurants = 1;
+}
+
+message BatchGetMenusRequest {
+  // 1..100 ids; repeats are read once.
+  repeated string restaurant_ids = 1;
+}
+
+// Current menu of one restaurant.
+message RestaurantMenu {
+  string restaurant_id = 1;
+  repeated MenuItem items = 2;
+}
+
+message BatchGetMenusResponse {
+  // Menus of the restaurants that have one, in no particular order.
+  repeated RestaurantMenu menus = 1;
+}
+
 message ListRestaurantsRequest {
   // 1..100; 0 means the default of 50.
   int32 page_size = 1;
@@ -159,6 +204,8 @@ message ReceiveOrderRequestRequest {
   string restaurant_id = 1;
   string order_id = 2;
   repeated OrderRequestItem items = 3;
+  // Required: the priority chosen at Place Order (FR-651).
+  OrderPriority priority = 4;
 }
 
 message ReceiveOrderRequestResponse {
@@ -196,6 +243,13 @@ enum RestaurantOrderState {
   RESTAURANT_ORDER_STATE_PICKED_UP = 10;
 }
 
+// Premium Priority of the order (FR-651): a premium order is started first.
+enum OrderPriority {
+  ORDER_PRIORITY_UNSPECIFIED = 0;
+  ORDER_PRIORITY_STANDARD = 1;
+  ORDER_PRIORITY_PREMIUM = 2;
+}
+
 // Restaurant Order after a kitchen command or in the Kitchen Queue.
 message RestaurantOrder {
   string restaurant_order_id = 1;
@@ -205,9 +259,10 @@ message RestaurantOrder {
   // Unset until Acceptance.
   google.protobuf.Timestamp expected_ready_at = 5;
   int64 version = 6;
-  // Cook assigned by StartPreparation; empty before it. Kept after the order
-  // is closed.
+  // Cook assigned by StartNextPreparation; empty before it. Kept after the
+  // order is closed.
   string cook_id = 7;
+  OrderPriority priority = 8;
 }
 
 message AcceptRestaurantOrderRequest {
@@ -233,12 +288,15 @@ message RejectRestaurantOrderResponse {
   RestaurantOrder restaurant_order = 1;
 }
 
-message StartPreparationRequest {
+message StartNextPreparationRequest {
   string restaurant_id = 1;
-  string restaurant_order_id = 2;
+  // Chosen by the caller per attempt and reused on a manual retry: a repeat
+  // with it starts no other order.
+  string request_id = 2;
 }
 
-message StartPreparationResponse {
+message StartNextPreparationResponse {
+  // The started order; unset when the Kitchen Queue is empty.
   RestaurantOrder restaurant_order = 1;
 }
 
@@ -357,6 +415,23 @@ message RegisterRestaurantRequest {
 message RegisterRestaurantResponse {
   Restaurant restaurant = 1;
   int64 version = 2;
+}
+
+message UpdateRestaurantRequest {
+  string restaurant_id = 1;
+  string name = 2;
+  // Premium fee to set (FR-649); at most one of premium_fee and
+  // clear_premium_fee. Neither keeps the current fee.
+  Money premium_fee = 3;
+  // Removes the premium option of the restaurant.
+  bool clear_premium_fee = 4;
+}
+
+message UpdateRestaurantResponse {
+  Restaurant restaurant = 1;
+  int64 version = 2;
+  // False when the restaurant already had this data.
+  bool changed = 3;
 }
 
 message AssignStaffRequest {

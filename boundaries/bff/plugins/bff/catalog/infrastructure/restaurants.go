@@ -17,8 +17,8 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 )
 
-// Restaurants implements applications.RestaurantLister and
-// applications.RestaurantReader.
+// Restaurants implements applications.RestaurantLister,
+// applications.RestaurantReader and applications.MenuBatchReader.
 type Restaurants struct {
 	client restaurantsv1.RestaurantsServiceClient
 }
@@ -30,6 +30,7 @@ func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
 var (
 	_ applications.RestaurantLister = (*Restaurants)(nil)
 	_ applications.RestaurantReader = (*Restaurants)(nil)
+	_ applications.MenuBatchReader  = (*Restaurants)(nil)
 )
 
 // List asks for open restaurants of the Market of the request only:
@@ -84,9 +85,27 @@ func (r *Restaurants) Menu(ctx context.Context, restaurantID string) ([]applicat
 	if err != nil {
 		return nil, fmt.Errorf("get menu: %w", err)
 	}
-	items := make([]applications.MenuItem, 0, len(response.GetItems()))
-	for _, item := range response.GetItems() {
-		items = append(items, applications.MenuItem{
+	return menuItemsOf(response.GetItems()), nil
+}
+
+// Menus reads the menus of a page with one BatchGetMenus; a published menu
+// without items is an empty, not a nil, slice.
+func (r *Restaurants) Menus(ctx context.Context, restaurantIDs []string) (map[string][]applications.MenuItem, error) {
+	response, err := r.client.BatchGetMenus(identity.WithoutUser(ctx), &restaurantsv1.BatchGetMenusRequest{RestaurantIds: restaurantIDs})
+	if err != nil {
+		return nil, fmt.Errorf("batch get menus: %w", err)
+	}
+	menus := make(map[string][]applications.MenuItem, len(response.GetMenus()))
+	for _, menu := range response.GetMenus() {
+		menus[menu.GetRestaurantId()] = menuItemsOf(menu.GetItems())
+	}
+	return menus, nil
+}
+
+func menuItemsOf(items []*restaurantsv1.MenuItem) []applications.MenuItem {
+	result := make([]applications.MenuItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, applications.MenuItem{
 			ID:          item.GetMenuItemId(),
 			Name:        item.GetName(),
 			Description: item.GetDescription(),
@@ -94,7 +113,7 @@ func (r *Restaurants) Menu(ctx context.Context, restaurantID string) ([]applicat
 			Available:   item.GetAvailable(),
 		})
 	}
-	return items, nil
+	return result
 }
 
 // restaurantOf requires wait_time: GetRestaurant and ListRestaurants always
@@ -104,7 +123,7 @@ func restaurantOf(restaurant *restaurantsv1.Restaurant) (applications.Restaurant
 	if waitTime == nil {
 		return applications.Restaurant{}, fmt.Errorf("restaurant %s has no wait_time", restaurant.GetRestaurantId())
 	}
-	return applications.Restaurant{
+	view := applications.Restaurant{
 		ID:     restaurant.GetRestaurantId(),
 		Name:   restaurant.GetName(),
 		IsOpen: restaurant.GetIsOpen(),
@@ -112,5 +131,9 @@ func restaurantOf(restaurant *restaurantsv1.Restaurant) (applications.Restaurant
 			Elevated:            waitTime.GetElevated(),
 			ExpectedWaitMinutes: int(waitTime.GetExpectedWaitMinutes()),
 		},
-	}, nil
+	}
+	if fee := restaurant.GetPremiumFee(); fee != nil {
+		view.PremiumFee = &applications.Money{Amount: fee.GetAmount(), Currency: fee.GetCurrency()}
+	}
+	return view, nil
 }

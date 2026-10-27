@@ -19,8 +19,8 @@ func TestListRestaurantsPassesTheCursorThrough(t *testing.T) {
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 1, Cursor: "restaurant-0"}).
 		Return(Page{Restaurants: []Restaurant{pho}, NextCursor: "restaurant-1"}, nil).Once()
-	menus := NewMockRestaurantReader(t)
-	menus.EXPECT().Menu(mock.Anything, pho.ID).Return(nil, nil).Once()
+	menus := NewMockMenuBatchReader(t)
+	menus.EXPECT().Menus(mock.Anything, []string{pho.ID}).Return(map[string][]MenuItem{pho.ID: {}}, nil).Once()
 
 	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 1, "restaurant-0")
 
@@ -36,9 +36,8 @@ func TestListRestaurantsLastPageEndsAtItsLastEdge(t *testing.T) {
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{Restaurants: []Restaurant{pho, ramen}}, nil).Once()
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{}, nil).Once()
-	menus := NewMockRestaurantReader(t)
-	menus.EXPECT().Menu(mock.Anything, pho.ID).Return(nil, nil).Once()
-	menus.EXPECT().Menu(mock.Anything, ramen.ID).Return(nil, nil).Once()
+	menus := NewMockMenuBatchReader(t)
+	menus.EXPECT().Menus(mock.Anything, []string{pho.ID, ramen.ID}).Return(map[string][]MenuItem{}, nil).Once()
 
 	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 
@@ -54,7 +53,7 @@ func TestListRestaurantsLastPageEndsAtItsLastEdge(t *testing.T) {
 
 func TestListRestaurantsRejectsAnUnusablePageSize(t *testing.T) {
 	for _, first := range []int{0, -1, MaxPageSize + 1} {
-		_, err := NewListRestaurants(NewMockRestaurantLister(t), NewMockRestaurantReader(t)).Handle(context.Background(), first, "")
+		_, err := NewListRestaurants(NewMockRestaurantLister(t), NewMockMenuBatchReader(t)).Handle(context.Background(), first, "")
 		assert.ErrorIs(t, err, ErrInvalidPageSize, first)
 	}
 }
@@ -102,12 +101,12 @@ func TestGetRestaurantErrors(t *testing.T) {
 	assert.ErrorIs(t, err, down)
 }
 
-func TestListRestaurantsCarriesEachMenu(t *testing.T) {
+func TestListRestaurantsReadsTheMenusOfThePageInOneCall(t *testing.T) {
 	soup := MenuItem{ID: "menu-1", Name: "Фо бо", Price: Money{Amount: "450", Currency: "RUB"}, Available: true}
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{Restaurants: []Restaurant{pho}}, nil).Once()
-	menus := NewMockRestaurantReader(t)
-	menus.EXPECT().Menu(mock.Anything, pho.ID).Return([]MenuItem{soup}, nil).Once()
+	menus := NewMockMenuBatchReader(t)
+	menus.EXPECT().Menus(mock.Anything, []string{pho.ID}).Return(map[string][]MenuItem{pho.ID: {soup}}, nil).Once()
 
 	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 
@@ -118,8 +117,8 @@ func TestListRestaurantsCarriesEachMenu(t *testing.T) {
 func TestListRestaurantsLeavesAMissingMenuNil(t *testing.T) {
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{Restaurants: []Restaurant{pho}}, nil).Once()
-	menus := NewMockRestaurantReader(t)
-	menus.EXPECT().Menu(mock.Anything, pho.ID).Return(nil, ErrMenuNotFound).Once()
+	menus := NewMockMenuBatchReader(t)
+	menus.EXPECT().Menus(mock.Anything, []string{pho.ID}).Return(map[string][]MenuItem{}, nil).Once()
 
 	page, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 
@@ -131,9 +130,8 @@ func TestListRestaurantsFailsWhenAMenuCannotBeRead(t *testing.T) {
 	broken := errors.New("restaurants unavailable")
 	restaurants := NewMockRestaurantLister(t)
 	restaurants.EXPECT().List(mock.Anything, PageRequest{Size: 10}).Return(Page{Restaurants: []Restaurant{pho, ramen}}, nil).Once()
-	menus := NewMockRestaurantReader(t)
-	menus.EXPECT().Menu(mock.Anything, pho.ID).Return(nil, broken).Once()
-	menus.EXPECT().Menu(mock.Anything, ramen.ID).Return(nil, broken).Once()
+	menus := NewMockMenuBatchReader(t)
+	menus.EXPECT().Menus(mock.Anything, []string{pho.ID, ramen.ID}).Return(nil, broken).Once()
 
 	_, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 

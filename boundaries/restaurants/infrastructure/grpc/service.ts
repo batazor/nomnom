@@ -6,11 +6,13 @@ import type { PutCookOnLineHandler } from "../../slices/cook/applications/put-co
 import type { RetireCookHandler } from "../../slices/cook/applications/retire-cook/retire-cook.ts";
 import type { TakeCookOffLineHandler } from "../../slices/cook/applications/take-cook-off-line/take-cook-off-line.ts";
 import type { AddMenuItemHandler } from "../../slices/menu/applications/add-menu-item/add-menu-item.ts";
+import type { BatchGetMenusHandler } from "../../slices/menu/applications/batch-get-menus/batch-get-menus.ts";
 import type { CreateMenuHandler } from "../../slices/menu/applications/create-menu/create-menu.ts";
 import type { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
 import type { SetMenuItemAvailabilityHandler } from "../../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
 import type { UpdateMenuItemHandler } from "../../slices/menu/applications/update-menu-item/update-menu-item.ts";
 import type { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
+import type { BatchGetRestaurantsHandler } from "../../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { CloseRestaurantHandler } from "../../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import type { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import type { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
@@ -18,6 +20,7 @@ import type { ListRestaurantsHandler } from "../../slices/restaurant/application
 import type { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import type { UpdateRestaurantHandler } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
 import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import type { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
@@ -36,6 +39,8 @@ import { createCookPoolRpcs } from "./cook-pool.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   AssignStaffResponseSchema,
+  BatchGetMenusResponseSchema,
+  BatchGetRestaurantsResponseSchema,
   CancelRestaurantOrderResponseSchema,
   GetMenuResponseSchema,
   GetRestaurantResponseSchema,
@@ -50,6 +55,7 @@ import { createKitchenRpcs } from "./kitchen.ts";
 import { createKitchenBoardRpcs } from "./kitchen-board.ts";
 import { createMenuRpcs } from "./menu-commands.ts";
 import {
+  fromPriorityMessage,
   toCatalogRestaurantMessage,
   toMenuItemMessages,
   toRestaurantMessage,
@@ -68,6 +74,8 @@ export {
 export type RestaurantsServiceDependencies = Readonly<{
   getRestaurant: Pick<GetRestaurantHandler, "execute">;
   getMenu: Pick<GetMenuHandler, "execute">;
+  batchGetRestaurants: Pick<BatchGetRestaurantsHandler, "execute">;
+  batchGetMenus: Pick<BatchGetMenusHandler, "execute">;
   listRestaurants: Pick<ListRestaurantsHandler, "execute">;
   listOwnedRestaurants: Pick<ListOwnedRestaurantsHandler, "execute">;
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
@@ -86,6 +94,7 @@ export type RestaurantsServiceDependencies = Readonly<{
     "execute"
   >;
   registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
+  updateRestaurant: Pick<UpdateRestaurantHandler, "execute">;
   assignStaff: Pick<AssignStaffHandler, "execute">;
   revokeStaff: Pick<RevokeStaffHandler, "execute">;
   openRestaurant: Pick<OpenRestaurantHandler, "execute">;
@@ -131,6 +140,35 @@ export const createRestaurantsService = (
         });
         return create(GetMenuResponseSchema, {
           items: toMenuItemMessages(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async batchGetRestaurants(request) {
+      try {
+        const views = await dependencies.batchGetRestaurants.execute({
+          restaurantIds: request.restaurantIds,
+        });
+        return create(BatchGetRestaurantsResponseSchema, {
+          restaurants: views.map(toCatalogRestaurantMessage),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    async batchGetMenus(request) {
+      try {
+        const views = await dependencies.batchGetMenus.execute({
+          restaurantIds: request.restaurantIds,
+        });
+        return create(BatchGetMenusResponseSchema, {
+          menus: views.map((view) => ({
+            restaurantId: view.restaurantId,
+            items: toMenuItemMessages(view),
+          })),
         });
       } catch (error) {
         throw transportError(error);
@@ -191,6 +229,7 @@ export const createRestaurantsService = (
             menuItemId: item.menuItemId,
             quantity: item.quantity,
           })),
+          priority: fromPriorityMessage(request.priority),
         });
         return create(ReceiveOrderRequestResponseSchema, {
           restaurantOrderId: result.restaurantOrder.restaurantOrderId,

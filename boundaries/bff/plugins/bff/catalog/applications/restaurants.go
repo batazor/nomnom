@@ -30,6 +30,8 @@ type Restaurant struct {
 	Name     string
 	IsOpen   bool
 	WaitTime WaitTime
+	// PremiumFee is nil when the restaurant offers no Premium Priority.
+	PremiumFee *Money
 }
 
 // WaitTime is the wait for an order placed now (restaurants FR-645): an

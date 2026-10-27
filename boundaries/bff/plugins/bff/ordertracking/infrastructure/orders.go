@@ -125,18 +125,30 @@ func requestCancellationError(err error) error {
 	return fmt.Errorf("request order cancellation: %w", err)
 }
 
+// orderPriorities has no UNSPECIFIED: orders always names the priority; an
+// unknown one stays empty and the presenter refuses it.
+var orderPriorities = map[ordersv1.OrderPriority]applications.Priority{
+	ordersv1.OrderPriority_ORDER_PRIORITY_STANDARD: applications.PriorityStandard,
+	ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM:  applications.PriorityPremium,
+}
+
 func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 	result := applications.OrderSnapshot{
 		ID:           order.GetOrderId(),
 		RestaurantID: order.GetRestaurantId(),
 		State:        orderStates[order.GetState()],
 		Total:        money(order.GetTotal()),
+		Priority:     orderPriorities[order.GetPriority()],
 		PlacedAt:     order.GetPlacedAt().AsTime(),
 		Deadlines: applications.Deadlines{
 			ExpectedReadyAt:     moment(order.GetExpectedReadyAt()),
 			ExpectedPickupAt:    moment(order.GetExpectedPickupAt()),
 			ExpectedDeliveredAt: moment(order.GetExpectedDeliveredAt()),
 		},
+	}
+	if fee := order.GetPremiumFee(); fee != nil {
+		premium := money(fee)
+		result.PremiumFee = &premium
 	}
 	for _, item := range order.GetItems() {
 		result.Items = append(result.Items, applications.OrderLine{

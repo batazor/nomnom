@@ -7,6 +7,7 @@ import {
   type VersionedDocument,
 } from "../../../../pkg/infrastructure/repository/versioned-collection.ts";
 import type { AuthorizationRevision } from "../../applications/access-control.ts";
+import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { OwnedRestaurantsReader } from "../../applications/list-owned-restaurants/list-owned-restaurants.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
@@ -35,7 +36,7 @@ import type {
 } from "../reconcile/reconcile.ts";
 
 export const RESTAURANTS_COLLECTION = "restaurants";
-export const RESTAURANT_SCHEMA_VERSION = 2;
+export const RESTAURANT_SCHEMA_VERSION = 3;
 
 /**
  * One document per Restaurant aggregate: profile, Market (ADR 41; required
@@ -55,6 +56,8 @@ export type RestaurantDocument = VersionedDocument & {
   isOpen: boolean;
   staff?: string[];
   authorizationRevision?: string;
+  /** Since schemaVersion 3: fee of Premium Priority, absent without premium. */
+  premiumFee?: { amount: string; currency: string };
   waitTime?: WaitTimeDocument;
 };
 
@@ -96,6 +99,7 @@ const toSnapshot = (
   isOpen: document.isOpen,
   staff: document.staff,
   authorizationRevision: document.authorizationRevision,
+  premiumFee: document.premiumFee,
 });
 
 const toData = (restaurant: Restaurant) => {
@@ -108,6 +112,10 @@ const toData = (restaurant: Restaurant) => {
     isOpen: snapshot.isOpen,
     staff: [...snapshot.staff],
     authorizationRevision: snapshot.authorizationRevision,
+    premiumFee:
+      snapshot.premiumFee === undefined
+        ? undefined
+        : { ...snapshot.premiumFee },
   };
 };
 
@@ -290,6 +298,9 @@ const toView = (document: RestaurantDocument): RestaurantView => ({
   name: document.name,
   marketId: document.marketId,
   isOpen: document.isOpen,
+  ...(document.premiumFee === undefined
+    ? {}
+    : { premiumFee: { ...document.premiumFee } }),
 });
 
 const MINUTE_MS = 60_000;
@@ -323,6 +334,7 @@ const toCatalogView = (
 export class DatabaseRestaurantCatalog
   implements
     RestaurantPublicReader,
+    RestaurantBatchReader,
     RestaurantCatalogReader,
     OwnedRestaurantsReader
 {
@@ -342,6 +354,15 @@ export class DatabaseRestaurantCatalog
     return document === undefined
       ? undefined
       : toCatalogView(document, this.#waitTime);
+  }
+
+  async getMany(
+    restaurantIds: readonly string[],
+  ): Promise<readonly CatalogRestaurantView[]> {
+    const documents = await this.#collection.find({
+      _id: { $in: [...restaurantIds] },
+    });
+    return documents.map((document) => toCatalogView(document, this.#waitTime));
   }
 
   async list(criteria: {

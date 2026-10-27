@@ -5,14 +5,18 @@ import { create } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 
 import {
+  BatchGetMenusRequestSchema,
+  BatchGetRestaurantsRequestSchema,
   CancelRestaurantOrderRequestSchema,
   GetMenuRequestSchema,
   GetRestaurantRequestSchema,
   ListOwnedRestaurantsRequestSchema,
   ListRestaurantsRequestSchema,
+  OrderPriority,
   ReceiveOrderRequestRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
+import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
@@ -34,6 +38,7 @@ const receiveRequest = (
     restaurantId,
     orderId,
     items: [{ menuItemId, quantity: 2 }],
+    priority: OrderPriority.STANDARD,
   });
 
 test("GetRestaurant maps the application view", async () => {
@@ -80,6 +85,69 @@ test("GetMenu maps a restaurant without a menu to NOT_FOUND", async () => {
       ),
     rejectsWith(Code.NotFound),
   );
+});
+
+test("BatchGetRestaurants returns the found restaurants of a page in one call", async () => {
+  const { world, service } = await createWorld();
+  const pho = await world.givenRestaurant("Pho Bar");
+  const ramen = await world.givenRestaurant("Ramen Bar");
+
+  const response = await service.batchGetRestaurants(
+    create(BatchGetRestaurantsRequestSchema, {
+      restaurantIds: [pho, ramen, pho, "missing"],
+    }),
+    context,
+  );
+
+  assert.deepEqual(
+    response.restaurants.map((restaurant) => restaurant.name).sort(),
+    ["Pho Bar", "Ramen Bar"],
+  );
+});
+
+test("BatchGetRestaurants without ids is INVALID_ARGUMENT", async () => {
+  const { service } = await createWorld();
+
+  await assert.rejects(
+    async () =>
+      service.batchGetRestaurants(
+        create(BatchGetRestaurantsRequestSchema, { restaurantIds: [] }),
+        context,
+      ),
+    rejectsWith(Code.InvalidArgument),
+  );
+});
+
+test("BatchGetMenus with more than 100 ids is INVALID_ARGUMENT", async () => {
+  const { service } = await createWorld();
+
+  await assert.rejects(
+    async () =>
+      service.batchGetMenus(
+        create(BatchGetMenusRequestSchema, {
+          restaurantIds: Array.from({ length: 101 }, (_, i) => `r-${i}`),
+        }),
+        context,
+      ),
+    rejectsWith(Code.InvalidArgument),
+  );
+});
+
+test("BatchGetMenus returns the menus by restaurant; a restaurant without a menu is absent", async () => {
+  const { world, service } = await createWorld();
+  const { restaurantId, phoId } = await world.givenKitchen("Pho Bar");
+  const withoutMenu = await world.givenRestaurant("Ramen Bar");
+
+  const response = await service.batchGetMenus(
+    create(BatchGetMenusRequestSchema, {
+      restaurantIds: [restaurantId, withoutMenu],
+    }),
+    context,
+  );
+
+  assert.equal(response.menus.length, 1);
+  assert.equal(response.menus[0]?.restaurantId, restaurantId);
+  assert.ok(response.menus[0]?.items.some((item) => item.menuItemId === phoId));
 });
 
 test("AC-565 ListRestaurants pages open restaurants with a next page token", async () => {
@@ -279,10 +347,47 @@ test("ReceiveOrderRequest maps a conflicting repeat to ALREADY_EXISTS", async ()
           restaurantId,
           orderId: "order-42",
           items: [{ menuItemId: phoId, quantity: 5 }],
+          priority: OrderPriority.STANDARD,
         }),
         context,
       ),
     rejectsWith(Code.AlreadyExists),
+  );
+});
+
+test("AC-859 ReceiveOrderRequest without priority is INVALID_ARGUMENT, PREMIUM is kept", async () => {
+  const { world, service } = await createWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+
+  await assert.rejects(
+    async () =>
+      service.receiveOrderRequest(
+        create(ReceiveOrderRequestRequestSchema, {
+          restaurantId,
+          orderId: "order-unspecified",
+          items: [{ menuItemId: phoId, quantity: 1 }],
+        }),
+        context,
+      ),
+    rejectsWith(Code.InvalidArgument),
+  );
+  assert.equal(
+    await world.restaurantOrders.findByOrderId("order-unspecified"),
+    undefined,
+  );
+
+  await service.receiveOrderRequest(
+    create(ReceiveOrderRequestRequestSchema, {
+      restaurantId,
+      orderId: "order-premium",
+      items: [{ menuItemId: phoId, quantity: 1 }],
+      priority: OrderPriority.PREMIUM,
+    }),
+    context,
+  );
+  assert.equal(
+    (await world.restaurantOrders.findByOrderId("order-premium"))?.priority,
+    "PREMIUM",
   );
 });
 
@@ -308,6 +413,7 @@ test("ReceiveOrderRequest maps invalid input to INVALID_ARGUMENT", async () => {
           restaurantId,
           orderId: "o",
           items: [{ menuItemId: phoId, quantity: 0 }],
+          priority: OrderPriority.STANDARD,
         }),
         context,
       ),
@@ -350,6 +456,10 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
   const unavailable = createService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
+    batchGetRestaurants: new BatchGetRestaurantsHandler({
+      reader: world.catalog,
+    }),
+    batchGetMenus: world.batchGetMenus,
     listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
     listOwnedRestaurants: new ListOwnedRestaurantsHandler({
       reader: world.catalog,
@@ -373,6 +483,7 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
       execute: async () => assert.fail("unexpected call"),
     },
     registerRestaurant: world.register,
+    updateRestaurant: world.update,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
     openRestaurant: world.open,

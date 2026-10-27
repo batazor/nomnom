@@ -21,13 +21,15 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	RestaurantsService_GetRestaurant_FullMethodName                = "/nomnom.restaurants.v1.RestaurantsService/GetRestaurant"
 	RestaurantsService_GetMenu_FullMethodName                      = "/nomnom.restaurants.v1.RestaurantsService/GetMenu"
+	RestaurantsService_BatchGetRestaurants_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/BatchGetRestaurants"
+	RestaurantsService_BatchGetMenus_FullMethodName                = "/nomnom.restaurants.v1.RestaurantsService/BatchGetMenus"
 	RestaurantsService_ListRestaurants_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/ListRestaurants"
 	RestaurantsService_ListOwnedRestaurants_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/ListOwnedRestaurants"
 	RestaurantsService_ReceiveOrderRequest_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
 	RestaurantsService_CancelRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
 	RestaurantsService_AcceptRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder"
 	RestaurantsService_RejectRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/RejectRestaurantOrder"
-	RestaurantsService_StartPreparation_FullMethodName             = "/nomnom.restaurants.v1.RestaurantsService/StartPreparation"
+	RestaurantsService_StartNextPreparation_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/StartNextPreparation"
 	RestaurantsService_MarkRestaurantOrderAssembled_FullMethodName = "/nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderAssembled"
 	RestaurantsService_MarkRestaurantOrderReady_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/MarkRestaurantOrderReady"
 	RestaurantsService_ReportPreparationDelay_FullMethodName       = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationDelay"
@@ -36,6 +38,7 @@ const (
 	RestaurantsService_ListIncomingOrders_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders"
 	RestaurantsService_ListActiveRestaurantOrders_FullMethodName   = "/nomnom.restaurants.v1.RestaurantsService/ListActiveRestaurantOrders"
 	RestaurantsService_RegisterRestaurant_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
+	RestaurantsService_UpdateRestaurant_FullMethodName             = "/nomnom.restaurants.v1.RestaurantsService/UpdateRestaurant"
 	RestaurantsService_AssignStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
 	RestaurantsService_RevokeStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
 	RestaurantsService_OpenRestaurant_FullMethodName               = "/nomnom.restaurants.v1.RestaurantsService/OpenRestaurant"
@@ -61,6 +64,16 @@ type RestaurantsServiceClient interface {
 	// Current menu of a restaurant: public data, no authorization (FR-216). A
 	// restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
 	GetMenu(ctx context.Context, in *GetMenuRequest, opts ...grpc.CallOption) (*GetMenuResponse, error)
+	// Public data of up to 100 restaurants in one call for pages that show
+	// restaurants of many items (ADR 7): no authorization. An unknown id is
+	// absent from the response; the caller matches by restaurant_id, not by
+	// position. Empty or more than 100 ids is INVALID_ARGUMENT.
+	BatchGetRestaurants(ctx context.Context, in *BatchGetRestaurantsRequest, opts ...grpc.CallOption) (*BatchGetRestaurantsResponse, error)
+	// Current menus of up to 100 restaurants in one call (ADR 7): public data, no
+	// authorization. A restaurant without a menu is absent from the response;
+	// the caller matches by restaurant_id. Empty or more than 100 ids is
+	// INVALID_ARGUMENT.
+	BatchGetMenus(ctx context.Context, in *BatchGetMenusRequest, opts ...grpc.CallOption) (*BatchGetMenusResponse, error)
 	// Restaurants available for selection: public data, no authorization
 	// (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
 	// cursor ordered by restaurant id.
@@ -76,14 +89,20 @@ type RestaurantsServiceClient interface {
 	// Kitchen commands of restaurant staff over one Restaurant Order addressed by
 	// restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
 	// an order of another restaurant is NOT_FOUND, a forbidden transition is
-	// FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
-	// succeeds without a new fact; other repeats are FAILED_PRECONDITION.
-	// StartPreparation assigns the free cook on line with the earliest last
-	// assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
-	// order stays QUEUED.
+	// FAILED_PRECONDITION. A repeated MarkRestaurantOrderReady succeeds without a
+	// new fact; other repeats are FAILED_PRECONDITION.
 	AcceptRestaurantOrder(ctx context.Context, in *AcceptRestaurantOrderRequest, opts ...grpc.CallOption) (*AcceptRestaurantOrderResponse, error)
 	RejectRestaurantOrder(ctx context.Context, in *RejectRestaurantOrderRequest, opts ...grpc.CallOption) (*RejectRestaurantOrderResponse, error)
-	StartPreparation(ctx context.Context, in *StartPreparationRequest, opts ...grpc.CallOption) (*StartPreparationResponse, error)
+	// Starts the head of the Kitchen Queue of the restaurant (FR-225): the
+	// kitchen does not choose the order. The head is a premium order or a
+	// standard one waiting longer than the aging limit, then the other standard
+	// ones, FIFO by queued_at inside a class. It assigns the free cook on line
+	// with the earliest last assignment; without a free cook it is
+	// RESOURCE_EXHAUSTED and the queue stays as it was. An empty queue starts
+	// nothing: the response has no restaurant_order. A repeat with the same
+	// request_id starts no other order and answers with the order the first
+	// call started.
+	StartNextPreparation(ctx context.Context, in *StartNextPreparationRequest, opts ...grpc.CallOption) (*StartNextPreparationResponse, error)
 	MarkRestaurantOrderAssembled(ctx context.Context, in *MarkRestaurantOrderAssembledRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderAssembledResponse, error)
 	MarkRestaurantOrderReady(ctx context.Context, in *MarkRestaurantOrderReadyRequest, opts ...grpc.CallOption) (*MarkRestaurantOrderReadyResponse, error)
 	ReportPreparationDelay(ctx context.Context, in *ReportPreparationDelayRequest, opts ...grpc.CallOption) (*ReportPreparationDelayResponse, error)
@@ -106,6 +125,9 @@ type RestaurantsServiceClient interface {
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
 	RegisterRestaurant(ctx context.Context, in *RegisterRestaurantRequest, opts ...grpc.CallOption) (*RegisterRestaurantResponse, error)
+	// Name and premium fee of a restaurant (FR-202, FR-649); requires
+	// restaurant#manage. Publishes no business fact.
+	UpdateRestaurant(ctx context.Context, in *UpdateRestaurantRequest, opts ...grpc.CallOption) (*UpdateRestaurantResponse, error)
 	AssignStaff(ctx context.Context, in *AssignStaffRequest, opts ...grpc.CallOption) (*AssignStaffResponse, error)
 	RevokeStaff(ctx context.Context, in *RevokeStaffRequest, opts ...grpc.CallOption) (*RevokeStaffResponse, error)
 	// Opening of a restaurant for new Restaurant Orders (FR-203). Both require
@@ -174,6 +196,26 @@ func (c *restaurantsServiceClient) GetMenu(ctx context.Context, in *GetMenuReque
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) BatchGetRestaurants(ctx context.Context, in *BatchGetRestaurantsRequest, opts ...grpc.CallOption) (*BatchGetRestaurantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchGetRestaurantsResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_BatchGetRestaurants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) BatchGetMenus(ctx context.Context, in *BatchGetMenusRequest, opts ...grpc.CallOption) (*BatchGetMenusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchGetMenusResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_BatchGetMenus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *restaurantsServiceClient) ListRestaurants(ctx context.Context, in *ListRestaurantsRequest, opts ...grpc.CallOption) (*ListRestaurantsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRestaurantsResponse)
@@ -234,10 +276,10 @@ func (c *restaurantsServiceClient) RejectRestaurantOrder(ctx context.Context, in
 	return out, nil
 }
 
-func (c *restaurantsServiceClient) StartPreparation(ctx context.Context, in *StartPreparationRequest, opts ...grpc.CallOption) (*StartPreparationResponse, error) {
+func (c *restaurantsServiceClient) StartNextPreparation(ctx context.Context, in *StartNextPreparationRequest, opts ...grpc.CallOption) (*StartNextPreparationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StartPreparationResponse)
-	err := c.cc.Invoke(ctx, RestaurantsService_StartPreparation_FullMethodName, in, out, cOpts...)
+	out := new(StartNextPreparationResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_StartNextPreparation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -318,6 +360,16 @@ func (c *restaurantsServiceClient) RegisterRestaurant(ctx context.Context, in *R
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterRestaurantResponse)
 	err := c.cc.Invoke(ctx, RestaurantsService_RegisterRestaurant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) UpdateRestaurant(ctx context.Context, in *UpdateRestaurantRequest, opts ...grpc.CallOption) (*UpdateRestaurantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateRestaurantResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_UpdateRestaurant_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -482,6 +534,16 @@ type RestaurantsServiceServer interface {
 	// Current menu of a restaurant: public data, no authorization (FR-216). A
 	// restaurant without a menu is NOT_FOUND. Not a snapshot of a placed order.
 	GetMenu(context.Context, *GetMenuRequest) (*GetMenuResponse, error)
+	// Public data of up to 100 restaurants in one call for pages that show
+	// restaurants of many items (ADR 7): no authorization. An unknown id is
+	// absent from the response; the caller matches by restaurant_id, not by
+	// position. Empty or more than 100 ids is INVALID_ARGUMENT.
+	BatchGetRestaurants(context.Context, *BatchGetRestaurantsRequest) (*BatchGetRestaurantsResponse, error)
+	// Current menus of up to 100 restaurants in one call (ADR 7): public data, no
+	// authorization. A restaurant without a menu is absent from the response;
+	// the caller matches by restaurant_id. Empty or more than 100 ids is
+	// INVALID_ARGUMENT.
+	BatchGetMenus(context.Context, *BatchGetMenusRequest) (*BatchGetMenusResponse, error)
 	// Restaurants available for selection: public data, no authorization
 	// (FR-205, FR-496). Open restaurants only unless include_closed; paged by a
 	// cursor ordered by restaurant id.
@@ -497,14 +559,20 @@ type RestaurantsServiceServer interface {
 	// Kitchen commands of restaurant staff over one Restaurant Order addressed by
 	// restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
 	// an order of another restaurant is NOT_FOUND, a forbidden transition is
-	// FAILED_PRECONDITION. A repeated StartPreparation or MarkRestaurantOrderReady
-	// succeeds without a new fact; other repeats are FAILED_PRECONDITION.
-	// StartPreparation assigns the free cook on line with the earliest last
-	// assignment (FR-225); without a free cook it is RESOURCE_EXHAUSTED and the
-	// order stays QUEUED.
+	// FAILED_PRECONDITION. A repeated MarkRestaurantOrderReady succeeds without a
+	// new fact; other repeats are FAILED_PRECONDITION.
 	AcceptRestaurantOrder(context.Context, *AcceptRestaurantOrderRequest) (*AcceptRestaurantOrderResponse, error)
 	RejectRestaurantOrder(context.Context, *RejectRestaurantOrderRequest) (*RejectRestaurantOrderResponse, error)
-	StartPreparation(context.Context, *StartPreparationRequest) (*StartPreparationResponse, error)
+	// Starts the head of the Kitchen Queue of the restaurant (FR-225): the
+	// kitchen does not choose the order. The head is a premium order or a
+	// standard one waiting longer than the aging limit, then the other standard
+	// ones, FIFO by queued_at inside a class. It assigns the free cook on line
+	// with the earliest last assignment; without a free cook it is
+	// RESOURCE_EXHAUSTED and the queue stays as it was. An empty queue starts
+	// nothing: the response has no restaurant_order. A repeat with the same
+	// request_id starts no other order and answers with the order the first
+	// call started.
+	StartNextPreparation(context.Context, *StartNextPreparationRequest) (*StartNextPreparationResponse, error)
 	MarkRestaurantOrderAssembled(context.Context, *MarkRestaurantOrderAssembledRequest) (*MarkRestaurantOrderAssembledResponse, error)
 	MarkRestaurantOrderReady(context.Context, *MarkRestaurantOrderReadyRequest) (*MarkRestaurantOrderReadyResponse, error)
 	ReportPreparationDelay(context.Context, *ReportPreparationDelayRequest) (*ReportPreparationDelayResponse, error)
@@ -527,6 +595,9 @@ type RestaurantsServiceServer interface {
 	// and writes restaurant#owner; AssignStaff/RevokeStaff require restaurant#manage
 	// and write restaurant#staff before saving. Staff commands are idempotent.
 	RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error)
+	// Name and premium fee of a restaurant (FR-202, FR-649); requires
+	// restaurant#manage. Publishes no business fact.
+	UpdateRestaurant(context.Context, *UpdateRestaurantRequest) (*UpdateRestaurantResponse, error)
 	AssignStaff(context.Context, *AssignStaffRequest) (*AssignStaffResponse, error)
 	RevokeStaff(context.Context, *RevokeStaffRequest) (*RevokeStaffResponse, error)
 	// Opening of a restaurant for new Restaurant Orders (FR-203). Both require
@@ -581,6 +652,12 @@ func (UnimplementedRestaurantsServiceServer) GetRestaurant(context.Context, *Get
 func (UnimplementedRestaurantsServiceServer) GetMenu(context.Context, *GetMenuRequest) (*GetMenuResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMenu not implemented")
 }
+func (UnimplementedRestaurantsServiceServer) BatchGetRestaurants(context.Context, *BatchGetRestaurantsRequest) (*BatchGetRestaurantsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchGetRestaurants not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) BatchGetMenus(context.Context, *BatchGetMenusRequest) (*BatchGetMenusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchGetMenus not implemented")
+}
 func (UnimplementedRestaurantsServiceServer) ListRestaurants(context.Context, *ListRestaurantsRequest) (*ListRestaurantsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRestaurants not implemented")
 }
@@ -599,8 +676,8 @@ func (UnimplementedRestaurantsServiceServer) AcceptRestaurantOrder(context.Conte
 func (UnimplementedRestaurantsServiceServer) RejectRestaurantOrder(context.Context, *RejectRestaurantOrderRequest) (*RejectRestaurantOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RejectRestaurantOrder not implemented")
 }
-func (UnimplementedRestaurantsServiceServer) StartPreparation(context.Context, *StartPreparationRequest) (*StartPreparationResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method StartPreparation not implemented")
+func (UnimplementedRestaurantsServiceServer) StartNextPreparation(context.Context, *StartNextPreparationRequest) (*StartNextPreparationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartNextPreparation not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) MarkRestaurantOrderAssembled(context.Context, *MarkRestaurantOrderAssembledRequest) (*MarkRestaurantOrderAssembledResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkRestaurantOrderAssembled not implemented")
@@ -625,6 +702,9 @@ func (UnimplementedRestaurantsServiceServer) ListActiveRestaurantOrders(context.
 }
 func (UnimplementedRestaurantsServiceServer) RegisterRestaurant(context.Context, *RegisterRestaurantRequest) (*RegisterRestaurantResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterRestaurant not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) UpdateRestaurant(context.Context, *UpdateRestaurantRequest) (*UpdateRestaurantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateRestaurant not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) AssignStaff(context.Context, *AssignStaffRequest) (*AssignStaffResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AssignStaff not implemented")
@@ -724,6 +804,42 @@ func _RestaurantsService_GetMenu_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RestaurantsServiceServer).GetMenu(ctx, req.(*GetMenuRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_BatchGetRestaurants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchGetRestaurantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).BatchGetRestaurants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_BatchGetRestaurants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).BatchGetRestaurants(ctx, req.(*BatchGetRestaurantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_BatchGetMenus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchGetMenusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).BatchGetMenus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_BatchGetMenus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).BatchGetMenus(ctx, req.(*BatchGetMenusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -836,20 +952,20 @@ func _RestaurantsService_RejectRestaurantOrder_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RestaurantsService_StartPreparation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StartPreparationRequest)
+func _RestaurantsService_StartNextPreparation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartNextPreparationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RestaurantsServiceServer).StartPreparation(ctx, in)
+		return srv.(RestaurantsServiceServer).StartNextPreparation(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RestaurantsService_StartPreparation_FullMethodName,
+		FullMethod: RestaurantsService_StartNextPreparation_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RestaurantsServiceServer).StartPreparation(ctx, req.(*StartPreparationRequest))
+		return srv.(RestaurantsServiceServer).StartNextPreparation(ctx, req.(*StartNextPreparationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -994,6 +1110,24 @@ func _RestaurantsService_RegisterRestaurant_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RestaurantsServiceServer).RegisterRestaurant(ctx, req.(*RegisterRestaurantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_UpdateRestaurant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRestaurantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).UpdateRestaurant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_UpdateRestaurant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).UpdateRestaurant(ctx, req.(*UpdateRestaurantRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1284,6 +1418,14 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RestaurantsService_GetMenu_Handler,
 		},
 		{
+			MethodName: "BatchGetRestaurants",
+			Handler:    _RestaurantsService_BatchGetRestaurants_Handler,
+		},
+		{
+			MethodName: "BatchGetMenus",
+			Handler:    _RestaurantsService_BatchGetMenus_Handler,
+		},
+		{
 			MethodName: "ListRestaurants",
 			Handler:    _RestaurantsService_ListRestaurants_Handler,
 		},
@@ -1308,8 +1450,8 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RestaurantsService_RejectRestaurantOrder_Handler,
 		},
 		{
-			MethodName: "StartPreparation",
-			Handler:    _RestaurantsService_StartPreparation_Handler,
+			MethodName: "StartNextPreparation",
+			Handler:    _RestaurantsService_StartNextPreparation_Handler,
 		},
 		{
 			MethodName: "MarkRestaurantOrderAssembled",
@@ -1342,6 +1484,10 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterRestaurant",
 			Handler:    _RestaurantsService_RegisterRestaurant_Handler,
+		},
+		{
+			MethodName: "UpdateRestaurant",
+			Handler:    _RestaurantsService_UpdateRestaurant_Handler,
 		},
 		{
 			MethodName: "AssignStaff",

@@ -1,7 +1,8 @@
 // Cached Get Menu (ADR 43, local ADR 3): the public menu of a restaurant is the
 // hottest read of restaurants (UI, BFF, Place Order of orders). Keyed by
 // restaurant id. MenuItemAdded, MenuItemUpdated and
-// MenuItemAvailabilityChanged refresh the menu right after the commit.
+// MenuItemAvailabilityChanged refresh the menu right after the commit. Batch
+// Get Menus reads the same keys in one MGET.
 import { fromBinary } from "@bufbuild/protobuf";
 import type { Valkey } from "iovalkey";
 
@@ -15,15 +16,16 @@ import {
   ReadCache,
 } from "../../../../pkg/infrastructure/valkey/read-cache.ts";
 import type { CacheRefreshes } from "../../../../pkg/infrastructure/valkey/refresh.ts";
+import type { MenuBatchReader } from "../../applications/batch-get-menus/batch-get-menus.ts";
 import type { MenuReader } from "../../applications/get-menu/get-menu.ts";
 import type { MenuView } from "../../applications/menu-support.ts";
 
-export class CachedMenuReader implements MenuReader {
-  readonly #source: MenuReader;
+export class CachedMenuReader implements MenuReader, MenuBatchReader {
+  readonly #source: MenuReader & MenuBatchReader;
   readonly #cache: ReadCache<MenuView>;
 
   constructor(
-    source: MenuReader,
+    source: MenuReader & MenuBatchReader,
     options: { client: Valkey; ttlMs: number; metrics: CacheMetrics },
   ) {
     this.#source = source;
@@ -38,6 +40,23 @@ export class CachedMenuReader implements MenuReader {
     return this.#cache.read(restaurantId, () =>
       this.#source.getByRestaurantId(restaurantId),
     );
+  }
+
+  /** Batch Get Menu: one MGET, the misses in one read of the source. */
+  async getManyByRestaurantId(
+    restaurantIds: readonly string[],
+  ): Promise<readonly MenuView[]> {
+    const menus = await this.#cache.readMany(
+      restaurantIds,
+      async (missing) =>
+        new Map(
+          (await this.#source.getManyByRestaurantId(missing)).map((menu) => [
+            menu.restaurantId,
+            menu,
+          ]),
+        ),
+    );
+    return [...menus.values()];
   }
 
   /** The menu of the restaurant as stored now. */

@@ -103,6 +103,8 @@ func compose(order OrderSnapshot, restaurant Restaurant, now time.Time) (OrderVi
 		Restaurant:     restaurant,
 		Items:          items,
 		Total:          order.Total,
+		Priority:       order.Priority,
+		PremiumFee:     order.PremiumFee,
 		PlacedAt:       order.PlacedAt,
 		Milestones:     milestones(order),
 		AvailableUntil: availableUntil(order, current, now),

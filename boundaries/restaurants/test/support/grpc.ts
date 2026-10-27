@@ -18,6 +18,7 @@ import {
 } from "../../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import type { Subject } from "../../pkg/application/subject.ts";
+import { BatchGetRestaurantsHandler } from "../../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
@@ -103,6 +104,10 @@ export const createWorld = async (
   const service = createService({
     getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
     getMenu: world.getMenu,
+    batchGetRestaurants: new BatchGetRestaurantsHandler({
+      reader: world.catalog,
+    }),
+    batchGetMenus: world.batchGetMenus,
     listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
     listOwnedRestaurants: new ListOwnedRestaurantsHandler({
       reader: world.catalog,
@@ -121,6 +126,7 @@ export const createWorld = async (
     listActiveRestaurantOrders:
       options.listActiveRestaurantOrders ?? notComposed,
     registerRestaurant: world.register,
+    updateRestaurant: world.update,
     assignStaff: world.assignStaff,
     revokeStaff: world.revokeStaff,
     openRestaurant: world.open,

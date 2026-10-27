@@ -33,6 +33,7 @@ type restaurantsServer struct {
 	// withoutWaitTime answers GetRestaurant like a restaurants without FR-204.
 	withoutWaitTime bool
 	seenMD          metadata.MD
+	menusOf         []string
 }
 
 func (s *restaurantsServer) ListRestaurants(ctx context.Context, request *restaurantsv1.ListRestaurantsRequest) (*restaurantsv1.ListRestaurantsResponse, error) {
@@ -69,6 +70,23 @@ func (s *restaurantsServer) GetMenu(context.Context, *restaurantsv1.GetMenuReque
 		MenuItemId: "menu-gyoza", Name: "Гёдза", Description: "6 шт.",
 		Price: &restaurantsv1.Money{Amount: "4.00", Currency: "EUR"}, Available: true,
 	}}}, nil
+}
+
+// BatchGetMenus answers with the menu of restaurant-1 only, one without items
+// for restaurant-2 and nothing for the others.
+func (s *restaurantsServer) BatchGetMenus(ctx context.Context, request *restaurantsv1.BatchGetMenusRequest) (*restaurantsv1.BatchGetMenusResponse, error) {
+	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	s.menusOf = request.GetRestaurantIds()
+	if s.menuErr != nil {
+		return nil, s.menuErr
+	}
+	return &restaurantsv1.BatchGetMenusResponse{Menus: []*restaurantsv1.RestaurantMenu{
+		{RestaurantId: "restaurant-1", Items: []*restaurantsv1.MenuItem{{
+			MenuItemId: "menu-gyoza", Name: "Гёдза",
+			Price: &restaurantsv1.Money{Amount: "4.00", Currency: "EUR"}, Available: true,
+		}}},
+		{RestaurantId: "restaurant-2"},
+	}}, nil
 }
 
 func connect(t *testing.T, server *restaurantsServer) *Restaurants {
@@ -151,6 +169,22 @@ func TestRestaurantAndMenuMapPublicData(t *testing.T) {
 		ID: "menu-gyoza", Name: "Гёдза", Description: "6 шт.",
 		Price: applications.Money{Amount: "4.00", Currency: "EUR"}, Available: true,
 	}}, menu)
+}
+
+// A page of menus is one BatchGetMenus without a user; a published menu
+// without items stays an empty menu, a restaurant without a menu is absent.
+func TestMenusReadThePageInOneCall(t *testing.T) {
+	server := &restaurantsServer{}
+
+	menus, err := connect(t, server).Menus(customerContext(), []string{"restaurant-1", "restaurant-2", "restaurant-3"})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]applications.MenuItem{
+		"restaurant-1": {{ID: "menu-gyoza", Name: "Гёдза", Price: applications.Money{Amount: "4.00", Currency: "EUR"}, Available: true}},
+		"restaurant-2": {},
+	}, menus)
+	assert.Equal(t, []string{"restaurant-1", "restaurant-2", "restaurant-3"}, server.menusOf)
+	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
 }
 
 func TestNotFoundIsNamed(t *testing.T) {

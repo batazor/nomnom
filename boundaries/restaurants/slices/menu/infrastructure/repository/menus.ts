@@ -6,6 +6,7 @@ import {
   VersionedCollection,
   type VersionedDocument,
 } from "../../../../pkg/infrastructure/repository/versioned-collection.ts";
+import type { MenuBatchReader } from "../../applications/batch-get-menus/batch-get-menus.ts";
 import type { MenuReader } from "../../applications/get-menu/get-menu.ts";
 import type { MenuView } from "../../applications/menu-support.ts";
 import {
@@ -48,6 +49,21 @@ const toSnapshot = (document: MenuDocument): MenuSnapshot => ({
     isAvailable: item.isAvailable,
   })),
 });
+
+const toMenuView = (document: MenuDocument): MenuView => {
+  const snapshot = toSnapshot(document);
+  return {
+    menuId: snapshot.id,
+    restaurantId: snapshot.restaurantId,
+    items: snapshot.items.map((item) => ({
+      menuItemId: item.id,
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      isAvailable: item.isAvailable,
+    })),
+  };
+};
 
 export const createMenuCollection = (
   db: Db,
@@ -95,7 +111,7 @@ export class DatabaseMenuRepository implements MenuRepository {
   }
 }
 
-export class DatabaseMenuReader implements MenuReader {
+export class DatabaseMenuReader implements MenuReader, MenuBatchReader {
   readonly #collection: VersionedCollection<MenuDocument>;
 
   constructor(collection: VersionedCollection<MenuDocument>) {
@@ -104,18 +120,15 @@ export class DatabaseMenuReader implements MenuReader {
 
   async getByRestaurantId(restaurantId: string): Promise<MenuView | undefined> {
     const document = await this.#collection.findOne({ restaurantId });
-    if (document === undefined) return undefined;
-    const snapshot = toSnapshot(document);
-    return {
-      menuId: snapshot.id,
-      restaurantId: snapshot.restaurantId,
-      items: snapshot.items.map((item) => ({
-        menuItemId: item.id,
-        name: item.name,
-        description: item.description,
-        price: item.price,
-        isAvailable: item.isAvailable,
-      })),
-    };
+    return document === undefined ? undefined : toMenuView(document);
+  }
+
+  async getManyByRestaurantId(
+    restaurantIds: readonly string[],
+  ): Promise<readonly MenuView[]> {
+    const documents = await this.#collection.find({
+      restaurantId: { $in: [...restaurantIds] },
+    });
+    return documents.map(toMenuView);
   }
 }
