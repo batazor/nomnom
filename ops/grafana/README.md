@@ -4,7 +4,7 @@
 
 ```bash
 make grafana-generate   # dashboards, README сервисов, docs/observability/metric-inventory.md
-make grafana-check      # CI: go test, регенерация без диффа, gcx dev lint (закоммиченные + live-вариант)
+make grafana-check      # перед push: go test, регенерация без диффа, gcx dev lint (закоммиченные + live-вариант)
 make grafana-serve      # gcx dev serve: локальный preview (нужен gcx context с Grafana для запросов)
 make grafana-tools      # go install gcx
 ```

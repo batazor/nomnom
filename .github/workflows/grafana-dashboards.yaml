@@ -1,19 +1,9 @@
 # Dashboards as code (ADR 29): генератор и артефакты не расходятся, PromQL и lint проходят.
+# Как и ci.yaml (ADR 30), запускается только вручную; источник истины — локальный `make grafana-check`.
 name: grafana-dashboards
 
 on:
-  pull_request:
-    paths:
-      - ops/grafana/**
-      - boundaries/*/ops/grafana/**
-      - docs/observability/metric-inventory.md
-      - .github/workflows/grafana-dashboards.yaml
-  push:
-    branches: [main]
-    paths:
-      - ops/grafana/**
-      - boundaries/*/ops/grafana/**
-      - docs/observability/metric-inventory.md
+  workflow_dispatch:
 
 permissions:
   contents: read

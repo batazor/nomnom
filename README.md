@@ -88,7 +88,7 @@ make kind-down     # удаление кластера
 
 ## CI
 
-Из-за лимитов GitHub Actions проверки выполняются локально: перед push — `make check` / `npm run check` затронутых boundaries, integration-цели — при изменении adapters, persistence, messaging или composition root. Workflow [`ci.yaml`](.github/workflows/ci.yaml) описывает те же проверки, но запускается только вручную (`workflow_dispatch`); автоматически работает лишь узкий `grafana-dashboards.yaml`. Решение — [ADR 30](docs/adr/0030-ci-is-described-but-runs-only-on-demand.md).
+Из-за лимитов GitHub Actions проверки выполняются локально: перед push — `make check` / `npm run check` затронутых boundaries, integration-цели — при изменении adapters, persistence, messaging или composition root. Workflow [`ci.yaml`](.github/workflows/ci.yaml) описывает те же проверки, но запускается только вручную (`workflow_dispatch`); так же устроен `grafana-dashboards.yaml` (`make grafana-check`), автоматических workflows нет. Решение — [ADR 30](docs/adr/0030-ci-is-described-but-runs-only-on-demand.md).
 
 ## Performance testing
 

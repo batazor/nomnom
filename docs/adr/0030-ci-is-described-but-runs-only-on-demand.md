@@ -22,7 +22,7 @@ Accepted
 
 **Workflow описан, но автоматически не запускается.** [`.github/workflows/ci.yaml`](../../.github/workflows/ci.yaml) содержит по job на boundary, которые вызывают те же команды `check`, что и локальная проверка, и отдельную job integration-тестов `orders`. Единственный trigger — `workflow_dispatch` с выбором boundary; `push` и `pull_request` не подключены. Job не дублирует логику Makefile/`package.json`: workflow только готовит toolchain и вызывает ту же команду.
 
-**Исключение.** [`grafana-dashboards.yaml`](../../.github/workflows/grafana-dashboards.yaml) (ADR 29) остаётся автоматическим: он ограничен путями `ops/grafana` и dashboards, выполняется за минуты и ловит расхождение закоммиченного артефакта с генератором, которое локально легко пропустить. Новые автоматические workflows добавляются только с таким же узким path filter и отдельным решением.
+**Без исключений.** [`grafana-dashboards.yaml`](../../.github/workflows/grafana-dashboards.yaml) (ADR 29) тоже запускается только через `workflow_dispatch`; расхождение dashboards с генератором ловит локальный `make grafana-check`. Автоматических workflows нет.
 
 **Включение.** Чтобы включить CI, в `ci.yaml` добавляются `pull_request` и `push` в `main` с `paths` по boundaries; jobs уже разделены, поэтому path filter запускает только затронутые. Изменение trigger оформляется новым ADR, заменяющим этот.
 
