@@ -6,40 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-type fakeDispatch struct {
-	pool  Pool
-	calls []string
-	err   error
-}
-
-func (f *fakeDispatch) Pool(context.Context) (Pool, error) { return f.pool, nil }
-
-func (f *fakeDispatch) Register(_ context.Context, courierID, name string) error {
-	f.calls = append(f.calls, "register "+courierID+" "+name)
-	return f.err
-}
-
-func (f *fakeDispatch) Place(_ context.Context, courierID string, location Location) error {
-	f.calls = append(f.calls, "place "+courierID)
-	return nil
-}
-
-func (f *fakeDispatch) SetOnLine(_ context.Context, courierID string, onLine bool) error {
-	if onLine {
-		f.calls = append(f.calls, "on line "+courierID)
-	} else {
-		f.calls = append(f.calls, "off line "+courierID)
-	}
-	return f.err
-}
-
-func (f *fakeDispatch) Retire(_ context.Context, courierID string) error {
-	f.calls = append(f.calls, "retire "+courierID)
-	return f.err
-}
 
 var start = Location{Latitude: 52.525, Longitude: 13.402}
 
@@ -49,23 +18,29 @@ func fixedID() (string, error) { return "courier-new", nil }
 // point and the pool is read back.
 func TestAddCourierRegistersAndPlacesIt(t *testing.T) {
 	pool := Pool{Size: 1, OnLine: 1, Couriers: []Courier{{ID: "courier-new", Name: "Анна", Availability: AvailabilityAvailable}}}
-	dispatch := &fakeDispatch{pool: pool}
+	dispatch := NewMockDispatch(t)
+	mock.InOrder(
+		dispatch.EXPECT().Register(mock.Anything, "courier-new", "Анна").Return(nil).Once(),
+		dispatch.EXPECT().Place(mock.Anything, "courier-new", start).Return(nil).Once(),
+		dispatch.EXPECT().Pool(mock.Anything).Return(pool, nil).Once(),
+	)
 
 	result, err := NewChangePool(dispatch, fixedID, start).Handle(context.Background(), Request{Command: CommandAdd, Name: "Анна"})
 
 	require.NoError(t, err)
 	assert.Equal(t, Result{Pool: pool}, result)
-	assert.Equal(t, []string{"register courier-new Анна", "place courier-new"}, dispatch.calls)
 }
 
 func TestRefusedAddPlacesNobody(t *testing.T) {
-	dispatch := &fakeDispatch{err: ErrInvalidCourierName}
+	// Place is not expected: nobody is placed.
+	dispatch := NewMockDispatch(t)
+	dispatch.EXPECT().Register(mock.Anything, "courier-new", " ").Return(ErrInvalidCourierName).Once()
+	dispatch.EXPECT().Pool(mock.Anything).Return(Pool{}, nil).Once()
 
 	result, err := NewChangePool(dispatch, fixedID, start).Handle(context.Background(), Request{Command: CommandAdd, Name: " "})
 
 	require.NoError(t, err)
 	assert.Equal(t, ProblemCourierNameInvalid, result.Problem)
-	assert.Equal(t, []string{"register courier-new  "}, dispatch.calls)
 }
 
 func TestLineCommandsAnswerProblemsAndErrors(t *testing.T) {
@@ -73,18 +48,21 @@ func TestLineCommandsAnswerProblemsAndErrors(t *testing.T) {
 		ErrStatusConflict: ProblemCourierStatusConflict,
 		ErrCourierOnLine:  ProblemCourierOnLine,
 	} {
-		dispatch := &fakeDispatch{err: cause}
+		dispatch := NewMockDispatch(t)
+		dispatch.EXPECT().SetOnLine(mock.Anything, "courier-1", false).Return(cause).Once()
+		dispatch.EXPECT().Pool(mock.Anything).Return(Pool{}, nil).Once()
 		result, err := NewChangePool(dispatch, fixedID, start).Handle(context.Background(), Request{Command: CommandTakeOffLine, CourierID: "courier-1"})
 		require.NoError(t, err)
 		assert.Equal(t, problem, result.Problem)
 	}
 
-	denied := &fakeDispatch{err: ErrNotPermitted}
+	denied := NewMockDispatch(t)
+	denied.EXPECT().Retire(mock.Anything, "courier-1").Return(ErrNotPermitted).Once()
 	_, err := NewChangePool(denied, fixedID, start).Handle(context.Background(), Request{Command: CommandRetire, CourierID: "courier-1"})
 	assert.ErrorIs(t, err, ErrNotPermitted)
 
 	broken := errors.New("id source down")
-	_, err = NewChangePool(&fakeDispatch{}, func() (string, error) { return "", broken }, start).Handle(context.Background(), Request{Command: CommandAdd, Name: "Анна"})
+	_, err = NewChangePool(NewMockDispatch(t), func() (string, error) { return "", broken }, start).Handle(context.Background(), Request{Command: CommandAdd, Name: "Анна"})
 	assert.ErrorIs(t, err, broken)
 }
 

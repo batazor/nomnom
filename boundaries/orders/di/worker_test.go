@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/worker"
@@ -20,30 +20,14 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-type fakeRunner struct {
-	options    worker.Options
-	workflows  []string
-	activities int
-	startErr   error
-	started    bool
-	stopped    bool
-	stopDelay  time.Duration
-}
-
-func (f *fakeRunner) RegisterWorkflowWithOptions(_ any, options workflow.RegisterOptions) {
-	f.workflows = append(f.workflows, options.Name)
-}
-
-func (f *fakeRunner) RegisterActivityWithOptions(any, activity.RegisterOptions) { f.activities++ }
-
-func (f *fakeRunner) Start() error {
-	f.started = true
-	return f.startErr
-}
-
-func (f *fakeRunner) Stop() {
-	time.Sleep(f.stopDelay)
-	f.stopped = true
+// expectStart expects the OrderFulfillment workflow and 12 Activities to be
+// registered, then Start returning startErr.
+func expectStart(runner *mockRunner, startErr error) {
+	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
+		return options.Name == "OrderFulfillment"
+	})).Return().Once()
+	runner.EXPECT().RegisterActivityWithOptions(mock.Anything, mock.Anything).Return().Times(12)
+	runner.EXPECT().Start().Return(startErr).Once()
 }
 
 func testConfig() config.Config {
@@ -58,7 +42,7 @@ func testConfig() config.Config {
 	}
 }
 
-func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*TemporalWorker, *mocks.Client) {
+func newTestWorker(t *testing.T, cfg config.Config, poller *mockRunner) (*TemporalWorker, *mocks.Client, *worker.Options) {
 	t.Helper()
 	temporalClient := mocks.NewClient(t)
 	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(repositorytest.Open(t), testNeighbours(), observability.UseCases()))
@@ -70,37 +54,40 @@ func newTestWorker(t *testing.T, cfg config.Config, fake *fakeRunner) (*Temporal
 		assert.NotNil(t, options.MetricsHandler, "Temporal SDK metrics go to the OTel pipeline")
 		return temporalClient, nil
 	}
+	var captured worker.Options
 	w.newWorker = func(_ client.Client, options worker.Options) runner {
-		fake.options = options
-		return fake
+		captured = options
+		return poller
 	}
 	w.ensure = func(context.Context, client.Client) error { return nil }
-	return w, temporalClient
+	return w, temporalClient, &captured
 }
 
 func TestTemporalWorkerStartsAndStops(t *testing.T) {
-	runner := &fakeRunner{}
-	w, temporalClient := newTestWorker(t, testConfig(), runner)
+	runner := newMockRunner(t)
+	expectStart(runner, nil)
+	runner.EXPECT().Stop().Return().Once()
+	w, temporalClient, options := newTestWorker(t, testConfig(), runner)
 	temporalClient.On("Close").Return().Once()
 
 	require.NoError(t, w.Start(context.Background()))
-	assert.True(t, runner.started)
-	assert.Equal(t, []string{"OrderFulfillment"}, runner.workflows)
-	assert.Equal(t, 12, runner.activities)
-	assert.Equal(t, 3*time.Second, runner.options.WorkerStopTimeout)
+	assert.Equal(t, 3*time.Second, options.WorkerStopTimeout)
 
 	runErr := make(chan error, 1)
 	go func() { runErr <- w.Run() }()
 	require.NoError(t, w.Shutdown(context.Background()))
 	require.NoError(t, <-runErr)
-	assert.True(t, runner.stopped)
 }
 
 func TestTemporalWorkerChecksSearchAttributeOnlyWhenPublishing(t *testing.T) {
 	for _, publish := range []bool{true, false} {
 		cfg := testConfig()
 		cfg.Fulfillment.PublishStage = publish
-		w, temporalClient := newTestWorker(t, cfg, &fakeRunner{})
+		runner := newMockRunner(t)
+		if !publish {
+			expectStart(runner, nil)
+		}
+		w, temporalClient, _ := newTestWorker(t, cfg, runner)
 		temporalClient.On("Close").Return().Maybe()
 		missing := errors.New("search attribute missing")
 		w.ensure = func(context.Context, client.Client) error { return missing }
@@ -118,18 +105,20 @@ func TestTemporalWorkerChecksSearchAttributeOnlyWhenPublishing(t *testing.T) {
 }
 
 func TestTemporalWorkerStartFailureClosesClient(t *testing.T) {
-	runner := &fakeRunner{startErr: errors.New("namespace not found")}
-	w, temporalClient := newTestWorker(t, testConfig(), runner)
+	startErr := errors.New("namespace not found")
+	runner := newMockRunner(t)
+	expectStart(runner, startErr)
+	w, temporalClient, _ := newTestWorker(t, testConfig(), runner)
 	temporalClient.On("Close").Return().Once()
 
-	require.ErrorIs(t, w.Start(context.Background()), runner.startErr)
+	require.ErrorIs(t, w.Start(context.Background()), startErr)
 }
 
 // AC-451: an unreachable Temporal fails startup within the connect timeout.
 func TestTemporalWorkerDialFailureFailsStartup(t *testing.T) {
 	cfg := testConfig()
 	cfg.Temporal.ConnectTimeout = 50 * time.Millisecond
-	w, _ := newTestWorker(t, cfg, &fakeRunner{})
+	w, _, _ := newTestWorker(t, cfg, newMockRunner(t))
 	w.dial = func(ctx context.Context, _ client.Options) (client.Client, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -143,19 +132,22 @@ func TestTemporalWorkerDialFailureFailsStartup(t *testing.T) {
 }
 
 func TestTemporalWorkerRunReturnsFatalError(t *testing.T) {
-	runner := &fakeRunner{}
-	w, _ := newTestWorker(t, testConfig(), runner)
+	runner := newMockRunner(t)
+	expectStart(runner, nil)
+	w, _, options := newTestWorker(t, testConfig(), runner)
 	require.NoError(t, w.Start(context.Background()))
 
 	fatal := errors.New("poller failed")
-	runner.options.OnFatalError(fatal)
+	options.OnFatalError(fatal)
 
 	require.ErrorIs(t, w.Run(), fatal)
 }
 
 func TestTemporalWorkerShutdownRespectsDeadline(t *testing.T) {
-	runner := &fakeRunner{stopDelay: 200 * time.Millisecond}
-	w, temporalClient := newTestWorker(t, testConfig(), runner)
+	runner := newMockRunner(t)
+	expectStart(runner, nil)
+	runner.EXPECT().Stop().RunAndReturn(func() { time.Sleep(200 * time.Millisecond) }).Once()
+	w, temporalClient, _ := newTestWorker(t, testConfig(), runner)
 	temporalClient.On("Close").Return().Maybe()
 	require.NoError(t, w.Start(context.Background()))
 	runErr := make(chan error, 1)

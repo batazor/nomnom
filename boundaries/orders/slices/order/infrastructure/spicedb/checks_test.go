@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -50,17 +51,21 @@ func point(t *testing.T, set attribute.Set) checkPoint {
 // ответ SpiceDB, error и timeout — сбой проверки; ID subject и resource не пишутся.
 func TestCheckRecordsResult(t *testing.T) {
 	for _, tc := range []struct {
-		result string
-		fake   *fakePermissions
+		result         string
+		permissionship v1.CheckPermissionResponse_Permissionship
+		err            error
 	}{
-		{"allowed", &fakePermissions{permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION}},
-		{"denied", &fakePermissions{permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_NO_PERMISSION}},
-		{"error", &fakePermissions{err: errors.New("unavailable")}},
-		{"timeout", &fakePermissions{err: status.Error(codes.DeadlineExceeded, "context deadline exceeded")}},
+		{result: "allowed", permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION},
+		{result: "denied", permissionship: v1.CheckPermissionResponse_PERMISSIONSHIP_NO_PERMISSION},
+		{result: "error", err: errors.New("unavailable")},
+		{result: "timeout", err: status.Error(codes.DeadlineExceeded, "context deadline exceeded")},
 	} {
 		t.Run(tc.result, func(t *testing.T) {
 			reader := installMeter(t)
-			a := spicedb.NewAuthorizer(tc.fake, nil, time.Second)
+			permissions := NewMockPermissionsServiceClient(t)
+			permissions.EXPECT().CheckPermission(mock.Anything, mock.Anything).
+				Return(&v1.CheckPermissionResponse{Permissionship: tc.permissionship}, tc.err).Once()
+			a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 
 			_ = a.Check(context.Background(), customerCheck)
 

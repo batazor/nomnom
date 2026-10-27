@@ -8,6 +8,7 @@ test:
 
 generate:
 	npm --prefix ../.. run generate
+	go tool mockery
 
 publish: generate
 	npm --prefix ../.. exec -- wgc router plugin publish plugins/bff

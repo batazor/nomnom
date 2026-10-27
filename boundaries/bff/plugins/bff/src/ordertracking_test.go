@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -22,28 +23,20 @@ import (
 
 const fixtures = "../../../../../tests/identity/fixtures"
 
-type fakeGetOrder struct {
-	view   applications.OrderView
-	err    error
-	called bool
-	user   identity.User
+// onBehalfOf matches a context that carries the verified user userID.
+func onBehalfOf(userID string) any {
+	return mock.MatchedBy(func(ctx context.Context) bool {
+		user, ok := identity.UserFrom(ctx)
+		return ok && user.ID == userID
+	})
 }
 
-func (f *fakeGetOrder) Handle(ctx context.Context, _ string) (applications.OrderView, error) {
-	f.called = true
-	f.user, _ = identity.UserFrom(ctx)
-	return f.view, f.err
-}
-
-type fakeCancellation struct {
-	result applications.CancellationResult
-	err    error
-	got    applications.CancellationRequest
-}
-
-func (f *fakeCancellation) Handle(_ context.Context, request applications.CancellationRequest) (applications.CancellationResult, error) {
-	f.got = request
-	return f.result, f.err
+// withUser matches a context that carries a verified user.
+func withUser() any {
+	return mock.MatchedBy(func(ctx context.Context) bool {
+		user, ok := identity.UserFrom(ctx)
+		return ok && user.ID != ""
+	})
 }
 
 func accessToken(t *testing.T) (verifier *identity.AccessTokenVerifier, token string) {
@@ -62,7 +55,7 @@ func accessToken(t *testing.T) (verifier *identity.AccessTokenVerifier, token st
 	return verifier, vectors.Tokens["valid"]
 }
 
-func newService(t *testing.T, getOrder *fakeGetOrder, cancel *fakeCancellation) (*BffService, context.Context) {
+func newService(t *testing.T, getOrder *mockGetOrderHandler, cancel *mockRequestCancellationHandler) (*BffService, context.Context) {
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{
@@ -75,20 +68,20 @@ func newService(t *testing.T, getOrder *fakeGetOrder, cancel *fakeCancellation) 
 
 // AC-556: without an access token nothing reaches orders.
 func TestQueryOrderRequiresAccessToken(t *testing.T) {
-	getOrder := &fakeGetOrder{}
-	svc, _ := newService(t, getOrder, &fakeCancellation{})
+	svc, _ := newService(t, newMockGetOrderHandler(t), newMockRequestCancellationHandler(t))
 
 	_, err := svc.QueryOrder(context.Background(), &service.QueryOrderRequest{Id: "order-1"})
 
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	assert.False(t, getOrder.called)
 }
 
 func TestQueryOrderMapsTheView(t *testing.T) {
 	placed := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	until := placed.Add(5 * time.Minute)
 	ready := placed.Add(12 * time.Minute)
-	getOrder := &fakeGetOrder{view: applications.OrderView{
+	getOrder := newMockGetOrderHandler(t)
+	// orders is called on behalf of the customer.
+	getOrder.EXPECT().Handle(onBehalfOf("customer-1"), "order-1").Return(applications.OrderView{
 		ID: "order-1", Status: applications.StatusPreparing,
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
 		Items: []applications.ItemView{{MenuItemID: "menu-tea", Name: "Чай", Quantity: 3,
@@ -98,14 +91,13 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 		Milestones:     []applications.Milestone{{Kind: applications.MilestoneCourierAssigned, OccurredAt: placed.Add(time.Minute)}},
 		AvailableUntil: &until,
 		Deadlines:      applications.Deadlines{ExpectedReadyAt: &ready},
-	}}
-	svc, ctx := newService(t, getOrder, &fakeCancellation{})
+	}, nil).Once()
+	svc, ctx := newService(t, getOrder, newMockRequestCancellationHandler(t))
 
 	response, err := svc.QueryOrder(ctx, &service.QueryOrderRequest{Id: "order-1"})
 
 	require.NoError(t, err)
 	order := response.GetOrder()
-	assert.Equal(t, "customer-1", getOrder.user.ID, "orders is called on behalf of the customer")
 	assert.Equal(t, service.OrderStatus_ORDER_STATUS_PREPARING, order.GetStatus())
 	assert.Equal(t, service.OrderEndReason_ORDER_END_REASON_UNSPECIFIED, order.GetEndReason())
 	assert.Equal(t, "0.30", order.GetItems()[0].GetLineTotal().GetAmount())
@@ -118,7 +110,9 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 }
 
 func TestQueryOrderNotFoundIsNull(t *testing.T) {
-	svc, ctx := newService(t, &fakeGetOrder{err: applications.ErrOrderNotFound}, &fakeCancellation{})
+	getOrder := newMockGetOrderHandler(t)
+	getOrder.EXPECT().Handle(mock.Anything, "order-1").Return(applications.OrderView{}, applications.ErrOrderNotFound).Once()
+	svc, ctx := newService(t, getOrder, newMockRequestCancellationHandler(t))
 	response, err := svc.QueryOrder(ctx, &service.QueryOrderRequest{Id: "order-1"})
 	require.NoError(t, err)
 	assert.Nil(t, response.GetOrder())
@@ -128,10 +122,12 @@ func TestQueryOrderNotFoundIsNull(t *testing.T) {
 // missing order is NOT_FOUND, never order data.
 func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
 	delivered := time.Date(2026, 10, 25, 12, 30, 0, 0, time.UTC)
-	getOrder := &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp,
+	getOrder := newMockGetOrderHandler(t)
+	getOrder.EXPECT().Handle(onBehalfOf("customer-1"), "order-1").Return(applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp,
 		Total:     applications.Money{Amount: "0.30", Currency: "EUR"},
-		Deadlines: applications.Deadlines{ExpectedDeliveredAt: &delivered}}}
-	svc, ctx := newService(t, getOrder, &fakeCancellation{})
+		Deadlines: applications.Deadlines{ExpectedDeliveredAt: &delivered}}, nil).Once()
+	getOrder.EXPECT().Handle(onBehalfOf("customer-1"), "order-1").Return(applications.OrderView{}, applications.ErrOrderNotFound).Once()
+	svc, ctx := newService(t, getOrder, newMockRequestCancellationHandler(t))
 	request := &service.LookupOrderByIdRequest{Keys: []*service.LookupOrderByIdRequestKey{{Id: "order-1"}}}
 
 	response, err := svc.LookupOrderById(ctx, request)
@@ -140,9 +136,7 @@ func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
 	assert.Equal(t, "order-1", response.GetResult()[0].GetId())
 	assert.Equal(t, "2026-10-25T12:30:00Z", response.GetResult()[0].GetExpectedDeliveredAt().GetValue(),
 		"orderChanged carries the deadlines (FR-611)")
-	assert.Equal(t, "customer-1", getOrder.user.ID)
 
-	getOrder.err = applications.ErrOrderNotFound
 	_, err = svc.LookupOrderById(ctx, request)
 	assert.Equal(t, codes.NotFound, status.Code(err))
 
@@ -151,8 +145,12 @@ func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
 }
 
 func TestRequestOrderCancellationMapsOutcomeAndProblem(t *testing.T) {
-	cancel := &fakeCancellation{result: applications.CancellationResult{Problem: applications.ProblemWindowExpired}}
-	svc, ctx := newService(t, &fakeGetOrder{}, cancel)
+	want := applications.CancellationRequest{OrderID: "order-1", RequestID: "r-1", Reason: "changed mind"}
+	cancel := newMockRequestCancellationHandler(t)
+	cancel.EXPECT().Handle(mock.Anything, want).Return(applications.CancellationResult{Problem: applications.ProblemWindowExpired}, nil).Once()
+	cancel.EXPECT().Handle(mock.Anything, want).Return(applications.CancellationResult{Outcome: applications.OutcomeRequested}, nil).Once()
+	cancel.EXPECT().Handle(mock.Anything, want).Return(applications.CancellationResult{}, applications.ErrOrderNotFound).Once()
+	svc, ctx := newService(t, newMockGetOrderHandler(t), cancel)
 	request := &service.MutationRequestOrderCancellationRequest{Input: &service.RequestOrderCancellationInput{
 		OrderId: "order-1", RequestId: "r-1", Reason: wrapperspb.String("changed mind"),
 	}}
@@ -161,15 +159,12 @@ func TestRequestOrderCancellationMapsOutcomeAndProblem(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, service.OrderCancellationProblemCode_ORDER_CANCELLATION_PROBLEM_CODE_CANCELLATION_WINDOW_EXPIRED,
 		response.GetRequestOrderCancellation().GetProblem().GetCode())
-	assert.Equal(t, applications.CancellationRequest{OrderID: "order-1", RequestID: "r-1", Reason: "changed mind"}, cancel.got)
 
-	cancel.result = applications.CancellationResult{Outcome: applications.OutcomeRequested}
 	response, err = svc.MutationRequestOrderCancellation(ctx, request)
 	require.NoError(t, err)
 	assert.Equal(t, service.OrderCancellationOutcome_ORDER_CANCELLATION_OUTCOME_REQUESTED, response.GetRequestOrderCancellation().GetOutcome())
 	assert.Nil(t, response.GetRequestOrderCancellation().GetProblem())
 
-	cancel.err = applications.ErrOrderNotFound
 	_, err = svc.MutationRequestOrderCancellation(ctx, request)
 	assert.Equal(t, codes.NotFound, status.Code(err))
 
@@ -179,7 +174,9 @@ func TestRequestOrderCancellationMapsOutcomeAndProblem(t *testing.T) {
 
 // AC-641: a status the presenter does not know is an error, not UNSPECIFIED.
 func TestQueryOrderWithUnknownStatusIsAnError(t *testing.T) {
-	svc, ctx := newService(t, &fakeGetOrder{view: applications.OrderView{ID: "order-1", Status: "LOST"}}, &fakeCancellation{})
+	getOrder := newMockGetOrderHandler(t)
+	getOrder.EXPECT().Handle(mock.Anything, "order-1").Return(applications.OrderView{ID: "order-1", Status: "LOST"}, nil).Once()
+	svc, ctx := newService(t, getOrder, newMockRequestCancellationHandler(t))
 	response, err := svc.QueryOrder(ctx, &service.QueryOrderRequest{Id: "order-1"})
 	assert.Equal(t, codes.Unavailable, status.Code(err))
 	assert.Nil(t, response)

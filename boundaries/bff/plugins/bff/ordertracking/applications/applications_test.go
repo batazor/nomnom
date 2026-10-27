@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,50 +15,20 @@ var placedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 
 func at(minutes int) time.Time { return placedAt.Add(time.Duration(minutes) * time.Minute) }
 
-type fakeOrders struct {
-	order   OrderSnapshot
-	err     error
-	outcome CancellationOutcome
-	got     CancellationRequest
+// orderReading expects one read of order.
+func orderReading(t *testing.T, order OrderSnapshot) *MockOrderReader {
+	orders := NewMockOrderReader(t)
+	orders.EXPECT().GetOrder(mock.Anything, order.ID).Return(order, nil).Once()
+	return orders
 }
 
-func (f *fakeOrders) GetOrder(context.Context, string) (OrderSnapshot, error) { return f.order, f.err }
-
-func (f *fakeOrders) RequestCancellation(_ context.Context, request CancellationRequest) (CancellationOutcome, error) {
-	f.got = request
-	return f.outcome, f.err
-}
-
-// fakeCatalog counts the restaurant reads; a restaurant in err fails.
-// fakeCouriers names the courier of every Order it is asked about.
-type fakeCouriers struct {
-	asked *[]string
-	err   error
-}
-
-func (f fakeCouriers) CourierOf(_ context.Context, orderID string) (*Courier, error) {
-	if f.asked != nil {
-		*f.asked = append(*f.asked, orderID)
+// catalogReading expects exactly one read of each restaurant.
+func catalogReading(t *testing.T, restaurantIDs ...string) *MockCatalog {
+	catalog := NewMockCatalog(t)
+	for _, id := range restaurantIDs {
+		catalog.EXPECT().Restaurant(mock.Anything, id).Return(Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil).Once()
 	}
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &Courier{Name: "Тимур"}, nil
-}
-
-type fakeCatalog struct {
-	reads map[string]int
-	err   map[string]error
-}
-
-func (f fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
-	if f.reads != nil {
-		f.reads[id]++
-	}
-	if err := f.err[id]; err != nil {
-		return Restaurant{}, err
-	}
-	return Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil
+	return catalog
 }
 
 func snapshot(state string, facts ...Fact) OrderSnapshot {
@@ -71,7 +42,11 @@ func snapshot(state string, facts ...Fact) OrderSnapshot {
 
 func view(t *testing.T, order OrderSnapshot, now time.Time) OrderView {
 	t.Helper()
-	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{}, fakeCouriers{})
+	// The courier rules are TestCourierIsNamedOnceAssigned's: here delivery
+	// names one whenever it is asked.
+	couriers := NewMockCouriers(t)
+	couriers.EXPECT().CourierOf(mock.Anything, order.ID).Return(&Courier{Name: "Тимур"}, nil).Maybe()
+	h := NewGetOrder(orderReading(t, order), catalogReading(t, order.RestaurantID), couriers)
 	h.now = func() time.Time { return now }
 	result, err := h.Handle(context.Background(), order.ID)
 	require.NoError(t, err)
@@ -108,7 +83,7 @@ func TestStatusFollowsStateAndFacts(t *testing.T) {
 }
 
 func TestUnknownStateIsAnError(t *testing.T) {
-	h := NewGetOrder(&fakeOrders{order: snapshot("lost")}, fakeCatalog{}, fakeCouriers{})
+	h := NewGetOrder(orderReading(t, snapshot("lost")), catalogReading(t, "restaurant-1"), NewMockCouriers(t))
 	_, err := h.Handle(context.Background(), "order-1")
 	assert.Error(t, err)
 }
@@ -169,25 +144,26 @@ func TestPreparingOrderWithCourierMilestones(t *testing.T) {
 // AC-795: an Order with an Assignment names its courier; before it delivery
 // is not asked.
 func TestCourierIsNamedOnceAssigned(t *testing.T) {
-	var asked []string
 	assigned := snapshot("confirmed", Fact{"courier_assigned", at(8)})
-	h := NewGetOrder(&fakeOrders{order: assigned}, fakeCatalog{}, fakeCouriers{asked: &asked})
+	couriers := NewMockCouriers(t)
+	couriers.EXPECT().CourierOf(mock.Anything, assigned.ID).Return(&Courier{Name: "Тимур"}, nil).Once()
+	h := NewGetOrder(orderReading(t, assigned), catalogReading(t, "restaurant-1"), couriers)
 
 	got, err := h.Handle(context.Background(), assigned.ID)
 
 	require.NoError(t, err)
 	assert.Equal(t, &Courier{Name: "Тимур"}, got.Courier)
-	assert.Equal(t, []string{assigned.ID}, asked)
 
-	asked = nil
+	// Delivery is not asked: the couriers expect no call.
 	waiting := snapshot("confirmed")
-	got, err = NewGetOrder(&fakeOrders{order: waiting}, fakeCatalog{}, fakeCouriers{asked: &asked}).Handle(context.Background(), waiting.ID)
+	got, err = NewGetOrder(orderReading(t, waiting), catalogReading(t, "restaurant-1"), NewMockCouriers(t)).Handle(context.Background(), waiting.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got.Courier)
-	assert.Empty(t, asked)
 
 	down := errors.New("delivery down")
-	_, err = NewGetOrder(&fakeOrders{order: assigned}, fakeCatalog{}, fakeCouriers{err: down}).Handle(context.Background(), assigned.ID)
+	failing := NewMockCouriers(t)
+	failing.EXPECT().CourierOf(mock.Anything, assigned.ID).Return(nil, down).Once()
+	_, err = NewGetOrder(orderReading(t, assigned), catalogReading(t, "restaurant-1"), failing).Handle(context.Background(), assigned.ID)
 	assert.ErrorIs(t, err, down)
 }
 
@@ -233,7 +209,7 @@ func TestLineTotalIsExact(t *testing.T) {
 func TestItemNameComesFromTheOrder(t *testing.T) {
 	order := snapshot("placed")
 	order.Items[0].Name = ""
-	h := NewGetOrder(&fakeOrders{order: order}, fakeCatalog{}, fakeCouriers{})
+	h := NewGetOrder(orderReading(t, order), catalogReading(t, "restaurant-1"), NewMockCouriers(t))
 	got, err := h.Handle(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.Empty(t, got.Items[0].Name)
@@ -241,24 +217,30 @@ func TestItemNameComesFromTheOrder(t *testing.T) {
 
 // AC-560: business refusals become problems, other errors stay errors.
 func TestCancellationRefusalsBecomeProblems(t *testing.T) {
+	request := CancellationRequest{OrderID: "order-1", RequestID: "r-1"}
 	for reason, want := range map[string]CancellationProblem{
 		"CANCELLATION_WINDOW_NOT_OPEN": ProblemWindowNotOpen,
 		"CANCELLATION_WINDOW_EXPIRED":  ProblemWindowExpired,
 		"ORDER_STATE_CONFLICT":         ProblemOrderAlreadyFinal,
 	} {
-		h := NewRequestCancellation(&fakeOrders{err: CancellationRefused{Reason: reason}})
-		got, err := h.Handle(context.Background(), CancellationRequest{OrderID: "order-1", RequestID: "r-1"})
+		h := NewRequestCancellation(cancelling(t, request, "", CancellationRefused{Reason: reason}))
+		got, err := h.Handle(context.Background(), request)
 		require.NoError(t, err, reason)
 		assert.Equal(t, CancellationResult{Problem: want}, got, reason)
 	}
 
-	orders := &fakeOrders{outcome: OutcomeRequested}
-	got, err := NewRequestCancellation(orders).Handle(context.Background(), CancellationRequest{OrderID: "order-1", RequestID: "r-1"})
+	got, err := NewRequestCancellation(cancelling(t, request, OutcomeRequested, nil)).Handle(context.Background(), request)
 	require.NoError(t, err)
 	assert.Equal(t, CancellationResult{Outcome: OutcomeRequested}, got)
-	assert.Equal(t, "r-1", orders.got.RequestID)
 
 	unavailable := errors.New("unavailable")
-	_, err = NewRequestCancellation(&fakeOrders{err: unavailable}).Handle(context.Background(), CancellationRequest{})
+	_, err = NewRequestCancellation(cancelling(t, CancellationRequest{}, "", unavailable)).Handle(context.Background(), CancellationRequest{})
 	assert.ErrorIs(t, err, unavailable)
+}
+
+// cancelling expects one Cancellation Request answered with outcome and err.
+func cancelling(t *testing.T, request CancellationRequest, outcome CancellationOutcome, err error) *MockCancellationRequester {
+	orders := NewMockCancellationRequester(t)
+	orders.EXPECT().RequestCancellation(mock.Anything, request).Return(outcome, err).Once()
+	return orders
 }

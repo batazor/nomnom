@@ -6,12 +6,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -49,32 +49,16 @@ type userVectors struct {
 	Tokens           map[string]string `json:"tokens"`
 }
 
-// fakeMenu serves GetRestaurant and GetMenu of restaurants behind the internal gateway.
-type fakeMenu struct {
+// The generated server mock declares mustEmbedUnimplemented… in the test
+// package; the Unimplemented server sits one level deeper, so the mock methods
+// win the embedding resolution.
+type unimplementedRestaurants struct {
 	restaurantsv1.UnimplementedRestaurantsServiceServer
-
-	mu            sync.Mutex
-	open          bool
-	items         []*restaurantsv1.MenuItem
-	err           error
-	authorization []string
 }
 
-func (f *fakeMenu) GetRestaurant(ctx context.Context, r *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	md, _ := metadata.FromIncomingContext(ctx)
-	f.authorization = md.Get("authorization")
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: f.open, MarketId: "berlin"}}, nil
-}
-
-func (f *fakeMenu) GetMenu(context.Context, *restaurantsv1.GetMenuRequest) (*restaurantsv1.GetMenuResponse, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return &restaurantsv1.GetMenuResponse{Items: f.items}, nil
+type restaurantsServer struct {
+	*MockRestaurantsServiceServer
+	unimplementedRestaurants
 }
 
 func bufconnClient(t *testing.T, register func(*grpc.Server), options ...grpc.DialOption) *grpc.ClientConn {
@@ -96,7 +80,7 @@ func bufconnClient(t *testing.T, register func(*grpc.Server), options ...grpc.Di
 
 // e2e is orders PlaceOrder with the production subject resolver (service token
 // and BFF user assertion) and the production restaurants catalog adapter
-// calling a fake restaurants with the projected token of nomnom.restaurants.
+// calling a mocked restaurants with the projected token of nomnom.restaurants.
 type e2e struct {
 	client     ordersv1.OrdersServiceClient
 	vectors    userVectors
@@ -104,7 +88,7 @@ type e2e struct {
 	authorizer *fake.Authorizer
 }
 
-func newE2E(t *testing.T, restaurants *fakeMenu) e2e {
+func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(identityFixtures, "user-vectors.json"))
 	require.NoError(t, err)
@@ -124,7 +108,9 @@ func newE2E(t *testing.T, restaurants *fakeMenu) e2e {
 
 	tokens := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tokens, "nomnom.restaurants"), []byte("orders-token\n"), 0o600))
-	gatewayConn := bufconnClient(t, func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, restaurants) },
+	gatewayConn := bufconnClient(t, func(s *grpc.Server) {
+		restaurantsv1.RegisterRestaurantsServiceServer(s, restaurantsServer{MockRestaurantsServiceServer: restaurants})
+	},
 		grpc.WithUnaryInterceptor(gateway.ServiceToken(tokens)))
 	ports := newCommandPorts()
 	ports.catalog = catalog.New(gatewayConn,
@@ -148,17 +134,40 @@ func asBFF(token string, assertion string) context.Context {
 	return metadata.NewOutgoingContext(context.Background(), md)
 }
 
-func openMenu() *fakeMenu {
-	return &fakeMenu{open: true, items: []*restaurantsv1.MenuItem{
+// expectRestaurant expects one GetRestaurant, made with ctx, of a Restaurant
+// in berlin.
+func expectRestaurant(restaurants *MockRestaurantsServiceServer, ctx any, open bool) {
+	restaurants.EXPECT().GetRestaurant(ctx, mock.Anything).RunAndReturn(
+		func(_ context.Context, r *restaurantsv1.GetRestaurantRequest) (*restaurantsv1.GetRestaurantResponse, error) {
+			return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: r.GetRestaurantId(), IsOpen: open, MarketId: "berlin"}}, nil
+		}).Once()
+}
+
+// openMenu expects the Restaurant to be read with ctx as open and its menu once.
+func openMenu(restaurants *MockRestaurantsServiceServer, ctx any) {
+	expectRestaurant(restaurants, ctx, true)
+	restaurants.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
 		{MenuItemId: "pizza", Name: "Pizza", Price: &restaurantsv1.Money{Amount: "12.50", Currency: "EUR"}, Available: true},
 		{MenuItemId: "gyoza", Name: "Gyoza", Price: &restaurantsv1.Money{Amount: "4", Currency: "EUR"}, Available: false},
-	}}
+	}}, nil).Once()
+}
+
+// restaurantFails expects one GetRestaurant answering err.
+func restaurantFails(err error) func(*MockRestaurantsServiceServer) {
+	return func(restaurants *MockRestaurantsServiceServer) {
+		restaurants.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(nil, err).Once()
+	}
 }
 
 // AC-508, AC-525: the customer delegated by the BFF places an Order priced from
 // the restaurants menu read through the gateway with the orders service token.
 func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
-	restaurants := openMenu()
+	restaurants := NewMockRestaurantsServiceServer(t)
+	// restaurants sees the orders service token, not the BFF one.
+	openMenu(restaurants, mock.MatchedBy(func(ctx context.Context) bool {
+		md, _ := metadata.FromIncomingContext(ctx)
+		return assert.ObjectsAreEqual([]string{"Bearer orders-token"}, md.Get("authorization"))
+	}))
 	env := newE2E(t, restaurants)
 
 	response, err := env.client.PlaceOrder(asBFF(env.vectors.DelegateToken, env.vectors.Tokens["valid"]), placeRequest())
@@ -173,33 +182,34 @@ func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
 	assert.Equal(t, order.MenuItemID("pizza"), snapshot.Items[0].MenuItemID())
 	assert.True(t, snapshot.Items[0].UnitPrice().Equal(ordertest.Money(t, "12.50")), "unit price comes from the restaurants menu")
 	assert.Equal(t, []order.ID{"order-1"}, env.store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
-	assert.Equal(t, []string{"Bearer orders-token"}, restaurants.authorization, "restaurants sees the orders service token, not the BFF one")
 }
 
 func TestPlaceOrderEndToEndRefusals(t *testing.T) {
 	for name, tc := range map[string]struct {
-		restaurants *fakeMenu
+		restaurants func(*MockRestaurantsServiceServer)
 		mutate      func(*ordersv1.PlaceOrderRequest)
 		call        func(userVectors) context.Context
 		code        codes.Code
 		reason      string
 	}{
 		// AC-510: the BFF without a user assertion is a service, not a Customer.
-		"bff without assertion": {openMenu(), nil,
+		"bff without assertion": {func(*MockRestaurantsServiceServer) {}, nil,
 			func(v userVectors) context.Context { return asBFF(v.DelegateToken, "") }, codes.PermissionDenied, "OPERATION_NOT_ALLOWED"},
-		"restaurants unavailable": {&fakeMenu{err: status.Error(codes.Unavailable, "down")}, nil,
+		"restaurants unavailable": {restaurantFails(status.Error(codes.Unavailable, "down")), nil,
 			nil, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
-		"unknown restaurant": {&fakeMenu{err: status.Error(codes.NotFound, "no restaurant")}, nil,
+		"unknown restaurant": {restaurantFails(status.Error(codes.NotFound, "no restaurant")), nil,
 			nil, codes.NotFound, "RESTAURANT_NOT_FOUND"},
-		"closed restaurant": {&fakeMenu{open: false}, nil,
+		"closed restaurant": {func(r *MockRestaurantsServiceServer) { expectRestaurant(r, mock.Anything, false) }, nil,
 			nil, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
-		"unknown menu item": {openMenu(), func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "missing" },
+		"unknown menu item": {func(r *MockRestaurantsServiceServer) { openMenu(r, mock.Anything) }, func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "missing" },
 			nil, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
-		"unavailable menu item": {openMenu(), func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "gyoza" },
+		"unavailable menu item": {func(r *MockRestaurantsServiceServer) { openMenu(r, mock.Anything) }, func(r *ordersv1.PlaceOrderRequest) { r.Items[0].MenuItemId = "gyoza" },
 			nil, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			env := newE2E(t, tc.restaurants)
+			restaurants := NewMockRestaurantsServiceServer(t)
+			tc.restaurants(restaurants)
+			env := newE2E(t, restaurants)
 			request := placeRequest()
 			if tc.mutate != nil {
 				tc.mutate(request)
@@ -219,7 +229,7 @@ func TestPlaceOrderEndToEndRefusals(t *testing.T) {
 
 // AC-526: a user assertion from a service outside the delegates is UNAUTHENTICATED.
 func TestPlaceOrderEndToEndRejectsAssertionFromNonDelegate(t *testing.T) {
-	env := newE2E(t, openMenu())
+	env := newE2E(t, NewMockRestaurantsServiceServer(t))
 
 	_, err := env.client.PlaceOrder(asBFF(env.vectors.NonDelegateToken, env.vectors.Tokens["valid"]), placeRequest())
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))

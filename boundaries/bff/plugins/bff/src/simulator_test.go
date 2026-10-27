@@ -7,42 +7,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications"
 )
 
-type fakeSimulatorScenario struct {
-	enabled bool
-	err     error
-	called  bool
-	got     bool
-	hasUser bool
-}
-
-func (f *fakeSimulatorScenario) handle(ctx context.Context) (bool, error) {
-	f.called = true
-	_, f.hasUser = identity.UserFrom(ctx)
-	return f.enabled, f.err
-}
-
-type fakeGetSimulator struct{ fakeSimulatorScenario }
-
-func (f *fakeGetSimulator) Handle(ctx context.Context) (bool, error) { return f.handle(ctx) }
-
-type fakeSetSimulator struct{ fakeSimulatorScenario }
-
-func (f *fakeSetSimulator) Handle(ctx context.Context, enabled bool) (bool, error) {
-	f.got = enabled
-	return f.handle(ctx)
-}
-
-func simulatorService(t *testing.T, get *fakeGetSimulator, set *fakeSetSimulator) (*BffService, context.Context) {
+func simulatorService(t *testing.T, get *mockGetSimulatorHandler, set *mockSetSimulatorEnabledHandler) (*BffService, context.Context) {
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{
@@ -53,39 +28,36 @@ func simulatorService(t *testing.T, get *fakeGetSimulator, set *fakeSetSimulator
 }
 
 func TestSimulatorRunsOnBehalfOfTheUser(t *testing.T) {
-	get := &fakeGetSimulator{fakeSimulatorScenario{enabled: true}}
-	svc, ctx := simulatorService(t, get, &fakeSetSimulator{})
+	get := newMockGetSimulatorHandler(t)
+	// the user reaches the contexts as a user assertion.
+	get.EXPECT().Handle(withUser()).Return(true, nil).Once()
+	svc, ctx := simulatorService(t, get, newMockSetSimulatorEnabledHandler(t))
 
 	response, err := svc.QuerySimulator(ctx, &service.QuerySimulatorRequest{})
 
 	require.NoError(t, err)
-	assert.True(t, get.hasUser, "the user reaches the contexts as a user assertion")
 	assert.True(t, response.GetSimulator().GetEnabled())
 }
 
 // AC-766: the operator switches the Simulator on.
 func TestSetSimulatorEnabledAnswersTheNewState(t *testing.T) {
-	set := &fakeSetSimulator{fakeSimulatorScenario{enabled: true}}
-	svc, ctx := simulatorService(t, &fakeGetSimulator{}, set)
+	set := newMockSetSimulatorEnabledHandler(t)
+	set.EXPECT().Handle(withUser(), true).Return(true, nil).Once()
+	svc, ctx := simulatorService(t, newMockGetSimulatorHandler(t), set)
 
 	response, err := svc.MutationSetSimulatorEnabled(ctx, &service.MutationSetSimulatorEnabledRequest{Enabled: true})
 
 	require.NoError(t, err)
-	assert.True(t, set.got)
-	assert.True(t, set.hasUser)
 	assert.True(t, response.GetSetSimulatorEnabled().GetEnabled())
 }
 
 func TestSimulatorRequiresAccessToken(t *testing.T) {
-	get, set := &fakeGetSimulator{}, &fakeSetSimulator{}
-	svc, _ := simulatorService(t, get, set)
+	svc, _ := simulatorService(t, newMockGetSimulatorHandler(t), newMockSetSimulatorEnabledHandler(t))
 
 	_, err := svc.QuerySimulator(context.Background(), &service.QuerySimulatorRequest{})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 	_, err = svc.MutationSetSimulatorEnabled(context.Background(), &service.MutationSetSimulatorEnabledRequest{Enabled: true})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	assert.False(t, get.called)
-	assert.False(t, set.called)
 }
 
 // AC-767: a user who is not the operator gets PermissionDenied; other
@@ -95,7 +67,10 @@ func TestSimulatorMapsRefusalsToErrors(t *testing.T) {
 		fmt.Errorf("set simulator enabled: %w", applications.ErrNotPermitted): codes.PermissionDenied,
 		errors.New("get delivery simulator: rpc error: spicedb down"):         codes.Unavailable,
 	} {
-		svc, ctx := simulatorService(t, &fakeGetSimulator{fakeSimulatorScenario{err: refusal}}, &fakeSetSimulator{fakeSimulatorScenario{err: refusal}})
+		get, set := newMockGetSimulatorHandler(t), newMockSetSimulatorEnabledHandler(t)
+		get.EXPECT().Handle(mock.Anything).Return(false, refusal).Once()
+		set.EXPECT().Handle(mock.Anything, false).Return(false, refusal).Once()
+		svc, ctx := simulatorService(t, get, set)
 
 		_, err := svc.QuerySimulator(ctx, &service.QuerySimulatorRequest{})
 		assert.Equal(t, want, status.Code(err), refusal)

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,8 +17,10 @@ import (
 // ADR 36: a courierChanged event resolves only the courier of the access
 // token; a foreign key is NOT_FOUND, never the work of another courier.
 func TestLookupCourierByIdIsTheVerifiedCourierOnly(t *testing.T) {
-	fake := &fakeCourierScenarios{view: busyCourier}
-	svc, ctx := courierService(t, fake)
+	scenarios := newCourierScenarios(t)
+	scenarios.getCourier.EXPECT().Handle(mock.Anything, verifiedCourier()).Return(busyCourier, nil).Twice()
+	scenarios.getCourier.EXPECT().Handle(mock.Anything, verifiedCourier()).Return(courierapp.CourierView{}, courierapp.ErrNotCourier).Once()
+	svc, ctx := courierService(t, scenarios)
 	query, err := svc.QueryCourier(ctx, &service.QueryCourierRequest{})
 	require.NoError(t, err)
 	courierID := query.GetCourier().GetId()
@@ -35,7 +38,6 @@ func TestLookupCourierByIdIsTheVerifiedCourierOnly(t *testing.T) {
 	})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	fake.err = courierapp.ErrNotCourier
 	_, err = svc.LookupCourierById(ctx, &service.LookupCourierByIdRequest{
 		Keys: []*service.LookupCourierByIdRequestKey{{Id: courierID}},
 	})
@@ -45,8 +47,11 @@ func TestLookupCourierByIdIsTheVerifiedCourierOnly(t *testing.T) {
 // ADR 36: a kitchenChanged event resolves the board with the subscriber's
 // rights; a kitchen the user may not see is NOT_FOUND.
 func TestLookupKitchenByRestaurantIdResolvesAsTheUser(t *testing.T) {
-	get := &fakeGetKitchen{view: kitchenapp.KitchenView{Restaurant: kitchenapp.Restaurant{ID: "restaurant-1", Name: "Кухня №8"}}}
-	svc, ctx := kitchenService(t, get, &fakeKitchenAction{})
+	get := newMockGetKitchenHandler(t)
+	// restaurants is called on behalf of the user.
+	get.EXPECT().Handle(withUser(), "restaurant-1").Return(kitchenapp.KitchenView{Restaurant: kitchenapp.Restaurant{ID: "restaurant-1", Name: "Кухня №8"}}, nil).Once()
+	get.EXPECT().Handle(withUser(), "restaurant-1").Return(kitchenapp.KitchenView{}, kitchenapp.ErrKitchenNotFound).Once()
+	svc, ctx := kitchenService(t, get, newMockKitchenActionHandler(t))
 	request := &service.LookupKitchenByRestaurantIdRequest{
 		Keys: []*service.LookupKitchenByRestaurantIdRequestKey{{RestaurantId: "restaurant-1"}},
 	}
@@ -55,9 +60,7 @@ func TestLookupKitchenByRestaurantIdResolvesAsTheUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, response.GetResult(), 1)
 	assert.Equal(t, "restaurant-1", response.GetResult()[0].GetRestaurantId())
-	assert.True(t, get.hasUser, "restaurants is called on behalf of the user")
 
-	get.err = kitchenapp.ErrKitchenNotFound
 	_, err = svc.LookupKitchenByRestaurantId(ctx, request)
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }

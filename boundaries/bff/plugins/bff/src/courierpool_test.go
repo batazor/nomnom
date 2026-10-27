@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -14,25 +15,7 @@ import (
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 
-type fakeGetCourierPool struct {
-	pool applications.Pool
-	err  error
-}
-
-func (f *fakeGetCourierPool) Handle(context.Context) (applications.Pool, error) { return f.pool, f.err }
-
-type fakeChangeCourierPool struct {
-	result  applications.Result
-	err     error
-	request applications.Request
-}
-
-func (f *fakeChangeCourierPool) Handle(_ context.Context, request applications.Request) (applications.Result, error) {
-	f.request = request
-	return f.result, f.err
-}
-
-func courierPoolService(t *testing.T, get *fakeGetCourierPool, change *fakeChangeCourierPool) (*BffService, context.Context) {
+func courierPoolService(t *testing.T, get *mockGetCourierPoolHandler, change *mockChangeCourierPoolHandler) (*BffService, context.Context) {
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{
@@ -50,7 +33,9 @@ var pool = applications.Pool{Market: "berlin", Size: 2, OnLine: 1, Busy: 1, Wait
 // ADR 41: the pool is the entity of its Market; the key of another Market is
 // not found.
 func TestCourierPoolIsTheEntityOfItsMarket(t *testing.T) {
-	svc, ctx := courierPoolService(t, &fakeGetCourierPool{pool: pool}, &fakeChangeCourierPool{})
+	get := newMockGetCourierPoolHandler(t)
+	get.EXPECT().Handle(mock.Anything).Return(pool, nil).Times(3)
+	svc, ctx := courierPoolService(t, get, newMockChangeCourierPoolHandler(t))
 
 	response, err := svc.QueryCourierPool(ctx, &service.QueryCourierPoolRequest{})
 
@@ -70,7 +55,9 @@ func TestCourierPoolIsTheEntityOfItsMarket(t *testing.T) {
 
 // AC-798: a user who may not manage couriers gets PERMISSION_DENIED.
 func TestCourierPoolOfAnotherUserIsPermissionDenied(t *testing.T) {
-	svc, ctx := courierPoolService(t, &fakeGetCourierPool{err: applications.ErrNotPermitted}, &fakeChangeCourierPool{})
+	get := newMockGetCourierPoolHandler(t)
+	get.EXPECT().Handle(mock.Anything).Return(applications.Pool{}, applications.ErrNotPermitted).Once()
+	svc, ctx := courierPoolService(t, get, newMockChangeCourierPoolHandler(t))
 
 	_, err := svc.QueryCourierPool(ctx, &service.QueryCourierPoolRequest{})
 
@@ -78,18 +65,19 @@ func TestCourierPoolOfAnotherUserIsPermissionDenied(t *testing.T) {
 }
 
 func TestCourierPoolCommandsAnswerThePoolAndTheProblem(t *testing.T) {
-	change := &fakeChangeCourierPool{result: applications.Result{Pool: pool, Problem: applications.ProblemCourierStatusConflict}}
-	svc, ctx := courierPoolService(t, &fakeGetCourierPool{}, change)
+	result := applications.Result{Pool: pool, Problem: applications.ProblemCourierStatusConflict}
+	change := newMockChangeCourierPoolHandler(t)
+	change.EXPECT().Handle(mock.Anything, applications.Request{Command: applications.CommandTakeOffLine, CourierID: "courier-1"}).Return(result, nil).Once()
+	change.EXPECT().Handle(mock.Anything, applications.Request{Command: applications.CommandAdd, Name: "Сергей"}).Return(result, nil).Once()
+	svc, ctx := courierPoolService(t, newMockGetCourierPoolHandler(t), change)
 
 	response, err := svc.MutationSetCourierOnLine(ctx, &service.MutationSetCourierOnLineRequest{CourierId: "courier-1", OnLine: false})
 
 	require.NoError(t, err)
-	assert.Equal(t, applications.Request{Command: applications.CommandTakeOffLine, CourierID: "courier-1"}, change.request)
 	assert.Equal(t, service.CourierPoolProblemCode_COURIER_POOL_PROBLEM_CODE_COURIER_STATUS_CONFLICT, response.GetSetCourierOnLine().GetProblem())
 
 	_, err = svc.MutationAddCourier(ctx, &service.MutationAddCourierRequest{Name: "Сергей"})
 	require.NoError(t, err)
-	assert.Equal(t, applications.Request{Command: applications.CommandAdd, Name: "Сергей"}, change.request)
 
 	_, err = svc.MutationRetireCourier(ctx, &service.MutationRetireCourierRequest{})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))

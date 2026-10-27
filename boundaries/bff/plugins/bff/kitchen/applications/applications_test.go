@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,59 +14,30 @@ var receivedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 
 func at(minutes int) time.Time { return receivedAt.Add(time.Duration(minutes) * time.Minute) }
 
-type fakeBoard struct {
-	active       []ActiveOrder
-	queue        []string
-	pool         CookPool
-	err          error
-	reads        int
-	commands     []ActionRequest
-	applyErr     error
-	cookCommands []CookPoolRequest
-	cookErr      error
+var menuNames = map[string]string{"menu-pho": "Фо бо"}
+
+// kitchenCatalog expects one read of the restaurant and of its menu names.
+func kitchenCatalog(t *testing.T, restaurantID string) *MockCatalog {
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, restaurantID).Return(Restaurant{ID: restaurantID, Name: "Кухня №8", IsOpen: true}, nil).Once()
+	catalog.EXPECT().MenuItemNames(mock.Anything, restaurantID).Return(menuNames, nil).Once()
+	return catalog
 }
 
-func (f *fakeBoard) CookPool(context.Context, string) (CookPool, error) { return f.pool, f.err }
-
-func (f *fakeBoard) Hire(_ context.Context, restaurantID, name string) error {
-	f.cookCommands = append(f.cookCommands, CookPoolRequest{RestaurantID: restaurantID, Command: CookCommandHire, Name: name})
-	return f.cookErr
+// kitchenBoard expects one read of the board of restaurant-1.
+func kitchenBoard(t *testing.T, active []ActiveOrder, queue []string, pool CookPool) *MockKitchenBoard {
+	board := NewMockKitchenBoard(t)
+	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return(active, nil).Once()
+	board.EXPECT().QueueOrder(mock.Anything, "restaurant-1").Return(queue, nil).Once()
+	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(pool, nil).Once()
+	return board
 }
 
-func (f *fakeBoard) SetOnLine(_ context.Context, restaurantID, cookID string, onLine bool) error {
-	command := CookCommandTakeOffLine
-	if onLine {
-		command = CookCommandPutOnLine
-	}
-	f.cookCommands = append(f.cookCommands, CookPoolRequest{RestaurantID: restaurantID, Command: command, CookID: cookID})
-	return f.cookErr
-}
-
-func (f *fakeBoard) Retire(_ context.Context, restaurantID, cookID string) error {
-	f.cookCommands = append(f.cookCommands, CookPoolRequest{RestaurantID: restaurantID, Command: CookCommandRetire, CookID: cookID})
-	return f.cookErr
-}
-
-func (f *fakeBoard) ActiveOrders(context.Context, string) ([]ActiveOrder, error) {
-	f.reads++
-	return f.active, f.err
-}
-
-func (f *fakeBoard) QueueOrder(context.Context, string) ([]string, error) { return f.queue, f.err }
-
-func (f *fakeBoard) Apply(_ context.Context, restaurantID, kitchenOrderID string, action Action) error {
-	f.commands = append(f.commands, ActionRequest{RestaurantID: restaurantID, KitchenOrderID: kitchenOrderID, Action: action})
-	return f.applyErr
-}
-
-type fakeCatalog struct{}
-
-func (fakeCatalog) Restaurant(_ context.Context, id string) (Restaurant, error) {
-	return Restaurant{ID: id, Name: "Кухня №8", IsOpen: true}, nil
-}
-
-func (fakeCatalog) MenuItemNames(context.Context, string) (map[string]string, error) {
-	return map[string]string{"menu-pho": "Фо бо"}, nil
+// applying expects one kitchen command answered with err.
+func applying(t *testing.T, request ActionRequest, err error) *MockKitchenCommands {
+	commands := NewMockKitchenCommands(t)
+	commands.EXPECT().Apply(mock.Anything, request.RestaurantID, request.KitchenOrderID, request.Action).Return(err).Once()
+	return commands
 }
 
 func active(id string, stage Stage, minutes int) ActiveOrder {
@@ -91,20 +63,17 @@ func ids(orders []OrderView) []string {
 
 // RECEIVED by receipt, then the Kitchen Queue order, then the rest by receipt.
 func TestKitchenOrdersFollowTheBoardOrder(t *testing.T) {
-	board := &fakeBoard{
-		active: []ActiveOrder{
-			active("ready", StageReady, 0),
-			active("queued-late", StageQueued, 1),
-			active("received-1", StageReceived, 2),
-			active("preparing", StagePreparing, 3),
-			active("queued-first", StageQueued, 4),
-			active("queued-missed", StageQueued, 5),
-			active("received-2", StageReceived, 6),
-		},
-		queue: []string{"queued-first", "queued-late"},
-	}
+	board := kitchenBoard(t, []ActiveOrder{
+		active("ready", StageReady, 0),
+		active("queued-late", StageQueued, 1),
+		active("received-1", StageReceived, 2),
+		active("preparing", StagePreparing, 3),
+		active("queued-first", StageQueued, 4),
+		active("queued-missed", StageQueued, 5),
+		active("received-2", StageReceived, 6),
+	}, []string{"queued-first", "queued-late"}, CookPool{})
 
-	view, err := NewGetKitchen(board, fakeCatalog{}).Handle(context.Background(), "restaurant-1")
+	view, err := NewGetKitchen(board, kitchenCatalog(t, "restaurant-1")).Handle(context.Background(), "restaurant-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"received-1", "received-2", "queued-first", "queued-late", "queued-missed", "ready", "preparing"}, ids(view.Orders))
@@ -121,13 +90,17 @@ func TestKitchenOrdersFollowTheBoardOrder(t *testing.T) {
 }
 
 func TestKitchenActionReadsTheOrderBack(t *testing.T) {
-	board := &fakeBoard{active: []ActiveOrder{active("other", StageReceived, 0), active("ro-1", StagePreparing, 1)}}
-	h := NewApplyKitchenAction(board, board, fakeCatalog{})
+	request := ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: ActionStartPreparation}
+	board := NewMockKitchenBoard(t)
+	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return([]ActiveOrder{active("other", StageReceived, 0), active("ro-1", StagePreparing, 1)}, nil).Once()
+	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(CookPool{}, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().MenuItemNames(mock.Anything, "restaurant-1").Return(menuNames, nil).Once()
+	h := NewApplyKitchenAction(applying(t, request, nil), board, catalog)
 
-	result, err := h.Handle(context.Background(), ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: ActionStartPreparation})
+	result, err := h.Handle(context.Background(), request)
 
 	require.NoError(t, err)
-	assert.Equal(t, []ActionRequest{{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: ActionStartPreparation}}, board.commands)
 	require.NotNil(t, result.Order)
 	assert.Equal(t, "ro-1", result.Order.ID)
 	assert.Equal(t, StagePreparing, result.Order.Stage)
@@ -135,14 +108,18 @@ func TestKitchenActionReadsTheOrderBack(t *testing.T) {
 }
 
 func TestRejectedOrLeftOrderIsNull(t *testing.T) {
-	board := &fakeBoard{}
-	h := NewApplyKitchenAction(board, board, fakeCatalog{})
+	commands := NewMockKitchenCommands(t)
+	commands.EXPECT().Apply(mock.Anything, "r", "ro-1", ActionReject).Return(nil).Once()
+	board := NewMockKitchenBoard(t)
+	h := NewApplyKitchenAction(commands, board, NewMockCatalog(t))
 
+	// A rejected order is not read back: the board expects no call yet.
 	rejected, err := h.Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionReject})
 	require.NoError(t, err)
 	assert.Equal(t, ActionResult{}, rejected)
-	assert.Zero(t, board.reads, "a rejected order is not read back")
 
+	commands.EXPECT().Apply(mock.Anything, "r", "ro-1", ActionMarkReady).Return(nil).Once()
+	board.EXPECT().ActiveOrders(mock.Anything, "r").Return(nil, nil).Once()
 	left, err := h.Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionMarkReady})
 	require.NoError(t, err)
 	assert.Nil(t, left.Order)
@@ -150,23 +127,22 @@ func TestRejectedOrLeftOrderIsNull(t *testing.T) {
 }
 
 func TestStageConflictIsAProblem(t *testing.T) {
-	board := &fakeBoard{applyErr: ErrStageConflict}
-	result, err := NewApplyKitchenAction(board, board, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionAccept})
+	request := ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionAccept}
+	// The board expects no call: the order is not read back.
+	result, err := NewApplyKitchenAction(applying(t, request, ErrStageConflict), NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), request)
 
 	require.NoError(t, err)
 	assert.Equal(t, ActionResult{Problem: ProblemOrderStageConflict}, result)
-	assert.Zero(t, board.reads)
 }
 
 func TestOtherKitchenRefusalsStayErrors(t *testing.T) {
-	refused := &fakeBoard{applyErr: ErrNotPermitted}
-	_, err := NewApplyKitchenAction(refused, refused, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionMarkAssembled})
+	request := ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionMarkAssembled}
+	_, err := NewApplyKitchenAction(applying(t, request, ErrNotPermitted), NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), request)
 	assert.ErrorIs(t, err, ErrNotPermitted)
 
-	board := &fakeBoard{}
-	_, err = NewApplyKitchenAction(board, board, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: "cook"})
+	// An unknown action reaches no command: the commands expect no call.
+	_, err = NewApplyKitchenAction(NewMockKitchenCommands(t), NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: "cook"})
 	assert.ErrorIs(t, err, ErrUnknownAction)
-	assert.Empty(t, board.commands)
 }
 
 // AC-800: an order shows its cook from the Cook Pool; the pool is on the screen.
@@ -176,15 +152,13 @@ func TestKitchenShowsTheCookPoolAndTheCookOfAnOrder(t *testing.T) {
 	retired := active("ro-2", StageReady, 1)
 	retired.CookID = "cook-gone"
 	aigul := Cook{ID: "cook-aigul", Name: "Айгуль", OnLine: true, CurrentKitchenOrderID: "ro-1"}
-	board := &fakeBoard{
-		active: []ActiveOrder{preparing, retired, active("ro-3", StageQueued, 2)},
-		pool:   CookPool{Size: 1, OnLine: 1, Busy: 1, Queued: 1, Cooks: []Cook{aigul}},
-	}
+	pool := CookPool{Size: 1, OnLine: 1, Busy: 1, Queued: 1, Cooks: []Cook{aigul}}
+	board := kitchenBoard(t, []ActiveOrder{preparing, retired, active("ro-3", StageQueued, 2)}, nil, pool)
 
-	view, err := NewGetKitchen(board, fakeCatalog{}).Handle(context.Background(), "restaurant-1")
+	view, err := NewGetKitchen(board, kitchenCatalog(t, "restaurant-1")).Handle(context.Background(), "restaurant-1")
 
 	require.NoError(t, err)
-	assert.Equal(t, board.pool, view.CookPool)
+	assert.Equal(t, pool, view.CookPool)
 	byID := map[string]OrderView{}
 	for _, order := range view.Orders {
 		byID[order.ID] = order
@@ -195,8 +169,8 @@ func TestKitchenShowsTheCookPoolAndTheCookOfAnOrder(t *testing.T) {
 }
 
 func TestStartWithoutAFreeCookIsAProblem(t *testing.T) {
-	board := &fakeBoard{applyErr: ErrNoCookAvailable}
-	result, err := NewApplyKitchenAction(board, board, fakeCatalog{}).Handle(context.Background(), ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionStartPreparation})
+	request := ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionStartPreparation}
+	result, err := NewApplyKitchenAction(applying(t, request, ErrNoCookAvailable), NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), request)
 
 	require.NoError(t, err)
 	assert.Equal(t, ActionResult{Problem: ProblemNoCookAvailable}, result)
@@ -206,14 +180,14 @@ func TestStartWithoutAFreeCookIsAProblem(t *testing.T) {
 // refusals are problems, the other refusals stay errors.
 func TestCookPoolCommandsAnswerThePool(t *testing.T) {
 	pool := CookPool{Size: 1, OnLine: 1, Cooks: []Cook{{ID: "cook-1", Name: "Олег", OnLine: true}}}
-	board := &fakeBoard{pool: pool}
-	h := NewChangeCookPool(board, board)
+	commands := NewMockCookCommands(t)
+	commands.EXPECT().SetOnLine(mock.Anything, "r", "cook-1", true).Return(nil).Once()
+	h := NewChangeCookPool(commands, poolReading(t, pool))
 
 	result, err := h.Handle(context.Background(), CookPoolRequest{RestaurantID: "r", Command: CookCommandPutOnLine, CookID: "cook-1"})
 
 	require.NoError(t, err)
 	assert.Equal(t, CookPoolResult{Pool: pool}, result)
-	assert.Equal(t, []CookPoolRequest{{RestaurantID: "r", Command: CookCommandPutOnLine, CookID: "cook-1"}}, board.cookCommands)
 
 	for cause, problem := range map[error]CookPoolProblem{
 		ErrCookBusy:        ProblemCookBusy,
@@ -221,13 +195,22 @@ func TestCookPoolCommandsAnswerThePool(t *testing.T) {
 		ErrCookRetired:     ProblemCookRetired,
 		ErrInvalidCookName: ProblemCookNameInvalid,
 	} {
-		refused := &fakeBoard{pool: pool, cookErr: cause}
-		result, err := NewChangeCookPool(refused, refused).Handle(context.Background(), CookPoolRequest{RestaurantID: "r", Command: CookCommandTakeOffLine, CookID: "cook-1"})
+		refused := NewMockCookCommands(t)
+		refused.EXPECT().SetOnLine(mock.Anything, "r", "cook-1", false).Return(cause).Once()
+		result, err := NewChangeCookPool(refused, poolReading(t, pool)).Handle(context.Background(), CookPoolRequest{RestaurantID: "r", Command: CookCommandTakeOffLine, CookID: "cook-1"})
 		require.NoError(t, err)
 		assert.Equal(t, CookPoolResult{Pool: pool, Problem: problem}, result)
 	}
 
-	denied := &fakeBoard{cookErr: ErrNotPermitted}
-	_, err = NewChangeCookPool(denied, denied).Handle(context.Background(), CookPoolRequest{RestaurantID: "r", Command: CookCommandHire, Name: "Марат"})
+	denied := NewMockCookCommands(t)
+	denied.EXPECT().Hire(mock.Anything, "r", "Марат").Return(ErrNotPermitted).Once()
+	_, err = NewChangeCookPool(denied, NewMockCookPoolReader(t)).Handle(context.Background(), CookPoolRequest{RestaurantID: "r", Command: CookCommandHire, Name: "Марат"})
 	assert.ErrorIs(t, err, ErrNotPermitted)
+}
+
+// poolReading expects one read of the Cook Pool of restaurant r.
+func poolReading(t *testing.T, pool CookPool) *MockCookPoolReader {
+	pools := NewMockCookPoolReader(t)
+	pools.EXPECT().CookPool(mock.Anything, "r").Return(pool, nil).Once()
+	return pools
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -13,28 +14,12 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
-type fakeOpening struct {
-	result       applications.OpeningResult
-	err          error
-	called       bool
-	restaurantID string
-	user         identity.User
-	hasUser      bool
-}
-
-func (f *fakeOpening) Handle(ctx context.Context, restaurantID string) (applications.OpeningResult, error) {
-	f.called, f.restaurantID = true, restaurantID
-	f.user, f.hasUser = identity.UserFrom(ctx)
-	return f.result, f.err
-}
-
 var nightBakery = applications.Restaurant{ID: "restaurant-night-bakery", Name: "Ночная пекарня"}
 
-func managementService(t *testing.T, open, closer *fakeOpening) (*BffService, context.Context) {
+func managementService(t *testing.T, open, closer *mockOpeningHandler) (*BffService, context.Context) {
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{
@@ -48,15 +33,14 @@ func managementService(t *testing.T, open, closer *fakeOpening) (*BffService, co
 func TestOpenRestaurantRunsOnBehalfOfTheUser(t *testing.T) {
 	opened := nightBakery
 	opened.IsOpen = true
-	open := &fakeOpening{result: applications.OpeningResult{Restaurant: opened, Changed: true}}
-	svc, ctx := managementService(t, open, &fakeOpening{})
+	open := newMockOpeningHandler(t)
+	// the user reaches restaurants as a user assertion.
+	open.EXPECT().Handle(withUser(), nightBakery.ID).Return(applications.OpeningResult{Restaurant: opened, Changed: true}, nil).Once()
+	svc, ctx := managementService(t, open, newMockOpeningHandler(t))
 
 	response, err := svc.MutationOpenRestaurant(ctx, &service.MutationOpenRestaurantRequest{RestaurantId: nightBakery.ID})
 
 	require.NoError(t, err)
-	assert.Equal(t, nightBakery.ID, open.restaurantID)
-	require.True(t, open.hasUser, "the user reaches restaurants as a user assertion")
-	assert.NotEmpty(t, open.user.ID)
 	payload := response.GetOpenRestaurant()
 	assert.True(t, payload.GetChanged())
 	assert.Equal(t, nightBakery.ID, payload.GetRestaurant().GetId())
@@ -67,38 +51,33 @@ func TestOpenRestaurantRunsOnBehalfOfTheUser(t *testing.T) {
 
 // AC-752: a repeat is not an error.
 func TestCloseRestaurantRepeatIsNotAChange(t *testing.T) {
-	closer := &fakeOpening{result: applications.OpeningResult{Restaurant: nightBakery, Changed: false}}
-	svc, ctx := managementService(t, &fakeOpening{}, closer)
+	closer := newMockOpeningHandler(t)
+	closer.EXPECT().Handle(mock.Anything, nightBakery.ID).Return(applications.OpeningResult{Restaurant: nightBakery, Changed: false}, nil).Once()
+	svc, ctx := managementService(t, newMockOpeningHandler(t), closer)
 
 	response, err := svc.MutationCloseRestaurant(ctx, &service.MutationCloseRestaurantRequest{RestaurantId: nightBakery.ID})
 
 	require.NoError(t, err)
-	assert.True(t, closer.called)
 	assert.False(t, response.GetCloseRestaurant().GetChanged())
 	assert.False(t, response.GetCloseRestaurant().GetRestaurant().GetAcceptingOrders())
 }
 
 // AC-753: without an access token nothing reaches restaurants.
 func TestOpeningRequiresAccessToken(t *testing.T) {
-	open, closer := &fakeOpening{}, &fakeOpening{}
-	svc, _ := managementService(t, open, closer)
+	svc, _ := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
 
 	_, err := svc.MutationOpenRestaurant(context.Background(), &service.MutationOpenRestaurantRequest{RestaurantId: nightBakery.ID})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 	_, err = svc.MutationCloseRestaurant(context.Background(), &service.MutationCloseRestaurantRequest{RestaurantId: nightBakery.ID})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	assert.False(t, open.called)
-	assert.False(t, closer.called)
 }
 
 func TestOpeningRequiresARestaurantID(t *testing.T) {
-	open := &fakeOpening{}
-	svc, ctx := managementService(t, open, &fakeOpening{})
+	svc, ctx := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
 
 	_, err := svc.MutationOpenRestaurant(ctx, &service.MutationOpenRestaurantRequest{})
 
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	assert.False(t, open.called)
 }
 
 // AC-754: refusals of restaurants become GraphQL errors without internal details.
@@ -109,7 +88,10 @@ func TestOpeningMapsRefusalsToErrors(t *testing.T) {
 		applications.ErrInvalidRestaurant:                      codes.InvalidArgument,
 		errors.New("open restaurant: rpc error: spicedb down"): codes.Unavailable,
 	} {
-		svc, ctx := managementService(t, &fakeOpening{err: refusal}, &fakeOpening{err: refusal})
+		open, closer := newMockOpeningHandler(t), newMockOpeningHandler(t)
+		open.EXPECT().Handle(mock.Anything, nightBakery.ID).Return(applications.OpeningResult{}, refusal).Once()
+		closer.EXPECT().Handle(mock.Anything, nightBakery.ID).Return(applications.OpeningResult{}, refusal).Once()
+		svc, ctx := managementService(t, open, closer)
 
 		_, err := svc.MutationOpenRestaurant(ctx, &service.MutationOpenRestaurantRequest{RestaurantId: nightBakery.ID})
 		assert.Equal(t, want, status.Code(err), refusal)
@@ -120,35 +102,20 @@ func TestOpeningMapsRefusalsToErrors(t *testing.T) {
 	}
 }
 
-type fakeOwned struct {
-	page    applications.RestaurantPage
-	err     error
-	first   int
-	after   string
-	hasUser bool
-}
-
-func (f *fakeOwned) Handle(ctx context.Context, first int, after string) (applications.RestaurantPage, error) {
-	f.first, f.after = first, after
-	_, f.hasUser = identity.UserFrom(ctx)
-	return f.page, f.err
-}
-
 func TestMyRestaurantsListsRestaurantsOfTheUser(t *testing.T) {
-	owned := &fakeOwned{page: applications.RestaurantPage{
+	owned := newMockOwnedRestaurantsHandler(t)
+	// the user reaches restaurants as a user assertion.
+	owned.EXPECT().Handle(withUser(), 10, "restaurant-0").Return(applications.RestaurantPage{
 		Edges:       []applications.RestaurantEdge{{Cursor: nightBakery.ID, Restaurant: nightBakery}},
 		HasNextPage: true,
 		EndCursor:   nightBakery.ID,
-	}}
-	svc, ctx := managementService(t, &fakeOpening{}, &fakeOpening{})
+	}, nil).Once()
+	svc, ctx := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
 	svc.management.listOwnedRestaurants = owned
 
 	response, err := svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 10, After: wrapperspb.String("restaurant-0")})
 
 	require.NoError(t, err)
-	assert.Equal(t, 10, owned.first)
-	assert.Equal(t, "restaurant-0", owned.after)
-	assert.True(t, owned.hasUser, "the user reaches restaurants as a user assertion")
 	connection := response.GetMyRestaurants()
 	require.Len(t, connection.GetEdges(), 1)
 	node := connection.GetEdges()[0].GetNode()
@@ -160,24 +127,26 @@ func TestMyRestaurantsListsRestaurantsOfTheUser(t *testing.T) {
 }
 
 func TestMyRestaurantsRequiresAccessToken(t *testing.T) {
-	owned := &fakeOwned{}
-	svc, _ := managementService(t, &fakeOpening{}, &fakeOpening{})
-	svc.management.listOwnedRestaurants = owned
+	svc, _ := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
+	svc.management.listOwnedRestaurants = newMockOwnedRestaurantsHandler(t)
 
 	_, err := svc.QueryMyRestaurants(context.Background(), &service.QueryMyRestaurantsRequest{First: 10})
 
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	assert.Zero(t, owned.first)
 }
 
 func TestMyRestaurantsMapsErrors(t *testing.T) {
-	svc, ctx := managementService(t, &fakeOpening{}, &fakeOpening{})
+	svc, ctx := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
 
-	svc.management.listOwnedRestaurants = &fakeOwned{err: applications.ErrInvalidPageSize}
+	owned := newMockOwnedRestaurantsHandler(t)
+	owned.EXPECT().Handle(mock.Anything, 101, "").Return(applications.RestaurantPage{}, applications.ErrInvalidPageSize).Once()
+	svc.management.listOwnedRestaurants = owned
 	_, err := svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 101})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	svc.management.listOwnedRestaurants = &fakeOwned{err: errors.New("restaurants is down")}
+	owned = newMockOwnedRestaurantsHandler(t)
+	owned.EXPECT().Handle(mock.Anything, 10, "").Return(applications.RestaurantPage{}, errors.New("restaurants is down")).Once()
+	svc.management.listOwnedRestaurants = owned
 	_, err = svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 10})
 	assert.Equal(t, codes.Unavailable, status.Code(err))
 	assert.NotContains(t, err.Error(), "restaurants is down")

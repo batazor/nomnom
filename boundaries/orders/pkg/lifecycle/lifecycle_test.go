@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,36 +21,33 @@ func testConfig() Config {
 	}
 }
 
-// fakeWorker обслуживает работу до Shutdown; drain задаёт длительность
-// завершения начатой работы.
-type fakeWorker struct {
-	startErr error
-	drain    time.Duration
-	runExit  chan error
-	started  chan struct{}
-}
-
-func newFakeWorker() *fakeWorker {
-	return &fakeWorker{runExit: make(chan error, 1), started: make(chan struct{})}
-}
-
-func (w *fakeWorker) Start(context.Context) error {
-	if w.startErr == nil {
-		close(w.started)
-	}
-	return w.startErr
-}
-
-func (w *fakeWorker) Run() error { return <-w.runExit }
-
-func (w *fakeWorker) Shutdown(ctx context.Context) error {
-	defer func() { w.runExit <- nil }()
-	select {
-	case <-time.After(w.drain):
+// newServingWorker возвращает MockWorker, который обслуживает работу до
+// Shutdown: started закрывается после успешного Start, отправка в runExit
+// завершает Run.
+func newServingWorker(t *testing.T) (*MockWorker, chan struct{}, chan error) {
+	worker := NewMockWorker(t)
+	started := make(chan struct{})
+	runExit := make(chan error, 1)
+	worker.EXPECT().Start(mock.Anything).RunAndReturn(func(context.Context) error {
+		close(started)
 		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	}).Once()
+	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
+	return worker, started, runExit
+}
+
+// expectDrain ожидает Shutdown, который завершает начатую работу за drain
+// и затем останавливает Run.
+func expectDrain(worker *MockWorker, runExit chan error, drain time.Duration) {
+	worker.EXPECT().Shutdown(mock.Anything).RunAndReturn(func(ctx context.Context) error {
+		defer func() { runExit <- nil }()
+		select {
+		case <-time.After(drain):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}).Once()
 }
 
 func runAsync(rt *Runtime, ctx context.Context, w Worker) chan error {
@@ -60,11 +58,12 @@ func runAsync(rt *Runtime, ctx context.Context, w Worker) chan error {
 
 func TestRunMarksReadyAndShutsDownGracefully(t *testing.T) {
 	rt := New(testConfig())
-	worker := newFakeWorker()
+	worker, started, runExit := newServingWorker(t)
+	expectDrain(worker, runExit, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := runAsync(rt, ctx, worker)
 
-	<-worker.started
+	<-started
 	require.Eventually(t, rt.Health().Ready, time.Second, time.Millisecond)
 
 	cancel()
@@ -76,10 +75,11 @@ func TestRunWaitsReadinessDelayBeforeShutdown(t *testing.T) {
 	cfg := testConfig()
 	cfg.ReadinessDelay = 150 * time.Millisecond
 	rt := New(cfg)
-	worker := newFakeWorker()
+	worker, started, runExit := newServingWorker(t)
+	expectDrain(worker, runExit, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := runAsync(rt, ctx, worker)
-	<-worker.started
+	<-started
 	require.Eventually(t, rt.Health().Ready, time.Second, time.Millisecond)
 
 	begin := time.Now()
@@ -90,11 +90,11 @@ func TestRunWaitsReadinessDelayBeforeShutdown(t *testing.T) {
 
 func TestRunFailsWhenDrainTimeoutExceeded(t *testing.T) {
 	rt := New(testConfig())
-	worker := newFakeWorker()
-	worker.drain = time.Hour
+	worker, started, runExit := newServingWorker(t)
+	expectDrain(worker, runExit, time.Hour)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := runAsync(rt, ctx, worker)
-	<-worker.started
+	<-started
 
 	cancel()
 	require.ErrorIs(t, <-result, context.DeadlineExceeded)
@@ -102,22 +102,23 @@ func TestRunFailsWhenDrainTimeoutExceeded(t *testing.T) {
 
 func TestRunFailsWithoutReadyWhenStartFails(t *testing.T) {
 	rt := New(testConfig())
-	worker := newFakeWorker()
-	worker.startErr = errors.New("address in use")
+	worker := NewMockWorker(t)
+	startErr := errors.New("address in use")
+	worker.EXPECT().Start(mock.Anything).Return(startErr).Once()
 
 	err := rt.Run(context.Background(), worker)
-	require.ErrorIs(t, err, worker.startErr)
+	require.ErrorIs(t, err, startErr)
 	assert.False(t, rt.Health().Ready())
 }
 
 func TestRunFailsWhenWorkerStopsOnItsOwn(t *testing.T) {
 	rt := New(testConfig())
-	worker := newFakeWorker()
+	worker, started, runExit := newServingWorker(t)
 	result := runAsync(rt, context.Background(), worker)
-	<-worker.started
+	<-started
 
 	cause := errors.New("listener closed")
-	worker.runExit <- cause
+	runExit <- cause
 	require.ErrorIs(t, <-result, cause)
 	assert.False(t, rt.Health().Ready())
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -16,56 +17,37 @@ import (
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 
-// fakeCourierScenarios records the courier id each scenario got.
-type fakeCourierScenarios struct {
-	view    applications.CourierView
-	result  applications.CommandResult
-	err     error
-	calls   []string
-	courier string
+// courierScenarios are the courier scenarios the service calls.
+type courierScenarios struct {
+	getCourier      *mockGetCourierHandler
+	setAvailability *mockSetAvailabilityHandler
+	acceptOffer     *mockAcceptOfferHandler
+	applyAction     *mockDeliveryActionHandler
 }
 
-func (f *fakeCourierScenarios) record(courierID, call string) {
-	f.courier = courierID
-	f.calls = append(f.calls, call)
+func newCourierScenarios(t *testing.T) courierScenarios {
+	t.Helper()
+	return courierScenarios{
+		getCourier:      newMockGetCourierHandler(t),
+		setAvailability: newMockSetAvailabilityHandler(t),
+		acceptOffer:     newMockAcceptOfferHandler(t),
+		applyAction:     newMockDeliveryActionHandler(t),
+	}
 }
 
-type getCourierFunc struct{ *fakeCourierScenarios }
-
-func (f getCourierFunc) Handle(_ context.Context, courierID string) (applications.CourierView, error) {
-	f.record(courierID, "get")
-	return f.view, f.err
+// verifiedCourier matches the courier id taken from the access token.
+func verifiedCourier() any {
+	return mock.MatchedBy(func(courierID string) bool { return courierID != "" })
 }
 
-type setAvailabilityFunc struct{ *fakeCourierScenarios }
-
-func (f setAvailabilityFunc) Handle(_ context.Context, courierID string, availability applications.Availability) (applications.CommandResult, error) {
-	f.record(courierID, "availability "+string(availability))
-	return f.result, f.err
-}
-
-type acceptOfferFunc struct{ *fakeCourierScenarios }
-
-func (f acceptOfferFunc) Handle(_ context.Context, courierID, offerID string) (applications.CommandResult, error) {
-	f.record(courierID, "accept "+offerID)
-	return f.result, f.err
-}
-
-type deliveryActionFunc struct{ *fakeCourierScenarios }
-
-func (f deliveryActionFunc) Handle(_ context.Context, courierID, deliveryID string, action applications.Action) (applications.CommandResult, error) {
-	f.record(courierID, string(action)+" "+deliveryID)
-	return f.result, f.err
-}
-
-func courierService(t *testing.T, fake *fakeCourierScenarios) (*BffService, context.Context) {
+func courierService(t *testing.T, scenarios courierScenarios) (*BffService, context.Context) {
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{accessTokens: verifier, courier: &courier{
-		getCourier:      getCourierFunc{fake},
-		setAvailability: setAvailabilityFunc{fake},
-		acceptOffer:     acceptOfferFunc{fake},
-		applyAction:     deliveryActionFunc{fake},
+		getCourier:      scenarios.getCourier,
+		setAvailability: scenarios.setAvailability,
+		acceptOffer:     scenarios.acceptOffer,
+		applyAction:     scenarios.applyAction,
 	}}
 	return svc, metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 }
@@ -79,19 +61,21 @@ var busyCourier = applications.CourierView{
 }
 
 func TestCourierIsTheVerifiedUser(t *testing.T) {
-	fake := &fakeCourierScenarios{view: applications.CourierView{
+	scenarios := newCourierScenarios(t)
+	// the courier id is the subject of the access token.
+	scenarios.getCourier.EXPECT().Handle(mock.Anything, verifiedCourier()).Return(applications.CourierView{
 		Availability: applications.AvailabilityAvailable,
 		Offers: []applications.Offer{{
 			ID: "offer-1", DeliveryID: "delivery-1", OrderID: "order-1",
 			ExpiresAt: time.Date(2026, 10, 25, 12, 5, 0, 0, time.UTC),
 		}},
-	}}
-	svc, ctx := courierService(t, fake)
+	}, nil).Once()
+	scenarios.getCourier.EXPECT().Handle(mock.Anything, verifiedCourier()).Return(busyCourier, nil).Once()
+	svc, ctx := courierService(t, scenarios)
 
 	response, err := svc.QueryCourier(ctx, &service.QueryCourierRequest{})
 
 	require.NoError(t, err)
-	assert.NotEmpty(t, fake.courier, "the courier id is the subject of the access token")
 	courierMessage := response.GetCourier()
 	assert.Equal(t, service.CourierAvailability_COURIER_AVAILABILITY_AVAILABLE, courierMessage.GetAvailability())
 	require.Len(t, courierMessage.GetOffers(), 1)
@@ -100,7 +84,6 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 	assert.Equal(t, "2026-10-25T12:05:00Z", courierMessage.GetOffers()[0].GetExpiresAt())
 	assert.Nil(t, courierMessage.GetCurrentDelivery())
 
-	fake.view = busyCourier
 	response, err = svc.QueryCourier(ctx, &service.QueryCourierRequest{})
 	require.NoError(t, err)
 	delivery := response.GetCourier().GetCurrentDelivery()
@@ -110,7 +93,9 @@ func TestCourierIsTheVerifiedUser(t *testing.T) {
 }
 
 func TestNotACourierIsNull(t *testing.T) {
-	svc, ctx := courierService(t, &fakeCourierScenarios{err: applications.ErrNotCourier})
+	scenarios := newCourierScenarios(t)
+	scenarios.getCourier.EXPECT().Handle(mock.Anything, verifiedCourier()).Return(applications.CourierView{}, applications.ErrNotCourier).Once()
+	svc, ctx := courierService(t, scenarios)
 	response, err := svc.QueryCourier(ctx, &service.QueryCourierRequest{})
 	require.NoError(t, err)
 	assert.Nil(t, response.GetCourier())
@@ -120,30 +105,33 @@ func TestNotACourierIsNull(t *testing.T) {
 }
 
 func TestCourierCommands(t *testing.T) {
-	fake := &fakeCourierScenarios{result: applications.CommandResult{Courier: busyCourier}}
-	svc, ctx := courierService(t, fake)
+	scenarios := newCourierScenarios(t)
+	mock.InOrder(
+		scenarios.setAvailability.EXPECT().Handle(mock.Anything, verifiedCourier(), applications.AvailabilityUnavailable).
+			Return(applications.CommandResult{Courier: busyCourier}, nil).Once(),
+		scenarios.acceptOffer.EXPECT().Handle(mock.Anything, verifiedCourier(), "offer-1").
+			Return(applications.CommandResult{Courier: busyCourier, Problem: applications.ProblemOfferNotAvailable}, nil).Once(),
+		scenarios.applyAction.EXPECT().Handle(mock.Anything, verifiedCourier(), "delivery-1", applications.ActionConfirmDelivery).
+			Return(applications.CommandResult{Courier: busyCourier, Problem: applications.ProblemDeliveryStageConflict}, nil).Once(),
+	)
+	svc, ctx := courierService(t, scenarios)
 
 	availability, err := svc.MutationSetCourierAvailability(ctx, &service.MutationSetCourierAvailabilityRequest{Availability: service.CourierAvailability_COURIER_AVAILABILITY_UNAVAILABLE})
 	require.NoError(t, err)
 	assert.Equal(t, service.CourierAvailability_COURIER_AVAILABILITY_BUSY, availability.GetSetCourierAvailability().GetCourier().GetAvailability())
 
-	fake.result.Problem = applications.ProblemOfferNotAvailable
 	accepted, err := svc.MutationAcceptDeliveryOffer(ctx, &service.MutationAcceptDeliveryOfferRequest{OfferId: "offer-1"})
 	require.NoError(t, err)
 	assert.Equal(t, service.CourierProblemCode_COURIER_PROBLEM_CODE_OFFER_NOT_AVAILABLE, accepted.GetAcceptDeliveryOffer().GetProblem())
 	assert.NotNil(t, accepted.GetAcceptDeliveryOffer().GetCourier())
 
-	fake.result.Problem = applications.ProblemDeliveryStageConflict
 	applied, err := svc.MutationApplyCourierDeliveryAction(ctx, &service.MutationApplyCourierDeliveryActionRequest{DeliveryId: "delivery-1", Action: service.CourierDeliveryAction_COURIER_DELIVERY_ACTION_CONFIRM_DELIVERY})
 	require.NoError(t, err)
 	assert.Equal(t, service.CourierProblemCode_COURIER_PROBLEM_CODE_DELIVERY_STAGE_CONFLICT, applied.GetApplyCourierDeliveryAction().GetProblem())
-
-	assert.Equal(t, []string{"availability unavailable", "accept offer-1", "confirm_delivery delivery-1"}, fake.calls)
 }
 
 func TestCourierCommandValidation(t *testing.T) {
-	fake := &fakeCourierScenarios{}
-	svc, ctx := courierService(t, fake)
+	svc, ctx := courierService(t, newCourierScenarios(t))
 	for _, availability := range []service.CourierAvailability{service.CourierAvailability_COURIER_AVAILABILITY_BUSY, service.CourierAvailability_COURIER_AVAILABILITY_UNSPECIFIED} {
 		_, err := svc.MutationSetCourierAvailability(ctx, &service.MutationSetCourierAvailabilityRequest{Availability: availability})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -154,7 +142,6 @@ func TestCourierCommandValidation(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	_, err = svc.MutationApplyCourierDeliveryAction(ctx, &service.MutationApplyCourierDeliveryActionRequest{Action: service.CourierDeliveryAction_COURIER_DELIVERY_ACTION_CONFIRM_PICKUP})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	assert.Empty(t, fake.calls)
 }
 
 func TestCourierCommandErrors(t *testing.T) {
@@ -165,7 +152,10 @@ func TestCourierCommandErrors(t *testing.T) {
 		applications.ErrInvalidCommand:       codes.InvalidArgument,
 		errors.New("down"):                   codes.Unavailable,
 	} {
-		svc, ctx := courierService(t, &fakeCourierScenarios{err: refusal})
+		scenarios := newCourierScenarios(t)
+		scenarios.applyAction.EXPECT().Handle(mock.Anything, verifiedCourier(), "delivery-1", applications.ActionConfirmPickup).
+			Return(applications.CommandResult{}, refusal).Once()
+		svc, ctx := courierService(t, scenarios)
 		_, err := svc.MutationApplyCourierDeliveryAction(ctx, &service.MutationApplyCourierDeliveryActionRequest{DeliveryId: "delivery-1", Action: service.CourierDeliveryAction_COURIER_DELIVERY_ACTION_CONFIRM_PICKUP})
 		assert.Equal(t, code, status.Code(err), refusal.Error())
 	}

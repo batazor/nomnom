@@ -1,0 +1,71 @@
+# Mocks of the ports the tests replace; regenerate with `go tool mockery`.
+template: testify
+dir: "{{.InterfaceDir}}"
+filename: mocks_test.go
+pkgname: "{{.SrcPackageName}}"
+structname: "{{.Mock}}{{.InterfaceName | firstUpper}}"
+force-file-write: true
+formatter: goimports
+packages:
+  nomnom/orders/di:
+    interfaces:
+      runner: {}
+  nomnom/orders/pkg/lifecycle:
+    interfaces:
+      Worker: {}
+  nomnom/orders/slices/fulfillment/applications/neighbours:
+    config:
+      dir: slices/fulfillment/infrastructure/temporal
+      filename: mocks_neighbours_test.go
+      pkgname: temporal_test
+    interfaces:
+      Delivery: {}
+      Payments: {}
+      Restaurants: {}
+  go.temporal.io/api/operatorservice/v1:
+    config:
+      include-auto-generated: true
+      dir: slices/fulfillment/infrastructure/temporal
+      filename: mocks_operatorservice_test.go
+      pkgname: temporal_test
+    interfaces:
+      OperatorServiceClient: {}
+  github.com/authzed/authzed-go/proto/authzed/api/v1:
+    config:
+      include-auto-generated: true
+      dir: slices/order/infrastructure/spicedb
+      filename: mocks_test.go
+      pkgname: spicedb_test
+    interfaces:
+      PermissionsServiceClient: {}
+  nomnom/orders/pkg/gateway/gen/nomnom/payments/v1:
+    config:
+      include-auto-generated: true
+      dir: slices/fulfillment/infrastructure/neighbours/grpcclient
+      filename: mocks_payments_test.go
+      pkgname: grpcclient_test
+    interfaces:
+      PaymentsServiceServer: {}
+  nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1:
+    config:
+      include-auto-generated: true
+      dir: slices/fulfillment/infrastructure/neighbours/grpcclient
+      filename: mocks_delivery_test.go
+      pkgname: grpcclient_test
+    interfaces:
+      DeliveryServiceServer: {}
+  nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1:
+    config:
+      include-auto-generated: true
+    interfaces:
+      RestaurantsServiceServer:
+        configs:
+          - dir: slices/fulfillment/infrastructure/neighbours/grpcclient
+            filename: mocks_restaurants_test.go
+            pkgname: grpcclient_test
+          - dir: slices/order/infrastructure/catalog
+            filename: mocks_test.go
+            pkgname: catalog_test
+          - dir: infrastructure/grpc
+            filename: mocks_test.go
+            pkgname: grpcadapter_test

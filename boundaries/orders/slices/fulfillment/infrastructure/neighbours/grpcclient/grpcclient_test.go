@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -22,97 +23,47 @@ import (
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
 )
 
-type fakePayments struct {
+// The generated server mocks declare mustEmbedUnimplemented… in the test
+// package; the Unimplemented server sits one level deeper, so the mock methods
+// win the embedding resolution.
+type unimplementedPayments struct {
 	paymentsv1.UnimplementedPaymentsServiceServer
-	created   []*paymentsv1.CreatePaymentRequest
-	authorize []*paymentsv1.AuthorizePaymentRequest
-	status    paymentsv1.PaymentOperationStatus
-	err       error
 }
 
-func (f *fakePayments) CreatePayment(_ context.Context, r *paymentsv1.CreatePaymentRequest) (*paymentsv1.CreatePaymentResponse, error) {
-	f.created = append(f.created, r)
-	return &paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil
+type paymentsServer struct {
+	*MockPaymentsServiceServer
+	unimplementedPayments
 }
 
-func (f *fakePayments) operation() *paymentsv1.PaymentOperation {
-	return &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: f.status, DeclineReason: "card_declined"}
-}
-
-func (f *fakePayments) AuthorizePayment(_ context.Context, r *paymentsv1.AuthorizePaymentRequest) (*paymentsv1.AuthorizePaymentResponse, error) {
-	f.authorize = append(f.authorize, r)
-	return &paymentsv1.AuthorizePaymentResponse{Operation: f.operation()}, f.err
-}
-
-func (f *fakePayments) CapturePayment(context.Context, *paymentsv1.CapturePaymentRequest) (*paymentsv1.CapturePaymentResponse, error) {
-	return &paymentsv1.CapturePaymentResponse{Operation: f.operation()}, f.err
-}
-
-func (f *fakePayments) CancelAuthorization(context.Context, *paymentsv1.CancelAuthorizationRequest) (*paymentsv1.CancelAuthorizationResponse, error) {
-	return &paymentsv1.CancelAuthorizationResponse{Operation: f.operation()}, f.err
-}
-
-func (f *fakePayments) RefundPayment(context.Context, *paymentsv1.RefundPaymentRequest) (*paymentsv1.RefundPaymentResponse, error) {
-	return &paymentsv1.RefundPaymentResponse{Operation: f.operation()}, f.err
-}
-
-type fakeRestaurants struct {
+type unimplementedRestaurants struct {
 	restaurantsv1.UnimplementedRestaurantsServiceServer
-	received  []*restaurantsv1.ReceiveOrderRequestRequest
-	cancelled bool
 }
 
-func (f *fakeRestaurants) ReceiveOrderRequest(_ context.Context, r *restaurantsv1.ReceiveOrderRequestRequest) (*restaurantsv1.ReceiveOrderRequestResponse, error) {
-	f.received = append(f.received, r)
-	return &restaurantsv1.ReceiveOrderRequestResponse{RestaurantOrderId: "ro-1", Created: true}, nil
+type restaurantsServer struct {
+	*MockRestaurantsServiceServer
+	unimplementedRestaurants
 }
 
-func (f *fakeRestaurants) CancelRestaurantOrder(context.Context, *restaurantsv1.CancelRestaurantOrderRequest) (*restaurantsv1.CancelRestaurantOrderResponse, error) {
-	if f.cancelled {
-		return &restaurantsv1.CancelRestaurantOrderResponse{Cancelled: true}, nil
-	}
-	return &restaurantsv1.CancelRestaurantOrderResponse{RejectionReason: "already_ready"}, nil
-}
-
-type fakeDelivery struct {
+type unimplementedDelivery struct {
 	deliveryv1.UnimplementedDeliveryServiceServer
-	created []*deliveryv1.CreateDeliveryRequest
-	err     error
 }
 
-func (f *fakeDelivery) CreateDelivery(_ context.Context, r *deliveryv1.CreateDeliveryRequest) (*deliveryv1.CreateDeliveryResponse, error) {
-	f.created = append(f.created, r)
-	return &deliveryv1.CreateDeliveryResponse{DeliveryId: "d-1", Created: true}, f.err
+type deliveryServer struct {
+	*MockDeliveryServiceServer
+	unimplementedDelivery
 }
 
-func (f *fakeDelivery) ReplanDelivery(context.Context, *deliveryv1.ReplanDeliveryRequest) (*deliveryv1.ReplanDeliveryResponse, error) {
-	return &deliveryv1.ReplanDeliveryResponse{DeliveryId: "d-1"}, f.err
-}
-
-func (f *fakeDelivery) CancelDelivery(context.Context, *deliveryv1.CancelDeliveryRequest) (*deliveryv1.CancelDeliveryResponse, error) {
-	return &deliveryv1.CancelDeliveryResponse{DeliveryId: "d-1", RejectionReason: "already_picked_up"}, f.err
-}
-
-type fakes struct {
-	payments    *fakePayments
-	restaurants *fakeRestaurants
-	delivery    *fakeDelivery
-	conn        *grpc.ClientConn
-}
-
-// serve runs the fake neighbours behind one in-process endpoint, like the internal gateway.
-func serve(t *testing.T) *fakes {
+// serve runs the mocked neighbours behind one in-process endpoint, like the internal gateway.
+func serve(t *testing.T) (*grpc.ClientConn, *MockPaymentsServiceServer, *MockRestaurantsServiceServer, *MockDeliveryServiceServer) {
 	t.Helper()
-	f := &fakes{
-		payments:    &fakePayments{status: paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED},
-		restaurants: &fakeRestaurants{cancelled: true},
-		delivery:    &fakeDelivery{},
-	}
+	payments := NewMockPaymentsServiceServer(t)
+	restaurants := NewMockRestaurantsServiceServer(t)
+	delivery := NewMockDeliveryServiceServer(t)
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer()
-	paymentsv1.RegisterPaymentsServiceServer(server, f.payments)
-	restaurantsv1.RegisterRestaurantsServiceServer(server, f.restaurants)
-	deliveryv1.RegisterDeliveryServiceServer(server, f.delivery)
+	paymentsv1.RegisterPaymentsServiceServer(server, paymentsServer{MockPaymentsServiceServer: payments})
+	restaurantsv1.RegisterRestaurantsServiceServer(server, restaurantsServer{MockRestaurantsServiceServer: restaurants})
+	deliveryv1.RegisterDeliveryServiceServer(server, deliveryServer{MockDeliveryServiceServer: delivery})
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 
@@ -121,8 +72,17 @@ func serve(t *testing.T) *fakes {
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	f.conn = conn
-	return f
+	return conn, payments, restaurants, delivery
+}
+
+func operation(status paymentsv1.PaymentOperationStatus) *paymentsv1.PaymentOperation {
+	return &paymentsv1.PaymentOperation{PaymentId: "payment-1", Status: status, DeclineReason: "card_declined"}
+}
+
+// expectCreatePayment expects times Payment creations, each answering payment-1.
+func expectCreatePayment(payments *MockPaymentsServiceServer, times int) {
+	payments.EXPECT().CreatePayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Times(times)
 }
 
 var payment = neighbours.PaymentRequest{
@@ -130,27 +90,29 @@ var payment = neighbours.PaymentRequest{
 }
 
 func TestPaymentsAuthorizeCreatesPaymentAndUsesStepKey(t *testing.T) {
-	f := serve(t)
+	conn, payments, _, _ := serve(t)
+	payments.EXPECT().CreatePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.CreatePaymentRequest) bool {
+		// The Payment is in the Market of the Order.
+		return r.GetOrderId() == "order-1" && r.GetAmount().GetAmount() == "20" && r.GetMarketId() == "berlin"
+	})).Return(&paymentsv1.CreatePaymentResponse{PaymentId: "payment-1"}, nil).Once()
+	payments.EXPECT().AuthorizePayment(mock.Anything, mock.MatchedBy(func(r *paymentsv1.AuthorizePaymentRequest) bool {
+		return r.GetPaymentId() == "payment-1" && r.GetIdempotencyKey() == payment.IdempotencyKey
+	})).Return(&paymentsv1.AuthorizePaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED)}, nil).Once()
 
-	d, err := grpcclient.NewPayments(f.conn).Authorize(context.Background(), payment)
+	d, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
 
 	require.NoError(t, err)
 	assert.True(t, d.Approved)
-	require.Len(t, f.payments.created, 1)
-	assert.Equal(t, "order-1", f.payments.created[0].GetOrderId())
-	assert.Equal(t, "20", f.payments.created[0].GetAmount().GetAmount())
-	assert.Equal(t, "berlin", f.payments.created[0].GetMarketId(), "the Payment is in the Market of the Order")
-	require.Len(t, f.payments.authorize, 1)
-	assert.Equal(t, "payment-1", f.payments.authorize[0].GetPaymentId())
-	assert.Equal(t, payment.IdempotencyKey, f.payments.authorize[0].GetIdempotencyKey())
 }
 
 // AC-457: a provider decline is a business decision, not an error.
 func TestPaymentsDeclineIsDecision(t *testing.T) {
-	f := serve(t)
-	f.payments.status = paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED
+	conn, payments, _, _ := serve(t)
+	expectCreatePayment(payments, 1)
+	payments.EXPECT().CapturePayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.CapturePaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED)}, nil).Once()
 
-	d, err := grpcclient.NewPayments(f.conn).Capture(context.Background(), payment)
+	d, err := grpcclient.NewPayments(conn).Capture(context.Background(), payment)
 
 	require.NoError(t, err)
 	assert.Equal(t, neighbours.PaymentDecision{Reason: "card_declined"}, d)
@@ -158,22 +120,27 @@ func TestPaymentsDeclineIsDecision(t *testing.T) {
 
 // AC-458: a pending operation is retried by the Activity with the same key.
 func TestPaymentsPendingIsRetryable(t *testing.T) {
-	f := serve(t)
-	f.payments.status = paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_PENDING
+	conn, payments, _, _ := serve(t)
+	expectCreatePayment(payments, 1)
+	payments.EXPECT().AuthorizePayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.AuthorizePaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_PENDING)}, nil).Once()
 
-	_, err := grpcclient.NewPayments(f.conn).Authorize(context.Background(), payment)
+	_, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
 
 	require.ErrorIs(t, err, grpcclient.ErrOperationPending)
 	assert.NotErrorIs(t, err, application.ErrInvalidInput)
 }
 
 func TestPaymentsDeclinedCompensationIsError(t *testing.T) {
-	f := serve(t)
-	f.payments.status = paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED
+	conn, payments, _, _ := serve(t)
+	expectCreatePayment(payments, 2)
+	payments.EXPECT().RefundPayment(mock.Anything, mock.Anything).
+		Return(&paymentsv1.RefundPaymentResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_DECLINED)}, nil).Once()
+	payments.EXPECT().CancelAuthorization(mock.Anything, mock.Anything).
+		Return(&paymentsv1.CancelAuthorizationResponse{Operation: operation(paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED)}, nil).Once()
 
-	require.Error(t, grpcclient.NewPayments(f.conn).Refund(context.Background(), payment))
-	f.payments.status = paymentsv1.PaymentOperationStatus_PAYMENT_OPERATION_STATUS_SUCCEEDED
-	require.NoError(t, grpcclient.NewPayments(f.conn).CancelAuthorization(context.Background(), payment))
+	require.Error(t, grpcclient.NewPayments(conn).Refund(context.Background(), payment))
+	require.NoError(t, grpcclient.NewPayments(conn).CancelAuthorization(context.Background(), payment))
 }
 
 func TestErrorsMapToRetryability(t *testing.T) {
@@ -189,10 +156,10 @@ func TestErrorsMapToRetryability(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.code.String(), func(t *testing.T) {
-			f := serve(t)
-			f.delivery.err = status.Error(tt.code, "boom")
+			conn, _, _, delivery := serve(t)
+			delivery.EXPECT().CancelDelivery(mock.Anything, mock.Anything).Return(nil, status.Error(tt.code, "boom")).Once()
 
-			err := grpcclient.NewDelivery(f.conn).Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"})
+			err := grpcclient.NewDelivery(conn).Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"})
 
 			require.Error(t, err)
 			assert.Equal(t, tt.permanent, errors.Is(err, application.ErrInvalidInput))
@@ -201,8 +168,15 @@ func TestErrorsMapToRetryability(t *testing.T) {
 }
 
 func TestRestaurantsRequestAndCancel(t *testing.T) {
-	f := serve(t)
-	restaurants := grpcclient.NewRestaurants(f.conn)
+	conn, _, server, _ := serve(t)
+	server.EXPECT().ReceiveOrderRequest(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.ReceiveOrderRequestRequest) bool {
+		return len(r.GetItems()) == 1 && r.GetItems()[0].GetMenuItemId() == "menu-1" && r.GetItems()[0].GetQuantity() == 2
+	})).Return(&restaurantsv1.ReceiveOrderRequestResponse{RestaurantOrderId: "ro-1", Created: true}, nil).Once()
+	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.Anything).
+		Return(&restaurantsv1.CancelRestaurantOrderResponse{Cancelled: true}, nil).Once()
+	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.Anything).
+		Return(&restaurantsv1.CancelRestaurantOrderResponse{RejectionReason: "already_ready"}, nil).Once()
+	restaurants := grpcclient.NewRestaurants(conn)
 	request := neighbours.RestaurantOrderRequest{
 		OrderID: "order-1", RestaurantID: "restaurant-1",
 		Items: []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
@@ -210,29 +184,26 @@ func TestRestaurantsRequestAndCancel(t *testing.T) {
 
 	require.NoError(t, restaurants.RequestOrder(context.Background(), request))
 	require.NoError(t, restaurants.CancelOrder(context.Background(), request))
-	f.restaurants.cancelled = false
 	require.NoError(t, restaurants.CancelOrder(context.Background(), request), "a rejection by stage is done")
-
-	require.Len(t, f.restaurants.received, 1)
-	assert.Equal(t, "menu-1", f.restaurants.received[0].GetItems()[0].GetMenuItemId())
-	assert.Equal(t, int32(2), f.restaurants.received[0].GetItems()[0].GetQuantity())
 }
 
 func TestDeliveryCreateSendsTheOrder(t *testing.T) {
-	f := serve(t)
-	d := grpcclient.NewDelivery(f.conn)
+	conn, _, _, delivery := serve(t)
+	delivery.EXPECT().CreateDelivery(mock.Anything, mock.MatchedBy(func(r *deliveryv1.CreateDeliveryRequest) bool {
+		// The Delivery is in the Market of the Order.
+		return r.GetOrderId() == "order-1" && r.GetMarketId() == "berlin"
+	})).Return(&deliveryv1.CreateDeliveryResponse{DeliveryId: "d-1", Created: true}, nil).Once()
+	delivery.EXPECT().CancelDelivery(mock.Anything, mock.Anything).
+		Return(&deliveryv1.CancelDeliveryResponse{DeliveryId: "d-1", RejectionReason: "already_picked_up"}, nil).Once()
+	d := grpcclient.NewDelivery(conn)
 
 	require.NoError(t, d.Create(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", MarketID: "berlin"}))
 	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", MarketID: "berlin"}))
-
-	require.Len(t, f.delivery.created, 1)
-	assert.Equal(t, "order-1", f.delivery.created[0].GetOrderId())
-	assert.Equal(t, "berlin", f.delivery.created[0].GetMarketId(), "the Delivery is in the Market of the Order")
 }
 
 func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {
-	f := serve(t)
-	f.delivery.err = status.Error(codes.FailedPrecondition, "candidate busy")
+	conn, _, _, delivery := serve(t)
+	delivery.EXPECT().ReplanDelivery(mock.Anything, mock.Anything).Return(nil, status.Error(codes.FailedPrecondition, "candidate busy")).Once()
 
-	require.NoError(t, grpcclient.NewDelivery(f.conn).Replan(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
+	require.NoError(t, grpcclient.NewDelivery(conn).Replan(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
 }

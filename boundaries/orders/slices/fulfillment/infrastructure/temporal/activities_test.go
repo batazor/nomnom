@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	sdktemporal "go.temporal.io/sdk/temporal"
@@ -22,73 +23,21 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-type fakeNeighbours struct {
-	payments    []ports.PaymentRequest
-	restaurants []ports.RestaurantOrderRequest
-	deliveries  []ports.DeliveryRequest
-	decision    ports.PaymentDecision
-	err         error
-}
-
-func (f *fakeNeighbours) Authorize(_ context.Context, r ports.PaymentRequest) (ports.PaymentDecision, error) {
-	f.payments = append(f.payments, r)
-	return f.decision, f.err
-}
-
-func (f *fakeNeighbours) Capture(_ context.Context, r ports.PaymentRequest) (ports.PaymentDecision, error) {
-	f.payments = append(f.payments, r)
-	return f.decision, f.err
-}
-
-func (f *fakeNeighbours) CancelAuthorization(_ context.Context, r ports.PaymentRequest) error {
-	f.payments = append(f.payments, r)
-	return f.err
-}
-
-func (f *fakeNeighbours) Refund(_ context.Context, r ports.PaymentRequest) error {
-	f.payments = append(f.payments, r)
-	return f.err
-}
-
-func (f *fakeNeighbours) RequestOrder(_ context.Context, r ports.RestaurantOrderRequest) error {
-	f.restaurants = append(f.restaurants, r)
-	return f.err
-}
-
-func (f *fakeNeighbours) CancelOrder(_ context.Context, r ports.RestaurantOrderRequest) error {
-	f.restaurants = append(f.restaurants, r)
-	return f.err
-}
-
-func (f *fakeNeighbours) Create(_ context.Context, r ports.DeliveryRequest) error {
-	f.deliveries = append(f.deliveries, r)
-	return f.err
-}
-
-func (f *fakeNeighbours) Replan(_ context.Context, r ports.DeliveryRequest) error {
-	f.deliveries = append(f.deliveries, r)
-	return f.err
-}
-
-func (f *fakeNeighbours) Cancel(_ context.Context, r ports.DeliveryRequest) error {
-	f.deliveries = append(f.deliveries, r)
-	return f.err
-}
-
-func activities(t *testing.T, state order.State) (*temporal.Activities, *fakeNeighbours, *repositorytest.Store) {
+// activities builds Activities over a real store; the neighbours are mocks
+// without expectations, so any unexpected neighbour call fails the test.
+func activities(t *testing.T, state order.State) (*temporal.Activities, *repositorytest.Store) {
 	t.Helper()
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
-	neighbours := &fakeNeighbours{decision: ports.PaymentDecision{Approved: true}}
 	return &temporal.Activities{
 		Orders:        store,
-		Payments:      neighbours,
-		Restaurants:   neighbours,
-		Delivery:      neighbours,
+		Payments:      NewMockPayments(t),
+		Restaurants:   NewMockRestaurants(t),
+		Delivery:      NewMockDelivery(t),
 		RecordPayment: recordpaymentauthorization.NewHandler(store, store),
 		Complete:      completeorder.NewHandler(store, store, store),
 		Finalize:      failorcancelorder.NewHandler(store, store, store),
-	}, neighbours, store
+	}, store
 }
 
 var step = temporal.StepInput{OrderID: orderID, IdempotencyKey: "order:order-1:authorize_payment"}
@@ -100,56 +49,64 @@ var completeStep = temporal.StepInput{
 }
 
 func TestPaymentActivitiesUseOrderSnapshotAndStableKey(t *testing.T) {
-	a, neighbours, _ := activities(t, order.StatePlaced)
-	neighbours.decision = ports.PaymentDecision{Reason: "card_declined"}
-
-	decision, err := a.AuthorizePayment(context.Background(), step)
-
-	require.NoError(t, err, "a decline is a business result, not an error")
-	assert.Equal(t, ports.PaymentDecision{Reason: "card_declined"}, decision)
-	assert.Equal(t, []ports.PaymentRequest{{
+	a, _ := activities(t, order.StatePlaced)
+	payments := NewMockPayments(t)
+	a.Payments = payments
+	payments.EXPECT().Authorize(mock.Anything, ports.PaymentRequest{
 		OrderID:        orderID,
 		CustomerID:     "customer-1",
 		MarketID:       ordertest.Market,
 		Amount:         "20",
 		Currency:       "EUR",
 		IdempotencyKey: "order:order-1:authorize_payment",
-	}}, neighbours.payments)
+	}).Return(ports.PaymentDecision{Reason: "card_declined"}, nil).Once()
+
+	decision, err := a.AuthorizePayment(context.Background(), step)
+
+	require.NoError(t, err, "a decline is a business result, not an error")
+	assert.Equal(t, ports.PaymentDecision{Reason: "card_declined"}, decision)
 }
 
 func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
-	a, neighbours, _ := activities(t, order.StatePlaced)
-	ctx := context.Background()
-
-	require.NoError(t, a.RequestRestaurantOrder(ctx, step))
-	require.NoError(t, a.CreateDelivery(ctx, step))
-
-	assert.Equal(t, []ports.RestaurantOrderRequest{{
+	a, _ := activities(t, order.StatePlaced)
+	restaurants := NewMockRestaurants(t)
+	delivery := NewMockDelivery(t)
+	a.Restaurants, a.Delivery = restaurants, delivery
+	restaurants.EXPECT().RequestOrder(mock.Anything, ports.RestaurantOrderRequest{
 		OrderID:        orderID,
 		RestaurantID:   "restaurant-1",
 		Items:          []ports.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
 		IdempotencyKey: step.IdempotencyKey,
-	}}, neighbours.restaurants)
-	assert.Equal(t, []ports.DeliveryRequest{{
+	}).Return(nil).Once()
+	delivery.EXPECT().Create(mock.Anything, ports.DeliveryRequest{
 		OrderID:        orderID,
 		MarketID:       ordertest.Market,
 		IdempotencyKey: step.IdempotencyKey,
-	}}, neighbours.deliveries)
+	}).Return(nil).Once()
+	ctx := context.Background()
+
+	require.NoError(t, a.RequestRestaurantOrder(ctx, step))
+	require.NoError(t, a.CreateDelivery(ctx, step))
 }
 
 func TestActivitiesKeepTransportFailuresRetryable(t *testing.T) {
-	a, neighbours, _ := activities(t, order.StatePlaced)
-	neighbours.err = errors.New("unavailable")
+	a, _ := activities(t, order.StatePlaced)
+	delivery := NewMockDelivery(t)
+	a.Delivery = delivery
+	unavailable := errors.New("unavailable")
+	delivery.EXPECT().Cancel(mock.Anything, mock.MatchedBy(func(r ports.DeliveryRequest) bool {
+		return r.OrderID == orderID && r.IdempotencyKey == step.IdempotencyKey
+	})).Return(unavailable).Once()
 
 	err := a.CancelDelivery(context.Background(), step)
 
 	var application *sdktemporal.ApplicationError
 	assert.False(t, errors.As(err, &application))
-	assert.ErrorIs(t, err, neighbours.err)
+	assert.ErrorIs(t, err, unavailable)
 }
 
 func TestActivitiesDoNotRetryPermanentErrors(t *testing.T) {
-	a, _, _ := activities(t, order.StatePlaced)
+	a, _ := activities(t, order.StatePlaced)
 	ctx := context.Background()
 	tests := []struct {
 		name     string
@@ -187,7 +144,7 @@ func TestActivitiesDoNotRetryPermanentErrors(t *testing.T) {
 
 // AC-825: a repeated payment Activity records the fact once with the workflow time.
 func TestRecordPaymentAuthorizationActivityIsIdempotent(t *testing.T) {
-	a, _, store := activities(t, order.StatePlaced)
+	a, store := activities(t, order.StatePlaced)
 	paymentStep := temporal.StepInput{
 		OrderID:        orderID,
 		IdempotencyKey: "order:order-1:record_payment_authorization",
@@ -203,7 +160,7 @@ func TestRecordPaymentAuthorizationActivityIsIdempotent(t *testing.T) {
 }
 
 func TestRecordPaymentAuthorizationActivityRequiresDecidedAt(t *testing.T) {
-	a, _, store := activities(t, order.StatePlaced)
+	a, store := activities(t, order.StatePlaced)
 	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivityWithOptions(a.RecordPaymentAuthorization, activity.RegisterOptions{Name: temporal.ActivityRecordPaymentAuthorization})
 
@@ -215,7 +172,7 @@ func TestRecordPaymentAuthorizationActivityRequiresDecidedAt(t *testing.T) {
 }
 
 func TestCompleteOrderActivityIsIdempotent(t *testing.T) {
-	a, _, store := activities(t, order.StateConfirmed)
+	a, store := activities(t, order.StateConfirmed)
 
 	require.NoError(t, a.CompleteOrder(context.Background(), completeStep))
 	require.NoError(t, a.CompleteOrder(context.Background(), completeStep))
@@ -230,7 +187,7 @@ func TestCompleteOrderActivityIsIdempotent(t *testing.T) {
 }
 
 func TestCompleteOrderActivityRequiresDecidedAt(t *testing.T) {
-	a, _, store := activities(t, order.StateConfirmed)
+	a, store := activities(t, order.StateConfirmed)
 	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivityWithOptions(a.CompleteOrder, activity.RegisterOptions{Name: temporal.ActivityCompleteOrder})
 
@@ -250,7 +207,7 @@ func TestFailOrCancelOrderActivityMapsOutcome(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.outcome), func(t *testing.T) {
-			a, _, store := activities(t, order.StateConfirmed)
+			a, store := activities(t, order.StateConfirmed)
 
 			err := a.FailOrCancelOrder(context.Background(), temporal.FinalizeInput{
 				OrderID:    orderID,

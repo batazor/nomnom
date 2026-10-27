@@ -7,34 +7,19 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	tracking "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
-type fakePlaceOrder struct {
-	result applications.Result
-	err    error
-	got    applications.Input
-	called bool
-	user   identity.User
-}
-
-func (f *fakePlaceOrder) Handle(ctx context.Context, input applications.Input) (applications.Result, error) {
-	f.called = true
-	f.got = input
-	f.user, _ = identity.UserFrom(ctx)
-	return f.result, f.err
-}
-
-func checkoutService(t *testing.T, placeOrder *fakePlaceOrder) (*BffService, context.Context) {
+func checkoutService(t *testing.T, placeOrder *mockPlaceOrderHandler) (*BffService, context.Context) {
 	t.Helper()
-	svc, ctx := newService(t, &fakeGetOrder{}, &fakeCancellation{})
+	svc, ctx := newService(t, newMockGetOrderHandler(t), newMockRequestCancellationHandler(t))
 	svc.checkout = &checkout{placeOrder: placeOrder}
 	return svc, ctx
 }
@@ -48,33 +33,31 @@ func placeOrderRequest() *service.MutationPlaceOrderRequest {
 }
 
 func TestPlaceOrderRequiresAccessToken(t *testing.T) {
-	placeOrder := &fakePlaceOrder{}
-	svc, _ := checkoutService(t, placeOrder)
+	svc, _ := checkoutService(t, newMockPlaceOrderHandler(t))
 
 	_, err := svc.MutationPlaceOrder(context.Background(), placeOrderRequest())
 
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	assert.False(t, placeOrder.called)
 }
 
 // AC-570: a placed order comes back RECEIVED without problems.
 func TestPlaceOrderReturnsTheOrder(t *testing.T) {
 	placed := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
-	placeOrder := &fakePlaceOrder{result: applications.Result{Order: &tracking.OrderView{
+	placeOrder := newMockPlaceOrderHandler(t)
+	// orders is called on behalf of the customer.
+	placeOrder.EXPECT().Handle(onBehalfOf("customer-1"), applications.Input{
+		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
+		IdempotencyKey: "attempt-1",
+	}).Return(applications.Result{Order: &tracking.OrderView{
 		ID: "order-1", Status: tracking.StatusReceived, PlacedAt: placed,
 		Restaurant: tracking.Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true},
 		Total:      tracking.Money{Amount: "19.00", Currency: "EUR"},
-	}}}
+	}}, nil).Once()
 	svc, ctx := checkoutService(t, placeOrder)
 
 	response, err := svc.MutationPlaceOrder(ctx, placeOrderRequest())
 
 	require.NoError(t, err)
-	assert.Equal(t, "customer-1", placeOrder.user.ID, "orders is called on behalf of the customer")
-	assert.Equal(t, applications.Input{
-		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
-		IdempotencyKey: "attempt-1",
-	}, placeOrder.got)
 	payload := response.GetPlaceOrder()
 	assert.Equal(t, service.OrderStatus_ORDER_STATUS_RECEIVED, payload.GetOrder().GetStatus())
 	assert.Equal(t, "19.00", payload.GetOrder().GetTotal().GetAmount())
@@ -83,10 +66,11 @@ func TestPlaceOrderReturnsTheOrder(t *testing.T) {
 
 // AC-569: problems replace the order, without a GraphQL error.
 func TestPlaceOrderReturnsProblems(t *testing.T) {
-	placeOrder := &fakePlaceOrder{result: applications.Result{Problems: []applications.Problem{
+	placeOrder := newMockPlaceOrderHandler(t)
+	placeOrder.EXPECT().Handle(mock.Anything, mock.Anything).Return(applications.Result{Problems: []applications.Problem{
 		{Code: applications.ProblemOrderItemUnavailable, MenuItemIDs: []string{"menu-gyoza"}},
 		{Code: applications.ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}},
-	}}}
+	}}, nil).Once()
 	svc, ctx := checkoutService(t, placeOrder)
 
 	response, err := svc.MutationPlaceOrder(ctx, placeOrderRequest())
@@ -111,13 +95,15 @@ func TestPlaceOrderErrors(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			svc, ctx := checkoutService(t, &fakePlaceOrder{err: tc.err})
+			placeOrder := newMockPlaceOrderHandler(t)
+			placeOrder.EXPECT().Handle(mock.Anything, mock.Anything).Return(applications.Result{}, tc.err).Once()
+			svc, ctx := checkoutService(t, placeOrder)
 			_, err := svc.MutationPlaceOrder(ctx, placeOrderRequest())
 			assert.Equal(t, tc.want, status.Code(err))
 		})
 	}
 
-	svc, ctx := checkoutService(t, &fakePlaceOrder{})
+	svc, ctx := checkoutService(t, newMockPlaceOrderHandler(t))
 	request := placeOrderRequest()
 	request.Input.IdempotencyKey = ""
 	_, err := svc.MutationPlaceOrder(ctx, request)

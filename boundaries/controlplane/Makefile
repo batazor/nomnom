@@ -33,6 +33,7 @@ postgres-dev-stop:
 generate:
 	$(MAKE) proto-generate
 	$(GO) tool wire ./di
+	$(GO) tool mockery
 
 proto-check:
 	cd ../.. && buf format --diff --exit-code

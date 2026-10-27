@@ -559,6 +559,8 @@ make format
 
 `make test` (`go test ./...`) запускает все тесты без build tags и переменных окружения: PostgreSQL, Kafka, SpiceDB и Temporal dev server поднимаются testcontainers (нужен Docker).
 
+Порты, которые тесты подменяют, — моки [mockery](https://github.com/vektra/mockery) (шаблон testify): список интерфейсов в [`.mockery.yml`](.mockery.yml), сгенерированные `mocks*_test.go` коммитятся и обновляются `make generate` (`go tool mockery`). Моки вручную не пишутся.
+
 ## Контейнер
 
 Образ собирается из каталога `boundaries/orders`. Доступные targets: `build` и

@@ -17,6 +17,7 @@ BFF — отдельный сервис и единая прикладная т�
 - клиентский API описывается GraphQL SDL;
 - резолверы реализуются Go router plugin через сгенерированный gRPC-контракт;
 - generated-код и lock-файл контракта коммитятся;
+- моки портов для Go-тестов генерирует mockery (шаблон testify) по `plugins/bff/.mockery.yml` (`make generate` в `plugins/bff`), вручную моки не пишутся;
 - минимальный stateless-запрос `bffInfo` подтверждает сборку полного контура.
 
 Реализованы слайсы `catalog`, `checkout`, `ordertracking`, `restaurantmanagement`, `kitchen`, `courier`, `courierpool` и `simulator` поверх `restaurants`, `orders` и `delivery` своей Cell через internal gateway ([BFF в Cell](#bff-в-cell)) (см. [Customer API](#customer-api)); операций «только схема» не осталось.

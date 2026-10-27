@@ -6,32 +6,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	tracking "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
-
-type fakeOrders struct {
-	orderID string
-	err     error
-	got     Input
-}
-
-func (f *fakeOrders) PlaceOrder(_ context.Context, input Input) (string, error) {
-	f.got = input
-	return f.orderID, f.err
-}
-
-type fakeViews struct {
-	view tracking.OrderView
-	err  error
-	read string
-}
-
-func (f *fakeViews) Handle(_ context.Context, orderID string) (tracking.OrderView, error) {
-	f.read = orderID
-	return f.view, f.err
-}
 
 var input = Input{
 	RestaurantID:   "restaurant-1",
@@ -39,16 +18,21 @@ var input = Input{
 	IdempotencyKey: "attempt-1",
 }
 
+// placing expects one Place Order of input answered with orderID and err.
+func placing(t *testing.T, orderID string, err error) *MockOrderPlacer {
+	orders := NewMockOrderPlacer(t)
+	orders.EXPECT().PlaceOrder(mock.Anything, input).Return(orderID, err).Once()
+	return orders
+}
+
 // AC-570: a placed Order comes back as the order tracking view.
 func TestPlaceOrderReturnsThePlacedOrder(t *testing.T) {
-	orders := &fakeOrders{orderID: "order-1"}
-	views := &fakeViews{view: tracking.OrderView{ID: "order-1", Status: tracking.StatusReceived}}
+	views := NewMockOrderViews(t)
+	views.EXPECT().Handle(mock.Anything, "order-1").Return(tracking.OrderView{ID: "order-1", Status: tracking.StatusReceived}, nil).Once()
 
-	result, err := NewPlaceOrder(orders, views).Handle(context.Background(), input)
+	result, err := NewPlaceOrder(placing(t, "order-1", nil), views).Handle(context.Background(), input)
 
 	require.NoError(t, err)
-	assert.Equal(t, input, orders.got)
-	assert.Equal(t, "order-1", views.read)
 	require.NotNil(t, result.Order)
 	assert.Equal(t, tracking.StatusReceived, result.Order.Status)
 	assert.Empty(t, result.Problems)
@@ -78,26 +62,27 @@ func TestPlaceOrderTurnsRefusalsIntoProblems(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			views := &fakeViews{}
-			result, err := NewPlaceOrder(&fakeOrders{err: tc.refused}, views).Handle(context.Background(), input)
+			// No order to read: views expects no call.
+			result, err := NewPlaceOrder(placing(t, "", tc.refused), NewMockOrderViews(t)).Handle(context.Background(), input)
 
 			require.NoError(t, err)
 			assert.Nil(t, result.Order)
 			assert.Equal(t, tc.want, result.Problems)
-			assert.Empty(t, views.read, "no order to read")
 		})
 	}
 }
 
 func TestPlaceOrderKeepsUnnamedRefusalsAndFailuresAsErrors(t *testing.T) {
 	unknown := PlacementRefused{Reason: "ORDER_NOT_ORDERABLE", Codes: []string{"SOMETHING_NEW"}}
-	_, err := NewPlaceOrder(&fakeOrders{err: unknown}, &fakeViews{}).Handle(context.Background(), input)
+	_, err := NewPlaceOrder(placing(t, "", unknown), NewMockOrderViews(t)).Handle(context.Background(), input)
 	assert.ErrorAs(t, err, new(PlacementRefused))
 
-	_, err = NewPlaceOrder(&fakeOrders{err: ErrRestaurantNotFound}, &fakeViews{}).Handle(context.Background(), input)
+	_, err = NewPlaceOrder(placing(t, "", ErrRestaurantNotFound), NewMockOrderViews(t)).Handle(context.Background(), input)
 	assert.ErrorIs(t, err, ErrRestaurantNotFound)
 
 	unreadable := errors.New("orders unavailable")
-	_, err = NewPlaceOrder(&fakeOrders{orderID: "order-1"}, &fakeViews{err: unreadable}).Handle(context.Background(), input)
+	views := NewMockOrderViews(t)
+	views.EXPECT().Handle(mock.Anything, "order-1").Return(tracking.OrderView{}, unreadable).Once()
+	_, err = NewPlaceOrder(placing(t, "order-1", nil), views).Handle(context.Background(), input)
 	assert.ErrorIs(t, err, unreadable)
 }

@@ -7,42 +7,17 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
 
-type fakeGetKitchen struct {
-	view    applications.KitchenView
-	err     error
-	called  bool
-	hasUser bool
-}
-
-func (f *fakeGetKitchen) Handle(ctx context.Context, _ string) (applications.KitchenView, error) {
-	f.called = true
-	_, f.hasUser = identity.UserFrom(ctx)
-	return f.view, f.err
-}
-
-type fakeKitchenAction struct {
-	result applications.ActionResult
-	err    error
-	got    applications.ActionRequest
-	called bool
-}
-
-func (f *fakeKitchenAction) Handle(_ context.Context, request applications.ActionRequest) (applications.ActionResult, error) {
-	f.called, f.got = true, request
-	return f.result, f.err
-}
-
-func kitchenService(t *testing.T, get *fakeGetKitchen, action *fakeKitchenAction) (*BffService, context.Context) {
+func kitchenService(t *testing.T, get *mockGetKitchenHandler, action *mockKitchenActionHandler) (*BffService, context.Context) {
 	t.Helper()
 	verifier, token := accessToken(t)
 	svc := &BffService{accessTokens: verifier, kitchen: &kitchen{getKitchen: get, applyAction: action}}
@@ -70,16 +45,17 @@ var received = applications.OrderView{
 }
 
 func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
-	get := &fakeGetKitchen{view: applications.KitchenView{
+	get := newMockGetKitchenHandler(t)
+	// the user reaches restaurants as a user assertion.
+	get.EXPECT().Handle(withUser(), "restaurant-1").Return(applications.KitchenView{
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
 		Orders:     []applications.OrderView{preparing, received},
-	}}
-	svc, ctx := kitchenService(t, get, &fakeKitchenAction{})
+	}, nil).Once()
+	svc, ctx := kitchenService(t, get, newMockKitchenActionHandler(t))
 
 	response, err := svc.QueryKitchen(ctx, &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
 
 	require.NoError(t, err)
-	assert.True(t, get.hasUser, "the user reaches restaurants as a user assertion")
 	kitchenMessage := response.GetKitchen()
 	assert.Equal(t, "Кухня №8", kitchenMessage.GetRestaurant().GetName())
 	assert.True(t, kitchenMessage.GetRestaurant().GetAcceptingOrders())
@@ -100,42 +76,47 @@ func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
 }
 
 func TestKitchenNotFoundIsNull(t *testing.T) {
-	svc, ctx := kitchenService(t, &fakeGetKitchen{err: applications.ErrKitchenNotFound}, &fakeKitchenAction{})
+	get := newMockGetKitchenHandler(t)
+	get.EXPECT().Handle(mock.Anything, "restaurant-1").Return(applications.KitchenView{}, applications.ErrKitchenNotFound).Once()
+	svc, ctx := kitchenService(t, get, newMockKitchenActionHandler(t))
 	response, err := svc.QueryKitchen(ctx, &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
 	require.NoError(t, err)
 	assert.Nil(t, response.GetKitchen())
 
-	svc, ctx = kitchenService(t, &fakeGetKitchen{err: errors.New("restaurants is down")}, &fakeKitchenAction{})
+	get = newMockGetKitchenHandler(t)
+	get.EXPECT().Handle(mock.Anything, "restaurant-1").Return(applications.KitchenView{}, errors.New("restaurants is down")).Once()
+	svc, ctx = kitchenService(t, get, newMockKitchenActionHandler(t))
 	_, err = svc.QueryKitchen(ctx, &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
 	assert.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 func TestKitchenRequiresAccessTokenAndRestaurant(t *testing.T) {
-	get := &fakeGetKitchen{}
-	svc, _ := kitchenService(t, get, &fakeKitchenAction{})
+	get := newMockGetKitchenHandler(t)
+	svc, _ := kitchenService(t, get, newMockKitchenActionHandler(t))
 	_, err := svc.QueryKitchen(context.Background(), &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	_, ctx := kitchenService(t, get, &fakeKitchenAction{})
+	_, ctx := kitchenService(t, get, newMockKitchenActionHandler(t))
 	_, err = svc.QueryKitchen(ctx, &service.QueryKitchenRequest{})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	assert.False(t, get.called)
 }
 
 func TestApplyKitchenActionPayload(t *testing.T) {
 	order := preparing
-	action := &fakeKitchenAction{result: applications.ActionResult{Order: &order}}
-	svc, ctx := kitchenService(t, &fakeGetKitchen{}, action)
+	action := newMockKitchenActionHandler(t)
+	action.EXPECT().Handle(mock.Anything, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionStartPreparation}).
+		Return(applications.ActionResult{Order: &order}, nil).Once()
+	action.EXPECT().Handle(mock.Anything, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionAccept}).
+		Return(applications.ActionResult{Problem: applications.ProblemOrderStageConflict}, nil).Once()
+	svc, ctx := kitchenService(t, newMockGetKitchenHandler(t), action)
 
 	response, err := svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: &service.KitchenActionInput{
 		RestaurantId: "restaurant-1", KitchenOrderId: "ro-1", Action: service.KitchenAction_KITCHEN_ACTION_START_PREPARATION,
 	}})
 
 	require.NoError(t, err)
-	assert.Equal(t, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionStartPreparation}, action.got)
 	assert.Equal(t, "ro-1", response.GetApplyKitchenAction().GetOrder().GetId())
 	assert.Equal(t, service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_UNSPECIFIED, response.GetApplyKitchenAction().GetProblem(), "no problem is null")
 
-	action.result = applications.ActionResult{Problem: applications.ProblemOrderStageConflict}
 	response, err = svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: &service.KitchenActionInput{
 		RestaurantId: "restaurant-1", KitchenOrderId: "ro-1", Action: service.KitchenAction_KITCHEN_ACTION_ACCEPT,
 	}})
@@ -152,13 +133,15 @@ func TestApplyKitchenActionErrors(t *testing.T) {
 		applications.ErrInvalidCommand: codes.InvalidArgument,
 		errors.New("down"):             codes.Unavailable,
 	} {
-		svc, ctx := kitchenService(t, &fakeGetKitchen{}, &fakeKitchenAction{err: refusal})
+		action := newMockKitchenActionHandler(t)
+		action.EXPECT().Handle(mock.Anything, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionReject}).
+			Return(applications.ActionResult{}, refusal).Once()
+		svc, ctx := kitchenService(t, newMockGetKitchenHandler(t), action)
 		_, err := svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: input})
 		assert.Equal(t, code, status.Code(err), refusal.Error())
 	}
 
-	action := &fakeKitchenAction{}
-	svc, ctx := kitchenService(t, &fakeGetKitchen{}, action)
+	svc, ctx := kitchenService(t, newMockGetKitchenHandler(t), newMockKitchenActionHandler(t))
 	for _, bad := range []*service.KitchenActionInput{
 		{KitchenOrderId: "ro-1", Action: service.KitchenAction_KITCHEN_ACTION_ACCEPT},
 		{RestaurantId: "restaurant-1", Action: service.KitchenAction_KITCHEN_ACTION_ACCEPT},
@@ -167,5 +150,4 @@ func TestApplyKitchenActionErrors(t *testing.T) {
 		_, err := svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: bad})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
-	assert.False(t, action.called)
 }
