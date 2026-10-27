@@ -21,7 +21,7 @@ use crate::slices::courier::applications::relationships::CourierRelationshipWrit
 use crate::slices::courier::applications::update_courier_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPositionPublisher,
 };
-use crate::slices::courier::di::{CourierDependencies, CourierPorts};
+use crate::slices::courier::di::{CourierDependencies, CourierPorts, CourierSettings};
 use crate::slices::courier::domains::courier::{
     CourierId, CourierRepository, CourierStatus, MarketId,
 };
@@ -242,7 +242,6 @@ impl Clock for SystemClock {
 pub struct LocalCourierPorts {
     store: Arc<dyn CourierStore>,
     publisher: Box<dyn ProcessPositionPublisher>,
-    persist_interval_seconds: i64,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -278,10 +277,6 @@ impl CourierPorts for LocalCourierPorts {
 
     fn relationships(&self) -> &dyn CourierRelationshipWriter {
         self.relationships.courier()
-    }
-
-    fn persist_interval_seconds(&self) -> i64 {
-        self.persist_interval_seconds
     }
 }
 
@@ -488,6 +483,18 @@ impl SimulatorPorts for LocalSimulatorPorts {
 }
 
 #[derive(Component)]
+#[shaku(interface = CourierSettings)]
+pub struct LocalCourierSettings {
+    persist_interval_seconds: i64,
+}
+
+impl CourierSettings for LocalCourierSettings {
+    fn persist_interval_seconds(&self) -> i64 {
+        self.persist_interval_seconds
+    }
+}
+
+#[derive(Component)]
 #[shaku(interface = DeliverySettings)]
 pub struct LocalDeliverySettings;
 
@@ -506,6 +513,7 @@ module! {
             LocalCourierPorts,
             LocalDeliveryPorts,
             LocalSimulatorPorts,
+            LocalCourierSettings,
             LocalDeliverySettings
         ],
         providers = []
@@ -539,6 +547,8 @@ pub(super) fn infrastructure(
             .with_component_parameters::<LocalCourierPorts>(LocalCourierPortsParameters {
                 store: stores.couriers,
                 publisher: tracking.publisher,
+            })
+            .with_component_parameters::<LocalCourierSettings>(LocalCourierSettingsParameters {
                 persist_interval_seconds: tracking.persist_interval_seconds,
             })
             .with_component_parameters::<LocalSimulatorPorts>(LocalSimulatorPortsParameters {

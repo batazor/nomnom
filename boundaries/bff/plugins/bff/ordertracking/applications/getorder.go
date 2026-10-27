@@ -70,12 +70,8 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 		if err != nil {
 			return OrderView{}, fmt.Errorf("read delivery: %w", err)
 		}
-		view.Courier = delivery.Courier
-		// A final Order has no courier on the way, whatever delivery still
-		// reports.
-		if !view.Status.Final() {
-			view.Tracking = delivery.Tracking
-		}
+		// delivery hands tracking out only while the courier is on the way.
+		view.Courier, view.Tracking = delivery.Courier, delivery.Tracking
 	}
 	return view, nil
 }

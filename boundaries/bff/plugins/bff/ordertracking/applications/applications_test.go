@@ -200,8 +200,9 @@ func TestCourierIsNamedOnceAssigned(t *testing.T) {
 	assert.ErrorIs(t, err, down)
 }
 
-// AC-884, AC-886: an active Order with an Assignment carries the tracking
-// delivery returns in the same call; a delivered Order shows none.
+// AC-884, AC-886: an Order with an Assignment carries the courier and the
+// tracking delivery returns in the same call; delivery returns no tracking
+// for a delivered Order.
 func TestTrackingOfActiveAssignedOrder(t *testing.T) {
 	pickedUp := snapshot("confirmed", Fact{"courier_assigned", at(8)}, Fact{"picked_up", at(9)})
 	tracking := &Tracking{
@@ -229,14 +230,14 @@ func TestTrackingOfActiveAssignedOrder(t *testing.T) {
 
 	delivered := snapshot("completed", Fact{"courier_assigned", at(8)}, Fact{"delivery_completed", at(20)})
 	final := NewMockDeliveries(t)
-	final.EXPECT().DeliveryOf(mock.Anything, delivered.ID).Return(OrderDelivery{Courier: &Courier{Name: "Тимур"}, Tracking: tracking}, nil).Once()
+	final.EXPECT().DeliveryOf(mock.Anything, delivered.ID).Return(OrderDelivery{Courier: &Courier{Name: "Тимур"}}, nil).Once()
 	deliveredOrders := NewMockOrderReader(t)
 	deliveredOrders.EXPECT().GetOrder(mock.Anything, "order-1").Return(delivered, nil).Once()
 	deliveredCatalog := NewMockCatalog(t)
 	deliveredCatalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
 	got, err = NewGetOrder(deliveredOrders, deliveredCatalog, final).Handle(context.Background(), delivered.ID)
 	require.NoError(t, err)
-	assert.Nil(t, got.Tracking, "a final Order has no tracking")
+	assert.Nil(t, got.Tracking, "delivery reports no tracking for a delivered Order")
 }
 
 // AC-558: the window is offered only while it is open and the Order is active.

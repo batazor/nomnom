@@ -858,8 +858,8 @@ fn offers_locations_and_reconciliation_reads() {
         location: Location::new(55.75, 37.61).expect("location"),
         recorded_at_epoch_seconds: 42,
     };
-    store.record(&position).expect("record");
-    store.record(&position).expect("upsert");
+    store.record(&position, 0).expect("record");
+    store.record(&position, 0).expect("upsert");
     assert_eq!(store.latest(&courier_id), Ok(Some(position)));
 
     let ids = vec![courier.clone(), unique("unknown")];
@@ -991,7 +991,7 @@ fn available_positions_are_positions_of_available_couriers_of_the_market() {
         market_id: market_id.clone(),
     };
     for courier_id in [&available, &busy, &elsewhere] {
-        store.record(&position(courier_id)).expect("record");
+        store.record(&position(courier_id), 0).expect("record");
     }
 
     let positions = store.available_positions(&berlin).expect("positions");

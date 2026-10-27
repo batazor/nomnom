@@ -122,11 +122,14 @@ mod tests {
         .expect("courier");
         if positioned {
             store
-                .record(&CourierPosition {
-                    courier_id: CourierId::new(id),
-                    location: Location::new(52.37, 4.89).expect("location"),
-                    recorded_at_epoch_seconds: 1_000,
-                })
+                .record(
+                    &CourierPosition {
+                        courier_id: CourierId::new(id),
+                        location: Location::new(52.37, 4.89).expect("location"),
+                        recorded_at_epoch_seconds: 1_000,
+                    },
+                    0,
+                )
                 .expect("position");
         }
     }

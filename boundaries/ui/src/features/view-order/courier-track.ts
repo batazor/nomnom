@@ -9,28 +9,6 @@ import type { ViewedOrder } from "./use-order-updates";
 
 export type OrderTracking = NonNullable<ViewedOrder["tracking"]>;
 export type TrackedPosition = TrackedPositionFragment;
-type City = OrderTracking["city"];
-type GeoPoint = City["origin"];
-
-// A point of the Virtual City grid: x blocks east, y blocks north of the
-// south-west corner (FR-658).
-export type GridPoint = { x: number; y: number };
-
-// Meters of one degree of latitude; one degree of longitude is this times
-// cos(latitude), as delivery computes it.
-const metersPerDegree = 111_320;
-
-export function toGrid(city: City, point: GeoPoint): GridPoint {
-  const cos = Math.cos((city.origin.latitude * Math.PI) / 180);
-  return {
-    x:
-      ((point.longitude - city.origin.longitude) * metersPerDegree * cos) /
-      city.blockMeters,
-    y:
-      ((point.latitude - city.origin.latitude) * metersPerDegree) /
-      city.blockMeters,
-  };
-}
 
 // Kinds of the blocks between the streets: a decoration of the map, seeded
 // by the tracking channel so one order keeps its city between renders.

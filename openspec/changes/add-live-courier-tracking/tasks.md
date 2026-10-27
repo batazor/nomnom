@@ -27,7 +27,7 @@
 
 ## 5. UI
 
-- [x] 5.1 `CourierMap` в `features/view-order`: SVG-сетка, маркеры, след, интерполяция через `requestAnimationFrame`, `prefers-reduced-motion`, `role="img"`, i18n (`FR-664`, `FR-669`, `AC-887`).
+- [x] 5.1 `CourierMap` в `features/view-order`: SVG-сетка, маркеры, след, движение маркера через `motion` (`requestAnimationFrame`), `prefers-reduced-motion`, общая проекция `shared/virtual-city`, `role="img"`, i18n (`FR-664`, `FR-669`, `AC-887`).
 - [x] 5.2 Подписка `courierMoved`, перезапрос query при переподключении, закрытие на финальном статусе; generated types, MSW-моки, `mocks/subscriptions.ts`, тесты (`FR-669`, `AC-888`, `AC-889`).
 
 ## 6. ops

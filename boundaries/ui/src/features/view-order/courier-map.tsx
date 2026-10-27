@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { m } from "motion/react";
+import { useMemo } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import {
   cityBlocks,
-  type GridPoint,
   type OrderTracking,
   type TrackedPosition,
-  toGrid,
   useCourierTrack,
 } from "./courier-track";
+import { type GridPoint, toGrid } from "../../shared/virtual-city";
 
 // Gap of the streets between blocks, in blocks.
 const street = 0.16;
@@ -36,7 +36,6 @@ export function CourierMap({
   const dropoff = svg(toGrid(city, tracking.dropoff));
   const path = trail.map((position) => svg(toGrid(city, position)));
   const latest = path.at(-1) ?? null;
-  const marker = useAnimatedPoint(latest, moveDuration(trail));
   const blocks = useMemo(
     () => cityBlocks(size, tracking.channel),
     [size, tracking.channel],
@@ -92,16 +91,23 @@ export function CourierMap({
           label={t("order.map.customer")}
           point={dropoff}
         />
-        {marker ? (
-          <g
+        {latest ? (
+          // The marker covers each step in the time the courier took; under
+          // prefers-reduced-motion MotionConfig makes it jump.
+          <m.g
+            animate={{ x: latest.x, y: latest.y }}
             className="order-map-courier"
             data-testid="courier-marker"
-            transform={`translate(${marker.x} ${marker.y})`}
+            initial={false}
+            transition={{
+              duration: moveDuration(trail) / 1000,
+              ease: "linear",
+            }}
           >
             <title>{t("order.map.courier")}</title>
             <circle className="order-map-courier-halo" r={0.42} />
             <circle className="order-map-courier-dot" r={0.22} />
-          </g>
+          </m.g>
         ) : null}
       </svg>
     </section>
@@ -133,51 +139,4 @@ function moveDuration(trail: readonly TrackedPosition[]): number {
   const elapsed =
     Date.parse(latest.recordedAt) - Date.parse(previous.recordedAt);
   return Math.min(maxMoveMs, Math.max(minMoveMs, elapsed));
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
-  );
-}
-
-// Moves from the shown point to target over durationMs by
-// requestAnimationFrame; with reduced motion or no duration it jumps.
-function useAnimatedPoint(
-  target: GridPoint | null,
-  durationMs: number,
-): GridPoint | null {
-  const [shown, setShown] = useState<GridPoint | null>(target);
-  const shownRef = useRef<GridPoint | null>(target);
-  const targetX = target?.x;
-  const targetY = target?.y;
-
-  useEffect(() => {
-    if (targetX === undefined || targetY === undefined) {
-      shownRef.current = null;
-      setShown(null);
-      return;
-    }
-    const to = { x: targetX, y: targetY };
-    const from = shownRef.current;
-    if (from === null || durationMs === 0 || prefersReducedMotion()) {
-      shownRef.current = to;
-      setShown(to);
-      return;
-    }
-    const started = performance.now();
-    let frame = requestAnimationFrame(function step(now) {
-      const progress = Math.min(1, (now - started) / durationMs);
-      const point = {
-        x: from.x + (to.x - from.x) * progress,
-        y: from.y + (to.y - from.y) * progress,
-      };
-      shownRef.current = point;
-      setShown(point);
-      if (progress < 1) frame = requestAnimationFrame(step);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [targetX, targetY, durationMs]);
-
-  return shown;
 }

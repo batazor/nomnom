@@ -3,6 +3,8 @@
 // courierMoved walks the courier along the streets like the delivery
 // Simulator. Development-only: no business rules live here.
 
+import { fromGrid, type GridPoint } from "../../virtual-city";
+
 export type MockGeoPoint = { latitude: number; longitude: number };
 export type MockCourierPosition = MockGeoPoint & {
   channel: string;
@@ -16,14 +18,13 @@ export type MockTracking = {
   courierPosition: MockCourierPosition | null;
 };
 
-type Cell = { x: number; y: number };
+type Cell = GridPoint;
 
 const city = {
   origin: { latitude: 52.515, longitude: 13.385 },
   blocks: 12,
   blockMeters: 150,
 };
-const metersPerDegree = 111_320;
 const courierStart: Cell = { x: 0, y: 1 };
 const pickupCell: Cell = { x: 3, y: 4 };
 const dropoffCell: Cell = { x: 9, y: 8 };
@@ -32,14 +33,7 @@ const pointsPerBlock = 4;
 export const courierStepMs = 1_000;
 
 function point(cell: Cell): MockGeoPoint {
-  const cos = Math.cos((city.origin.latitude * Math.PI) / 180);
-  return {
-    latitude:
-      city.origin.latitude + (cell.y * city.blockMeters) / metersPerDegree,
-    longitude:
-      city.origin.longitude +
-      (cell.x * city.blockMeters) / (metersPerDegree * cos),
-  };
+  return { ...fromGrid(city, cell) };
 }
 
 export function trackingChannel(orderId: string): string {

@@ -28,12 +28,19 @@ pub trait CourierPorts: Interface {
     fn publisher(&self) -> &dyn CourierPositionPublisher;
     fn clock(&self) -> &dyn Clock;
     fn relationships(&self) -> &dyn CourierRelationshipWriter;
+}
+
+/// Числовые параметры слайса; значения задаёт корневой `di`.
+pub trait CourierSettings: Interface {
     /// `TRACKING__PERSIST_INTERVAL` in seconds.
     fn persist_interval_seconds(&self) -> i64;
 }
 
-/// Модуль, через который корневой `di` передаёт слайсу его порты.
-pub trait CourierDependencies: HasComponent<dyn CourierPorts> {}
+/// Модуль, через который корневой `di` передаёт слайсу порты и настройки.
+pub trait CourierDependencies:
+    HasComponent<dyn CourierPorts> + HasComponent<dyn CourierSettings>
+{
+}
 
 pub trait CourierUseCases: Interface {
     fn register_courier(
@@ -66,6 +73,8 @@ pub trait CourierUseCases: Interface {
 pub struct CourierUseCasesImpl {
     #[shaku(inject)]
     ports: Arc<dyn CourierPorts>,
+    #[shaku(inject)]
+    settings: Arc<dyn CourierSettings>,
 }
 
 impl CourierUseCases for CourierUseCasesImpl {
@@ -119,7 +128,7 @@ impl CourierUseCases for CourierUseCasesImpl {
             channels: self.ports.channels(),
             publisher: self.ports.publisher(),
             clock: self.ports.clock(),
-            persist_interval_seconds: self.ports.persist_interval_seconds(),
+            persist_interval_seconds: self.settings.persist_interval_seconds(),
         }
         .execute(subject, input)
     }
@@ -131,7 +140,7 @@ module! {
         providers = [],
 
         use dyn CourierDependencies {
-            components = [dyn CourierPorts],
+            components = [dyn CourierPorts, dyn CourierSettings],
             providers = []
         }
     }

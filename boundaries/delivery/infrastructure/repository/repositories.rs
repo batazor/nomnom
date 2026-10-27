@@ -352,22 +352,7 @@ impl Store {
 }
 
 impl CourierLocationStore for Store {
-    fn record(&self, position: &CourierPosition) -> Result<(), RepositoryError> {
-        sql!(self, "INSERT", |connection| sqlx::query!(
-            "INSERT INTO courier_positions (courier_id, latitude, longitude, recorded_at)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (courier_id) DO UPDATE SET latitude = EXCLUDED.latitude,
-                 longitude = EXCLUDED.longitude, recorded_at = EXCLUDED.recorded_at",
-            position.courier_id.as_str(),
-            position.location.latitude(),
-            position.location.longitude(),
-            position.recorded_at_epoch_seconds
-        )
-        .execute(connection))
-        .map(drop)
-    }
-
-    fn record_thinned(
+    fn record(
         &self,
         position: &CourierPosition,
         min_interval_seconds: i64,

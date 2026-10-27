@@ -298,7 +298,7 @@ describe("order updates", () => {
 // the way.
 describe("courier map", () => {
   function markerPosition() {
-    return screen.getByTestId("courier-marker").getAttribute("transform");
+    return screen.getByTestId("courier-marker").style.transform;
   }
 
   it("AC-887: moves the courier by courierMoved, without polling", async () => {

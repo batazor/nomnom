@@ -40,7 +40,7 @@ Create Delivery выбирает два разных случайных пере
 
 Handler после проверки прав и координат:
 
-1. сохраняет позицию через `CourierLocationStore::record_thinned` условным upsert: `latitude`, `longitude`, `recorded_at` меняются, только если прежняя запись старше `TRACKING__PERSIST_INTERVAL`;
+1. сохраняет позицию через `CourierLocationStore::record(position, persist_interval)` условным upsert (интервал — `CourierSettings`; `0` пишет всегда): `latitude`, `longitude`, `recorded_at` меняются, только если прежняя запись старше `TRACKING__PERSIST_INTERVAL`;
 2. читает канал активной доставки курьера (`assigned` или `picked_up`) через порт `ActiveTrackingChannel` слайса `courier`.
 
 Слайс `courier` не знает `Delivery` (FR-486), поэтому порт реализует адаптер верхнего уровня `infrastructure/tracks.rs`, как `StoredCourierLocator`: он читает `deliveries` по индексу `deliveries_courier`.
@@ -68,7 +68,7 @@ Query слайса `delivery` заменяет прежний `GetOrderCourier` 
 
 ## BFF
 
-Plugin резолвит `Order.courier` и `Order.tracking: OrderTracking` одним вызовом `GetOrderDelivery` от имени покупателя (ADR 32), только у заказа с milestone `COURIER_ASSIGNED`. `tracking` отдаётся только незавершённому заказу, без активной доставки — `null`.
+Plugin резолвит `Order.courier` и `Order.tracking: OrderTracking` одним вызовом `GetOrderDelivery` от имени покупателя (ADR 32), только у заказа с milestone `COURIER_ASSIGNED`. `tracking` BFF берёт как есть: без активной доставки `delivery` его не отдаёт, поэтому поле `null`.
 
 Events subgraph:
 
@@ -105,8 +105,9 @@ Simulator читает точки доставки из своей выборк�
 - SVG `viewBox` по сетке Virtual City: линии улиц, кварталы, маркеры ресторана (pickup) и клиента (dropoff), маркер курьера и полилиния следа из полученных точек;
 - координаты переводятся в `viewBox` по параметрам `city` из ответа; карта не знает констант сервера;
 - подписка `courierMoved(channel)` стартует после query; при каждом (пере)подключении query перезапрашивается, след начинается с `courierPosition` (ADR 36);
-- маркер интерполируется от прежней точки к новой за интервал между их `recordedAt` через `requestAnimationFrame`; таймеров запроса данных нет (ADR 36 запрещает polling);
-- при `prefers-reduced-motion` маркер переносится без анимации;
+- маркер — `m.g` библиотеки `motion` (кадры `requestAnimationFrame`): от прежней точки к новой за интервал между их `recordedAt`; таймеров запроса данных нет (ADR 36 запрещает polling);
+- при `prefers-reduced-motion` маркер переносится без анимации: так настроен общий `MotionConfig reducedMotion="user"`;
+- проекция широты и долготы на сетку — `src/shared/virtual-city`, общая для карты и моков;
 - карта — `role="img"` с текстовым `aria-label` («Курьер едет в ресторан» или «Курьер везёт заказ»), смена фазы объявляется уже существующим `aria-live`.
 
 Моки: `mocks/subscriptions.ts` эмулирует `courierMoved` на mock store так же, как `orderChanged`.

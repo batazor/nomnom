@@ -137,6 +137,7 @@ impl World {
                 location: Location::new(latitude, longitude).expect("location"),
                 recorded_at_epoch_seconds: recorded_at,
             },
+            0,
         )
         .expect("seed position");
     }

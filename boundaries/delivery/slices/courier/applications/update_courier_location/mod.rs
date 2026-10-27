@@ -25,13 +25,10 @@ pub struct CourierPosition {
 /// High-frequency store of the last known courier position. A single write,
 /// no Unit of Work.
 pub trait CourierLocationStore {
-    /// Replaces the last known position of the courier.
-    fn record(&self, position: &CourierPosition) -> Result<(), RepositoryError>;
-
     /// Replaces the last known position only when the stored one was
     /// recorded at least `min_interval_seconds` before `position`, or none is
-    /// stored; returns whether it was written.
-    fn record_thinned(
+    /// stored; returns whether it was written. `0` always writes.
+    fn record(
         &self,
         position: &CourierPosition,
         min_interval_seconds: i64,
@@ -103,7 +100,7 @@ impl Handler<'_> {
             recorded_at_epoch_seconds: self.clock.now_epoch_seconds(),
         };
         self.locations
-            .record_thinned(&position, self.persist_interval_seconds)?;
+            .record(&position, self.persist_interval_seconds)?;
         if let Some(channel) = self.channels.active_channel(&position.courier_id)? {
             self.publisher.publish(&channel, &position)?;
         }

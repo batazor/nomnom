@@ -279,17 +279,12 @@ impl CourierRepository for TestStore {
 }
 
 impl CourierLocationStore for TestStore {
-    fn record(&self, position: &CourierPosition) -> Result<(), RepositoryError> {
-        self.available()?.record(position)
-    }
-
-    fn record_thinned(
+    fn record(
         &self,
         position: &CourierPosition,
         min_interval_seconds: i64,
     ) -> Result<bool, RepositoryError> {
-        self.available()?
-            .record_thinned(position, min_interval_seconds)
+        self.available()?.record(position, min_interval_seconds)
     }
 
     fn latest(&self, courier_id: &CourierId) -> Result<Option<CourierPosition>, RepositoryError> {

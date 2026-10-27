@@ -96,9 +96,10 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
 
 /// Live tracking тестовых графов: Virtual City 12 × 12 кварталов по 150 м
 /// у позиций курьеров kind, запись каждой позиции, записывающий publisher и
-/// фиксированная случайность.
+/// фиксированная случайность. Не часть API крейта: снаружи тестовый граф
+/// собирает только [`build_over`].
 #[must_use]
-pub fn test_tracking() -> ProcessTracking {
+pub(crate) fn test_tracking() -> ProcessTracking {
     ProcessTracking {
         city: VirtualCity::new(52.515, 13.385, 12, 150.0).expect("test virtual city"),
         persist_interval_seconds: 0,

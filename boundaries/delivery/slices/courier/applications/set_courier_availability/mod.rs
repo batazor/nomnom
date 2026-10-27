@@ -127,7 +127,7 @@ mod tests {
             location: Location::new(52.52, 13.405).expect("location"),
             recorded_at_epoch_seconds: 100,
         };
-        store.record(&position).expect("seed position");
+        store.record(&position, 0).expect("seed position");
         let authorization = StaticAuthorization::allow_all();
         let handler = Handler {
             authorization: &authorization,
