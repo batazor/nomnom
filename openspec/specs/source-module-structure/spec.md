@@ -91,5 +91,5 @@ Use cases `restaurants` SHALL зависеть от портов доступа 
 #### Scenario: Адаптер consumer'а
 **ID:** AC-638
 
-- **WHEN** consumer `OrderPlaced` проверяет право координации fulfillment
-- **THEN** его адаптер реализует только `FulfillmentCoordinatorAccess` без заглушек
+- **WHEN** consumer `delivery.v1.delivery-events` проверяет право записать Pickup
+- **THEN** его адаптер реализует только нужный ему порт доступа без заглушек

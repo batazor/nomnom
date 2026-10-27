@@ -107,7 +107,7 @@ Unit-тесты доменной и прикладной логики MUST NOT �
 **ID:** AC-739
 
 - **WHEN** покупатель оформил заказ через BFF
-- **THEN** workflow авторизует оплату и запрашивает ресторан, а `restaurants-consumer` получает `OrderPlaced`
+- **THEN** consumer `orders` получает `OrderPlaced` и запускает workflow, workflow авторизует оплату, заказ получает статус `PAID`, и только после этого у ресторана появляется Restaurant Order в `RECEIVED`
 
 ### Requirement: Путь заказа проверяется насквозь
 **ID:** FR-585

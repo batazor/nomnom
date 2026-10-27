@@ -396,7 +396,7 @@ Consumers интеграционных событий `restaurants` исполь
 | `CONSUMER__MAX_RETRIES` | повторы transient-ошибки в процессе, 0…100 | `5` |
 | `CONSUMER__RETRY_INITIAL_INTERVAL`, `CONSUMER__RETRY_MAX_INTERVAL` | экспоненциальный backoff повторов | `100ms`, `5s` |
 
-Consumer `OrderPlaced` из change [`add-restaurants-order-placed-consumer`](../../openspec/changes/archive/2026-10-25-add-restaurants-order-placed-consumer/) удалён change [`start-fulfillment-and-pay-before-kitchen`](../../openspec/changes/start-fulfillment-and-pay-before-kitchen/). Общие правила — [ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md), [документация событийного взаимодействия](../../docs/event-driven-architecture.md) и [Unit of Work](../../docs/unit-of-work.md#restaurants--mongodb).
+Consumer `OrderPlaced` из change [`add-restaurants-order-placed-consumer`](../../openspec/changes/archive/2026-10-25-add-restaurants-order-placed-consumer/) удалён change [`start-fulfillment-and-pay-before-kitchen`](../../openspec/changes/archive/2026-10-27-start-fulfillment-and-pay-before-kitchen/). Общие правила — [ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md), [документация событийного взаимодействия](../../docs/event-driven-architecture.md) и [Unit of Work](../../docs/unit-of-work.md#restaurants--mongodb).
 
 ## Dependency Injection
 
