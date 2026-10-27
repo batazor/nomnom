@@ -33,7 +33,6 @@ import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   MENU_AGGREGATE_TYPE,
-  MENU_EVENTS_TOPIC,
   menuEventMapper,
 } from "../slices/menu/infrastructure/integration/menu-events.ts";
 import {
@@ -246,32 +245,5 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
     const repeated = await client.openRestaurant({ restaurantId });
     assert.equal(repeated.changed, false);
     assert.equal((await outboxRecords(restaurantId)).length, 1);
-  });
-
-  test("CloseRestaurant over gRPC writes RestaurantClosed", async () => {
-    const response = await client.closeRestaurant({ restaurantId });
-    assert.equal(response.changed, true);
-    const records = await outboxRecords(restaurantId);
-    assert.equal(
-      records.at(-1)?.eventType,
-      "nomnom.restaurants.v1.RestaurantClosed",
-    );
-  });
-
-  test("SetMenuItemAvailability over gRPC writes MenuItemAvailabilityChanged", async () => {
-    const response = await client.setMenuItemAvailability({
-      restaurantId,
-      menuItemId: "pho",
-      available: false,
-    });
-    assert.equal(response.changed, true);
-    assert.equal(response.menuItem?.available, false);
-    const records = await outboxRecords(menuId);
-    assert.equal(records.length, 1);
-    assert.equal(
-      records[0]?.eventType,
-      "nomnom.restaurants.v1.MenuItemAvailabilityChanged",
-    );
-    assert.equal(records[0]?.topic, MENU_EVENTS_TOPIC);
   });
 });

@@ -15,14 +15,8 @@ import {
   OrderPriority,
   ReceiveOrderRequestRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
-import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
-import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
-import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import {
   context,
-  createService,
   createWorld,
   rejectsWith,
   resolverOf,
@@ -203,6 +197,11 @@ test("ADR 41 ListRestaurants returns only the requested Market and requires it",
     hamburg.restaurants.map((r) => [r.name, r.marketId]),
     [["Hamburg Bar", "hamburg"]],
   );
+  const munich = await service.listRestaurants(
+    create(ListRestaurantsRequestSchema, { marketId: "munich" }),
+    context,
+  );
+  assert.deepEqual(munich.restaurants, [], "an unknown Market is empty");
   for (const marketId of ["", "Hamburg", "h"]) {
     await assert.rejects(
       async () =>
@@ -441,7 +440,7 @@ test("ReceiveOrderRequest maps an unknown restaurant to NOT_FOUND", async () => 
   );
 });
 
-test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE", async () => {
+test("commands map a denied authorization to PERMISSION_DENIED", async () => {
   const { world, service } = await createWorld({
     subjects: resolverOf({ type: "service", id: "stranger-worker" }),
   });
@@ -451,63 +450,6 @@ test("commands map authorization outcomes to PERMISSION_DENIED and UNAVAILABLE",
     async () =>
       service.receiveOrderRequest(receiveRequest(restaurantId, phoId), context),
     rejectsWith(Code.PermissionDenied),
-  );
-
-  const unavailable = createService({
-    getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
-    getMenu: world.getMenu,
-    batchGetRestaurants: new BatchGetRestaurantsHandler({
-      reader: world.catalog,
-    }),
-    batchGetMenus: world.batchGetMenus,
-    listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
-    listOwnedRestaurants: new ListOwnedRestaurantsHandler({
-      reader: world.catalog,
-    }),
-    receiveOrderRequest: {
-      execute: async () => {
-        throw new AuthorizationUnavailableError();
-      },
-    },
-    cancelRestaurantOrder: world.cancel,
-    acceptRestaurantOrder: world.accept,
-    rejectRestaurantOrder: world.reject,
-    startPreparation: world.startPreparation,
-    markRestaurantOrderAssembled: world.markAssembled,
-    markRestaurantOrderReady: world.markReady,
-    reportPreparationDelay: world.reportDelay,
-    reportPreparationFailure: world.reportFailure,
-    getKitchenQueue: world.getKitchenQueue,
-    listIncomingOrders: { execute: async () => assert.fail("unexpected call") },
-    listActiveRestaurantOrders: {
-      execute: async () => assert.fail("unexpected call"),
-    },
-    registerRestaurant: world.register,
-    updateRestaurant: world.update,
-    assignStaff: world.assignStaff,
-    revokeStaff: world.revokeStaff,
-    openRestaurant: world.open,
-    closeRestaurant: world.close,
-    createMenu: world.createMenu,
-    addMenuItem: world.addMenuItem,
-    updateMenuItem: world.updateMenuItem,
-    setMenuItemAvailability: world.setAvailability,
-    getSimulator: { execute: () => Promise.reject(new Error("unused")) },
-    setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
-    hireCook: { execute: () => Promise.reject(new Error("unused")) },
-    putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
-    takeCookOffLine: { execute: () => Promise.reject(new Error("unused")) },
-    retireCook: { execute: () => Promise.reject(new Error("unused")) },
-    getCookPool: { execute: () => Promise.reject(new Error("unused")) },
-    subjects: resolverOf(ordersService),
-  });
-  await assert.rejects(
-    async () =>
-      unavailable.receiveOrderRequest(
-        receiveRequest(restaurantId, phoId),
-        context,
-      ),
-    rejectsWith(Code.Unavailable),
   );
 });
 

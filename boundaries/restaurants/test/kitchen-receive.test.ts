@@ -80,23 +80,6 @@ test("AC-859 an order without a known priority is not received", async () => {
   assert.deepEqual(await world.orderStore.find({}), []);
 });
 
-test("AC-244 a repeat with another priority is rejected as already exists", async () => {
-  const world = await createKitchenWorld();
-  const { restaurantId, phoId } = await world.givenKitchen();
-  const request = {
-    subject: ordersService,
-    restaurantId,
-    orderId: "order-42",
-    items: [{ menuItemId: phoId, quantity: 1 }],
-  };
-  await world.receive.execute({ ...request, priority: "STANDARD" });
-
-  await assert.rejects(
-    world.receive.execute({ ...request, priority: "PREMIUM" }),
-    AlreadyExistsError,
-  );
-});
-
 test("ADR 41 a received order takes the Market of its restaurant", async () => {
   const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
@@ -143,7 +126,7 @@ test("AC-243 a repeated receive returns the existing order", async () => {
   assert.equal((await world.orderStore.find({})).length, 1);
 });
 
-test("AC-244 a conflicting repeat is rejected as already exists", async () => {
+test("AC-244 a repeat with another composition or priority is rejected as already exists", async () => {
   const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   await world.receive.execute({
@@ -161,6 +144,17 @@ test("AC-244 a conflicting repeat is rejected as already exists", async () => {
       orderId: "order-42",
       items: [{ menuItemId: phoId, quantity: 3 }],
       priority: "STANDARD",
+    }),
+    AlreadyExistsError,
+  );
+  // Another priority is another request too (FR-651).
+  await assert.rejects(
+    world.receive.execute({
+      subject: ordersService,
+      restaurantId,
+      orderId: "order-42",
+      items: [{ menuItemId: phoId, quantity: 2 }],
+      priority: "PREMIUM",
     }),
     AlreadyExistsError,
   );

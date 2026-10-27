@@ -151,24 +151,27 @@ for (const kitchen of KITCHEN_RPCS) {
     );
     assert.equal((await world.outbox.eventTypes()).length, before);
   });
-
-  test(`FR-482 ${kitchen.rpc} from ${kitchen.invalidFrom} is FAILED_PRECONDITION`, async () => {
-    const { world, service } = await createKitchenCallerWorld();
-    const { restaurantId, phoId } = await world.givenKitchen();
-    const order = await world.givenOrderIn(
-      kitchen.invalidFrom,
-      restaurantId,
-      phoId,
-    );
-    const before = (await world.outbox.eventTypes()).length;
-
-    await assert.rejects(
-      async () => kitchen.call(service, order, new Date()),
-      rejectsWith(Code.FailedPrecondition),
-    );
-    assert.equal((await world.outbox.eventTypes()).length, before);
-  });
 }
+
+// One case of the shared mapping: the FSM tests cover every forbidden pair.
+test("FR-482 a forbidden transition is FAILED_PRECONDITION without a fact", async () => {
+  const [kitchen] = KITCHEN_RPCS;
+  assert.ok(kitchen);
+  const { world, service } = await createKitchenCallerWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const order = await world.givenOrderIn(
+    kitchen.invalidFrom,
+    restaurantId,
+    phoId,
+  );
+  const before = (await world.outbox.eventTypes()).length;
+
+  await assert.rejects(
+    async () => kitchen.call(service, order, new Date()),
+    rejectsWith(Code.FailedPrecondition),
+  );
+  assert.equal((await world.outbox.eventTypes()).length, before);
+});
 
 test("AC-541 kitchen commands are UNAUTHENTICATED with the default rejecting resolver", async () => {
   const { world, service } = await createWorld({ subjects: null });
@@ -251,27 +254,6 @@ test("AC-544 repeated StartNextPreparation and MarkRestaurantOrderReady succeed 
   assert.equal(started.restaurantOrder?.state, RestaurantOrderState.PREPARING);
   assert.equal(markedReady.restaurantOrder?.state, RestaurantOrderState.READY);
   assert.equal((await world.outbox.eventTypes()).length, before);
-});
-
-test("FR-225 StartNextPreparation starts the queue head and publishes PreparationStarted", async () => {
-  const { world, service } = await createKitchenCallerWorld();
-  const { restaurantId, phoId } = await world.givenKitchen();
-  const head = await world.givenOrderIn("QUEUED", restaurantId, phoId);
-  const before = (await world.outbox.eventTypes()).length;
-
-  const response = await service.startNextPreparation(
-    { restaurantId, requestId: "request-1" },
-    context,
-  );
-
-  assert.equal(
-    response.restaurantOrder?.restaurantOrderId,
-    head.restaurantOrderId,
-  );
-  assert.equal(response.restaurantOrder?.state, RestaurantOrderState.PREPARING);
-  assert.deepEqual((await world.outbox.eventTypes()).slice(before), [
-    "PreparationStarted",
-  ]);
 });
 
 test("AC-861 StartNextPreparation on an empty queue answers without an order", async () => {

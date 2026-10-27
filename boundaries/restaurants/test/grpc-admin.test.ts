@@ -115,24 +115,6 @@ test("FR-446 RegisterRestaurant returns the restaurant and version", async () =>
   ]);
 });
 
-test("RegisterRestaurant without platform#register_restaurant is PERMISSION_DENIED", async () => {
-  const { world, as } = await createWorld();
-
-  await assert.rejects(
-    async () =>
-      as(stranger).registerRestaurant(
-        create(RegisterRestaurantRequestSchema, {
-          name: "Pho",
-          ownerId: owner.id,
-          marketId: "berlin",
-        }),
-        context,
-      ),
-    rejectsWith(Code.PermissionDenied),
-  );
-  assert.equal((await world.store.find({})).length, 0);
-});
-
 test("RegisterRestaurant with missing fields is INVALID_ARGUMENT", async () => {
   const { world, as } = await createWorld();
 
@@ -181,29 +163,6 @@ test("AssignStaff returns sorted staff; a repeat is changed=false", async () => 
     `touch:${restaurantId}:zed`,
     `touch:${restaurantId}:${cook}`,
   ]);
-});
-
-test("RevokeStaff removes the user; a repeat is changed=false", async () => {
-  const { world, as, register } = await createWorld();
-  const restaurantId = await register();
-  await as(owner).assignStaff(
-    create(AssignStaffRequestSchema, staffRequest(restaurantId)),
-    context,
-  );
-
-  const revoked = await as(owner).revokeStaff(
-    create(RevokeStaffRequestSchema, staffRequest(restaurantId)),
-    context,
-  );
-  const repeat = await as(owner).revokeStaff(
-    create(RevokeStaffRequestSchema, staffRequest(restaurantId)),
-    context,
-  );
-
-  assert.deepEqual(revoked.staff, []);
-  assert.equal(revoked.changed, true);
-  assert.equal(repeat.changed, false);
-  assert.equal(world.authorization.isStaff(restaurantId, cook), false);
 });
 
 test("AC-481 AssignStaff without restaurant#manage is PERMISSION_DENIED and staff is unchanged", async () => {

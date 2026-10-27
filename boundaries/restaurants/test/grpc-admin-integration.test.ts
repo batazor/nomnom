@@ -249,21 +249,30 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
   };
 
   test("AC-479 operator registers a restaurant and the owner gets manage", async () => {
-    const { register, can } = await world("register");
+    const { register, restaurants, can } = await world("register");
 
     const response = await register();
 
     const restaurantId = response.restaurant?.restaurantId ?? "";
     assert.ok(restaurantId.startsWith(run));
     assert.equal(response.version, 1n);
+    // FR-447: the ZedToken of the owner write is stored with the restaurant.
+    assert.ok(
+      (await restaurants.get(restaurantId))?.authorizationRevision !==
+        undefined,
+    );
     assert.equal(await can("manage", restaurantId, owner.id), true);
     assert.equal(await can("manage", restaurantId, stranger.id), false);
   });
 
   test("AC-480 AC-482 owner assigns and revokes staff, visible immediately; repeats are changed=false", async () => {
-    const { as, register, can } = await world("staff");
+    const { as, register, restaurants, can } = await world("staff");
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
     const request = { restaurantId, userId: cook };
+    // FR-447: every relationship write stores its ZedToken with the restaurant.
+    const revision = async () =>
+      (await restaurants.get(restaurantId))?.authorizationRevision;
+    const registered = await revision();
 
     const assigned = await as(owner).assignStaff(
       create(AssignStaffRequestSchema, request),
@@ -271,6 +280,8 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     );
     assert.equal(assigned.changed, true);
     assert.deepEqual(assigned.staff, [cook]);
+    const afterAssign = await revision();
+    assert.ok(afterAssign !== undefined && afterAssign !== registered);
     assert.equal(await can("operate_kitchen", restaurantId, cook), true);
     const assignedAgain = await as(owner).assignStaff(
       create(AssignStaffRequestSchema, request),
@@ -284,6 +295,8 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     );
     assert.equal(revoked.changed, true);
     assert.deepEqual(revoked.staff, []);
+    const afterRevoke = await revision();
+    assert.ok(afterRevoke !== undefined && afterRevoke !== afterAssign);
     assert.equal(await can("operate_kitchen", restaurantId, cook), false);
     const revokedAgain = await as(owner).revokeStaff(
       create(RevokeStaffRequestSchema, request),

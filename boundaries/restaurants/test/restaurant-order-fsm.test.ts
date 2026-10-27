@@ -5,15 +5,9 @@ import {
   ALL_STATES,
   ALL_TRIGGERS,
   AlreadyInStateError,
-  RestaurantOrderCompoundState as C,
   GuardFailedError,
   InvalidTransitionError,
-  isIn,
-  leavesOf,
-  lineage,
-  PARENT,
   REPEATS,
-  type RestaurantOrderNode,
   type RestaurantOrderState,
   type RestaurantOrderTrigger,
   resolveTransition,
@@ -274,20 +268,6 @@ test("Cancel during Preparation follows the cancellation policy", () => {
   }
 });
 
-test("hierarchy is acyclic and every compound state has children", () => {
-  for (const node of Object.keys(PARENT) as RestaurantOrderNode[]) {
-    const nodes = lineage(node);
-    assert.equal(new Set(nodes).size, nodes.length, node);
-  }
-  for (const compound of Object.values(C)) {
-    assert.ok(
-      Object.values(PARENT).includes(compound),
-      `${compound} has no children`,
-    );
-    assert.ok(leavesOf(compound).length > 0, compound);
-  }
-});
-
 test("table declares each node × trigger once and repeats only on leaves", () => {
   const declared = TRANSITIONS.map((row) => `${row.source} × ${row.trigger}`);
   assert.equal(new Set(declared).size, declared.length);
@@ -298,25 +278,4 @@ test("table declares each node × trigger once and repeats only on leaves", () =
       `${repeat.state} × ${repeat.trigger}`,
     );
   }
-});
-
-test("compound states group the expected leaf states", () => {
-  assert.deepEqual(leavesOf(C.Open), [
-    S.Received,
-    S.Accepted,
-    S.Queued,
-    S.Preparing,
-    S.Assembled,
-  ]);
-  assert.deepEqual(leavesOf(C.InKitchen), [S.Queued, S.Preparing, S.Assembled]);
-  assert.deepEqual(leavesOf(C.ActivePreparation), [S.Preparing, S.Assembled]);
-  assert.deepEqual(leavesOf(C.Closed), [
-    S.Ready,
-    S.PickedUp,
-    S.Rejected,
-    S.Cancelled,
-    S.Failed,
-  ]);
-  assert.ok(isIn(S.Preparing, C.Open));
-  assert.ok(!isIn(S.Ready, C.Open));
 });

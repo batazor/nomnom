@@ -23,23 +23,8 @@ import type { RestaurantBatchReader } from "../../applications/batch-get-restaur
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
 import type { CatalogRestaurantView } from "../../applications/restaurant-view.ts";
-import { MarketId } from "../../domains/restaurant/restaurant.ts";
 
 type CacheOptions = { client: Valkey; ttlMs: number; metrics: CacheMetrics };
-
-const isCurrentView = (view: CatalogRestaurantView): boolean => {
-  // FR-204: an entry cached before the wait time has no waitTime.
-  if (typeof view.waitTime !== "object" || view.waitTime === null) {
-    return false;
-  }
-  if (typeof view.marketId !== "string") return false;
-  try {
-    MarketId.of(view.marketId);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 /** Generation scope of the List Restaurants pages of one Market. */
 const listScope = (marketId: string): string => `pages:${marketId}`;
@@ -67,16 +52,11 @@ export class CachedRestaurantCatalog
       ...options,
       name: "restaurant",
       prefix: "restaurants:restaurant:",
-      // ADR 41: an entry cached before Markets has no marketId; GetRestaurant
-      // must never return an empty Market, so such an entry is a miss, like
-      // an entry cached before the wait time.
-      isCurrent: isCurrentView,
     });
     this.#pages = new ReadCache({
       ...options,
       name: "restaurant_list",
       prefix: "restaurants:list:",
-      isCurrent: (views) => views.every(isCurrentView),
     });
   }
 

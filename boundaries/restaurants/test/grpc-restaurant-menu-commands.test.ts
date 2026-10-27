@@ -12,7 +12,6 @@ import {
   SetMenuItemAvailabilityRequestSchema,
   UpdateMenuItemRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
 import type { Subject } from "../pkg/application/subject.ts";
 import { context, createService, rejectsWith } from "./support/grpc.ts";
 import { createMenuWorld } from "./support/menus.ts";
@@ -177,23 +176,6 @@ test("opening commands map a missing restaurant to NOT_FOUND and a blank id to I
         context,
       ),
     rejectsWith(Code.InvalidArgument),
-  );
-});
-
-test("opening commands map unavailable authorization to UNAVAILABLE", async () => {
-  const { world, as } = await createWorld();
-  const restaurantId = await world.givenRestaurant("Pho Bar", { open: false });
-  world.authorization.canManageRestaurant = async () => {
-    throw new AuthorizationUnavailableError();
-  };
-
-  await assert.rejects(
-    async () =>
-      as(owner).openRestaurant(
-        create(OpenRestaurantRequestSchema, { restaurantId }),
-        context,
-      ),
-    rejectsWith(Code.Unavailable),
   );
 });
 

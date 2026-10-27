@@ -292,9 +292,6 @@ describe("refresh by Integration Events (ADR 43)", () => {
 
   after(() => client.quit());
 
-  const catalog = (world: ReturnType<typeof restaurantSource>) =>
-    new CachedRestaurantCatalog(world.source, options());
-
   test("RestaurantClosed rewrites the cached restaurant and drops the list pages", async () => {
     const id = `r-${randomUUID()}`;
     const world = restaurantSource();
@@ -414,30 +411,6 @@ describe("refresh by Integration Events (ADR 43)", () => {
     );
   });
 
-  test("FR-204 a cached restaurant without the wait time is a miss", async () => {
-    const id = `r-${randomUUID()}`;
-    const world = restaurantSource();
-    world.stored.set(id, {
-      restaurantId: id,
-      name: "Pho",
-      marketId: "berlin",
-      isOpen: true,
-    });
-    // Written by a release before the wait time.
-    await client.set(
-      `restaurants:restaurant:${id}`,
-      JSON.stringify({
-        restaurantId: id,
-        name: "Pho",
-        marketId: "berlin",
-        isOpen: true,
-      }),
-    );
-    const reads = world.reads();
-    assert.deepEqual((await catalog(world).get(id))?.waitTime, NORMAL_WAIT);
-    assert.equal(world.reads(), reads + 1, "read from MongoDB");
-  });
-
   test("ADR 41 list pages are keyed per Market and refreshed only in the restaurant's Market", async () => {
     // Markets unique to this run: generations are shared through Valkey.
     const berlin = `berlin-${randomUUID().slice(0, 8)}`;
@@ -487,37 +460,6 @@ describe("refresh by Integration Events (ADR 43)", () => {
     assert.equal(world.reads(), reads, "Hamburg pages are kept");
     assert.deepEqual(await ids(berlin), []);
     assert.equal(world.reads(), reads + 1, "Berlin pages are dropped");
-  });
-
-  test("ADR 41 a cached restaurant without a valid marketId is a miss and is overwritten", async () => {
-    const world = restaurantSource();
-    const catalog = new CachedRestaurantCatalog(world.source, options());
-    for (const legacy of [
-      { name: "Pho", isOpen: true },
-      { name: "Pho", isOpen: true, marketId: "" },
-    ]) {
-      const id = `r-${randomUUID()}`;
-      const key = `restaurants:restaurant:${id}`;
-      world.stored.set(id, {
-        restaurantId: id,
-        name: "Pho",
-        marketId: "berlin",
-        isOpen: true,
-      });
-      // Written by a release before Markets.
-      await client.set(key, JSON.stringify({ restaurantId: id, ...legacy }));
-      const reads = world.reads();
-
-      assert.equal((await catalog.get(id))?.marketId, "berlin");
-      assert.equal(world.reads(), reads + 1, "read from MongoDB");
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const cached = JSON.parse(
-        (await client.get(key)) ?? "null",
-      ) as RestaurantView | null;
-      assert.equal(cached?.marketId, "berlin", "entry overwritten");
-      assert.equal((await catalog.get(id))?.marketId, "berlin");
-      assert.equal(world.reads(), reads + 1, "served from the cache again");
-    }
   });
 
   test("a read that started before the change does not overwrite the refresh", async () => {

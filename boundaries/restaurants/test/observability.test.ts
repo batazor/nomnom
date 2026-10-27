@@ -219,6 +219,10 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
     const useCase = spanNamed(exporter, "usecase open_restaurant");
     assert.equal(server.kind, SpanKind.SERVER);
     assert.equal(parentOf(server), CALLER_SPAN_ID);
+    assert.equal(server.spanContext().traceId, TRACE_ID);
+    assert.equal(server.attributes["rpc.system.name"], "grpc");
+    assert.equal(server.attributes["rpc.method"], method);
+    assert.equal(server.attributes["rpc.response.status_code"], "OK");
     assert.equal(parentOf(useCase), server.spanContext().spanId);
     assert.deepEqual(useCase.attributes, {
       "nomnom.usecase.name": "open_restaurant",

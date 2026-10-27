@@ -112,28 +112,6 @@ const mapping: ReadonlyArray<{
   },
 ];
 
-for (const { name, call, expected } of mapping) {
-  test(`${name} checks ${expected} with minimize_latency`, async () => {
-    const client = FakeClient.answering(HAS_PERMISSION);
-    const access = new SpiceDbAccessControl({
-      client,
-      revisions: noRevisions,
-      timeoutMs: 1000,
-    });
-
-    assert.equal(await call(access), true);
-    assert.equal(client.requests.length, 1);
-    const [request] = client.requests;
-    assert.ok(request !== undefined);
-    assert.equal(describe(request), expected);
-    assert.equal(request.subject?.optionalRelation, "");
-    assert.deepEqual(request.consistency?.requirement, {
-      oneofKind: "minimizeLatency",
-      minimizeLatency: true,
-    });
-  });
-}
-
 for (const permissionship of [
   NO_PERMISSION,
   CONDITIONAL_PERMISSION,
@@ -168,9 +146,11 @@ for (const { name, call, expected } of mapping) {
     });
 
     assert.equal(await call(access), true);
+    assert.equal(client.requests.length, 1);
     const [request] = client.requests;
     assert.ok(request !== undefined);
     assert.equal(describe(request), expected);
+    assert.equal(request.subject?.optionalRelation, "");
     if (platform) {
       assert.deepEqual(revisions.reads, []);
       assert.deepEqual(request.consistency?.requirement, {

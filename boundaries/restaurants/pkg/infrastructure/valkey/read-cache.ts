@@ -61,7 +61,6 @@ export class ReadCache<T> {
   readonly #prefix: string;
   readonly #ttlMs: number;
   readonly #metrics: CacheMetrics;
-  readonly #isCurrent: ((value: T) => boolean) | undefined;
 
   constructor(options: {
     client: Valkey;
@@ -71,19 +70,12 @@ export class ReadCache<T> {
     prefix: string;
     ttlMs: number;
     metrics: CacheMetrics;
-    /**
-     * Whether a cached value has the current shape. A value that does not
-     * (written by an older release) is a miss: it is deleted and replaced by
-     * the source value.
-     */
-    isCurrent?: (value: T) => boolean;
   }) {
     this.#client = options.client;
     this.#name = options.name;
     this.#prefix = options.prefix;
     this.#ttlMs = options.ttlMs;
     this.#metrics = options.metrics;
-    this.#isCurrent = options.isCurrent;
   }
 
   /**
@@ -108,20 +100,8 @@ export class ReadCache<T> {
       return load();
     }
     if (cached !== null) {
-      const value = JSON.parse(cached) as T;
-      if (this.#isCurrent === undefined || this.#isCurrent(value)) {
-        this.#metrics.lookup(this.#name, "hit");
-        return value;
-      }
-      // Outdated shape: drop it so the NX store below replaces it; a refresh
-      // that writes in between still wins.
-      try {
-        await this.#client.del(fullKey);
-      } catch {
-        this.#metrics.error(this.#name, "set");
-        this.#metrics.lookup(this.#name, "bypass");
-        return load();
-      }
+      this.#metrics.lookup(this.#name, "hit");
+      return JSON.parse(cached) as T;
     }
     this.#metrics.lookup(this.#name, "miss");
     const loaded = await load();
@@ -160,34 +140,16 @@ export class ReadCache<T> {
     }
     const result = new Map<string, T>();
     const missing: string[] = [];
-    const outdated: string[] = [];
     keys.forEach((key, index) => {
       const entry = cached[index];
       if (entry === null || entry === undefined) {
         missing.push(key);
         return;
       }
-      const value = JSON.parse(entry) as T;
-      if (this.#isCurrent === undefined || this.#isCurrent(value)) {
-        result.set(key, value);
-        return;
-      }
-      missing.push(key);
-      outdated.push(this.#prefix + key);
+      result.set(key, JSON.parse(entry) as T);
     });
     this.#metrics.lookup(this.#name, "hit", result.size);
     if (missing.length === 0) return result;
-    if (outdated.length > 0) {
-      // Outdated shapes: drop them so the NX stores below replace them.
-      try {
-        await this.#client.del(...outdated);
-      } catch {
-        this.#metrics.error(this.#name, "set");
-        this.#metrics.lookup(this.#name, "bypass", missing.length);
-        for (const [key, value] of await load(missing)) result.set(key, value);
-        return result;
-      }
-    }
     this.#metrics.lookup(this.#name, "miss", missing.length);
     const loaded = await load(missing);
     for (const [key, value] of loaded) {

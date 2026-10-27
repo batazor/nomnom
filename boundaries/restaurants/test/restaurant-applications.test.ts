@@ -475,42 +475,6 @@ test("AC-214 list restaurants pages with a cursor without repeats", async () => 
   );
 });
 
-test("list restaurants returns only restaurants of the requested Market (ADR 41)", async () => {
-  const world = await createRestaurantWorld();
-  const berlin = await world.givenRestaurant("Berlin Pho");
-  const hamburg = await world.givenRestaurant("Hamburg Pho", {
-    open: true,
-    marketId: otherMarket,
-  });
-  const list = new ListRestaurantsHandler({ reader: world.catalog });
-
-  const berlinPage = await list.execute({ marketId: market });
-  const hamburgPage = await list.execute({
-    marketId: otherMarket,
-    includeClosed: true,
-  });
-  const emptyPage = await list.execute({ marketId: "munich" });
-
-  assert.deepEqual(
-    berlinPage.restaurants.map((restaurant) => [
-      restaurant.restaurantId,
-      restaurant.marketId,
-    ]),
-    [[berlin, market]],
-  );
-  assert.deepEqual(
-    hamburgPage.restaurants.map((restaurant) => [
-      restaurant.restaurantId,
-      restaurant.marketId,
-    ]),
-    [[hamburg, otherMarket]],
-  );
-  assert.deepEqual(emptyPage.restaurants, []);
-  for (const marketId of ["", "BERLIN", "berlin/1"]) {
-    await assert.rejects(list.execute({ marketId }), InvalidMarketIdError);
-  }
-});
-
 test("list owned restaurants returns open and closed restaurants of the owner only", async () => {
   const world = await createRestaurantWorld();
   const open = await world.givenRestaurant("Open");

@@ -3,26 +3,15 @@ import test from "node:test";
 
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { SpanKind } from "@opentelemetry/api";
-import {
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace";
 
 import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import type { Outbox } from "../pkg/application/outbox.ts";
-import {
-  type ConsumerClient,
-  type EachMessage,
-  KafkaConsumerWorker,
-} from "../pkg/infrastructure/kafka/consumer.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import {
   installPropagation,
-  startTracing,
   tracesEndpointConfigured,
 } from "../pkg/telemetry/tracing.ts";
 import {
@@ -137,103 +126,4 @@ test("without span export the caller's traceparent reaches the Outbox", async ()
     await stop();
   }
   assert.deepEqual(metadata, [{ traceparent: TRACEPARENT }]);
-});
-
-test("a gRPC request with traceparent writes an Outbox record in the same trace", async () => {
-  const exporter = new InMemorySpanExporter();
-  const tracing = startTracing(
-    "restaurants",
-    {},
-    { spanProcessors: [new SimpleSpanProcessor({ exporter })] },
-  );
-  assert.equal(tracing.enabled, true);
-  const { client, restaurantId, metadata, stop } = await startServer();
-  try {
-    const response = await client.openRestaurant(
-      { restaurantId },
-      { headers: { traceparent: TRACEPARENT } },
-    );
-    assert.equal(response.changed, true);
-  } finally {
-    await stop();
-  }
-
-  const [span] = exporter
-    .getFinishedSpans()
-    .filter(
-      (s) =>
-        s.name === "nomnom.restaurants.v1.RestaurantsService/OpenRestaurant",
-    );
-  assert.ok(span, "server span exported");
-  assert.equal(span.kind, SpanKind.SERVER);
-  assert.equal(span.spanContext().traceId, TRACE_ID);
-  assert.equal(span.parentSpanContext?.spanId, CALLER_SPAN_ID);
-  assert.equal(span.attributes["rpc.system.name"], "grpc");
-  assert.equal(
-    span.attributes["rpc.method"],
-    "nomnom.restaurants.v1.RestaurantsService/OpenRestaurant",
-  );
-  assert.equal(span.attributes["rpc.response.status_code"], "OK");
-
-  assert.equal(metadata.length, 1);
-  const [version, traceId, spanId, flags] = (
-    metadata[0]?.traceparent ?? ""
-  ).split("-");
-  assert.equal(version, "00");
-  assert.equal(traceId, TRACE_ID, "Outbox record continues the caller's trace");
-  assert.equal(spanId, span.spanContext().spanId, "parent is the server span");
-  assert.equal(flags, "01");
-
-  await tracing.shutdown();
-});
-
-test("restaurants-consumer continues the traceparent of a Kafka message", async () => {
-  const exporter = new InMemorySpanExporter();
-  const tracing = startTracing(
-    "restaurants-consumer",
-    {},
-    { spanProcessors: [new SimpleSpanProcessor({ exporter })] },
-  );
-  let eachMessage: ((payload: EachMessage) => Promise<void>) | undefined;
-  const client: ConsumerClient = {
-    connect: async () => {},
-    subscribe: async () => {},
-    run: async (config) => {
-      eachMessage = config.eachMessage;
-    },
-    disconnect: async () => {},
-  };
-  const seen: { traceparent?: string }[] = [];
-  const worker = new KafkaConsumerWorker({
-    client,
-    topics: ["orders.v1.order-events"],
-    handler: {
-      process: async () => {
-        seen.push(currentTraceMetadata());
-        return "processed";
-      },
-    },
-  });
-  await worker.start();
-  await eachMessage?.({
-    topic: "orders.v1.order-events",
-    partition: 0,
-    message: {
-      key: null,
-      value: Buffer.from([]),
-      offset: "7",
-      headers: { traceparent: Buffer.from(TRACEPARENT) },
-    },
-  });
-  await worker.shutdown(AbortSignal.timeout(1000));
-
-  const [span] = exporter.getFinishedSpans();
-  assert.equal(span?.name, "process orders.v1.order-events");
-  assert.equal(span?.kind, SpanKind.CONSUMER);
-  assert.equal(span?.parentSpanContext?.spanId, CALLER_SPAN_ID);
-  assert.equal(
-    seen[0]?.traceparent,
-    `00-${TRACE_ID}-${span?.spanContext().spanId}-01`,
-  );
-  await tracing.shutdown();
 });
