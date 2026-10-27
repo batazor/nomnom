@@ -152,7 +152,7 @@ spicedb:
     key: preshared-key
 
 # PostgreSQL (ADR 8): DSN из внешнего Secret обязателен. Миграции встроены в образ и
-# применяются при старте под advisory lock (ADR 38).
+# применяются при старте под advisory lock (ADR 42).
 postgres:
   dsnSecret:
     name: ""

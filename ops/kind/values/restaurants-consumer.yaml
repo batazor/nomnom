@@ -13,7 +13,7 @@ mongodb:
   uriSecret:
     name: restaurants-mongodb
 
-# ADR 40: обновление кеша каталога; Secret restaurants-valkey создаёт chart ops/kind/bootstrap.
+# ADR 43: обновление кеша каталога; Secret restaurants-valkey создаёт chart ops/kind/bootstrap.
 valkey:
   urlSecret:
     name: restaurants-valkey

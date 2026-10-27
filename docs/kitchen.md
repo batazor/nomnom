@@ -139,7 +139,7 @@ Start/Complete Preparation Item существуют только при item-le
 
 **Политика повтора (предложение для MVP):** kitchen board — общий экран нескольких сотрудников, повторное нажатие и повтор запроса после потери ответа являются нормальным UX. Handler превращает `AlreadyInState{PREPARING}` в успешный no-op: возвращает текущее состояние, не создаёт Domain Event и не публикует `PreparationStarted` повторно. Если заказ уже ушёл дальше (`ASSEMBLED`, `READY`) или в terminal state, FSM возвращает `InvalidTransition`, и UI показывает актуальное состояние. BDD-сценарий повтора остаётся `@pending` до подтверждения политики продуктом.
 
-Текущее допущение реализации: политика не зашита в handler — Start Preparation и Mark Ready for Pickup получают обязательный параметр `onRepeat: "succeed-without-event" | "reject"` без значения по умолчанию, значение выбирает composition root ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)). Продуктовый вопрос остаётся открытым.
+Текущее допущение реализации: политика не зашита в handler — Start Preparation и Mark Ready for Pickup получают обязательный параметр `onRepeat: "succeed-without-event" | "reject"` без значения по умолчанию, значение выбирает composition root ([design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)). Продуктовый вопрос остаётся открытым.
 
 #### Mark Assembled
 
@@ -163,13 +163,13 @@ Start/Complete Preparation Item существуют только при item-le
 | `Cancelled{stage}` (повтор) | Заказ уже `CANCELLED` — `AlreadyInState`, возвращается сохранённый результат | Не публикуется повторно |
 | `CancellationRejected{reason}` | Политика стадии запрещает отмену или заказ уже в другом terminal state (`READY`, `REJECTED`, `FAILED`) | Нет |
 
-Текущие допущения реализации ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)): политика отмены во время Preparation — обязательный параметр handler `cancellationDuringPreparation: "allow" | "reject"` без значения по умолчанию, передаётся в guard FSM; Cancel до Receive возвращает `NotFoundError`, tombstone не вводится. Продуктовые вопросы остаются открытыми.
+Текущие допущения реализации ([design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)): политика отмены во время Preparation — обязательный параметр handler `cancellationDuringPreparation: "allow" | "reject"` без значения по умолчанию, передаётся в guard FSM; Cancel до Receive возвращает `NotFoundError`, tombstone не вводится. Продуктовые вопросы остаются открытыми.
 
 Отказ — business result, а не technical error: Activity не повторяет его как retryable failure ([ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md#activities)). Команда идемпотентна по `orderId` и логическому шагу; gateway retry допустим только после согласования этой политики ([ADR 15](adr/0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md)). Отмена `restaurants` не завершает `Order`: полный процесс отмены, компенсации и финансовые последствия решает `orders` через Temporal.
 
 #### Reject After Acceptance
 
-Инициатива ресторана отказаться от уже принятого заказа до начала приготовления (сломалось оборудование, закончился ингредиент). Возможность — отдельное продуктовое решение; в MVP переходы `ACCEPTED/QUEUED → REJECTED` не разрешены. Если решение будет принято, используется тот же trigger `Reject` и тот же факт `RestaurantOrderRejected` с признаком стадии; `orders` должен уметь обработать его после Acceptance ([Сверка с Temporal](#сверка-с-сигналами-temporal)). Текущая реализация возвращает `InvalidTransition` для `ACCEPTED/QUEUED × Reject` ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)).
+Инициатива ресторана отказаться от уже принятого заказа до начала приготовления (сломалось оборудование, закончился ингредиент). Возможность — отдельное продуктовое решение; в MVP переходы `ACCEPTED/QUEUED → REJECTED` не разрешены. Если решение будет принято, используется тот же trigger `Reject` и тот же факт `RestaurantOrderRejected` с признаком стадии; `orders` должен уметь обработать его после Acceptance ([Сверка с Temporal](#сверка-с-сигналами-temporal)). Текущая реализация возвращает `InvalidTransition` для `ACCEPTED/QUEUED × Reject` ([design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)).
 
 ### Queries
 
@@ -412,7 +412,7 @@ Feature: Order ready for pickup
 - Грамматика имён: `PreparationStarted`, `PreparationDelayed`, `PreparationFailed` не следуют форме `<Aggregate><Fact>`; кандидаты `RestaurantOrderPreparationStarted` и подобные — решить при создании контракта.
 - Cancel до Receive: Activity отмены может прийти раньше, чем повтор Receive Order Request создаст заказ; нужен ли tombstone, запрещающий последующее создание. Текущее допущение реализации — `NotFoundError` без tombstone.
 
-Текущие допущения реализации описаны в [design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам); они не закрывают вопросы выше.
+Текущие допущения реализации описаны в [design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам); они не закрывают вопросы выше.
 
 ## Предложения
 

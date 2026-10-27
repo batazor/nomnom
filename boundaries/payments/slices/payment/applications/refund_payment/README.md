@@ -34,7 +34,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `RefundPaymentHandler` в [`handler.py`](handler.py), требования FR-402, FR-403, FR-406, FR-407, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Только полный Refund через общий поток `operation_flow`; partial refund остаётся открытым продуктовым вопросом. Отказ оставляет `Payment` в `captured`. Policy `PaymentRefundable` не применяется, пока не определён refund window.
+Handler `RefundPaymentHandler` в [`handler.py`](handler.py), требования FR-402, FR-403, FR-406, FR-407, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Только полный Refund через общий поток `operation_flow`; partial refund остаётся открытым продуктовым вопросом. Отказ оставляет `Payment` в `captured`. Policy `PaymentRefundable` не применяется, пока не определён refund window.
 
 ## Acceptance
 

@@ -23,7 +23,7 @@ groups:
       - id: nomnom.cache.name
         type: string
         stability: development
-        brief: "Read cache of a context (ADR 40)."
+        brief: "Read cache of a context (ADR 43)."
         examples: ["menu", "restaurant", "restaurant_list"]
       - id: nomnom.cache.operation
         type: string

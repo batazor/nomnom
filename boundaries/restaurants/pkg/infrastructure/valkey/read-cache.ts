@@ -1,4 +1,4 @@
-// Cache-aside over Valkey (ADR 40, local ADR 3). A miss stores the source
+// Cache-aside over Valkey (ADR 43, local ADR 3). A miss stores the source
 // value with SET NX for `ttlMs`; an Integration Event of the change refreshes
 // the key with plain SET from the source read after the commit. A read that
 // started before the change cannot put the old value back: its NX store

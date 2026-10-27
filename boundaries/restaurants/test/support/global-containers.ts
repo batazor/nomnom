@@ -91,7 +91,7 @@ async function startSpiceDb(): Promise<StartedTestContainer> {
     .start();
 }
 
-/** Valkey of the catalog read cache (ADR 40) without persistence, as in kind. */
+/** Valkey of the catalog read cache (ADR 43) without persistence, as in kind. */
 async function startValkey(): Promise<StartedTestContainer> {
   return new GenericContainer(VALKEY_IMAGE)
     .withCommand(["valkey-server", "--save", "", "--appendonly", "no"])

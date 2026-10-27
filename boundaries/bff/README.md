@@ -23,7 +23,7 @@ BFF — отдельный сервис и единая прикладная т�
 
 ## Customer API
 
-Публичная customer-схема в [`plugins/bff/src/schema.graphql`](plugins/bff/src/schema.graphql) зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/add-customer-graphql-contract/)), чтобы customer UI развивался параллельно с bounded contexts на MSW-моках той же схемы.
+Публичная customer-схема в [`plugins/bff/src/schema.graphql`](plugins/bff/src/schema.graphql) зафиксирована раньше resolvers (OpenSpec change [`add-customer-graphql-contract`](../../openspec/changes/archive/2026-10-25-add-customer-graphql-contract/)), чтобы customer UI развивался параллельно с bounded contexts на MSW-моках той же схемы.
 
 | Операция | Назначение | Статус |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ BFF — отдельный сервис и единая прикладная т�
 
 ### Слайс `ordertracking`
 
-Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order-tracking-resolvers/). `plugins/bff/ordertracking/applications` строит представление заказа без Protobuf и GraphQL-типов: `OrderStatus` по таблице выше, `endReason` по `reason_code`, milestones из `placed_at`, Fulfillment Facts и `cancelled_at` (`CONFIRMED` — из факта `restaurant_accepted`; у заказов, подтверждённых до его появления, этого milestone нет), названия позиций — снимок `orders` на момент Place Order (`OrderItem.name`; у заказов, оформленных до снимка, — пустое имя, текущее меню не читается), `lineTotal` десятичной арифметикой `math/big`, `cancellation.availableUntil` по окну отмены и часам BFF, `expectedReadyAt`/`expectedPickupAt`/`expectedDeliveredAt` — последние сроки `Order` `orders` (FR-611, FR-612; не названный срок — `null`, его же несёт `orderChanged` через `LookupOrderById`). `ordertracking/infrastructure` вызывает `orders` от имени покупателя (service token и user assertion, ADR 32) и публичный `GetRestaurant` без пользователя; клиенты генерируются из workspace (`make proto-generate`, `plugins/bff/infrastructure/grpc/buf.gen.yaml`).
+Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-10-25-add-bff-order-tracking-resolvers/). `plugins/bff/ordertracking/applications` строит представление заказа без Protobuf и GraphQL-типов: `OrderStatus` по таблице выше, `endReason` по `reason_code`, milestones из `placed_at`, Fulfillment Facts и `cancelled_at` (`CONFIRMED` — из факта `restaurant_accepted`; у заказов, подтверждённых до его появления, этого milestone нет), названия позиций — снимок `orders` на момент Place Order (`OrderItem.name`; у заказов, оформленных до снимка, — пустое имя, текущее меню не читается), `lineTotal` десятичной арифметикой `math/big`, `cancellation.availableUntil` по окну отмены и часам BFF, `expectedReadyAt`/`expectedPickupAt`/`expectedDeliveredAt` — последние сроки `Order` `orders` (FR-611, FR-612; не названный срок — `null`, его же несёт `orderChanged` через `LookupOrderById`). `ordertracking/infrastructure` вызывает `orders` от имени покупателя (service token и user assertion, ADR 32) и публичный `GetRestaurant` без пользователя; клиенты генерируются из workspace (`make proto-generate`, `plugins/bff/infrastructure/grpc/buf.gen.yaml`).
 
 | Ответ контекста | GraphQL |
 | --- | --- |
@@ -66,7 +66,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/add-bff-order
 
 ### Слайс `catalog`
 
-Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checkout-flow/). `plugins/bff/catalog/applications` — сценарии List Restaurants и Get Restaurant с меню без Protobuf и GraphQL-типов; `catalog/infrastructure` вызывает публичные `ListRestaurants`, `GetRestaurant` и `GetMenu` `restaurants` с service token BFF и без user assertion (`identity.WithoutUser`). Resolvers каталога access token не требуют.
+Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/catalog/applications` — сценарии List Restaurants и Get Restaurant с меню без Protobuf и GraphQL-типов; `catalog/infrastructure` вызывает публичные `ListRestaurants`, `GetRestaurant` и `GetMenu` `restaurants` с service token BFF и без user assertion (`identity.WithoutUser`). Resolvers каталога access token не требуют.
 
 - `restaurants(first, after)` → `ListRestaurants` только открытых ресторанов (`include_closed = false`); `first` — 1..100, иначе error `INVALID_ARGUMENT`; `after` и `pageInfo.endCursor` — `next_page_token` `restaurants` как есть, cursor ребра — id ресторана (тот же ключ курсора), на последней странице `endCursor` — cursor последнего ребра, на пустой — `null`; `menu` каждого ресторана страницы читается из `GetMenu` параллельно (ресторан без меню — `null`, любая другая ошибка роняет запрос): customer UI показывает превью блюд на карточке ресторана.
 - `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; `acceptingOrders` — `is_open`, пустое описание позиции — `null`.
@@ -74,7 +74,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checko
 
 ### Слайс `checkout`
 
-Change [`add-customer-checkout-flow`](../../openspec/changes/add-customer-checkout-flow/). `plugins/bff/checkout/applications` вызывает `PlaceOrder` от имени покупателя и строит payload сценарием `GetOrder` слайса `ordertracking` (тот же `Order`, что у `order(id)`); `checkout/infrastructure` переводит отказы `orders` по `ErrorInfo`.
+Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/checkout/applications` вызывает `PlaceOrder` от имени покупателя и строит payload сценарием `GetOrder` слайса `ordertracking` (тот же `Order`, что у `order(id)`); `checkout/infrastructure` переводит отказы `orders` по `ErrorInfo`.
 
 | Ответ `orders` `PlaceOrder` | GraphQL `placeOrder` |
 | --- | --- |
@@ -310,7 +310,7 @@ boundaries/bff/
 
 Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
 
-Композиция ([`refactor-bff-composition`](../../openspec/changes/refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и даёт всем слайсам по одному соединению с internal gateway своей Cell (через `market.Require`) на `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
+Композиция ([`refactor-bff-composition`](../../openspec/changes/archive/2026-10-25-refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и даёт всем слайсам по одному соединению с internal gateway своей Cell (через `market.Require`) на `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 
 Внутренние клиенты будут генерироваться из закреплённых BSR commits согласно [общесистемному ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md). Интеграция этих клиентов с plugin относится к следующему шагу.
 

@@ -103,7 +103,7 @@ Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `r
 
 ## Read cache (Valkey)
 
-ADR 40: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`); `restaurants-consumer` обновляет ключи по событиям открытия, закрытия и доступности блюда, остальное — TTL. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB.
+ADR 43: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`); `restaurants-consumer` обновляет ключи по событиям открытия, закрытия и доступности блюда, остальное — TTL. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -347,7 +347,7 @@ Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job="infr
 
 ## Valkey (сервер)
 
-Alloy `prometheus.exporter.redis` по владельцу (ADR 40), `job="infra/valkey"`, label `owner`; ACL-пользователь `exporter` только с INFO, CONFIG GET и служебными командами, без доступа к ключам. Клиентская сторона — row Cache сервиса. Platform / Overview.
+Alloy `prometheus.exporter.redis` по владельцу (ADR 43), `job="infra/valkey"`, label `owner`; ACL-пользователь `exporter` только с INFO, CONFIG GET и служебными командами, без доступа к ключам. Клиентская сторона — row Cache сервиса. Platform / Overview.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |

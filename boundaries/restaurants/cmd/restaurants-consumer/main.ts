@@ -46,7 +46,7 @@ if (!config.kafka.enabled) {
     "KAFKA__BROKERS is required: restaurants-consumer reads Integration Events from Kafka",
   );
 }
-// Valkey (ADR 40) is required: the consumer refreshes the catalog read cache
+// Valkey (ADR 43) is required: the consumer refreshes the catalog read cache
 // by restaurant-events and menu-events. While Valkey is down the refresh
 // waits and its offsets stay uncommitted.
 if (!config.valkey.enabled) {

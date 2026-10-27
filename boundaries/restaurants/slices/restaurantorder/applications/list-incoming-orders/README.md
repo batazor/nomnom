@@ -15,6 +15,6 @@
 
 ## Acceptance
 
-[FR-586, AC-742, AC-743](../../../../../../openspec/changes/close-order-lifecycle-in-kind/specs/kitchen-board/spec.md).
+[FR-586, AC-742, AC-743](../../../../../../openspec/changes/archive/2026-10-25-close-order-lifecycle-in-kind/specs/kitchen-board/spec.md).
 
 Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

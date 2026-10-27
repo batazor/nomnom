@@ -54,7 +54,7 @@ export interface RestaurantDependencies {
   readonly outbox: Outbox;
   /** ADR 36: the kitchen board shows the restaurant, so every save notifies it. */
   readonly kitchenChanges: RestaurantSaved;
-  /** ADR 40: Get Restaurant and List Restaurants are cached for `valkeyConfig.ttlMs`. */
+  /** ADR 43: Get Restaurant and List Restaurants are cached for `valkeyConfig.ttlMs`. */
   readonly valkey: Valkey;
   readonly valkeyConfig: ValkeyEnabledConfig;
   readonly cacheMetrics: CacheMetrics;
@@ -84,7 +84,7 @@ export interface RestaurantCradle {
   readonly restaurants: DatabaseRestaurantRepository;
   readonly restaurantMemberships: DatabaseRestaurantMemberships;
   readonly restaurantCatalog: DatabaseRestaurantCatalog;
-  /** Get Restaurant and List Restaurants through the Valkey read cache (ADR 40). */
+  /** Get Restaurant and List Restaurants through the Valkey read cache (ADR 43). */
   readonly cachedRestaurantCatalog: CachedRestaurantCatalog;
   readonly getRestaurant: GetRestaurantHandler;
   readonly listRestaurants: ListRestaurantsHandler;

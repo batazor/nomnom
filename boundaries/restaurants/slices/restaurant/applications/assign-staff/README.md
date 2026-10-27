@@ -22,6 +22,6 @@
 
 ## Acceptance
 
-AC-476 ([restaurant-delivery-relationships](../../../../../../openspec/changes/add-restaurant-delivery-relationships/specs/restaurant-delivery-relationships/spec.md)): после назначения пользователь получает `restaurant#operate_kitchen`.
+AC-476 ([restaurant-delivery-relationships](../../../../../../openspec/changes/archive/2026-10-25-add-restaurant-delivery-relationships/specs/restaurant-delivery-relationships/spec.md)): после назначения пользователь получает `restaurant#operate_kitchen`.
 
 Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

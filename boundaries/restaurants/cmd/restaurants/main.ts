@@ -42,7 +42,7 @@ if (!config.spicedb.enabled) {
     "SPICEDB__ENDPOINT is required: restaurants checks permissions in SpiceDB",
   );
 }
-// Valkey (ADR 40, local ADR 3) caches Get Restaurant and Get Menu. The URL is
+// Valkey (ADR 43, local ADR 3) caches Get Restaurant and Get Menu. The URL is
 // required; an unreachable Valkey only makes reads bypass the cache.
 if (!config.valkey.enabled) {
   throw new Error(

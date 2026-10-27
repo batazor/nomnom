@@ -34,7 +34,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `CancelAuthorizationHandler` в [`handler.py`](handler.py), требования FR-402, FR-403, FR-405, FR-407, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Общий поток `operation_flow`; успех возвращает `Payment` в `pending` без `Provider Reference`, отказ оставляет `authorized`. `Order` не изменяется.
+Handler `CancelAuthorizationHandler` в [`handler.py`](handler.py), требования FR-402, FR-403, FR-405, FR-407, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Общий поток `operation_flow`; успех возвращает `Payment` в `pending` без `Provider Reference`, отказ оставляет `authorized`. `Order` не изменяется.
 
 ## Acceptance
 

@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
-# Миграции встроены в процесс и применяются при старте (ADR 38).
+# Миграции встроены в процесс и применяются при старте (ADR 42).
 COPY --from=build --chown=nonroot:nonroot /out/controlplane /controlplane
 
 EXPOSE 8086 9086

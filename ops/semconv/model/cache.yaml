@@ -1,4 +1,4 @@
-# Метрики раздела cache инвентаря ops/grafana/inventory (ADR 40). Проверка: make semconv-check.
+# Метрики раздела cache инвентаря ops/grafana/inventory (ADR 43). Проверка: make semconv-check.
 groups:
   - id: metric.nomnom.cache.lookups
     type: metric

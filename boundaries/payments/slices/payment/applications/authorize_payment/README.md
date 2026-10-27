@@ -34,7 +34,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `AuthorizePaymentHandler` в [`handler.py`](handler.py), требования FR-401…FR-403, FR-407, FR-408, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Общий поток `operation_flow`: pending `Payment Operation` по idempotency key → provider call вне транзакции → результат, `Payment` и Outbox в одной Unit of Work. Отказ переводит `Payment` в `failed`. Момент вызова определяет оркестратор `orders`.
+Handler `AuthorizePaymentHandler` в [`handler.py`](handler.py), требования FR-401…FR-403, FR-407, FR-408, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Общий поток `operation_flow`: pending `Payment Operation` по idempotency key → provider call вне транзакции → результат, `Payment` и Outbox в одной Unit of Work. Отказ переводит `Payment` в `failed`. Момент вызова определяет оркестратор `orders`.
 
 ## Acceptance
 

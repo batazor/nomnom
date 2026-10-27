@@ -104,13 +104,13 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 
 - когда именно выполняется Authorization;
 - когда выполняется Capture;
-- какие сроки authorization window и refund window проверяют `PaymentCapturable` и `PaymentRefundable` (текущее допущение реализации: policies в handlers не подключены, Capture и Refund выполняются на полную сумму, см. [design.md change `implement-payments-application-layer`](../openspec/changes/implement-payments-application-layer/design.md));
+- какие сроки authorization window и refund window проверяют `PaymentCapturable` и `PaymentRefundable` (текущее допущение реализации: policies в handlers не подключены, Capture и Refund выполняются на полную сумму, см. [design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md));
 - можно ли принять `Restaurant Order`, если курьер ещё не назначен;
 - на какой стадии Request Order Cancellation больше не может быть удовлетворён;
 - какая компенсация применяется после начала Preparation;
 - что происходит при запросе отмены после Pickup;
-- какие причины отклонения рестораном и неудачи доставки являются retryable (текущее допущение реализации `delivery`: причина Delivery Failure хранится без классификации, `Failed` терминален для этой `Delivery`, решение о повторе принимает `orders`, см. [design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам));
-- что делает Create Delivery при повторной доставке того же `Order` после Delivery Failure, если идемпотентность Create Delivery определяется по `OrderId` (например, номер попытки в ключе); см. [design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам);
+- какие причины отклонения рестораном и неудачи доставки являются retryable (текущее допущение реализации `delivery`: причина Delivery Failure хранится без классификации, `Failed` терминален для этой `Delivery`, решение о повторе принимает `orders`, см. [design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам));
+- что делает Create Delivery при повторной доставке того же `Order` после Delivery Failure, если идемпотентность Create Delivery определяется по `OrderId` (например, номер попытки в ключе); см. [design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам);
 - нужен ли отдельный Order State для Failure (текущее допущение реализации: Failure использует State `cancelled`, вид итога и код причины сохраняются, см. [design.md change `implement-orders-application-layer`](../openspec/changes/archive/2026-10-25-implement-orders-application-layer/design.md#допущения-по-открытым-вопросам));
 - нужна ли поддержка partial refund сверх полного Refund текущей минимальной модели;
 - какие данные `Restaurant` и `Menu Item` сохраняются как snapshot в `Order`.
@@ -121,4 +121,4 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 
 Полный список открытых вопросов кухни — в [Kitchen](kitchen.md#открытые-вопросы).
 
-Момент начала поиска курьера решён Dispatch Deliveries ([change `close-order-lifecycle-in-kind`](../openspec/changes/close-order-lifecycle-in-kind/design.md), FR-582): фоновая задача процесса `delivery` предлагает ожидающую доставку без pending offer курьеру, которому её ещё не предлагали, — в течение `OFFERS__DISPATCH_INTERVAL` после Create Delivery и снова после отказа или истечения предложения. Create Delivery, Reject Delivery Offer и Reassign Courier сами Find Courier не вызывают; Replan Delivery из `orders` остаётся эскалацией по таймауту назначения.
+Момент начала поиска курьера решён Dispatch Deliveries ([change `close-order-lifecycle-in-kind`](../openspec/changes/archive/2026-10-25-close-order-lifecycle-in-kind/design.md), FR-582): фоновая задача процесса `delivery` предлагает ожидающую доставку без pending offer курьеру, которому её ещё не предлагали, — в течение `OFFERS__DISPATCH_INTERVAL` после Create Delivery и снова после отказа или истечения предложения. Create Delivery, Reject Delivery Offer и Reassign Courier сами Find Courier не вызывают; Replan Delivery из `orders` остаётся эскалацией по таймауту назначения.

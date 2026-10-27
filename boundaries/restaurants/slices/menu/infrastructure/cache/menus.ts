@@ -1,4 +1,4 @@
-// Cached Get Menu (ADR 40, local ADR 3): the public menu of a restaurant is the
+// Cached Get Menu (ADR 43, local ADR 3): the public menu of a restaurant is the
 // hottest read of restaurants (UI, BFF, Place Order of orders). Keyed by
 // restaurant id. MenuItemAdded, MenuItemUpdated and
 // MenuItemAvailabilityChanged refresh the menu right after the commit.

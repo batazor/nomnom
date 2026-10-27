@@ -43,7 +43,7 @@ UoW — application port. Он нужен нескольким слайсам о
 
 Пути реализации задаются относительно корня boundary так же, как `infrastructure/grpc` и `infrastructure/temporal`. Port и реализация появляются вместе с первым слайсом, которому нужна атомарность нескольких persistence operations; заранее не создаются.
 
-В `payments` port реализован в `pkg/application/unit_of_work.py` как синхронный `UnitOfWork.run(work)`: runtime синхронный; переход на async меняет только сигнатуры ([design.md change `implement-payments-application-layer`](../openspec/changes/implement-payments-application-layer/design.md)).
+В `payments` port реализован в `pkg/application/unit_of_work.py` как синхронный `UnitOfWork.run(work)`: runtime синхронный; переход на async меняет только сигнатуры ([design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md)).
 
 Port — интерфейс из одного метода. Реализация одна на хранилище boundary и общая для всех слайсов: она же владеет механизмом propagation транзакции, которым пользуются репозитории, Inbox и Outbox этого boundary. Сборка — в composition root каждого процесса (API, consumer, Temporal worker) по [ADR 5](adr/0005-dependency-injection-strategy.md).
 
@@ -435,7 +435,7 @@ UoW всех четырёх boundaries реализован поверх их х
 | `register-restaurant`, `update-restaurant`, `create-menu`, `add-menu-item`, `update-menu-item`, `cancel-restaurant-order` | Нет по умолчанию | Single-document; UoW, только если document boundaries потребуют нескольких документов или Outbox |
 | `get-restaurant`, `list-restaurants`, `get-menu` | Нет | Queries |
 
-Реализация application-слоя `restaurants` ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md)) уточняет таблицу:
+Реализация application-слоя `restaurants` ([design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md)) уточняет таблицу:
 
 - `open-restaurant`, `close-restaurant`, `set-menu-item-availability` публикуют бизнес-факт (`RestaurantOpened`, `RestaurantClosed`, `MenuItemAvailabilityChanged`) и используют UoW;
 - `update-menu-item` выполняется в UoW: при изменении названия, описания или цены записывает `MenuItemUpdated`, при изменении доступности — тот же `MenuItemAvailabilityChanged` в Outbox вместе с `Menu`;
@@ -462,7 +462,7 @@ UoW всех четырёх boundaries реализован поверх их х
 | `reassign_courier` | Да | Завершение текущего назначения + `Delivery` + освобождение курьера + [Outbox] |
 | `replan_delivery` | Да | Одна UoW под одной проверкой `ReplanDelivery`: [завершение назначения, как `reassign_courier`] + выбор кандидата + offer |
 | `confirm_pickup` | Да | `Delivery` + Outbox |
-| `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md)) |
+| `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md)) |
 | `cancel_delivery` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |
 | `create_delivery`, `offer_delivery` | Если публикуют событие или хранят idempotency key отдельно | Запись + [idempotency] + [Outbox] |
 | `register_courier`, `set_courier_availability`, `reject_delivery_offer`, `find_courier` | Нет по умолчанию | Одиночное изменение |

@@ -273,7 +273,7 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_orders}}"
           image.tag: "{{.IMAGE_TAG_nomnom_orders}}"
       # Kafka consumer restaurants (ADR 11, ADR 28): тот же образ и chart, OrderPlaced →
-      # Restaurant Order через Inbox. Схему каждый процесс создаёт сам при старте (ADR 38).
+      # Restaurant Order через Inbox. Схему каждый процесс создаёт сам при старте (ADR 42).
       - name: restaurants-consumer
         chartPath: ../../../boundaries/restaurants/ops/helm
         namespace: nomnom-restaurants
@@ -286,7 +286,7 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_restaurants}}"
           image.tag: "{{.IMAGE_TAG_nomnom_restaurants}}"
       # Temporal worker orders: Order Fulfillment Workflow, тот же образ и chart,
-      # command /orders-worker. Миграции процесс применяет сам при старте (ADR 38).
+      # command /orders-worker. Миграции процесс применяет сам при старте (ADR 42).
       - name: orders-worker
         chartPath: ../../../boundaries/orders/ops/helm
         namespace: nomnom-orders

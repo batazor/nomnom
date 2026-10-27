@@ -1,4 +1,4 @@
-// Cached Get Restaurant and List Restaurants (ADR 40, local ADR 3): read by the
+// Cached Get Restaurant and List Restaurants (ADR 43, local ADR 3): read by the
 // UI, the BFF and Place Order of orders (is_open). RestaurantOpened and
 // RestaurantClosed refresh the restaurant and start a new generation of the
 // list pages right after the commit; renames and new restaurants publish no

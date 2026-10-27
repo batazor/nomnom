@@ -255,7 +255,7 @@ Topic и партиционирование новой версии опреде
 
 ## Каталог: `restaurants` / Restaurant и Menu
 
-Опубликованные контракты aggregates `Restaurant` и `Menu` (`nomnom/restaurants/v1/events.proto`, change [`publish-restaurant-and-menu-events`](../openspec/changes/publish-restaurant-and-menu-events/)). Факты передаются в Outbox port application-слоем; у каждого aggregate свой стрим, key — `aggregate_id`.
+Опубликованные контракты aggregates `Restaurant` и `Menu` (`nomnom/restaurants/v1/events.proto`, change [`publish-restaurant-and-menu-events`](../openspec/changes/archive/2026-10-25-publish-restaurant-and-menu-events/)). Факты передаются в Outbox port application-слоем; у каждого aggregate свой стрим, key — `aggregate_id`.
 
 | Domain Event | Маппинг | Integration Event `nomnom.restaurants.v1.*` | Topic | Consumer |
 | --- | --- | --- | --- | --- |

@@ -53,7 +53,7 @@ cdc:
   connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
   connectionString: ${dir:/etc/nomnom/cdc:restaurants-uri}
 
-# ADR 40: кеш чтения каталога; Secret restaurants-valkey (URL ACL-пользователя restaurants)
+# ADR 43: кеш чтения каталога; Secret restaurants-valkey (URL ACL-пользователя restaurants)
 # создаёт chart ops/kind/bootstrap.
 valkey:
   urlSecret:

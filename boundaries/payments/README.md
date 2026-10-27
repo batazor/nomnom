@@ -20,7 +20,7 @@ Python.
 
 ## Use Cases
 
-Статус реализации: application handlers всех перечисленных сценариев реализованы change [`implement-payments-application-layer`](../../openspec/changes/implement-payments-application-layer/) поверх портов и проверены тестами поверх реального PostgreSQL (testcontainers); хранилище — PostgreSQL (`infrastructure/repository`, [локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)), provider adapters ещё не реализованы (см. [Статус реализации](#статус-реализации)).
+Статус реализации: application handlers всех перечисленных сценариев реализованы change [`implement-payments-application-layer`](../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/) поверх портов и проверены тестами поверх реального PostgreSQL (testcontainers); хранилище — PostgreSQL (`infrastructure/repository`, [локальный ADR 1](docs/adr/0001-use-postgresql-for-payments-storage.md)), provider adapters ещё не реализованы (см. [Статус реализации](#статус-реализации)).
 
 ### Commands
 
@@ -79,7 +79,7 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 
 ## Service identity
 
-Синхронные вызовы других контекстов (Activities Order Fulfillment Workflow `orders-worker`) аутентифицируются Kubernetes projected ServiceAccount token по [ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md) (FR-431, FR-432). `ServiceTokenSubjectResolver` (`infrastructure/grpc/identity.py`) реализует порт `SubjectResolver`: читает metadata вызова и соединяет не зависящие от транспорта `ServiceTokenVerifier` (`service_token.py`) и `UserAssertionVerifier` (`user_assertion.py`). Каждый вызов проверяется по общему контракту [design](../../openspec/changes/add-service-identity/design.md):
+Синхронные вызовы других контекстов (Activities Order Fulfillment Workflow `orders-worker`) аутентифицируются Kubernetes projected ServiceAccount token по [ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md) (FR-431, FR-432). `ServiceTokenSubjectResolver` (`infrastructure/grpc/identity.py`) реализует порт `SubjectResolver`: читает metadata вызова и соединяет не зависящие от транспорта `ServiceTokenVerifier` (`service_token.py`) и `UserAssertionVerifier` (`user_assertion.py`). Каждый вызов проверяется по общему контракту [design](../../openspec/changes/archive/2026-10-25-add-service-identity/design.md):
 
 | Проверка | Отказ |
 | --- | --- |
@@ -106,7 +106,7 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 
 ### User identity
 
-Пользователя передаёт только BFF: вместе с собственным service token он присылает metadata `x-nomnom-user-assertion` — ES256 JWT, подписанный ключом BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md), FR-471–FR-473). `ServiceTokenSubjectResolver` проверяет вызов по порядку [design](../../openspec/changes/add-user-identity-assertions/design.md):
+Пользователя передаёт только BFF: вместе с собственным service token он присылает metadata `x-nomnom-user-assertion` — ES256 JWT, подписанный ключом BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md), FR-471–FR-473). `ServiceTokenSubjectResolver` проверяет вызов по порядку [design](../../openspec/changes/archive/2026-10-25-add-user-identity-assertions/design.md):
 
 1. service token, как выше; отказ — `UNAUTHENTICATED`, assertion не рассматривается;
 2. нет `x-nomnom-user-assertion` — `Subject(service, <service-name>)`, как раньше;
@@ -125,7 +125,7 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 
 ## Authorization
 
-Порт `PaymentPermissionChecker` (`slices/payment/applications/ports.py`) реализует `SpiceDBPermissionChecker` (`infrastructure/authorization/spicedb.py`) на официальном клиенте `authzed` по [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md) и нормативной таблице [design](../../openspec/changes/add-spicedb-authorization/design.md) (FR-435). Schema и grants развёртывания — `authorization/schema.zed` и `authorization/bootstrap.yaml`.
+Порт `PaymentPermissionChecker` (`slices/payment/applications/ports.py`) реализует `SpiceDBPermissionChecker` (`infrastructure/authorization/spicedb.py`) на официальном клиенте `authzed` по [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md) и нормативной таблице [design](../../openspec/changes/archive/2026-10-25-add-spicedb-authorization/design.md) (FR-435). Schema и grants развёртывания — `authorization/schema.zed` и `authorization/bootstrap.yaml`.
 
 | `PaymentPermission` | SpiceDB `CheckPermission` |
 | --- | --- |
@@ -249,7 +249,7 @@ Histograms в секундах получают явные границы `SECON
 
 Реализован in-memory агрегат `Payment`: точный `Money`, чистая табличная FSM, типизированные ошибки переходов, восстановление из persisted state и забор domain events (`PaymentAuthorized`, `PaymentCaptured`, `PaymentAuthorizationCancelled`, `PaymentRefunded`, `PaymentFailed`). Также реализованы policies `PaymentRefundable` и `PaymentCapturable` с типизированными reasons и unit tests.
 
-Реализован application-слой всех use cases по change [`implement-payments-application-layer`](../../openspec/changes/implement-payments-application-layer/) (`FR-400`…`FR-414`, `AC-400`…`AC-432`):
+Реализован application-слой всех use cases по change [`implement-payments-application-layer`](../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/) (`FR-400`…`FR-414`, `AC-400`…`AC-432`):
 
 - `Payment Operation` (`domains/payment/operation.py`) — запись одной логической операции с idempotency key и FSM `pending → succeeded | declined`. Что делает каждый `OperationKind`, задаёт одна таблица `OPERATION_KINDS` (`domains/payment/operation_kinds.py`): право (`PaymentPermission`), trigger `Payment`, действие при успехе и поведение при отказе (отказ Authorization переводит `Payment` в `failed`, остальные отказы его не меняют). Доменный сервис `complete_operation` (`domains/payment/completion.py`) применяет результат provider по этой таблице; вид без правила — `UnknownOperationKindError`, `Payment` и операция не меняются (FR-549, AC-639). Бизнес-метрики (`infrastructure/observability/domain.py`) относят отказ к счётчику по той же таблице. Контракты repositories — в `domains/payment/repository.py`.
 - Финансовые операции следуют схеме `UoW { pending operation } → provider call → UoW { result + Payment + Outbox }`. Повтор с тем же idempotency key возвращает сохранённый результат без provider call либо завершает незавершённую операцию повтором provider call с тем же ключом. У `Payment` не более одной незавершённой операции.

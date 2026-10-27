@@ -369,7 +369,7 @@ data:
       forward_to = [otelcol.receiver.prometheus.infra.receiver]
     }
 
-    // Valkey: по экспортеру на владельца (ADR 40); ACL-пользователь exporter без доступа к
+    // Valkey: по экспортеру на владельца (ADR 43); ACL-пользователь exporter без доступа к
     // ключам, пароль из Secret alloy-valkey (chart ops/kind/bootstrap).
     prometheus.exporter.redis "restaurants" {
       redis_addr     = "valkey-restaurants.nomnom-data.svc.cluster.local:6379"

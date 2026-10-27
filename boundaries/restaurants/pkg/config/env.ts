@@ -77,7 +77,7 @@ export const DEFAULT_CONSUMER_RETRY_MAX_INTERVAL = "5s";
 export const SIMULATOR_INTERVAL_ENV = "SIMULATOR__INTERVAL";
 export const SIMULATOR_MIN_DELAY_ENV = "SIMULATOR__MIN_DELAY";
 export const SIMULATOR_MAX_DELAY_ENV = "SIMULATOR__MAX_DELAY";
-// Valkey, кеш чтения каталога (ADR 40, локальный ADR 3): URL обязателен, без default.
+// Valkey, кеш чтения каталога (ADR 43, локальный ADR 3): URL обязателен, без default.
 export const VALKEY_URL_ENV = "VALKEY__URL";
 export const VALKEY_COMMAND_TIMEOUT_ENV = "VALKEY__COMMAND_TIMEOUT";
 export const DEFAULT_VALKEY_COMMAND_TIMEOUT = "50ms";

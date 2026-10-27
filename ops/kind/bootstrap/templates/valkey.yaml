@@ -1,4 +1,4 @@
-# Valkey restaurants тестового окружения (ADR 40): кеш чтения каталога, без persistence —
+# Valkey restaurants тестового окружения (ADR 43): кеш чтения каталога, без persistence —
 # данные не переживают пересоздание Pod, после рестарта кеш заполняется заново из MongoDB.
 # default-пользователь выключен; ACL-пользователь restaurants видит только ключи restaurants:*.
 # ACL-пользователь exporter (Alloy prometheus.exporter.redis) читает только INFO и CONFIG GET,

@@ -1,4 +1,4 @@
-// Valkey client of the catalog read cache (ADR 40, local ADR 3). The cache
+// Valkey client of the catalog read cache (ADR 43, local ADR 3). The cache
 // only speeds reads up: the process starts and serves without a reachable
 // Valkey, and every command fails fast while the connection is down (no
 // offline queue, no per-request retries), so readers go to MongoDB instead.

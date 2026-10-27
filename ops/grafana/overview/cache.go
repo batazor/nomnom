@@ -1,6 +1,6 @@
 package overview
 
-// Кеш чтения в Valkey (ADR 40, раздел cache инвентаря): клиентская сторона —
+// Кеш чтения в Valkey (ADR 43, раздел cache инвентаря): клиентская сторона —
 // lookups и ошибки API, обновления по событиям — consumer контекста. Серверные
 // метрики Valkey — row Valkey в Platform / Overview.
 
@@ -39,7 +39,7 @@ func cacheAlerts(o Options, sc Scope, dash string) []Alert {
 	}}
 }
 
-// valkeyOwners — владельцы Valkey (ADR 40): label owner экспортера Alloy.
+// valkeyOwners — владельцы Valkey (ADR 43): label owner экспортера Alloy.
 var valkeyOwners = []string{"restaurants"}
 
 // valkeyPanels — row Valkey в Platform / Overview.

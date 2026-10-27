@@ -67,7 +67,7 @@ spec:
         - protocol: TCP
           port: 50051
 ---
-# restaurants: своя MongoDB, свой Valkey (кеш чтения каталога, ADR 40), Kafka.
+# restaurants: своя MongoDB, свой Valkey (кеш чтения каталога, ADR 43), Kafka.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

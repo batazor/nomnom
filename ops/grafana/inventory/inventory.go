@@ -37,7 +37,7 @@ const (
 	OrdersWorker   = "orders-worker"
 	OrdersConsumer = "orders-consumer"
 	Restaurants    = "restaurants"
-	// RestaurantsConsumer — Inbox OrderPlaced и обновление кеша каталога (ADR 40).
+	// RestaurantsConsumer — Inbox OrderPlaced и обновление кеша каталога (ADR 43).
 	RestaurantsConsumer = "restaurants-consumer"
 	Delivery            = "delivery"
 	Payments            = "payments"
@@ -53,7 +53,7 @@ const (
 	PostgreSQLServer = "postgresql"
 	CertManager      = "cert-manager"
 	KafkaConnect     = "kafka-connect"
-	// Valkey — кеш чтения каталога restaurants (ADR 40).
+	// Valkey — кеш чтения каталога restaurants (ADR 43).
 	Valkey = "valkey"
 )
 
@@ -124,7 +124,7 @@ var Sections = []Section{
 	{"graphql", "GraphQL / HTTP (BFF, Cosmo Router)", "Встроенная telemetry Cosmo Router: OTLP к Alloy в профиле grafana-cloud (`BFF__METRICS_OTLP_ENABLED`). Alloy оставляет три инструмента и labels `wg_operation_type`, `wg_subgraph_name`, `http_status_code` — operation name, клиент и версии router отбрасываются ради квоты series."},
 	{"runtime", "Runtime", "Go: `go.opentelemetry.io/contrib/instrumentation/runtime` (semconv runtime Go). Node.js: `@opentelemetry/instrumentation-runtime-node` и `process.*`/`v8js.memory.heap.limit` своими callbacks. Python и Rust: `process.cpu.time`, `process.memory.usage`, `process.thread.count` своими callbacks (Python — ещё `cpython.gc.collections`; Rust читает procfs), потому что готовые instrumentations пишут устаревшие labels. Метрики tokio runtime не имеют semconv и не инвентаризированы."},
 	{"db", "Database client (PostgreSQL, MongoDB)", "Semconv `db.client.*`: `pgx` + otelpgx в `orders`, MongoDB Node.js driver в `restaurants`: операции — instrumentation драйвера, пул — CMAP events (`db.client.connection.*` и `nomnom.db.client.connection.pool.clears`). Пул PostgreSQL `orders` — tracer и `Pool.Stat` pgx, `payments` — `psycopg_pool` (`get_stats` и замер выдачи соединения); операции `payments` (psycopg instrumentation) не подключены. Пул `delivery` — sqlx (состояние пула при сборе и замер выдачи соединения), операции `delivery` — `sql!` хранилища (`db.client.operation.duration` и client span на statement, `pkg/telemetry/db.rs`). Серверные метрики PostgreSQL — Platform / Overview (раздел [PostgreSQL](#postgresql)), MongoDB — пока нет; в overview сервисов не дублируются."},
-	{"cache", "Read cache (Valkey)", "ADR 40: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`); `restaurants-consumer` обновляет ключи по событиям открытия, закрытия и доступности блюда, остальное — TTL. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB."},
+	{"cache", "Read cache (Valkey)", "ADR 43: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`pkg/infrastructure/valkey`); `restaurants-consumer` обновляет ключи по событиям открытия, закрытия и доступности блюда, остальное — TTL. Ключи и restaurant id не labels. `bypass` — Valkey недоступен, чтение из MongoDB."},
 	{"watermill", "Kafka: встроенные метрики Watermill", "`components/metrics.PrometheusMetricsBuilder`, namespace `watermill`, subsystem — deployable role (`consumer`). Экспорт через OTel Prometheus bridge (`orders/pkg/telemetry`) в общий OTLP pipeline; имена Prometheus сохраняются без изменений. Референс панелей — Grafana dashboard 9777, отдельный dashboard не создаётся."},
 	{"messaging-otel", "Kafka: semconv messaging (не-Go контексты)", "Kafka-клиенты: kafkajs (`restaurants`), confluent-kafka (`payments`), rdkafka (`delivery`). Trace context: Outbox хранит `traceparent` span, в котором событие записано; Debezium отдаёт его header `traceparent` без изменений (ADR 37); consumer — CONSUMER span `process <topic>` дочерним. Метрики semconv messaging не инвентаризированы."},
 	{"messaging", "Kafka: собственный OTel middleware и consumer lag", "Middleware в composition root поверх Watermill (и эквивалент в других runtime): то, чего нет во встроенных метриках. Порядок: OTel/metrics → Retry (transient) → PoisonQueue (permanent) → handler. Attributes только `nomnom.messaging.handler`, `nomnom.event.type`, `messaging.destination.name`, `nomnom.error.class`; без `event_id`/`aggregate_id`. Consumer lag — Alloy `prometheus.exporter.kafka`, не Watermill."},
@@ -140,7 +140,7 @@ var Sections = []Section{
 	{"pods", "Pods (Kubernetes)", "Alloy: cAdvisor kubelet через API server proxy и kube-state-metrics (только pods прикладных неймспейсов), `job=\"infra/kubernetes\"`. Метрики Prometheus, без `target_info`: сервис выбирается `namespace` и префиксом `pod`. Row Pods в overview каждого сервиса и в Platform / Overview."},
 	{"spicedb", "SpiceDB (сервер)", "Alloy scrape `:9090` pod SpiceDB, `job=\"infra/spicedb\"`. Серверная сторона; клиентская — row Authorization сервисов. Platform / Overview."},
 	{"postgresql", "PostgreSQL (сервер)", "Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job=\"infra/postgresql\"`, label `owner`; `stat_database` и размер — только база владельца. Клиентская сторона — row Dependencies сервисов. Platform / Overview."},
-	{"valkey", "Valkey (сервер)", "Alloy `prometheus.exporter.redis` по владельцу (ADR 40), `job=\"infra/valkey\"`, label `owner`; ACL-пользователь `exporter` только с INFO, CONFIG GET и служебными командами, без доступа к ключам. Клиентская сторона — row Cache сервиса. Platform / Overview."},
+	{"valkey", "Valkey (сервер)", "Alloy `prometheus.exporter.redis` по владельцу (ADR 43), `job=\"infra/valkey\"`, label `owner`; ACL-пользователь `exporter` только с INFO, CONFIG GET и служебными командами, без доступа к ключам. Клиентская сторона — row Cache сервиса. Platform / Overview."},
 	{"certificates", "Certificates (cert-manager)", "Alloy scrape `:9402` controller cert-manager, `job=\"infra/cert-manager\"`: все `Certificate` кластера, `namespace`/`name` — неймспейс и имя ресурса. Row Certificates в Platform / Overview и в overview контекстов, у которых есть свои сертификаты (BFF: `bff-assertion-key`)."},
 }
 
@@ -315,7 +315,7 @@ var Metrics = []Metric{
 	{Name: "pg_stat_database_temp_bytes", Section: "postgresql", Type: Counter, Source: "postgres_exporter `stat_database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer}), Note: "Запросы, вылезшие за `work_mem`."},
 	{Name: "pg_database_size_bytes", Section: "postgresql", Type: Gauge, Source: "postgres_exporter `database`", Labels: []string{"owner", "datname"}, Status: verified([]string{PostgreSQLServer})},
 
-	// cache (ADR 40)
+	// cache (ADR 43)
 	{Name: "nomnom_cache_lookups_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.lookups`", Labels: []string{"nomnom_cache_name", "nomnom_cache_result"}, Status: expected(Restaurants), Note: "hit ratio = hit / (hit + miss); доля bypass — время без Valkey."},
 	{Name: "nomnom_cache_errors_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.errors`", Labels: []string{"nomnom_cache_name", "nomnom_cache_operation"}, Status: expected(Restaurants, RestaurantsConsumer), Note: "`get`/`set` — чтение API, `refresh` — обновление по событию в `restaurants-consumer`."},
 	{Name: "nomnom_cache_refreshes_total", Section: "cache", Type: Counter, Source: "`nomnom.cache.refreshes`", Labels: []string{"nomnom_cache_name"}, Status: expected(RestaurantsConsumer), Note: "Пишет `restaurants-consumer` по RestaurantOpened/Closed, MenuItemAdded, MenuItemUpdated и MenuItemAvailabilityChanged."},

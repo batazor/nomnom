@@ -33,7 +33,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `ApplyProviderCallbackHandler` в [`handler.py`](handler.py), требования FR-409, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Регистрация `provider_message_id` (порт `ProviderMessageInbox`) и применение результата к операции по `operation_id` выполняются в одной Unit of Work; повторный message — no-op, ошибка откатывает регистрацию.
+Handler `ApplyProviderCallbackHandler` в [`handler.py`](handler.py), требования FR-409, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Регистрация `provider_message_id` (порт `ProviderMessageInbox`) и применение результата к операции по `operation_id` выполняются в одной Unit of Work; повторный message — no-op, ошибка откатывает регистрацию.
 
 ## Acceptance
 

@@ -51,7 +51,7 @@ type Options struct {
 	// DatabasePool — пул клиента БД экспортирует полный набор db.client.connection.*
 	// (pool.go): saturation, pending, timeouts, wait/use/create time и alert rules пула.
 	DatabasePool bool
-	// Cache — кеш чтения в Valkey (ADR 40, cache.go): row Cache и alert на долю bypass.
+	// Cache — кеш чтения в Valkey (ADR 43, cache.go): row Cache и alert на долю bypass.
 	Cache           bool
 	PaymentProvider bool
 	Kafka           *Kafka

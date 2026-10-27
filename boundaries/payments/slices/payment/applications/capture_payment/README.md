@@ -34,7 +34,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `CapturePaymentHandler` в [`handler.py`](handler.py), требования FR-402…FR-404, FR-407, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Полный Capture через общий поток `operation_flow`. Отказ provider сохраняется в `Payment Operation`, `Payment` остаётся `authorized`. Policy `PaymentCapturable` не применяется, пока не определён срок Authorization.
+Handler `CapturePaymentHandler` в [`handler.py`](handler.py), требования FR-402…FR-404, FR-407, FR-411, FR-414 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Полный Capture через общий поток `operation_flow`. Отказ provider сохраняется в `Payment Operation`, `Payment` остаётся `authorized`. Policy `PaymentCapturable` не применяется, пока не определён срок Authorization.
 
 ## Acceptance
 

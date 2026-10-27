@@ -126,7 +126,7 @@ export interface ConsumerCradle {
   readonly valkeyConfig: ValkeyEnabledConfig;
   readonly valkey: Valkey;
   readonly cacheMetrics: CacheMetrics;
-  /** ADR 40: opening and availability events rewrite the read cache keys. */
+  /** ADR 43: opening and availability events rewrite the read cache keys. */
   readonly cacheRefresh: CacheRefreshHandler;
   readonly deadLetters: MessagePublisher;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */

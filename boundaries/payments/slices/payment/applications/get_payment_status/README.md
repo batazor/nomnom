@@ -15,7 +15,7 @@
 
 ## Реализация
 
-Handler `GetPaymentStatusHandler` в [`handler.py`](handler.py), требования FR-411, FR-412 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Читает read model `PaymentStatusReader` (адаптер `infrastructure/repository/queries.py`) прямо из таблицы `payments`, без восстановления агрегата `Payment` и без Unit of Work; результат содержит `market_id` Payment и не содержит `Provider Reference`.
+Handler `GetPaymentStatusHandler` в [`handler.py`](handler.py), требования FR-411, FR-412 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Читает read model `PaymentStatusReader` (адаптер `infrastructure/repository/queries.py`) прямо из таблицы `payments`, без восстановления агрегата `Payment` и без Unit of Work; результат содержит `market_id` Payment и не содержит `Provider Reference`.
 
 ## Acceptance
 

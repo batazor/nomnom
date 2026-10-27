@@ -3,7 +3,7 @@
 // contract in nomnom/restaurants/v1/events.proto (stream
 // restaurants.v1.menu-events, key = menu id, the Menu aggregate): they carry
 // keys only, the content is read through GetMenu. The read cache of GetMenu is
-// refreshed by them (ADR 40). MenuCreated stays internal: an absent menu is
+// refreshed by them (ADR 43). MenuCreated stays internal: an absent menu is
 // not cached.
 import {
   MenuItemAddedSchema,

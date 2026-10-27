@@ -1,5 +1,5 @@
 // Refresh of the read cache by Integration Events of the context itself
-// (ADR 40, local ADR 3): Debezium publishes them from the Outbox right after
+// (ADR 43, local ADR 3): Debezium publishes them from the Outbox right after
 // the commit, restaurants-consumer reads them in its own consumer group and
 // rewrites the changed keys from MongoDB. A refresh reads the current
 // document, so redeliveries and reordering within the TTL need no Inbox.

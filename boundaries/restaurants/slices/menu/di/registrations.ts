@@ -39,7 +39,7 @@ export interface MenuDependencies {
   readonly menuAccessControl: MenuAccessControl;
   /** Create Menu requires an existing restaurant (FR-211). */
   readonly restaurants: RestaurantRepository;
-  /** ADR 40: Get Menu is cached in Valkey for `valkeyConfig.ttlMs`. */
+  /** ADR 43: Get Menu is cached in Valkey for `valkeyConfig.ttlMs`. */
   readonly valkey: Valkey;
   readonly valkeyConfig: ValkeyEnabledConfig;
   readonly cacheMetrics: CacheMetrics;

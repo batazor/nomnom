@@ -104,7 +104,7 @@ const restaurantSource = () => {
   };
 };
 
-describe("catalog read cache on Valkey (ADR 40)", () => {
+describe("catalog read cache on Valkey (ADR 43)", () => {
   let client: Valkey;
   const prefix = `restaurants:test-${randomUUID()}:`;
   const cacheOf = (ttlMs: number) =>
@@ -165,7 +165,7 @@ describe("catalog read cache on Valkey (ADR 40)", () => {
   });
 });
 
-describe("refresh by Integration Events (ADR 40)", () => {
+describe("refresh by Integration Events (ADR 43)", () => {
   let client: Valkey;
   const options = () => ({
     client,
@@ -418,7 +418,7 @@ describe("refresh by Integration Events (ADR 40)", () => {
   });
 });
 
-describe("catalog read cache without Valkey (ADR 40)", () => {
+describe("catalog read cache without Valkey (ADR 43)", () => {
   // Nothing listens on port 1: the client never becomes ready.
   const valkey = connectValkey(testValkeyConfig("redis://127.0.0.1:1"), {
     connectionName: "test",

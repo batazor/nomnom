@@ -1,5 +1,5 @@
 // Package migration applies the schema migrations of the orders database
-// (ADR 38, ADR 39). Every slice with tables has its own Set, next to the
+// (ADR 42, ADR 39). Every slice with tables has its own Set, next to the
 // repositories of those tables, with its own numbering and version table; the
 // composition root passes them to Apply in order. The version table is named
 // only by the ID of the Set, never by the package, directory or slice that

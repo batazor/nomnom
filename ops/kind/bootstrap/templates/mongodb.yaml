@@ -169,7 +169,7 @@ data:
   init.js: {{ .Files.Get "files/mongodb-init.js" | toJson }}
 ---
 # Идемпотентно: rs.initiate, если replica set ещё не создан, затем пользователь restaurants
-# (readWrite и dbAdmin: процессы restaurants при старте создают коллекции и индексы, ADR 38). Hook запускается
+# (readWrite и dbAdmin: процессы restaurants при старте создают коллекции и индексы, ADR 42). Hook запускается
 # после --wait, то есть после readiness MongoDB, и пересоздаётся при каждом upgrade.
 apiVersion: batch/v1
 kind: Job

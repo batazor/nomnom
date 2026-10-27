@@ -343,7 +343,7 @@ stateDiagram-v2
 
 Интерпретация `AlreadyInState` — application layer ([Transition table и результат](#transition-table-и-результат)). Предложение для kitchen board: Start Preparation и Mark Ready for Pickup превращают повтор в успешный no-op без нового Domain Event; Cancel Restaurant Order возвращает сохранённый результат отмены. Политика остаётся предложением до подтверждения продуктом.
 
-Текущие допущения реализации ([design.md change `implement-restaurants-application-layer`](../openspec/changes/implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)); продуктовые вопросы остаются открытыми:
+Текущие допущения реализации ([design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам)); продуктовые вопросы остаются открытыми:
 
 - интерпретация повтора Start Preparation и Mark Ready for Pickup — обязательный параметр handler `onRepeat: "succeed-without-event" | "reject"` без значения по умолчанию, выбор в composition root;
 - guard `Cancel` из `PREPARING`/`ASSEMBLED` — политика из обязательного параметра handler `cancellationDuringPreparation: "allow" | "reject"` без значения по умолчанию; `reject` даёт `GuardFailed{cancellation_during_preparation_not_allowed}`;

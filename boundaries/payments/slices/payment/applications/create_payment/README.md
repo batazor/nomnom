@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler `CreatePaymentHandler` в [`handler.py`](handler.py), требования FR-400, FR-411 change [`implement-payments-application-layer`](../../../../../../openspec/changes/implement-payments-application-layer/). Естественный ключ идемпотентности — `order_id`: повтор с теми же Market, суммой и валютой возвращает существующий `Payment`, с другими — `PaymentAlreadyExistsError`. `market_id` — Market заказа ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)), обязателен и неизменяем: пустой или не slug `^[a-z][a-z0-9-]{1,31}$` — `InvalidPaymentRequestError` до проверки прав. Одиночная запись без Unit of Work; provider не вызывается, факт не публикуется.
+Handler `CreatePaymentHandler` в [`handler.py`](handler.py), требования FR-400, FR-411 change [`implement-payments-application-layer`](../../../../../../openspec/changes/archive/2026-10-25-implement-payments-application-layer/). Естественный ключ идемпотентности — `order_id`: повтор с теми же Market, суммой и валютой возвращает существующий `Payment`, с другими — `PaymentAlreadyExistsError`. `market_id` — Market заказа ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)), обязателен и неизменяем: пустой или не slug `^[a-z][a-z0-9-]{1,31}$` — `InvalidPaymentRequestError` до проверки прав. Одиночная запись без Unit of Work; provider не вызывается, факт не публикуется.
 
 ## Acceptance
 

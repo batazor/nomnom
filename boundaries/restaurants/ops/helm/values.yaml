@@ -239,7 +239,7 @@ mongodb:
     # Одновременно устанавливаемые соединения: сглаживает шторм подключений после рестарта.
     maxConnecting: 2
 
-# Кеш чтения каталога (ADR 40, локальный ADR 3): GetRestaurant, GetMenu и ListRestaurants в Valkey.
+# Кеш чтения каталога (ADR 43, локальный ADR 3): GetRestaurant, GetMenu и ListRestaurants в Valkey.
 # restaurants-consumer обновляет ключи по RestaurantOpened/Closed и MenuItemAvailabilityChanged
 # сразу после commit, остальное устаревает до TTL. Пока urlSecret.name пуст, VALKEY__* не
 # задаются и процессы не стартуют (VALKEY__URL обязателен). Недоступный Valkey процесс не

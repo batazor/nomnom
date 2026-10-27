@@ -9,7 +9,7 @@ import {
 } from "./env.ts";
 import { durationSchema } from "./schemas.ts";
 
-/** Кеш чтения каталога в Valkey (ADR 40, локальный ADR 3), когда задан `VALKEY__URL`. */
+/** Кеш чтения каталога в Valkey (ADR 43, локальный ADR 3), когда задан `VALKEY__URL`. */
 export type ValkeyEnabledConfig = Readonly<{
   enabled: true;
   /** `redis://` или `rediss://` с ACL-пользователем контекста; приходит из Secret. */
