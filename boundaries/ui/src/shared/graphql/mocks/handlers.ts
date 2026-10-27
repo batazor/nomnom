@@ -1,9 +1,8 @@
 import { execute, getOperationAST, parse, validate } from "graphql";
 import { HttpResponse, http } from "msw";
 import { graphql } from "msw/graphql";
-
-import { publicSchema } from "./schema";
 import { marketFixtures } from "./restaurant-fixtures";
+import { publicSchema } from "./schema";
 import { bffError, createMockStore, type MockStore } from "./store";
 
 // The BFF of a Market: /m/{marketId}/graphql (ADR 41).
