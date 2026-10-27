@@ -73,3 +73,17 @@ Cosmo Router и BFF. Регистрация, восстановление пар
   выходе за пределы тестового окружения провайдер выбирается заново, без изменений контекстов.
 - Refresh token в `sessionStorage` доступен скриптам страницы: XSS может его украсть. Риск
   ограничен вкладкой, ротацией и CSP; для production выбирается BFF-session с httpOnly cookie.
+
+## References
+
+- [Duende IdentityServer — Signing Key Management](https://docs.duendesoftware.com/identityserver/v6/fundamentals/keys/):
+  фазы ротации announce → signing → retire; новый ключ публикуется до того, как им подписывают,
+  прежний остаётся для проверки на время жизни token.
+- [Auth0 — Rotate Signing Keys](https://auth0.com/docs/get-started/tenant-settings/signing-keys/rotate-signing-keys):
+  JWKS содержит текущий и следующий ключ; проверяющий принимает любой из опубликованных.
+- [Gravitee — JWKS and Key Rotation for JWT Validation](https://gravitee.io/jwks-guide.html) и
+  [JWKS Rotation and Key Discovery](https://gravitee.io/corpus/gen-1799/authentication-and-key-agreement/jwks-rotation-and-key-discovery.html):
+  overlap-then-retire, окно перекрытия не меньше времени жизни token и кеша JWKS самого медленного
+  проверяющего; проверяющий обновляет JWKS по расписанию и сразу — на неизвестный `kid`.
+- [Dex — Tokens](https://dexidp.io/docs/tokens): `expiry.signingKeys` / `keysRotationPeriod` local
+  signer; публичная часть ключа остаётся для проверки, пока действуют подписанные им token.
