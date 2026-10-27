@@ -86,7 +86,7 @@ Bootstrap описывается chart `ops/kind/bootstrap` (`kind-bootstrap`, r
 Release `bootstrap` принимает ресурсы, созданные скриптами (`--take-ownership`); образы
 хранилищ теперь закреплены digest, поэтому первый deploy после перехода один раз
 перезапускает SpiceDB, PostgreSQL и MongoDB (данные `emptyDir` теряются, миграции
-приложений процессы выполняют заново при старте, ADR 38).
+приложений процессы выполняют заново при старте, ADR 42).
 
 Ключ BFF принадлежит cert-manager: Secret `bff-assertion-key` содержит `tls.key` вместо
 `key.pem`. Потребители ключа — BFF (`values/bff.yaml`) и проверка 7 `verify.sh` (подпись

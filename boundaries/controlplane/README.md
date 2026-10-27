@@ -49,7 +49,7 @@ server-side apply применяет в неймспейс публичного 
   [`publishroutes`](slices/topology/applications/publishroutes/README.md); PostgreSQL-репозитории
   (pgx + squirrel, ADR 39), проверка SpiceDB и адаптер маршрутов `infrastructure/gatewayroutes`
   (client-go, dynamic client, in-cluster ServiceAccount).
-- Миграции встроены в бинарь и применяются при старте под advisory lock (ADR 38), набор `topology`.
+- Миграции встроены в бинарь и применяются при старте под advisory lock (ADR 42), набор `topology`.
 - DI — Google Wire (ADR 5): `di/wire.go`, `make generate`.
 - Runtime contract (ADR 17): бизнес-порт 8086, технический порт `metrics` 9086 с `/health/*`;
   OpenTelemetry (ADR 9) — OTLP metrics и traces, JSON-логи.

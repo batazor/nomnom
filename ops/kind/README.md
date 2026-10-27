@@ -99,11 +99,11 @@ make kind-down
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
   [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, один PostgreSQL с базами `orders`,
   `payments`, `delivery`, `controlplane`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
-  [ADR 40](../../docs/adr/0040-application-caching-policy.md): без persistence, ACL-пользователь
+  [ADR 43](../../docs/adr/0043-application-caching-policy.md): без persistence, ACL-пользователь
   `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`; пользователь `exporter`
   для Alloy — только INFO и CONFIG GET, пароль — Secret `alloy-valkey`) в `nomnom-data` (`emptyDir`). Secret DSN
   кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`). Миграции
-  каждый процесс применяет сам при старте ([ADR 38](../../docs/adr/0038-schema-migrations-at-process-startup.md)).
+  каждый процесс применяет сам при старте ([ADR 42](../../docs/adr/0042-schema-migrations-at-process-startup.md)).
 
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
   `nomnom-observability` и OTLP метрик `orders`/`orders-consumer` в Grafana Cloud free tier;

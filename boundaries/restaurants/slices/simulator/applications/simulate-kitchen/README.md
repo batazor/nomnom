@@ -22,6 +22,6 @@
 
 ## Acceptance
 
-FR-605, AC-763, AC-764 change [`add-demo-simulator`](../../../../../../openspec/changes/add-demo-simulator/); FR-609 change [`add-fulfillment-eta`](../../../../../../openspec/changes/add-fulfillment-eta/); FR-618, AC-786 change [`add-cook-and-courier-pools`](../../../../../../openspec/changes/add-cook-and-courier-pools/).
+FR-605, AC-763, AC-764 change [`add-demo-simulator`](../../../../../../openspec/changes/add-demo-simulator/); FR-609 change [`add-fulfillment-eta`](../../../../../../openspec/changes/archive/2026-10-27-add-fulfillment-eta/); FR-618, AC-786 change [`add-cook-and-courier-pools`](../../../../../../openspec/changes/add-cook-and-courier-pools/).
 
 Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

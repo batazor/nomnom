@@ -6,7 +6,7 @@ Date: 2026-10-26
 
 Accepted
 
-Вводит кеш по [общесистемному ADR 40](../../../../docs/adr/0040-application-caching-policy.md).
+Вводит кеш по [общесистемному ADR 43](../../../../docs/adr/0043-application-caching-policy.md).
 
 ## Context
 

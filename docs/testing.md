@@ -241,7 +241,7 @@ k6 отвечает за load, stress, spike и soak: как меняются la
 k6 → GraphQL (Cosmo Router / BFF) → internal gateway → bounded contexts
 ```
 
-Прямой gRPC (`k6/net/grpc`, proto из закреплённого BSR commit) допускается только для профилирования одного сервиса, отдельным сценарием, и не считается клиентской производительностью. Endpoint для тестов не создаётся: сценарий без публичной операции заблокирован. Сейчас публичная schema содержит только технический `bffInfo`, поэтому заблокированы все бизнес-сценарии, включая customer. Kitchen и courier остаются заблокированными и после появления customer-операций, пока нет публичного API отдельных operator/courier приложений ([UI](ui.md)).
+Прямой gRPC (`k6/net/grpc`, proto из закреплённого BSR commit) допускается только для профилирования одного сервиса, отдельным сценарием, и не считается клиентской производительностью. Endpoint для тестов не создаётся: сценарий без публичной операции заблокирован. Публичная schema уже содержит операции покупателя (`restaurants`, `restaurant`, `placeOrder`, `order`, `customerOrders`, `requestOrderCancellation`), кухни (`applyKitchenAction`) и курьера (`acceptDeliveryOffer`, `applyCourierDeliveryAction`); k6-сценарии поверх них ещё не написаны ([tests/performance](../tests/performance/README.md)).
 
 ### Closed loop
 

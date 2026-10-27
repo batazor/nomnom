@@ -8,7 +8,7 @@ Accepted
 
 Закрывает открытый вопрос «драйверы, ORM/ODM и инструменты миграций» из
 [8. Storage Strategy](0008-storage-strategy-postgresql-and-mongodb.md); уточняет
-[38. Миграции схемы применяет сам процесс при старте](0038-schema-migrations-at-process-startup.md).
+[42. Миграции схемы применяет сам процесс при старте](0042-schema-migrations-at-process-startup.md).
 
 ## Context
 
@@ -52,7 +52,7 @@ ORM и ODM не используются. Запросы пишутся на SQL
   имён пакетов, каталогов и слайсов, и рефакторинг кода его не меняет; смена идентификатора —
   только миграцией. Запуск один на процесс: явный упорядоченный список наборов в
   composition root, общий набор первым, без автопоиска.
-- Одновременный старт нескольких pods ([ADR 38](0038-schema-migrations-at-process-startup.md))
+- Одновременный старт нескольких pods ([ADR 42](0042-schema-migrations-at-process-startup.md))
   сериализует session `pg_advisory_lock`, который процесс PostgreSQL-контекста берёт сам на всё
   применение наборов: lock библиотеки (строка yoyo после убитого процесса требовала бы ручного
   `yoyo break-lock`, advisory lock sqlx попадал бы под `lock_timeout`) не используется или не

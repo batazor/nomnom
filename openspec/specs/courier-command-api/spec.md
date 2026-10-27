@@ -1,7 +1,7 @@
 # courier-command-api Specification
 
 ## Purpose
-TBD - created by archiving change close-order-lifecycle-in-kind. Update Purpose after archive.
+Определяет gRPC API курьерских сценариев `delivery`: регистрацию курьера оператором, местоположение и доступность, работу с предложениями доставки, забор, доставку и отказ доставки через application handlers с их authorization, Unit of Work и Outbox.
 
 ## Requirements
 

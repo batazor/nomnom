@@ -37,13 +37,13 @@ UoW — application port. Он нужен нескольким слайсам о
 | Boundary | Port (shared application-уровень) | Реализация (shared infrastructure boundary) |
 | --- | --- | --- |
 | `orders` (Go) | `pkg/application` | `slices/<slice>/infrastructure/repository` |
-| `restaurants` (TypeScript) | `pkg/application` | `slices/<slice>/infrastructure/repository` |
-| `payments` (Python) | `pkg/application` | После выбора хранилища |
-| `delivery` (Rust) | `pkg/application` | После выбора хранилища |
+| `restaurants` (TypeScript) | `pkg/application` | `pkg/infrastructure/repository` |
+| `payments` (Python) | `pkg/application` | `infrastructure/repository` |
+| `delivery` (Rust) | `pkg/application` | `infrastructure/repository` |
 
 Пути реализации задаются относительно корня boundary так же, как `infrastructure/grpc` и `infrastructure/temporal`. Port и реализация появляются вместе с первым слайсом, которому нужна атомарность нескольких persistence operations; заранее не создаются.
 
-В `payments` port реализован в `pkg/application/unit_of_work.py` как синхронный `UnitOfWork.run(work)`: runtime синхронный, transport и Temporal worker для Python не выбраны; переход на async меняет только сигнатуры ([design.md change `implement-payments-application-layer`](../openspec/changes/implement-payments-application-layer/design.md)).
+В `payments` port реализован в `pkg/application/unit_of_work.py` как синхронный `UnitOfWork.run(work)`: runtime синхронный; переход на async меняет только сигнатуры ([design.md change `implement-payments-application-layer`](../openspec/changes/implement-payments-application-layer/design.md)).
 
 Port — интерфейс из одного метода. Реализация одна на хранилище boundary и общая для всех слайсов: она же владеет механизмом propagation транзакции, которым пользуются репозитории, Inbox и Outbox этого boundary. Сборка — в composition root каждого процесса (API, consumer, Temporal worker) по [ADR 5](adr/0005-dependency-injection-strategy.md).
 
@@ -191,8 +191,8 @@ Repository, Inbox и Outbox работают в контексте активн�
 | --- | --- |
 | `orders` | Транзакция хранится в `context.Context`; repository получает executor из `ctx`: активную транзакцию или pool |
 | `restaurants` | `ClientSession` в `AsyncLocalStorage` или в message/request scope Awilix |
-| `payments` | `contextvars` или scope Dependency Injector после выбора хранилища |
-| `delivery` | Выбирается после выбора хранилища; application API не зависит от типов драйвера. Пока propagation закрыт in-memory адаптером `infrastructure/memory` с синхронным `run` ([design.md change `implement-delivery-application-layer`](../openspec/changes/implement-delivery-application-layer/design.md)) |
+| `payments` | Соединение активной транзакции в `ContextVar` (`infrastructure/repository/database.py`); вложенный `run` присоединяется к ней |
+| `delivery` | Соединение текущей транзакции в thread-local слоте, привязанном к `Store` (`infrastructure/repository/transaction.rs`); application API не зависит от типов драйвера ([ADR 1 контекста](../boundaries/delivery/docs/adr/0001-postgresql-хранилище-delivery.md)) |
 
 Правила:
 
@@ -328,14 +328,13 @@ UoW { record operation (pending, idempotency key) }
 - Multi-document transactions не используются без необходимости; если документную модель можно построить так, чтобы изменение было в одном документе, это предпочтительнее.
 - Транзакции MongoDB требуют replica set, в том числе локально и в тестах.
 
-### `delivery`
+### `delivery` / PostgreSQL
 
-Хранилище не выбрано. При выборе подтверждаются:
+Хранилище — PostgreSQL контекста через `sqlx` ([ADR 1 контекста](../boundaries/delivery/docs/adr/0001-postgresql-хранилище-delivery.md)):
 
-- transaction capabilities и isolation;
-- атомарная запись state + Inbox/Outbox и уникальность `(consumer, event_id)`;
-- защита конкурентных courier assignments (`Accept Delivery Offer`): ровно один актуальный offer становится `Courier Assignment` — через unique constraint, `FOR UPDATE` или версию;
-- корректный rollback при отмене async-задачи посреди транзакции.
+- state + Outbox в одной транзакции `BEGIN`/`COMMIT`/`ROLLBACK`; Kafka consumers и Inbox у `delivery` нет;
+- конкурентные courier assignments (`Accept Delivery Offer`) отсекает optimistic concurrency по `version`: ровно один актуальный offer становится `Courier Assignment`;
+- ошибка или panic внутри `run` откатывают транзакцию; вложенный `run` отклоняется до начала транзакции.
 
 ## Ошибки
 
@@ -409,7 +408,7 @@ MongoDB:
 
 UoW подключается вместе с реализацией соответствующего SDD change; пустые программные scaffolds не создаются.
 
-Application-слой всех четырёх boundaries уже реализован с in-memory адаптерами UoW (changes `implement-{orders,restaurants,delivery,payments}-application-layer`); production-реализаций поверх хранилищ пока нет. Отличия реализации от таблиц ниже отмечены в соответствующих разделах.
+UoW всех четырёх boundaries реализован поверх их хранилищ: PostgreSQL в `orders`, `payments` и `delivery`, MongoDB в `restaurants`. Отличия реализации от таблиц ниже отмечены в соответствующих разделах.
 
 ### `orders`
 

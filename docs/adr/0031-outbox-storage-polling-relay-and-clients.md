@@ -59,9 +59,9 @@ Outbox читает **polling relay** — отдельный процесс `<co
 
 | Context | Хранилище | Миграции | Kafka |
 | --- | --- | --- | --- |
-| `payments` | `psycopg` 3 (синхронный, как handlers) с `psycopg_pool` | версионированные SQL-файлы, применяемые процессом `payments-migrate` (с ADR 38 — самим процессом при старте, с ADR 39 — yoyo-migrations) | `confluent-kafka` |
-| `delivery` | `sqlx` (PostgreSQL, tokio) | `sqlx::migrate!`, процесс `delivery-migrate` (с ADR 38 — сам процесс при старте) | `rdkafka` |
-| `restaurants` | официальный driver `mongodb` | идемпотентное создание коллекций, validators и индексов процессом `restaurants-migrate` (с ADR 38 — сам процесс при старте, с ADR 39 — migrate-mongo) | `@confluentinc/kafka-javascript` |
+| `payments` | `psycopg` 3 (синхронный, как handlers) с `psycopg_pool` | версионированные SQL-файлы, применяемые процессом `payments-migrate` (с ADR 42 — самим процессом при старте, с ADR 39 — yoyo-migrations) | `confluent-kafka` |
+| `delivery` | `sqlx` (PostgreSQL, tokio) | `sqlx::migrate!`, процесс `delivery-migrate` (с ADR 42 — сам процесс при старте) | `rdkafka` |
+| `restaurants` | официальный driver `mongodb` | идемпотентное создание коллекций, validators и индексов процессом `restaurants-migrate` (с ADR 42 — сам процесс при старте, с ADR 39 — migrate-mongo) | `@confluentinc/kafka-javascript` |
 
 Все три Kafka-клиента построены на librdkafka и дают одинаковую семантику idempotent producer. Версии выбираются последними стабильными на момент реализации и фиксируются lock-файлами.
 

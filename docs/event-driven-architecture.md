@@ -369,10 +369,10 @@ Business error не уходит в бесконечный transport retry. Ра
 | --- | --- | --- |
 | `orders` | PostgreSQL | Уникальное ограничение на `(consumer, event_id)` в базе `orders`; запись Inbox в той же транзакции, что и изменения `Order` и Outbox. |
 | `restaurants` | MongoDB | Unique index на `{ consumer, event_id }`; multi-document транзакция охватывает запись Inbox, изменённые документы и Outbox. |
-| `delivery` | Не выбрано | Эквивалентная атомарная защита обязательна и проверяется при выборе хранилища. |
-| `payments` | Не выбрано | Эквивалентная атомарная защита обязательна и проверяется при выборе хранилища. |
+| `delivery` | PostgreSQL | Inbox нет: Kafka consumers у `delivery` нет. Появится consumer — нужна та же атомарная защита `(consumer, event_id)`. |
+| `payments` | PostgreSQL | Первичный ключ `(consumer, event_id)` таблицы `inbox`; сейчас её использует только дедупликация provider webhooks (consumer `payment-provider`) в той же транзакции, что и изменения `Payment` и Outbox. |
 
-Outbox каждого контекста размещается в том же хранилище и фиксируется в той же транзакции, что и его state: таблица SQL Pub/Sub Watermill в PostgreSQL `orders`, коллекция в MongoDB `restaurants`, эквивалентный механизм в хранилищах `delivery` и `payments` после их выбора.
+Outbox каждого контекста размещается в том же хранилище и фиксируется в той же транзакции, что и его state: таблицы `orders_outbox`, `payments_outbox` и `delivery_outbox` в PostgreSQL, коллекция `outbox` в MongoDB `restaurants`; доставляет их Debezium ([ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md)).
 
 Распределение хранилищ описано в [ADR 8](adr/0008-storage-strategy-postgresql-and-mongodb.md). Конкретные таблицы, коллекции, индексы, миграции и реализации определяются отдельно.
 

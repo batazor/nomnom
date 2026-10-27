@@ -13,7 +13,7 @@ Accepted
 [18. SpiceDB](0018-spicedb-for-authorization.md),
 [32. User identity через BFF](0032-user-identity-via-bff-signed-assertions.md),
 [36. GraphQL subscriptions](0036-graphql-subscriptions-via-cosmo-streams.md) и
-[40. Кеширование чтений](0040-application-caching-policy.md). Уточняет точку входа из
+[43. Кеширование чтений](0043-application-caching-policy.md). Уточняет точку входа из
 [локального ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-point.md).
 
 ## Context
@@ -102,7 +102,7 @@ Router ячеек — публичный gateway; всё, что обслужи�
 - Пустой или неизвестный по формату `market_id` — `INVALID_ARGUMENT`. Ячейка не проверяет, что Market
   размещён в ней: туда её направляет router, а ресурс чужого Market в ней не найдётся.
 - Данные, созданные до введения Market, принадлежат стартовому Market `berlin`: миграции схемы
-  ([ADR 38](0038-schema-migrations-at-process-startup.md)) один раз проставляют его явно и делают
+  ([ADR 42](0042-schema-migrations-at-process-startup.md)) один раз проставляют его явно и делают
   поле обязательным.
 
 ### Маршрутизация

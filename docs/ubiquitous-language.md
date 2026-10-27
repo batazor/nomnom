@@ -260,5 +260,5 @@ Context glossary остаются локальными индексами. Пр�
 ## Покрытие источников и ограничения
 
 - Проверены context glossary/README, все root/local ADR, FSM, EDA, Specification, Testing, UoW, application-model rules ADR 6, Temporal ADR/SDD, security/runtime docs, GraphQL SDL и `.feature`.
-- Public GraphQL schema содержит только технический `BffInfo`; domain vocabulary ещё отсутствует. Generated plugin `service.proto` описывает `QueryBffInfo` и не является Published Language bounded contexts.
-- README/ADR объявляют BSR-модули `buf.build/nomnom/{orders,restaurants,delivery,payments}`, но `buf export` для каждого вернул `resource ... was not found`; context README также сообщают, что реальные `.proto` и Buf configs ещё не реализованы. Поэтому proto vocabulary нельзя подтвердить, и отсутствующие contract names не придуманы.
+- Public GraphQL schema (`boundaries/bff/client-schema.graphql`) содержит, кроме технического `BffInfo`, операции покупателя, кухни и курьера (`restaurants`, `placeOrder`, `order`, `applyKitchenAction`, `acceptDeliveryOffer` и др.); её vocabulary этой сверкой ещё не сопоставлен с глоссарием. Generated plugin `service.proto` BFF не является Published Language bounded contexts.
+- `.proto` контекстов лежат в `boundaries/<context>/infrastructure/grpc/nomnom/<context>/v1/`, модули `buf.build/nomnom/{orders,restaurants,delivery,payments,controlplane}` объявлены в корневом `buf.yaml`. Proto vocabulary этой сверкой ещё не сопоставлен с глоссарием, и отсутствующие в глоссарии contract names не придуманы.

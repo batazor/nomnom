@@ -289,7 +289,7 @@ Histograms в секундах получают явные границы `SECON
 
 При одной реплике это 10 server-соединений; соединение миграций закрывается до открытия пула. Debezium держит своё соединение репликации к базе (не через пулер). Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`; `db.client.connection.pool.name=payments`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
-Не реализованы: provider client, проверка подписи webhooks, Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `SPICEDB__ENDPOINT`, `PROVIDER__KIND=fake` и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Не реализованы: client реального провайдера (есть только `fake`), Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `SPICEDB__ENDPOINT`, `PROVIDER__KIND=fake` и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ## Запуск
 

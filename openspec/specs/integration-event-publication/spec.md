@@ -255,7 +255,7 @@ Helm chart каждого контекста SHALL содержать конфи
 ### Requirement: Integration Events состава и данных Menu Item
 **ID:** FR-613
 
-`restaurants` SHALL публиковать в topic `restaurants.v1.menu-events` события aggregate `Menu` `MenuItemAdded` (Add Menu Item) и `MenuItemUpdated` (Update Menu Item изменил название, описание или цену) с полями `menu_id`, `restaurant_id` и `menu_item_id`, атомарно с меню. Новые значения соседи и кеш чтения (ADR 40) читают через GetMenu; события MUST NOT нести цену или название. Update Menu Item без изменения этих данных MUST NOT публиковать `MenuItemUpdated`.
+`restaurants` SHALL публиковать в topic `restaurants.v1.menu-events` события aggregate `Menu` `MenuItemAdded` (Add Menu Item) и `MenuItemUpdated` (Update Menu Item изменил название, описание или цену) с полями `menu_id`, `restaurant_id` и `menu_item_id`, атомарно с меню. Новые значения соседи и кеш чтения (ADR 43) читают через GetMenu; события MUST NOT нести цену или название. Update Menu Item без изменения этих данных MUST NOT публиковать `MenuItemUpdated`.
 
 #### Scenario: Add Menu Item публикует факт
 **ID:** AC-773
