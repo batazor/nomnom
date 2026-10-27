@@ -13,6 +13,9 @@ message Restaurant {
   string market_id = 5;
   // Set by GetRestaurant and ListRestaurants only (FR-204).
   RestaurantWaitTime wait_time = 6;
+  // Fee of Premium Priority in the currency of the restaurant (FR-202); unset
+  // when the restaurant offers no premium.
+  Money premium_fee = 7;
 }
 
 // Wait for a new order of the restaurant (Wait Time Statistics, FR-645).

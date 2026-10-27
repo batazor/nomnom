@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CourierWork on Courier { availability currentDelivery { id orderId stage } id offers { deliveryId expiresAt id orderId } } subscription BoardCourierChanged($id: ID!) { courierChanged(id: $id) { ...CourierWork } }"
+}

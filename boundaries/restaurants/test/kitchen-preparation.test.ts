@@ -9,9 +9,11 @@ import type { Outbox } from "../pkg/application/outbox.ts";
 import {
   AlreadyInStateError,
   GuardFailedError,
+  InvalidRestaurantOrderError,
   InvalidTransitionError,
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
+  cook,
   createKitchenWorld,
   minutes,
   ordersService,
@@ -70,38 +72,99 @@ test("AC-253 start preparation publishes PreparationStarted", async () => {
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   world.clock.advance(minutes(3));
 
-  const result = await world.startPreparation.execute(order);
+  const result = await world.startNext(restaurantId);
 
-  assert.equal(result.state, "PREPARING");
-  assert.deepEqual(result.timeline.preparationStartedAt, world.clock.now());
+  assert.equal(result?.restaurantOrderId, order.restaurantOrderId);
+  assert.equal(result?.state, "PREPARING");
+  assert.deepEqual(result?.timeline.preparationStartedAt, world.clock.now());
   assert.equal(
     (await world.outbox.records()).at(-1)?.event.type,
     "PreparationStarted",
   );
 });
 
-test("AC-254 repeated start preparation is a no-op under the no-op policy", async () => {
-  const world = await createKitchenWorld({ onRepeat: "succeed-without-event" });
+test("AC-860 start next takes the premium order before an earlier standard one", async () => {
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
-  const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
+  const standard = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  world.clock.advance(minutes(5));
+  const premium = await world.givenReceivedOrder(
+    restaurantId,
+    phoId,
+    "PREMIUM",
+  );
+  await world.accept.execute({
+    subject: cook,
+    restaurantId,
+    restaurantOrderId: premium.restaurantOrderId,
+  });
+
+  const first = await world.startNext(restaurantId);
+  const second = await world.startNext(restaurantId);
+
+  assert.deepEqual(
+    [first?.restaurantOrderId, first?.priority],
+    [premium.restaurantOrderId, "PREMIUM"],
+  );
+  assert.equal(second?.restaurantOrderId, standard.restaurantOrderId);
+});
+
+test("AC-861 start next on an empty queue starts nothing and publishes nothing", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  await world.givenOrderIn("RECEIVED", restaurantId, phoId);
   const outboxBefore = (await world.outbox.records()).length;
-  const before = await world.restaurantOrders.get(order.restaurantOrderId);
 
-  const result = await world.startPreparation.execute(order);
-
-  assert.equal(result.state, "PREPARING");
-  assert.equal(result.version, before?.version);
+  assert.equal(await world.startNext(restaurantId), undefined);
   assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
-test("AC-255 repeated start preparation is rejected under the strict policy", async () => {
-  const world = await createKitchenWorld({ onRepeat: "reject" });
+test("FR-225 start next requires a request id", async () => {
+  const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
-  const order = await world.givenOrderIn("PREPARING", restaurantId, phoId);
+  await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
   await assert.rejects(
-    world.startPreparation.execute(order),
+    world.startNext(restaurantId, " "),
+    InvalidRestaurantOrderError,
+  );
+});
+
+test("AC-254 a repeat with the same request_id starts no other order under the no-op policy", async () => {
+  const world = await createKitchenWorld({ onRepeat: "succeed-without-event" });
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const next = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const first = await world.startNext(restaurantId, "request-1");
+  const outboxBefore = (await world.outbox.records()).length;
+
+  const result = await world.startNext(restaurantId, "request-1");
+
+  assert.equal(first?.restaurantOrderId, order.restaurantOrderId);
+  assert.equal(result?.restaurantOrderId, order.restaurantOrderId);
+  assert.equal(result?.state, "PREPARING");
+  assert.equal(result?.version, first?.version);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
+  assert.equal(
+    (await world.restaurantOrders.get(next.restaurantOrderId))?.state,
+    "QUEUED",
+  );
+});
+
+test("AC-255 a repeat with the same request_id is rejected under the strict policy", async () => {
+  const world = await createKitchenWorld({ onRepeat: "reject" });
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const next = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  await world.startNext(restaurantId, "request-1");
+
+  await assert.rejects(
+    world.startNext(restaurantId, "request-1"),
     AlreadyInStateError,
+  );
+  assert.equal(
+    (await world.restaurantOrders.get(next.restaurantOrderId))?.state,
+    "QUEUED",
   );
   await world.markAssembled.execute(order);
   await world.markReady.execute(order);
@@ -248,17 +311,14 @@ test("published kitchen fact is rolled back with the state when the outbox fails
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
 
-  await assert.rejects(
-    world.startPreparation.execute(order),
-    /outbox unavailable/,
-  );
+  await assert.rejects(world.startNext(restaurantId), /outbox unavailable/);
   assert.equal(
     (await world.restaurantOrders.get(order.restaurantOrderId))?.state,
     "QUEUED",
   );
 });
 
-test("AC-268 a cancelled order cannot start preparation", async () => {
+test("AC-268 AC-861 a cancelled order leaves the queue: start next starts nothing", async () => {
   const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
   const order = await world.givenOrderIn("QUEUED", restaurantId, phoId);
@@ -267,11 +327,10 @@ test("AC-268 a cancelled order cannot start preparation", async () => {
     restaurantId,
     orderId: order.orderId,
   });
+  const outboxBefore = (await world.outbox.records()).length;
 
-  await assert.rejects(
-    world.startPreparation.execute(order),
-    InvalidTransitionError,
-  );
+  assert.equal(await world.startNext(restaurantId), undefined);
+  assert.equal((await world.outbox.records()).length, outboxBefore);
   assert.equal(
     (await world.restaurantOrders.get(order.restaurantOrderId))?.state,
     "CANCELLED",

@@ -21,6 +21,10 @@ var ErrUnknownRestaurant = errors.New("unknown restaurant")
 // restaurant: the Order is refused before the transaction.
 var ErrRestaurantNotAcceptingOrders = errors.New("restaurant is not accepting orders")
 
+// ErrPremiumUnavailable refuses Premium Priority at a restaurant without a
+// premium fee (FR-650): nothing is stored.
+var ErrPremiumUnavailable = errors.New("restaurant offers no premium priority")
+
 type ItemInput struct {
 	MenuItemID order.MenuItemID
 	Quantity   int
@@ -33,6 +37,9 @@ type Input struct {
 	IdempotencyKey string
 	RestaurantID   order.RestaurantID
 	Items          []ItemInput
+	// Priority is STANDARD or PREMIUM (FR-650); empty means STANDARD, any
+	// other value is invalid input.
+	Priority string
 }
 
 type Result struct {
@@ -58,6 +65,9 @@ type CatalogSnapshot struct {
 	Items        map[order.MenuItemID]CatalogItem
 	MinimumTotal vo.Money
 	MaximumTotal vo.Money
+	// PremiumFee is the current fee of Premium Priority of the Restaurant; nil
+	// when it offers no premium.
+	PremiumFee *vo.Money
 }
 
 type Catalog interface {
@@ -136,12 +146,16 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	service, err := request.service(snapshot)
+	if err != nil {
+		return Result{}, err
+	}
 
 	orderID, err := h.deps.IDs.NewOrderID(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("generate order id: %w", err)
 	}
-	placed, err := order.Place(orderID, customerID, in.RestaurantID, snapshot.MarketID, items, h.deps.Clock.Now(), orderability)
+	placed, err := order.Place(orderID, customerID, in.RestaurantID, snapshot.MarketID, items, service, h.deps.Clock.Now(), orderability)
 	if err != nil {
 		return Result{}, err
 	}
@@ -198,7 +212,8 @@ type itemRequest struct {
 }
 
 type placementRequest struct {
-	items []itemRequest
+	items    []itemRequest
+	priority order.Priority
 }
 
 // validate rejects malformed input before any external call. The aggregate
@@ -216,11 +231,19 @@ func validate(in Input) (order.CustomerID, placementRequest, error) {
 	if in.RestaurantID == "" {
 		return "", placementRequest{}, application.InvalidInput("restaurant_id", "is required")
 	}
+	priority := order.PriorityStandard
+	if in.Priority != "" {
+		parsed, err := order.ParsePriority(in.Priority)
+		if err != nil {
+			return "", placementRequest{}, application.InvalidInput("priority", "must be STANDARD or PREMIUM")
+		}
+		priority = parsed
+	}
 	if len(in.Items) == 0 {
 		return "", placementRequest{}, order.ErrOrderRequiresItems
 	}
 
-	request := placementRequest{items: make([]itemRequest, 0, len(in.Items))}
+	request := placementRequest{items: make([]itemRequest, 0, len(in.Items)), priority: priority}
 	seen := make(map[order.MenuItemID]struct{}, len(in.Items))
 	for _, item := range in.Items {
 		if item.MenuItemID == "" {
@@ -246,6 +269,18 @@ func (r placementRequest) menuItemIDs() []order.MenuItemID {
 		ids = append(ids, item.menuItemID)
 	}
 	return ids
+}
+
+// service fixes the premium fee of the snapshot in the Order: a premium
+// Order at a restaurant without a fee is refused.
+func (r placementRequest) service(snapshot CatalogSnapshot) (order.Service, error) {
+	if r.priority == order.PriorityStandard {
+		return order.StandardService(), nil
+	}
+	if snapshot.PremiumFee == nil {
+		return order.Service{}, ErrPremiumUnavailable
+	}
+	return order.PremiumService(*snapshot.PremiumFee)
 }
 
 // priced maps the snapshot to domain items and the orderability context; the

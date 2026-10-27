@@ -40,6 +40,7 @@ export function useCanAct(): boolean {
 type ClientSettings = Readonly<{
   reportError?: (report: GraphqlErrorReport) => void;
   subscriptions?: SubscriptionTransport;
+  persistedOperations: boolean;
 }>;
 
 const ClientSettingsContext = createContext<ClientSettings | null>(null);
@@ -87,6 +88,7 @@ export function AsRole({
             url: marketGraphqlUrl(apiUrl, marketId),
             reportError: settings.reportError,
             subscriptions: settings.subscriptions,
+            persistedOperations: settings.persistedOperations,
             getAccessToken: () => token,
           }),
     [settings, token, apiUrl, marketId],

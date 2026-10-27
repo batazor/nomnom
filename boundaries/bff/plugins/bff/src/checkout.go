@@ -26,9 +26,19 @@ func (s *BffService) MutationPlaceOrder(ctx context.Context, request *service.Mu
 	for _, item := range input.GetItems() {
 		lines = append(lines, applications.Line{MenuItemID: item.GetMenuItemId(), Quantity: int(item.GetQuantity())})
 	}
+	// A null priority is STANDARD (orders FR-650).
+	priority := applications.PriorityStandard
+	switch input.GetPriority() {
+	case service.OrderPriority_ORDER_PRIORITY_UNSPECIFIED, service.OrderPriority_ORDER_PRIORITY_STANDARD:
+	case service.OrderPriority_ORDER_PRIORITY_PREMIUM:
+		priority = applications.PriorityPremium
+	default:
+		return nil, status.Error(codes.InvalidArgument, "priority is unknown")
+	}
 	result, err := s.checkout.placeOrder.Handle(ctx, applications.Input{
 		RestaurantID:   input.GetRestaurantId(),
 		Lines:          lines,
+		Priority:       priority,
 		IdempotencyKey: input.GetIdempotencyKey(),
 	})
 	switch {

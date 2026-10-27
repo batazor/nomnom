@@ -105,7 +105,10 @@ test("committed kitchen commands count received, accepted, rejected and delays",
     restaurantId,
     orderId,
     items: [{ menuItemId: phoId, quantity: 1 }],
+    priority: "STANDARD",
   });
+  // Started first: the Kitchen Queue takes its head, not a named order.
+  const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const first = await receive.execute(request("order-a"));
   const second = await receive.execute(request("order-b"));
   await world.accept.execute({
@@ -119,7 +122,6 @@ test("committed kitchen commands count received, accepted, rejected and delays",
     restaurantOrderId: second.restaurantOrder.restaurantOrderId,
     reason: "too_busy",
   });
-  const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
   await world.reportDelay.execute({
     ...preparing,
     expectedReadyAt: new Date(world.clock.now().getTime() + minutes(90)),
@@ -197,6 +199,7 @@ test("an idempotent repeat and an Inbox duplicate record nothing more", async ()
           restaurantId,
           orderId: "order-a",
           items: [{ menuItemId: phoId, quantity: 1 }],
+          priority: "STANDARD",
         });
       }),
     );
@@ -208,6 +211,7 @@ test("an idempotent repeat and an Inbox duplicate record nothing more", async ()
     restaurantId,
     orderId: "order-a",
     items: [{ menuItemId: phoId, quantity: 1 }],
+    priority: "STANDARD",
   });
 
   assert.equal(repeat.created, false);
@@ -225,6 +229,7 @@ test("a received order inside a rolled back Inbox transaction is not counted", a
         restaurantId,
         orderId: "order-a",
         items: [{ menuItemId: phoId, quantity: 1 }],
+        priority: "STANDARD",
       });
       throw new Error("inbox commit failed");
     }),
@@ -315,6 +320,7 @@ const newOrder = (id: string) =>
     restaurantId: "r-1",
     marketId: "berlin",
     items: [{ menuItemId: "pho", quantity: 1 }],
+    priority: "STANDARD",
     receivedAt: at(0),
   });
 
@@ -335,7 +341,11 @@ test("saved Restaurant Orders record their applied FSM transitions in order", as
   order.queue({ queuedAt: at(1) });
   await repository.save(order);
   order.pullEvents();
-  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
+  order.startPreparation({
+    startedAt: at(2),
+    cookId: "cook-1",
+    requestId: "start-1",
+  });
   order.reportDelay({ reportedAt: at(3), expectedReadyAt: at(40) });
   await repository.save(order);
   order.pullEvents();

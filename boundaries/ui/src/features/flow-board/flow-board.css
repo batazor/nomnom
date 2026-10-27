@@ -607,3 +607,15 @@ button.board-card-head {
   flex: none;
   gap: var(--space-1);
 }
+
+/* FR-655: premium orders are taken first; the kitchen takes the next one. */
+.board-badge[data-priority="premium"] {
+  background: var(--color-surface-muted);
+  color: var(--color-warning);
+}
+
+.board-take-next {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}

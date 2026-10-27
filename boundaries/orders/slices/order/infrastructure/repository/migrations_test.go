@@ -45,12 +45,40 @@ func TestMarketMigrationBackfillsExistingOrdersWithBerlin(t *testing.T) {
 	assert.Equal(t, "berlin", orderMarket)
 	assert.Equal(t, "berlin", detailsMarket)
 
-	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, total_amount, total_currency, state, placed_at, version)
-		VALUES ('new-1', 'customer-1', 'restaurant-1', 10, 'EUR', 'placed', now(), 1)`)
+	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, total_amount, total_currency, state, placed_at, version, priority)
+		VALUES ('new-1', 'customer-1', 'restaurant-1', 10, 'EUR', 'placed', now(), 1, 'STANDARD')`)
 	require.ErrorContains(t, err, "market_id", "the Market has no default")
-	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version)
-		VALUES ('new-2', 'customer-1', 'restaurant-1', 'Berlin', 10, 'EUR', 'placed', now(), 1)`)
+	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version, priority)
+		VALUES ('new-2', 'customer-1', 'restaurant-1', 'Berlin', 10, 'EUR', 'placed', now(), 1, 'STANDARD')`)
 	require.ErrorContains(t, err, "orders_market_id_format")
+}
+
+// FR-650: Orders placed before Premium Priority are STANDARD; afterwards the
+// priority is required and a premium Order needs a positive fee.
+func TestPremiumPriorityMigrationMakesExistingOrdersStandard(t *testing.T) {
+	ctx := context.Background()
+	cfg := database.Config{DSN: emptyOrdersDatabase(t), MaxConns: 1}
+	require.NoError(t, migration.Apply(ctx, cfg, migrationsBefore(t, "00009_premium_priority.up.sql")))
+
+	conn, err := pgx.Connect(ctx, cfg.DSN)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version)
+		VALUES ('legacy-1', 'customer-1', 'restaurant-1', 'berlin', 10, 'EUR', 'placed', now(), 1)`)
+	require.NoError(t, err)
+
+	require.NoError(t, migration.Apply(ctx, cfg, repository.Migrations))
+
+	var priority string
+	require.NoError(t, conn.QueryRow(ctx, `SELECT priority FROM orders WHERE id = 'legacy-1'`).Scan(&priority))
+	assert.Equal(t, "STANDARD", priority)
+
+	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version)
+		VALUES ('new-1', 'customer-1', 'restaurant-1', 'berlin', 10, 'EUR', 'placed', now(), 1)`)
+	require.ErrorContains(t, err, "priority", "the priority has no default")
+	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version, priority)
+		VALUES ('new-2', 'customer-1', 'restaurant-1', 'berlin', 10, 'EUR', 'placed', now(), 1, 'PREMIUM')`)
+	require.ErrorContains(t, err, "orders_premium_fee_by_priority")
 }
 
 // migrationsBefore is the order migration set without first and every later file.

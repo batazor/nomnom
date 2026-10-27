@@ -118,11 +118,12 @@ test("AC-778 a cook on line gets the next order; a repeat changes nothing", asyn
     restaurantId,
     cookId,
   });
-  const started = await world.startPreparation.execute(order);
+  const started = await world.startNext(restaurantId);
 
   assert.deepEqual([first.changed, repeat.changed], [true, false]);
-  assert.equal(started.state, "PREPARING");
-  assert.equal(started.cookId, cookId);
+  assert.equal(started?.restaurantOrderId, order.restaurantOrderId);
+  assert.equal(started?.state, "PREPARING");
+  assert.equal(started?.cookId, cookId);
 });
 
 test("AC-779 a busy cook stays on line", async () => {
@@ -223,10 +224,7 @@ test("AC-782 without a free cook the order stays QUEUED and nothing is published
   const waiting = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const outboxBefore = (await world.outbox.records()).length;
 
-  await assert.rejects(
-    world.startPreparation.execute(waiting),
-    NoCookAvailableError,
-  );
+  await assert.rejects(world.startNext(restaurantId), NoCookAvailableError);
 
   const order = await world.restaurantOrders.get(waiting.restaurantOrderId);
   assert.equal(order?.state, "QUEUED");
@@ -272,15 +270,13 @@ test("AC-784 a cook is free again once the order is READY and keeps it as histor
   const [oleg] = cookIds;
   const first = await world.givenOrderIn("ASSEMBLED", restaurantId, phoId);
   const second = await world.givenOrderIn("QUEUED", restaurantId, phoId);
-  await assert.rejects(
-    world.startPreparation.execute(second),
-    NoCookAvailableError,
-  );
+  await assert.rejects(world.startNext(restaurantId), NoCookAvailableError);
 
   await world.markReady.execute(first);
-  const started = await world.startPreparation.execute(second);
+  const started = await world.startNext(restaurantId);
 
-  assert.equal(started.cookId, oleg);
+  assert.equal(started?.restaurantOrderId, second.restaurantOrderId);
+  assert.equal(started?.cookId, oleg);
   const ready = await world.restaurantOrders.get(first.restaurantOrderId);
   assert.deepEqual([ready?.state, ready?.cookId], ["READY", oleg]);
 });
@@ -296,7 +292,7 @@ test("AC-785 simultaneous starts on the last free cook: one starts, one waits", 
   ];
 
   const outcomes = await Promise.allSettled(
-    orders.map((order) => world.startPreparation.execute(order)),
+    orders.map(() => world.startNext(restaurantId)),
   );
 
   const started = outcomes.flatMap((outcome) =>

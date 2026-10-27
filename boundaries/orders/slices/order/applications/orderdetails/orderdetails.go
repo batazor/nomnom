@@ -19,10 +19,13 @@ type Details struct {
 	MarketID     vo.MarketID
 	RestaurantID order.RestaurantID
 	Items        []Item
-	Total        vo.Money
-	State        order.State
-	PlacedAt     time.Time
-	Facts        []Fact
+	// Service is the priority with the premium fee fixed at Place Order
+	// (FR-650); the fee is part of Total.
+	Service  order.Service
+	Total    vo.Money
+	State    order.State
+	PlacedAt time.Time
+	Facts    []Fact
 	// Expected are the latest named Fulfillment deadlines; a zero time is not named.
 	Expected order.ExpectedTimes
 	// Cancellation is nil unless the Order is cancelled.

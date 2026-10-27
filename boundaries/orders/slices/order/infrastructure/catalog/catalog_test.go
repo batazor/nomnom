@@ -97,6 +97,25 @@ func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 	}, snapshot.Items, "only requested items with their names; unknown ones stay out and are unavailable")
 	assert.True(t, snapshot.MinimumTotal.Equal(ordertest.Money(t, "5")))
 	assert.True(t, snapshot.MaximumTotal.Equal(ordertest.Money(t, "100")))
+	assert.Nil(t, snapshot.PremiumFee, "a restaurant without premium_fee offers no premium")
+}
+
+// FR-650: the premium fee of the Restaurant reaches the snapshot.
+func TestSnapshotReadsPremiumFee(t *testing.T) {
+	server := NewMockRestaurantsServiceServer(t)
+	server.EXPECT().GetRestaurant(mock.Anything, mock.Anything).Return(&restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
+		RestaurantId: "restaurant-1", IsOpen: true, MarketId: ordertest.Market,
+		PremiumFee: &restaurantsv1.Money{Amount: "1.50", Currency: "EUR"},
+	}}, nil).Once()
+	server.EXPECT().GetMenu(mock.Anything, mock.Anything).Return(&restaurantsv1.GetMenuResponse{Items: []*restaurantsv1.MenuItem{
+		item("pizza", "12.50", "EUR", true),
+	}}, nil).Once()
+
+	snapshot, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
+
+	require.NoError(t, err)
+	require.NotNil(t, snapshot.PremiumFee)
+	assert.True(t, snapshot.PremiumFee.Equal(ordertest.Money(t, "1.50")))
 }
 
 // The name is kept in the Order: a requested item without one breaks the

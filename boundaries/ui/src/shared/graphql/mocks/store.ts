@@ -1,5 +1,5 @@
 import { GraphQLError } from "graphql";
-
+import { courierMoves } from "./courier-tracks";
 import {
   bffInfoFixture,
   createOrderScenarios,
@@ -14,8 +14,8 @@ import {
   orderTotal,
   preparationDelayed,
   restaurantFixtures,
+  withFee,
 } from "./fixtures";
-import { courierMoves } from "./courier-tracks";
 import { createFulfillment, mockCourierId } from "./fulfillment";
 import { createChangeFeed } from "./order-changes";
 
@@ -35,6 +35,7 @@ type PlaceOrderInput = {
   restaurantId: string;
   items: { menuItemId: string; quantity: number }[];
   idempotencyKey: string;
+  priority?: "STANDARD" | "PREMIUM" | null;
 };
 
 type PlaceOrderPayload = {
@@ -278,6 +279,16 @@ export function createMockStore({
       };
     }
 
+    // A null priority is STANDARD; PREMIUM needs the fee of the restaurant
+    // (FR-650), which is fixed in the order and added to its total.
+    const priority = input.priority ?? "STANDARD";
+    const premiumFee = priority === "PREMIUM" ? restaurant.premiumFee : null;
+    if (priority === "PREMIUM" && !premiumFee) {
+      return {
+        order: null,
+        problems: [{ code: "PREMIUM_UNAVAILABLE", menuItemIds: [] }],
+      };
+    }
     const placedAt = clock();
     const items = input.items.map((line) => {
       const item = menu.find((candidate) => candidate.id === line.menuItemId);
@@ -290,7 +301,11 @@ export function createMockStore({
       endReason: null,
       restaurant,
       items,
-      total: orderTotal(items),
+      total: premiumFee
+        ? withFee(orderTotal(items), premiumFee)
+        : orderTotal(items),
+      priority,
+      premiumFee,
       placedAt: placedAt.toISOString(),
       milestones: [{ kind: "PLACED", occurredAt: placedAt.toISOString() }],
       cancellation: {
@@ -416,6 +431,15 @@ export function createMockStore({
       }: {
         input: Parameters<typeof fulfillment.applyKitchenAction>[0];
       }) => fulfillment.applyKitchenAction(input),
+    ),
+    startNextPreparation: mutation(
+      ({
+        restaurantId,
+        requestId,
+      }: {
+        restaurantId: string;
+        requestId: string;
+      }) => fulfillment.startNextPreparation(restaurantId, requestId),
     ),
     hireCook: mutation(
       ({ restaurantId, name }: { restaurantId: string; name: string }) =>

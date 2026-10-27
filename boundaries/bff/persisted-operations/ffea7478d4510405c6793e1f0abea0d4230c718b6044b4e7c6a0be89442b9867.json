@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation StartNextPreparation($requestId: String!, $restaurantId: ID!) { startNextPreparation(restaurantId: $restaurantId, requestId: $requestId) { order { cook { id name } id items { name quantity } orderId priority receivedAt stage } problem } }"
+}

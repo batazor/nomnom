@@ -50,7 +50,8 @@ spec:
               ca="$(kubectl -n cert-manager get secret nomnom-local-ca -o jsonpath='{.data.ca\.crt}' | base64 -d)"
               # restaurants передаёт market_id из X-Nomnom-Market: без него или с двумя значениями
               # BFF отвечает INVALID_ARGUMENT. Чужой заголовок клиента маршрут перезаписывает.
-              body='{"query":"{ restaurants(first: 1) { edges { node { id } } } }"}'
+              # ADR 3 BFF: только persisted operations.
+              body="$(../../scripts/graphql-body.sh E2eRestaurants '{}')"
               deadline=$(($(date +%s) + 120))
               until response="$(kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
                 printf "%s" "$0" > /tmp/nomnom-ca.crt

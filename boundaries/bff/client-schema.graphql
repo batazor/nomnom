@@ -14,6 +14,14 @@ type BffInfo {
   version: String!
 }
 
+"""Premium Priority of an order: a premium order is prepared first"""
+enum OrderPriority {
+  """Prepared in the order of the kitchen queue"""
+  STANDARD
+  """Prepared first for the premium fee of the restaurant"""
+  PREMIUM
+}
+
 """Exact monetary amount"""
 type Money {
   """
@@ -46,6 +54,11 @@ type Restaurant {
   Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
   """
   waitTime: RestaurantWaitTime
+  """
+  Fee of Premium Priority, null when the restaurant offers no premium; set by the catalog
+  queries restaurants and restaurant, null elsewhere
+  """
+  premiumFee: Money
 }
 
 """Wait for a new order of a restaurant, estimated from its recent orders"""
@@ -197,8 +210,12 @@ type Order {
   restaurant: Restaurant!
   """Ordered items"""
   items: [OrderItem!]!
-  """Total amount of the order"""
+  """Total amount of the order, the premium fee included"""
   total: Money!
+  """Premium Priority chosen at checkout"""
+  priority: OrderPriority!
+  """Premium fee fixed at checkout, null for a standard order"""
+  premiumFee: Money
   """Moment the order was placed in RFC 3339"""
   placedAt: String!
   """Milestones in chronological order"""
@@ -355,6 +372,8 @@ type KitchenOrder {
   left the Cook Pool
   """
   cook: Cook
+  """Premium Priority of the order: premium orders are taken first"""
+  priority: OrderPriority!
 }
 
 """Cook of the Cook Pool of a restaurant"""
@@ -431,8 +450,6 @@ enum KitchenAction {
   ACCEPT
   """Reject a RECEIVED order"""
   REJECT
-  """Start preparing a QUEUED order"""
-  START_PREPARATION
   """Mark a PREPARING order assembled"""
   MARK_ASSEMBLED
   """Mark an ASSEMBLED order ready for pickup"""
@@ -655,6 +672,10 @@ input PlaceOrderInput {
   items: [OrderLineInput!]!
   """Client-generated key of this checkout attempt, reused on manual retry"""
   idempotencyKey: String!
+  """
+  Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee
+  """
+  priority: OrderPriority
 }
 
 """Business reason why an order cannot be placed"""
@@ -667,6 +688,8 @@ enum PlaceOrderProblemCode {
   ORDER_TOTAL_ABOVE_MAXIMUM
   """Restaurant does not accept orders now"""
   RESTAURANT_NOT_ACCEPTING_ORDERS
+  """Restaurant offers no Premium Priority"""
+  PREMIUM_UNAVAILABLE
 }
 
 type PlaceOrderProblem {
@@ -750,10 +773,15 @@ type Mutation {
   """
   closeRestaurant(restaurantId: ID!): RestaurantOpeningPayload!
   """
-  Apply a kitchen command to a restaurant order; repeating START_PREPARATION or MARK_READY
-  changes nothing
+  Apply a kitchen command to a restaurant order; repeating MARK_READY changes nothing
   """
   applyKitchenAction(input: KitchenActionInput!): KitchenActionPayload!
+  """
+  Start preparing the head of the kitchen queue: premium orders first, the kitchen does not
+  choose the order. requestId is chosen per attempt and reused on a manual retry, which starts
+  no other order. order is null when the queue is empty
+  """
+  startNextPreparation(restaurantId: ID!, requestId: String!): KitchenActionPayload!
   """
   Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
   """

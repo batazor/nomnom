@@ -686,6 +686,78 @@ func (_c *MockKitchenCommands_Apply_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// StartNext provides a mock function for the type MockKitchenCommands
+func (_mock *MockKitchenCommands) StartNext(ctx context.Context, restaurantID string, requestID string) (string, error) {
+	ret := _mock.Called(ctx, restaurantID, requestID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StartNext")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
+		return returnFunc(ctx, restaurantID, requestID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
+		r0 = returnFunc(ctx, restaurantID, requestID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, restaurantID, requestID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKitchenCommands_StartNext_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StartNext'
+type MockKitchenCommands_StartNext_Call struct {
+	*mock.Call
+}
+
+// StartNext is a helper method to define mock.On call
+//   - ctx context.Context
+//   - restaurantID string
+//   - requestID string
+func (_e *MockKitchenCommands_Expecter) StartNext(ctx any, restaurantID any, requestID any) *MockKitchenCommands_StartNext_Call {
+	return &MockKitchenCommands_StartNext_Call{Call: _e.mock.On("StartNext", ctx, restaurantID, requestID)}
+}
+
+func (_c *MockKitchenCommands_StartNext_Call) Run(run func(ctx context.Context, restaurantID string, requestID string)) *MockKitchenCommands_StartNext_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKitchenCommands_StartNext_Call) Return(s string, err error) *MockKitchenCommands_StartNext_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockKitchenCommands_StartNext_Call) RunAndReturn(run func(ctx context.Context, restaurantID string, requestID string) (string, error)) *MockKitchenCommands_StartNext_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockCatalog creates a new instance of MockCatalog. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockCatalog(t interface {

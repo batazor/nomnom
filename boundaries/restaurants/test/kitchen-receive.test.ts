@@ -22,6 +22,7 @@ test("AC-242 receive order request creates a RECEIVED restaurant order", async (
     restaurantId,
     orderId: "order-42",
     items: [{ menuItemId: phoId, quantity: 2, options: ["spicy"] }],
+    priority: "STANDARD",
   });
 
   assert.equal(result.created, true);
@@ -32,12 +33,68 @@ test("AC-242 receive order request creates a RECEIVED restaurant order", async (
     state: "RECEIVED",
     items: [{ menuItemId: phoId, quantity: 2, options: ["spicy"] }],
     timeline: { receivedAt },
+    priority: "STANDARD",
     cookId: undefined,
     rejectionReason: undefined,
     failureReason: undefined,
     cancelledAtStage: undefined,
     version: 1,
   });
+});
+
+test("AC-858 a premium order is received with its priority", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+
+  const result = await world.receive.execute({
+    subject: ordersService,
+    restaurantId,
+    orderId: "order-premium",
+    items: [{ menuItemId: phoId, quantity: 1 }],
+    priority: "PREMIUM",
+  });
+
+  assert.equal(result.restaurantOrder.priority, "PREMIUM");
+  assert.equal(
+    (await world.restaurantOrders.findByOrderId("order-premium"))?.priority,
+    "PREMIUM",
+  );
+});
+
+test("AC-859 an order without a known priority is not received", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+
+  for (const priority of ["", "URGENT"]) {
+    await assert.rejects(
+      world.receive.execute({
+        subject: ordersService,
+        restaurantId,
+        orderId: `order-${priority}`,
+        items: [{ menuItemId: phoId, quantity: 1 }],
+        priority,
+      }),
+      InvalidRestaurantOrderError,
+    );
+  }
+  assert.deepEqual(await world.orderStore.find({}), []);
+});
+
+test("AC-244 a repeat with another priority is rejected as already exists", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const request = {
+    subject: ordersService,
+    restaurantId,
+    orderId: "order-42",
+    items: [{ menuItemId: phoId, quantity: 1 }],
+  };
+  await world.receive.execute({ ...request, priority: "STANDARD" });
+
+  await assert.rejects(
+    world.receive.execute({ ...request, priority: "PREMIUM" }),
+    AlreadyExistsError,
+  );
 });
 
 test("ADR 41 a received order takes the Market of its restaurant", async () => {
@@ -49,12 +106,14 @@ test("ADR 41 a received order takes the Market of its restaurant", async () => {
     restaurantId,
     orderId: "order-named",
     items: [{ menuItemId: phoId, quantity: 1 }],
+    priority: "STANDARD",
   });
   await world.receive.execute({
     subject: ordersService,
     restaurantId,
     orderId: "order-unnamed",
     items: [{ menuItemId: phoId, quantity: 1 }],
+    priority: "STANDARD",
   });
 
   assert.equal(named.created, true);
@@ -73,6 +132,7 @@ test("AC-243 a repeated receive returns the existing order", async () => {
     restaurantId,
     orderId: "order-42",
     items: [{ menuItemId: phoId, quantity: 2 }],
+    priority: "STANDARD",
   };
 
   const first = await world.receive.execute(request);
@@ -91,6 +151,7 @@ test("AC-244 a conflicting repeat is rejected as already exists", async () => {
     restaurantId,
     orderId: "order-42",
     items: [{ menuItemId: phoId, quantity: 2 }],
+    priority: "STANDARD",
   });
 
   await assert.rejects(
@@ -99,6 +160,7 @@ test("AC-244 a conflicting repeat is rejected as already exists", async () => {
       restaurantId,
       orderId: "order-42",
       items: [{ menuItemId: phoId, quantity: 3 }],
+      priority: "STANDARD",
     }),
     AlreadyExistsError,
   );
@@ -121,6 +183,7 @@ test("concurrent receive that loses the unique orderId race returns the winner",
         restaurantId,
         marketId: "berlin",
         items,
+        priority: "STANDARD",
         receivedAt: world.clock.now(),
       });
       await world.restaurantOrders.save(winner);
@@ -134,6 +197,7 @@ test("concurrent receive that loses the unique orderId race returns the winner",
     restaurantId,
     orderId: "order-42",
     items,
+    priority: "STANDARD",
   });
 
   assert.equal(result.created, false);
@@ -159,6 +223,7 @@ test("AC-245 invalid composition is rejected and nothing is stored", async () =>
         restaurantId,
         orderId: "order-42",
         items,
+        priority: "STANDARD",
       }),
       InvalidRestaurantOrderError,
     );
@@ -177,6 +242,7 @@ test("receive order request requires the fulfillment service identity and a know
       restaurantId,
       orderId: "order-42",
       items: [{ menuItemId: phoId, quantity: 1 }],
+      priority: "STANDARD",
     }),
     PermissionDeniedError,
   );
@@ -186,6 +252,7 @@ test("receive order request requires the fulfillment service identity and a know
       restaurantId: "missing",
       orderId: "order-42",
       items: [{ menuItemId: phoId, quantity: 1 }],
+      priority: "STANDARD",
     }),
     NotFoundError,
   );

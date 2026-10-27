@@ -1,0 +1,9 @@
+query E2eOrder($id: ID!) {
+  order(id: $id) {
+    id
+    status
+    milestones {
+      kind
+    }
+  }
+}

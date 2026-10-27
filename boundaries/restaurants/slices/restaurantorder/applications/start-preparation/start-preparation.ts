@@ -1,12 +1,37 @@
+import type { Clock } from "../../../../pkg/application/clock.ts";
+import type { Outbox } from "../../../../pkg/application/outbox.ts";
+import { requirePermission } from "../../../../pkg/application/require-permission.ts";
+import type { Subject } from "../../../../pkg/application/subject.ts";
+import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
 import {
-  executeKitchenCommand,
-  type KitchenCommand,
-  type KitchenCommandDependencies,
-  type RepeatPolicy,
-} from "../kitchen-command.ts";
-import type { RestaurantOrderView } from "../restaurant-order-view.ts";
+  AlreadyInStateError,
+  InvalidRestaurantOrderError,
+  InvalidRestaurantOrderReason,
+  type RestaurantOrderRepository,
+  RestaurantOrderState,
+} from "../../domains/restaurantorder/restaurantorder.ts";
+import type { KitchenStaffAccess } from "../access-control.ts";
+import type {
+  KitchenQueueOrdering,
+  KitchenQueueReader,
+} from "../get-kitchen-queue/get-kitchen-queue.ts";
+import type { RepeatPolicy } from "../kitchen-command.ts";
+import { loadRestaurantOrder } from "../load-restaurant-order.ts";
+import { saveAndPublish } from "../publish-order-change.ts";
+import {
+  type RestaurantOrderView,
+  toRestaurantOrderView,
+} from "../restaurant-order-view.ts";
 
-export type StartPreparation = KitchenCommand;
+/**
+ * Start Next Preparation: the kitchen names the restaurant, the Kitchen Queue
+ * names the order. `requestId` is chosen per attempt and reused on a retry.
+ */
+export type StartPreparation = Readonly<{
+  subject: Subject;
+  restaurantId: string;
+  requestId: string;
+}>;
 
 /**
  * Cook Pool of the restaurant as seen by Start Preparation: assigns a free
@@ -17,41 +42,107 @@ export interface CookAssigner {
   assignFreeCook(restaurantId: string, at: Date): Promise<string>;
 }
 
+/** The order a Start Next Preparation `requestId` already started. */
+export interface StartedOrders {
+  findStarted(
+    restaurantId: string,
+    requestId: string,
+  ): Promise<RestaurantOrderView | undefined>;
+}
+
 /**
- * Starts Preparation of a `QUEUED` order by a free cook on line and publishes
- * `PreparationStarted`; without a free cook the order stays `QUEUED` with
- * `NoCookAvailableError` (FR-225). A repeat for a `PREPARING` order follows
- * the explicit {@link RepeatPolicy} and assigns no cook.
+ * Starts Preparation of the head of the Kitchen Queue by a free cook on line
+ * and publishes `PreparationStarted` (FR-225). The kitchen does not choose the
+ * order: the Kitchen Queue policy does. Without a free cook the queue stays as
+ * it was with `NoCookAvailableError`. An empty queue is an empty result, not
+ * an error: nothing is started. A repeat with the same `requestId` starts no
+ * other order and follows the explicit {@link RepeatPolicy}.
  */
 export class StartPreparationHandler {
-  readonly #dependencies: KitchenCommandDependencies;
+  readonly #accessControl: KitchenStaffAccess;
+  readonly #unitOfWork: UnitOfWork;
+  readonly #restaurantOrders: RestaurantOrderRepository;
+  readonly #started: StartedOrders;
+  readonly #queue: KitchenQueueReader;
+  readonly #ordering: KitchenQueueOrdering;
   readonly #cooks: CookAssigner;
+  readonly #outbox: Outbox;
+  readonly #clock: Clock;
   readonly #onRepeat: RepeatPolicy;
 
-  constructor(
-    dependencies: KitchenCommandDependencies & {
-      cooks: CookAssigner;
-      onRepeat: RepeatPolicy;
-    },
-  ) {
-    this.#dependencies = dependencies;
+  constructor(dependencies: {
+    accessControl: KitchenStaffAccess;
+    unitOfWork: UnitOfWork;
+    restaurantOrders: RestaurantOrderRepository;
+    started: StartedOrders;
+    queue: KitchenQueueReader;
+    ordering: KitchenQueueOrdering;
+    cooks: CookAssigner;
+    outbox: Outbox;
+    clock: Clock;
+    onRepeat: RepeatPolicy;
+  }) {
+    this.#accessControl = dependencies.accessControl;
+    this.#unitOfWork = dependencies.unitOfWork;
+    this.#restaurantOrders = dependencies.restaurantOrders;
+    this.#started = dependencies.started;
+    this.#queue = dependencies.queue;
+    this.#ordering = dependencies.ordering;
     this.#cooks = dependencies.cooks;
+    this.#outbox = dependencies.outbox;
+    this.#clock = dependencies.clock;
     this.#onRepeat = dependencies.onRepeat;
   }
 
-  execute(command: StartPreparation): Promise<RestaurantOrderView> {
-    return executeKitchenCommand(this.#dependencies, command, {
-      action: "start preparation",
-      published: ["PreparationStarted"],
-      change: async (order, now) => {
-        order.checkStartPreparation();
-        const cookId = await this.#cooks.assignFreeCook(
-          order.restaurantId,
-          now,
-        );
-        order.startPreparation({ startedAt: now, cookId });
-      },
-      repeatPolicy: this.#onRepeat,
+  /** The started order; `undefined` when the Kitchen Queue is empty. */
+  async execute(
+    command: StartPreparation,
+  ): Promise<RestaurantOrderView | undefined> {
+    await requirePermission(
+      this.#accessControl.canOperateKitchen(
+        command.subject,
+        command.restaurantId,
+      ),
+      "start preparation",
+    );
+    const requestId = command.requestId.trim();
+    if (requestId.length === 0) {
+      throw new InvalidRestaurantOrderError(
+        InvalidRestaurantOrderReason.EmptyStartRequestId,
+      );
+    }
+    const now = this.#clock.now();
+    return this.#unitOfWork.run(async () => {
+      const repeated = await this.#started.findStarted(
+        command.restaurantId,
+        requestId,
+      );
+      if (repeated !== undefined) {
+        if (this.#onRepeat === "succeed-without-event") return repeated;
+        throw new AlreadyInStateError(RestaurantOrderState.Preparing);
+      }
+      const queued = await this.#queue.listQueued(command.restaurantId);
+      const [head] = await this.#ordering.order(
+        command.restaurantId,
+        queued,
+        now,
+      );
+      if (head === undefined) return undefined;
+      const order = await loadRestaurantOrder(
+        this.#restaurantOrders,
+        command.restaurantId,
+        head.restaurantOrderId,
+      );
+      order.checkStartPreparation();
+      const cookId = await this.#cooks.assignFreeCook(order.restaurantId, now);
+      order.startPreparation({ startedAt: now, cookId, requestId });
+      const version = await saveAndPublish(
+        this.#restaurantOrders,
+        this.#outbox,
+        order,
+        ["PreparationStarted"],
+      );
+      return toRestaurantOrderView(order, version);
     });
   }
 }

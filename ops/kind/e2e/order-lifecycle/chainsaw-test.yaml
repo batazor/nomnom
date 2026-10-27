@@ -246,11 +246,11 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - name: body
+            - {name: operation, value: E2ePlaceOrder}
+            - name: variables
               value: >-
-                {query: "mutation($input: PlaceOrderInput!) { placeOrder(input: $input) { order { id status } problems { code menuItemIds } } }",
-                 variables: {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
-                 idempotencyKey: $s.run}}}
+                {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
+                 idempotencyKey: $s.run}}
             - {name: until, value: '.data.placeOrder.order.id != null'}
             - {name: wait, value: 90}
             - {name: save, value: '{order_id: .data.placeOrder.order.id}'}
@@ -262,8 +262,8 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - name: body
-              value: '{query: "query($id: ID!) { order(id: $id) { status milestones { kind } } }", variables: {id: $s.order_id}}'
+            - {name: operation, value: E2eOrder}
+            - {name: variables, value: '{id: $s.order_id}'}
             - name: until
               value: '.data.order.status == "PAID" and ([.data.order.milestones[]?.kind] | index("PAID")) != null'
             - {name: wait, value: 120}
@@ -335,7 +335,9 @@ spec:
             - {name: method, value: nomnom.delivery.v1.DeliveryService/AcceptDeliveryOffer}
             - {name: request, value: '{offerId: $s.offer_id, courierId: $s.courier}'}
 
-    # 7. Кухня готовит заказ: Preparing → Assembled → Ready.
+    # 7. Кухня готовит заказ: Preparing → Assembled → Ready. «Взять следующий» (FR-225)
+    # начинает голову очереди ресторана теста — его единственный заказ; request_id попытки —
+    # id этого заказа, уникальный на прогон.
     - name: kitchen starts preparation
       use:
         template: ../templates/driver-call.yaml
@@ -343,8 +345,8 @@ spec:
           bindings:
             - {name: audience, value: nomnom.restaurants}
             - {name: subject, value: $s.staff}
-            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/StartPreparation}
-            - {name: request, value: '{restaurantId: $s.restaurant_id, restaurantOrderId: $s.restaurant_order_id}'}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/StartNextPreparation}
+            - {name: request, value: '{restaurantId: $s.restaurant_id, requestId: $s.restaurant_order_id}'}
     - name: kitchen assembles order
       use:
         template: ../templates/driver-call.yaml
@@ -370,8 +372,8 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - name: body
-              value: '{query: "query($id: ID!) { order(id: $id) { status milestones { kind } } }", variables: {id: $s.order_id}}'
+            - {name: operation, value: E2eOrder}
+            - {name: variables, value: '{id: $s.order_id}'}
             - name: until
               value: >-
                 [.data.order.milestones[]?.kind] as $kinds
@@ -404,8 +406,8 @@ spec:
         template: ../templates/customer-graphql.yaml
         with:
           bindings:
-            - name: body
-              value: '{query: "query($id: ID!) { order(id: $id) { status milestones { kind } } }", variables: {id: $s.order_id}}'
+            - {name: operation, value: E2eOrder}
+            - {name: variables, value: '{id: $s.order_id}'}
             - name: until
               value: >-
                 .data.order.status == "DELIVERED"

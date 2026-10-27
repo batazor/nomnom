@@ -320,8 +320,8 @@ test("FR-605 delay moves expected_ready_at later and failure fails the order", a
     sequence(0, 0, 0, 0, 0, 0.93, 0.95, 0.5),
   );
   const { restaurantId, phoId } = await world.givenOwnedKitchen();
-  const queued = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
+  const queued = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const before = await world.board.get(restaurantId, queued.restaurantOrderId);
   await world.state.setEnabled(true, world.clock.now());
 

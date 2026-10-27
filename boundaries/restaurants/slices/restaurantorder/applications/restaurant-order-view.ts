@@ -1,4 +1,5 @@
 import type {
+  OrderPriority,
   RestaurantOrder,
   RestaurantOrderSnapshot,
   RestaurantOrderState,
@@ -17,6 +18,7 @@ export type RestaurantOrderView = Readonly<{
     options: readonly string[];
   }>[];
   timeline: RestaurantOrderTimeline;
+  priority: OrderPriority;
   /** Cook assigned by Start Preparation, if it happened. */
   cookId: string | undefined;
   rejectionReason: string | undefined;
@@ -39,6 +41,7 @@ export const snapshotToView = (
     options: [...item.options],
   })),
   timeline: { ...snapshot.timeline },
+  priority: snapshot.priority,
   cookId: snapshot.cookId,
   rejectionReason: snapshot.rejectionReason,
   failureReason: snapshot.failureReason,

@@ -37,11 +37,16 @@ var (
 // calls carried a user assertion.
 type restaurantsServer struct {
 	restaurantsv1.UnimplementedRestaurantsServiceServer
-	mu         sync.Mutex
-	err        error
-	state      restaurantsv1.RestaurantOrderState
-	calls      []string
-	assertions map[string]bool
+	mu    sync.Mutex
+	err   error
+	state restaurantsv1.RestaurantOrderState
+	// emptyQueue answers StartNextPreparation without an order.
+	emptyQueue bool
+	// priority of ro-1; UNSPECIFIED means STANDARD unless unspecified is set.
+	priority    restaurantsv1.OrderPriority
+	unspecified bool
+	calls       []string
+	assertions  map[string]bool
 }
 
 func (s *restaurantsServer) record(ctx context.Context, call string) error {
@@ -64,10 +69,14 @@ func (s *restaurantsServer) ListActiveRestaurantOrders(ctx context.Context, requ
 	if state == restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_UNSPECIFIED {
 		state = restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_PREPARING
 	}
+	priority := s.priority
+	if priority == restaurantsv1.OrderPriority_ORDER_PRIORITY_UNSPECIFIED && !s.unspecified {
+		priority = restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD
+	}
 	return &restaurantsv1.ListActiveRestaurantOrdersResponse{Orders: []*restaurantsv1.ActiveRestaurantOrder{{
 		RestaurantOrder: &restaurantsv1.RestaurantOrder{
 			RestaurantOrderId: "ro-1", OrderId: "order-1", RestaurantId: request.GetRestaurantId(), State: state,
-			ExpectedReadyAt: timestamppb.New(expectedReadyAt),
+			ExpectedReadyAt: timestamppb.New(expectedReadyAt), Priority: priority,
 		},
 		Items:      []*restaurantsv1.RestaurantOrderItem{{MenuItemId: "menu-pho", Quantity: 2}},
 		ReceivedAt: timestamppb.New(receivedAt),
@@ -75,7 +84,8 @@ func (s *restaurantsServer) ListActiveRestaurantOrders(ctx context.Context, requ
 	}, {
 		RestaurantOrder: &restaurantsv1.RestaurantOrder{
 			RestaurantOrderId: "ro-received", OrderId: "order-received", RestaurantId: request.GetRestaurantId(),
-			State: restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_RECEIVED,
+			State:    restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_RECEIVED,
+			Priority: restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
 		},
 		ReceivedAt: timestamppb.New(receivedAt),
 	}}}, nil
@@ -99,8 +109,14 @@ func (s *restaurantsServer) RejectRestaurantOrder(ctx context.Context, r *restau
 	return &restaurantsv1.RejectRestaurantOrderResponse{}, s.record(ctx, "Reject:"+r.GetRestaurantId()+"/"+r.GetRestaurantOrderId())
 }
 
-func (s *restaurantsServer) StartPreparation(ctx context.Context, r *restaurantsv1.StartPreparationRequest) (*restaurantsv1.StartPreparationResponse, error) {
-	return &restaurantsv1.StartPreparationResponse{}, s.record(ctx, "Start:"+r.GetRestaurantId()+"/"+r.GetRestaurantOrderId())
+func (s *restaurantsServer) StartNextPreparation(ctx context.Context, r *restaurantsv1.StartNextPreparationRequest) (*restaurantsv1.StartNextPreparationResponse, error) {
+	if err := s.record(ctx, "StartNext:"+r.GetRestaurantId()+"/"+r.GetRequestId()); err != nil {
+		return nil, err
+	}
+	if s.emptyQueue {
+		return &restaurantsv1.StartNextPreparationResponse{}, nil
+	}
+	return &restaurantsv1.StartNextPreparationResponse{RestaurantOrder: &restaurantsv1.RestaurantOrder{RestaurantOrderId: "ro-2"}}, nil
 }
 
 func (s *restaurantsServer) MarkRestaurantOrderAssembled(ctx context.Context, r *restaurantsv1.MarkRestaurantOrderAssembledRequest) (*restaurantsv1.MarkRestaurantOrderAssembledResponse, error) {
@@ -190,10 +206,12 @@ func TestBoardCarriesTheUserAndPublicReadsDoNot(t *testing.T) {
 		ReceivedAt:      receivedAt,
 		AcceptedAt:      &acceptedAt,
 		ExpectedReadyAt: &expectedReadyAt,
+		Priority:        applications.PriorityStandard,
 	}, {
 		ID: "ro-received", OrderID: "order-received", Stage: applications.StageReceived,
 		Lines:      []applications.ActiveOrderLine{},
 		ReceivedAt: receivedAt,
+		Priority:   applications.PriorityPremium,
 	}}, orders, "an order before Acceptance has neither acceptedAt nor expectedReadyAt")
 	queue, err := restaurants.QueueOrder(cookContext(), "restaurant-1")
 	require.NoError(t, err)
@@ -244,10 +262,10 @@ func TestBoardRejectsStatesOutsideTheKitchen(t *testing.T) {
 func TestCommandsGoToTheirRPCOnBehalfOfTheUser(t *testing.T) {
 	server := &restaurantsServer{}
 	restaurants := connect(t, server)
-	for _, action := range []applications.Action{applications.ActionAccept, applications.ActionReject, applications.ActionStartPreparation, applications.ActionMarkAssembled, applications.ActionMarkReady} {
+	for _, action := range []applications.Action{applications.ActionAccept, applications.ActionReject, applications.ActionMarkAssembled, applications.ActionMarkReady} {
 		require.NoError(t, restaurants.Apply(cookContext(), "restaurant-1", "ro-1", action))
 	}
-	assert.Equal(t, []string{"Accept:restaurant-1/ro-1", "Reject:restaurant-1/ro-1", "Start:restaurant-1/ro-1", "Assembled:restaurant-1/ro-1", "Ready:restaurant-1/ro-1"}, server.calls)
+	assert.Equal(t, []string{"Accept:restaurant-1/ro-1", "Reject:restaurant-1/ro-1", "Assembled:restaurant-1/ro-1", "Ready:restaurant-1/ro-1"}, server.calls)
 	for call, asserted := range server.assertions {
 		assert.True(t, asserted, call)
 	}
@@ -274,8 +292,27 @@ func TestCommandsNameRefusals(t *testing.T) {
 // FR-225: a start of preparation without a free cook on line.
 func TestStartWithoutAFreeCookIsNamed(t *testing.T) {
 	server := &restaurantsServer{err: status.Error(codes.ResourceExhausted, "no cook")}
-	err := connect(t, server).Apply(cookContext(), "restaurant-1", "ro-1", applications.ActionStartPreparation)
+	_, err := connect(t, server).StartNext(cookContext(), "restaurant-1", "attempt-1")
 	assert.ErrorIs(t, err, applications.ErrNoCookAvailable)
+}
+
+// FR-225: the queue names the order; an empty queue starts nothing.
+func TestStartNextGoesOnBehalfOfTheUser(t *testing.T) {
+	server := &restaurantsServer{}
+	started, err := connect(t, server).StartNext(cookContext(), "restaurant-1", "attempt-1")
+	require.NoError(t, err)
+	assert.Equal(t, "ro-2", started)
+	assert.True(t, server.assertions["StartNext:restaurant-1/attempt-1"])
+
+	empty, err := connect(t, &restaurantsServer{emptyQueue: true}).StartNext(cookContext(), "restaurant-1", "attempt-2")
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}
+
+// FR-655: restaurants always names the priority of an order.
+func TestBoardRejectsAnUnspecifiedPriority(t *testing.T) {
+	_, err := connect(t, &restaurantsServer{unspecified: true}).ActiveOrders(cookContext(), "restaurant-1")
+	assert.ErrorContains(t, err, "unexpected priority")
 }
 
 func TestCookPoolIsReadOnBehalfOfTheUser(t *testing.T) {

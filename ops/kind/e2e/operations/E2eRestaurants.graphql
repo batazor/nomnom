@@ -1,0 +1,9 @@
+query E2eRestaurants {
+  restaurants(first: 1) {
+    edges {
+      node {
+        id
+      }
+    }
+  }
+}

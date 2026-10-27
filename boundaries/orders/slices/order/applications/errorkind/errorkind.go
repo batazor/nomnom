@@ -38,7 +38,8 @@ func Classify(err error) application.ErrorKind {
 		errors.As(err, &notOrderable), errors.As(err, &notCancellable),
 		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem),
 		errors.Is(err, order.ErrInvalidCancellationReason),
-		errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders), errors.Is(err, fulfillment.ErrCancellationRefused):
+		errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders), errors.Is(err, placeorder.ErrPremiumUnavailable),
+		errors.Is(err, fulfillment.ErrCancellationRefused):
 		return application.KindDomainRule
 	case errors.Is(err, application.ErrPermissionDenied):
 		return application.KindPermission

@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation E2ePlaceOrder($input: PlaceOrderInput!) {\n  placeOrder(input: $input) {\n    order {\n      id\n      status\n    }\n    problems {\n      code\n      menuItemIds\n    }\n  }\n}"
+}

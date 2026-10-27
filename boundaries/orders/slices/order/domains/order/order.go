@@ -57,6 +57,7 @@ type Order struct {
 	restaurantID RestaurantID
 	marketID     vo.MarketID
 	items        []Item
+	service      Service
 	total        vo.Money
 	placedAt     time.Time
 	state        State
@@ -70,20 +71,30 @@ type Order struct {
 
 // New builds an Order without recording a domain event; use Place for a new
 // placement. marketID is the Market of the Restaurant (ADR 41): required and
-// immutable for the life of the Order.
+// immutable for the life of the Order. service is its priority with the
+// premium fee fixed at placement; the fee is part of the total (FR-650).
 func New(
 	id ID,
 	customerID CustomerID,
 	restaurantID RestaurantID,
 	marketID vo.MarketID,
 	items []Item,
+	service Service,
 ) (*Order, error) {
 	if marketID.IsZero() {
 		return nil, ErrMarketRequired
 	}
+	if err := service.validate(); err != nil {
+		return nil, err
+	}
 	total, err := calculateTotal(items)
 	if err != nil {
 		return nil, err
+	}
+	if fee, premium := service.PremiumFee(); premium {
+		if total, err = total.Add(fee); err != nil {
+			return nil, fmt.Errorf("premium fee: %w", err)
+		}
 	}
 	return &Order{
 		id:           id,
@@ -91,6 +102,7 @@ func New(
 		restaurantID: restaurantID,
 		marketID:     marketID,
 		items:        append([]Item(nil), items...),
+		service:      service,
 		total:        total,
 		state:        StatePlaced,
 	}, nil
@@ -104,13 +116,14 @@ func Place(
 	restaurantID RestaurantID,
 	marketID vo.MarketID,
 	items []Item,
+	service Service,
 	placedAt time.Time,
 	orderability OrderabilityContext,
 ) (*Order, error) {
 	if placedAt.IsZero() {
 		return nil, ErrPlacedAtRequired
 	}
-	order, err := New(id, customerID, restaurantID, marketID, items)
+	order, err := New(id, customerID, restaurantID, marketID, items, service)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +209,7 @@ func (o *Order) ID() ID                                 { return o.id }
 func (o *Order) State() State                           { return o.state }
 func (o *Order) Version() uint64                        { return o.version }
 func (o *Order) Total() vo.Money                        { return o.total }
+func (o *Order) Service() Service                       { return o.service }
 func (o *Order) CustomerID() CustomerID                 { return o.customerID }
 func (o *Order) RestaurantID() RestaurantID             { return o.restaurantID }
 func (o *Order) MarketID() vo.MarketID                  { return o.marketID }

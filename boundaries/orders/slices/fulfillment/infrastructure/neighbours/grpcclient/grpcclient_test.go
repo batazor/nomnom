@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +19,9 @@ import (
 	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
 	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
+	"nomnom/orders/slices/order/domains/order"
 )
 
 // The generated server mocks declare mustEmbedUnimplemented… in the test
@@ -163,7 +164,8 @@ func TestErrorsMapToRetryability(t *testing.T) {
 func TestRestaurantsRequestAndCancel(t *testing.T) {
 	conn, _, server, _ := serve(t)
 	server.EXPECT().ReceiveOrderRequest(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.ReceiveOrderRequestRequest) bool {
-		return len(r.GetItems()) == 1 && r.GetItems()[0].GetMenuItemId() == "menu-1" && r.GetItems()[0].GetQuantity() == 2
+		return len(r.GetItems()) == 1 && r.GetItems()[0].GetMenuItemId() == "menu-1" && r.GetItems()[0].GetQuantity() == 2 &&
+			r.GetPriority() == restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM // AC-857
 	})).Return(&restaurantsv1.ReceiveOrderRequestResponse{RestaurantOrderId: "ro-1", Created: true}, nil).Once()
 	server.EXPECT().CancelRestaurantOrder(mock.Anything, mock.Anything).
 		Return(&restaurantsv1.CancelRestaurantOrderResponse{Cancelled: true}, nil).Once()
@@ -172,7 +174,8 @@ func TestRestaurantsRequestAndCancel(t *testing.T) {
 	restaurants := grpcclient.NewRestaurants(conn)
 	request := neighbours.RestaurantOrderRequest{
 		OrderID: "order-1", RestaurantID: "restaurant-1",
-		Items: []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
+		Items:    []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
+		Priority: order.PriorityPremium,
 	}
 
 	require.NoError(t, restaurants.RequestOrder(context.Background(), request))

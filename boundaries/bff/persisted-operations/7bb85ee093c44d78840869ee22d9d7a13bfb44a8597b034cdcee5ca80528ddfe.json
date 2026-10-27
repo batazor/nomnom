@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment BoardOrderView on Order { endReason id placedAt restaurant { id name } status total { amount currency } } subscription BoardOrderChanged($id: ID!) { orderChanged(id: $id) { ...BoardOrderView } }"
+}

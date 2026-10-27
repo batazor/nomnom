@@ -69,7 +69,8 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 		user, ok := identity.UserFrom(ctx)
 		return ok && user.ID == "customer-1"
 	}), "order-1").Return(applications.OrderView{
-		ID: "order-1", Status: applications.StatusPreparing,
+		ID: "order-1", Status: applications.StatusPreparing, Priority: applications.PriorityPremium,
+		PremiumFee: &applications.Money{Amount: "0.10", Currency: "EUR"},
 		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
 		Items: []applications.ItemView{{MenuItemID: "menu-tea", Name: "Чай", Quantity: 3,
 			UnitPrice: applications.Money{Amount: "0.10", Currency: "EUR"}, LineTotal: applications.Money{Amount: "0.30", Currency: "EUR"}}},
@@ -94,6 +95,9 @@ func TestQueryOrderMapsTheView(t *testing.T) {
 	assert.Equal(t, "2026-10-25T12:12:00Z", order.GetExpectedReadyAt().GetValue())
 	assert.Nil(t, order.GetExpectedPickupAt(), "a deadline nobody named is null")
 	assert.Nil(t, order.GetExpectedDeliveredAt(), "a deadline nobody named is null")
+	// FR-652: the premium order carries its fixed fee.
+	assert.Equal(t, service.OrderPriority_ORDER_PRIORITY_PREMIUM, order.GetPriority())
+	assert.Equal(t, "0.10", order.GetPremiumFee().GetAmount())
 }
 
 func TestQueryOrderNotFoundIsNull(t *testing.T) {
@@ -113,7 +117,7 @@ func TestLookupOrderByIdResolvesAsTheCustomer(t *testing.T) {
 	getOrder.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool {
 		user, ok := identity.UserFrom(ctx)
 		return ok && user.ID == "customer-1"
-	}), "order-1").Return(applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp,
+	}), "order-1").Return(applications.OrderView{ID: "order-1", Status: applications.StatusPickedUp, Priority: applications.PriorityStandard,
 		Total:     applications.Money{Amount: "0.30", Currency: "EUR"},
 		Deadlines: applications.Deadlines{ExpectedDeliveredAt: &delivered}}, nil).Once()
 	getOrder.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool {

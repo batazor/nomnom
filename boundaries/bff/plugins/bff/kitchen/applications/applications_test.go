@@ -18,7 +18,7 @@ var menuNames = map[string]string{"menu-pho": "Фо бо"}
 
 func active(id string, stage Stage, minutes int) ActiveOrder {
 	order := ActiveOrder{
-		ID: id, OrderID: "order-" + id, Stage: stage,
+		ID: id, OrderID: "order-" + id, Stage: stage, Priority: PriorityStandard,
 		Lines:      []ActiveOrderLine{{MenuItemID: "menu-pho", Quantity: 2}, {MenuItemID: "menu-gone", Quantity: 1}},
 		ReceivedAt: at(minutes),
 	}
@@ -72,14 +72,14 @@ func TestKitchenOrdersFollowTheBoardOrder(t *testing.T) {
 }
 
 func TestKitchenActionReadsTheOrderBack(t *testing.T) {
-	request := ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: ActionStartPreparation}
+	request := ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: ActionMarkAssembled}
 	board := NewMockKitchenBoard(t)
-	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return([]ActiveOrder{active("other", StageReceived, 0), active("ro-1", StagePreparing, 1)}, nil).Once()
+	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return([]ActiveOrder{active("other", StageReceived, 0), active("ro-1", StageAssembled, 1)}, nil).Once()
 	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(CookPool{}, nil).Once()
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().MenuItemNames(mock.Anything, "restaurant-1").Return(menuNames, nil).Once()
 	commands := NewMockKitchenCommands(t)
-	commands.EXPECT().Apply(mock.Anything, "restaurant-1", "ro-1", ActionStartPreparation).Return(nil).Once()
+	commands.EXPECT().Apply(mock.Anything, "restaurant-1", "ro-1", ActionMarkAssembled).Return(nil).Once()
 	h := NewApplyKitchenAction(commands, board, catalog)
 
 	result, err := h.Handle(context.Background(), request)
@@ -87,8 +87,51 @@ func TestKitchenActionReadsTheOrderBack(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.Order)
 	assert.Equal(t, "ro-1", result.Order.ID)
-	assert.Equal(t, StagePreparing, result.Order.Stage)
+	assert.Equal(t, StageAssembled, result.Order.Stage)
 	assert.Empty(t, result.Problem)
+}
+
+// FR-225, AC-867: the queue chooses the order; the started one is read back
+// with its priority.
+func TestStartNextReadsTheStartedOrderBack(t *testing.T) {
+	premium := active("premium", StagePreparing, 2)
+	premium.Priority = PriorityPremium
+	board := NewMockKitchenBoard(t)
+	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return([]ActiveOrder{active("standard", StageQueued, 0), premium}, nil).Once()
+	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(CookPool{}, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().MenuItemNames(mock.Anything, "restaurant-1").Return(menuNames, nil).Once()
+	commands := NewMockKitchenCommands(t)
+	commands.EXPECT().StartNext(mock.Anything, "restaurant-1", "attempt-1").Return("premium", nil).Once()
+
+	result, err := NewStartNextPreparation(commands, board, catalog).Handle(context.Background(), StartNextRequest{RestaurantID: "restaurant-1", RequestID: "attempt-1"})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Order)
+	assert.Equal(t, "premium", result.Order.ID)
+	assert.Equal(t, PriorityPremium, result.Order.Priority)
+}
+
+// An empty Kitchen Queue is an empty result, not a problem.
+func TestStartNextOnAnEmptyQueueStartsNothing(t *testing.T) {
+	commands := NewMockKitchenCommands(t)
+	commands.EXPECT().StartNext(mock.Anything, "restaurant-1", "attempt-1").Return("", nil).Once()
+
+	result, err := NewStartNextPreparation(commands, NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), StartNextRequest{RestaurantID: "restaurant-1", RequestID: "attempt-1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, ActionResult{}, result)
+}
+
+// AC-868: no free cook is the problem of the payload.
+func TestStartNextWithoutAFreeCookIsAProblem(t *testing.T) {
+	commands := NewMockKitchenCommands(t)
+	commands.EXPECT().StartNext(mock.Anything, "restaurant-1", "attempt-1").Return("", ErrNoCookAvailable).Once()
+
+	result, err := NewStartNextPreparation(commands, NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), StartNextRequest{RestaurantID: "restaurant-1", RequestID: "attempt-1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, ProblemNoCookAvailable, result.Problem)
 }
 
 func TestRejectedOrLeftOrderIsNull(t *testing.T) {
@@ -160,16 +203,6 @@ func TestKitchenShowsTheCookPoolAndTheCookOfAnOrder(t *testing.T) {
 	assert.Equal(t, &aigul, byID["ro-1"].Cook)
 	assert.Nil(t, byID["ro-2"].Cook, "a cook who left the pool is not named")
 	assert.Nil(t, byID["ro-3"].Cook, "a queued order has no cook")
-}
-
-func TestStartWithoutAFreeCookIsAProblem(t *testing.T) {
-	request := ActionRequest{RestaurantID: "r", KitchenOrderID: "ro-1", Action: ActionStartPreparation}
-	commands := NewMockKitchenCommands(t)
-	commands.EXPECT().Apply(mock.Anything, "r", "ro-1", ActionStartPreparation).Return(ErrNoCookAvailable).Once()
-	result, err := NewApplyKitchenAction(commands, NewMockKitchenBoard(t), NewMockCatalog(t)).Handle(context.Background(), request)
-
-	require.NoError(t, err)
-	assert.Equal(t, ActionResult{Problem: ProblemNoCookAvailable}, result)
 }
 
 // AC-793, AC-799: a Cook Pool command answers the pool read back; business

@@ -15,8 +15,8 @@ import {
 } from "vitest";
 
 import { AppProviders } from "../../app/providers";
-import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { courierStepMs } from "../../shared/graphql/mocks/courier-tracks";
+import { mockStore } from "../../shared/graphql/mocks/handlers";
 import { mockServer } from "../../shared/graphql/mocks/server";
 import { liveStepMs } from "../../shared/graphql/mocks/store";
 import { OrderDetails } from "./order-details";

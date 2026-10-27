@@ -4,6 +4,13 @@ package nomnom.orders.v1;
 
 import "google/protobuf/timestamp.proto";
 
+// Premium Priority of an Order (FR-650): a premium Order is prepared first.
+enum OrderPriority {
+  ORDER_PRIORITY_UNSPECIFIED = 0;
+  ORDER_PRIORITY_STANDARD = 1;
+  ORDER_PRIORITY_PREMIUM = 2;
+}
+
 enum OrderState {
   ORDER_STATE_UNSPECIFIED = 0;
   ORDER_STATE_PLACED = 1;
@@ -65,6 +72,11 @@ message Order {
   google.protobuf.Timestamp expected_delivered_at = 14;
   // Market of the Restaurant at Place Order (ADR 41); immutable.
   string market_id = 15;
+  // Premium Priority chosen at Place Order (FR-650).
+  OrderPriority priority = 16;
+  // Fee of Premium Priority fixed at Place Order and included in total; unset
+  // for a standard Order.
+  Money premium_fee = 17;
 }
 
 message OrderSummary {

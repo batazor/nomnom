@@ -56,7 +56,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			order, err := Place("order-1", "customer-1", "restaurant-1", testMarket(t), items, tt.placedAt, tt.context)
+			order, err := Place("order-1", "customer-1", "restaurant-1", testMarket(t), items, StandardService(), tt.placedAt, tt.context)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 				return

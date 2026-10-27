@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CourierPoolView on CourierPool { busy couriers { availability currentOrderId id name offeredOrderId } id onLine size waiting } mutation SetCourierOnLine($courierId: ID!, $onLine: Boolean!) { setCourierOnLine(courierId: $courierId, onLine: $onLine) { courierPool { ...CourierPoolView } problem } }"
+}

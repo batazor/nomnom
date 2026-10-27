@@ -32,7 +32,7 @@ var (
 )
 
 var preparing = applications.OrderView{
-	ID: "ro-1", OrderID: "order-1", Stage: applications.StagePreparing,
+	ID: "ro-1", OrderID: "order-1", Stage: applications.StagePreparing, Priority: applications.PriorityPremium,
 	Items:           []applications.ItemView{{Name: "Фо бо", Quantity: 2}},
 	ReceivedAt:      kitchenReceivedAt,
 	AcceptedAt:      &kitchenAcceptedAt,
@@ -40,7 +40,7 @@ var preparing = applications.OrderView{
 }
 
 var received = applications.OrderView{
-	ID: "ro-2", OrderID: "order-2", Stage: applications.StageReceived,
+	ID: "ro-2", OrderID: "order-2", Stage: applications.StageReceived, Priority: applications.PriorityStandard,
 	Items:      []applications.ItemView{{Name: "Фо бо", Quantity: 1}},
 	ReceivedAt: kitchenReceivedAt,
 }
@@ -104,18 +104,19 @@ func TestKitchenRequiresAccessTokenAndRestaurant(t *testing.T) {
 func TestApplyKitchenActionPayload(t *testing.T) {
 	order := preparing
 	action := newMockKitchenActionHandler(t)
-	action.EXPECT().Handle(mock.Anything, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionStartPreparation}).
+	action.EXPECT().Handle(mock.Anything, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionMarkAssembled}).
 		Return(applications.ActionResult{Order: &order}, nil).Once()
 	action.EXPECT().Handle(mock.Anything, applications.ActionRequest{RestaurantID: "restaurant-1", KitchenOrderID: "ro-1", Action: applications.ActionAccept}).
 		Return(applications.ActionResult{Problem: applications.ProblemOrderStageConflict}, nil).Once()
 	svc, ctx := kitchenService(t, newMockGetKitchenHandler(t), action)
 
 	response, err := svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: &service.KitchenActionInput{
-		RestaurantId: "restaurant-1", KitchenOrderId: "ro-1", Action: service.KitchenAction_KITCHEN_ACTION_START_PREPARATION,
+		RestaurantId: "restaurant-1", KitchenOrderId: "ro-1", Action: service.KitchenAction_KITCHEN_ACTION_MARK_ASSEMBLED,
 	}})
 
 	require.NoError(t, err)
 	assert.Equal(t, "ro-1", response.GetApplyKitchenAction().GetOrder().GetId())
+	assert.Equal(t, service.OrderPriority_ORDER_PRIORITY_PREMIUM, response.GetApplyKitchenAction().GetOrder().GetPriority())
 	assert.Equal(t, service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_UNSPECIFIED, response.GetApplyKitchenAction().GetProblem(), "no problem is null")
 
 	response, err = svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: &service.KitchenActionInput{
@@ -151,4 +152,35 @@ func TestApplyKitchenActionErrors(t *testing.T) {
 		_, err := svc.MutationApplyKitchenAction(ctx, &service.MutationApplyKitchenActionRequest{Input: bad})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
+}
+
+// FR-655: startNextPreparation answers the started order, null on an empty
+// queue and NO_COOK_AVAILABLE without a free cook.
+func TestStartNextPreparationPayload(t *testing.T) {
+	order := preparing
+	start := newMockStartNextPreparationHandler(t)
+	start.EXPECT().Handle(mock.Anything, applications.StartNextRequest{RestaurantID: "restaurant-1", RequestID: "attempt-1"}).
+		Return(applications.ActionResult{Order: &order}, nil).Once()
+	start.EXPECT().Handle(mock.Anything, applications.StartNextRequest{RestaurantID: "restaurant-1", RequestID: "attempt-2"}).
+		Return(applications.ActionResult{}, nil).Once()
+	start.EXPECT().Handle(mock.Anything, applications.StartNextRequest{RestaurantID: "restaurant-1", RequestID: "attempt-3"}).
+		Return(applications.ActionResult{Problem: applications.ProblemNoCookAvailable}, nil).Once()
+	svc, ctx := kitchenService(t, newMockGetKitchenHandler(t), newMockKitchenActionHandler(t))
+	svc.kitchen.startNext = start
+
+	response, err := svc.MutationStartNextPreparation(ctx, &service.MutationStartNextPreparationRequest{RestaurantId: "restaurant-1", RequestId: "attempt-1"})
+	require.NoError(t, err)
+	assert.Equal(t, "ro-1", response.GetStartNextPreparation().GetOrder().GetId())
+
+	response, err = svc.MutationStartNextPreparation(ctx, &service.MutationStartNextPreparationRequest{RestaurantId: "restaurant-1", RequestId: "attempt-2"})
+	require.NoError(t, err)
+	assert.Nil(t, response.GetStartNextPreparation().GetOrder(), "an empty queue starts nothing")
+	assert.Equal(t, service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_UNSPECIFIED, response.GetStartNextPreparation().GetProblem())
+
+	response, err = svc.MutationStartNextPreparation(ctx, &service.MutationStartNextPreparationRequest{RestaurantId: "restaurant-1", RequestId: "attempt-3"})
+	require.NoError(t, err)
+	assert.Equal(t, service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_NO_COOK_AVAILABLE, response.GetStartNextPreparation().GetProblem())
+
+	_, err = svc.MutationStartNextPreparation(ctx, &service.MutationStartNextPreparationRequest{RestaurantId: "restaurant-1"})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "requestId is required")
 }

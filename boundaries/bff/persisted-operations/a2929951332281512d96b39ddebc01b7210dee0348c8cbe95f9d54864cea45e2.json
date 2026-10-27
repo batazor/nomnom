@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation RequestOrderCancellation($input: RequestOrderCancellationInput!) { requestOrderCancellation(input: $input) { outcome problem { code } } }"
+}

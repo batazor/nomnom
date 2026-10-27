@@ -36,6 +36,14 @@ func WithMarket(marketID string) Option {
 	return func(snapshot *order.Snapshot) { snapshot.MarketID = mustMarket(marketID) }
 }
 
+// WithPremium makes the fixture a premium Order with fee EUR (FR-650).
+func WithPremium(t testing.TB, fee string) Option {
+	t.Helper()
+	service, err := order.PremiumService(Money(t, fee))
+	require.NoError(t, err)
+	return func(snapshot *order.Snapshot) { snapshot.Service = service }
+}
+
 func WithExpectedTimes(expected order.ExpectedTimes) Option {
 	return func(snapshot *order.Snapshot) { snapshot.Expected = expected }
 }
@@ -43,7 +51,7 @@ func WithExpectedTimes(expected order.ExpectedTimes) Option {
 // Market is the Market of fixtures unless WithMarket names another.
 const Market = "berlin"
 
-// New returns a standard Order with one item "menu-1" × 2 at 10 EUR for
+// New returns a standard Order (no Premium Priority) with one item "menu-1" × 2 at 10 EUR for
 // customer-1 in restaurant-1 of Market berlin, not yet persisted (version 0).
 func New(t testing.TB, id order.ID, options ...Option) *order.Order {
 	t.Helper()
@@ -53,6 +61,7 @@ func New(t testing.TB, id order.ID, options ...Option) *order.Order {
 		RestaurantID: "restaurant-1",
 		MarketID:     MarketID(t),
 		Items:        []order.Item{order.NewItem("menu-1", "Margherita", Quantity(t, 2), Money(t, "10"))},
+		Service:      order.StandardService(),
 		PlacedAt:     PlacedAt,
 		State:        order.StatePlaced,
 	}

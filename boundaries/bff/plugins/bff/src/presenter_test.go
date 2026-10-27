@@ -55,19 +55,22 @@ func TestEnumTablesAreComplete(t *testing.T) {
 	assertComplete(t, placeOrderProblemCodes, []checkoutapp.ProblemCode{
 		checkoutapp.ProblemOrderItemUnavailable, checkoutapp.ProblemOrderTotalBelowMinimum,
 		checkoutapp.ProblemOrderTotalAboveMaximum, checkoutapp.ProblemRestaurantNotAcceptingOrders,
+		checkoutapp.ProblemPremiumUnavailable,
 	}, service.PlaceOrderProblemCode_name)
+	assertComplete(t, orderPriorities, []tracking.Priority{tracking.PriorityStandard, tracking.PriorityPremium}, service.OrderPriority_name)
 }
 
 // AC-641: an unknown value is an error, never UNSPECIFIED.
 func TestUnknownValuesAreErrors(t *testing.T) {
-	valid := tracking.OrderView{ID: "order-1", Status: tracking.StatusCancelled}
+	valid := tracking.OrderView{ID: "order-1", Status: tracking.StatusCancelled, Priority: tracking.PriorityStandard}
 	_, err := orderMessage(valid)
 	require.NoError(t, err)
 
 	for name, view := range map[string]tracking.OrderView{
-		"status":     {Status: "LOST"},
-		"end reason": {Status: tracking.StatusCancelled, EndReason: "LOST"},
-		"milestone":  {Status: tracking.StatusCancelled, Milestones: []tracking.Milestone{{Kind: "LOST"}}},
+		"status":     {Status: "LOST", Priority: tracking.PriorityStandard},
+		"priority":   {Status: tracking.StatusCancelled},
+		"end reason": {Status: tracking.StatusCancelled, Priority: tracking.PriorityStandard, EndReason: "LOST"},
+		"milestone":  {Status: tracking.StatusCancelled, Priority: tracking.PriorityStandard, Milestones: []tracking.Milestone{{Kind: "LOST"}}},
 	} {
 		_, err := orderMessage(view)
 		assert.Error(t, err, name)

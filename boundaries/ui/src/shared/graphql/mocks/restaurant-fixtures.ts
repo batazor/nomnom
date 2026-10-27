@@ -1,6 +1,7 @@
 import type {
   OrderEndReason,
   OrderMilestoneKind,
+  OrderPriority,
   OrderStatus,
 } from "../generated/graphql";
 import type { MockTracking } from "./courier-tracks";
@@ -38,6 +39,8 @@ export type MockRestaurant = {
   menu: { items: MockMenuItem[] } | null;
   // Set by the catalog queries, null elsewhere like in the BFF.
   waitTime: MockWaitTime | null;
+  // Fee of Premium Priority, null when the restaurant offers none (FR-652).
+  premiumFee: MockMoney | null;
 };
 
 // A kitchen working at its usual pace.
@@ -62,6 +65,9 @@ export type MockOrder = {
   restaurant: MockRestaurant;
   items: MockOrderItem[];
   total: MockMoney;
+  priority: OrderPriority;
+  // Fee fixed at checkout, null for a standard order.
+  premiumFee: MockMoney | null;
   placedAt: string;
   milestones: MockOrderMilestone[];
   cancellation: { availableUntil: string } | null;
@@ -100,6 +106,8 @@ export const kitchenEight: MockRestaurant = {
   acceptingOrders: true,
   // The kitchen is slower than usual: the catalog shows the badge.
   waitTime: { elevated: true, expectedWaitMinutes: 42 },
+  // Offers Premium Priority (FR-653); the other restaurants do not.
+  premiumFee: { amount: "99.00", currency: "RUB" },
   menu: {
     items: [
       {
@@ -139,6 +147,7 @@ export const nightBakery: MockRestaurant = {
   name: "Ночная пекарня",
   acceptingOrders: false,
   waitTime: usualWait,
+  premiumFee: null,
   menu: {
     items: [
       {
@@ -169,6 +178,7 @@ const moreRestaurants: MockRestaurant[] = [
     name: "Пельменная «Север»",
     acceptingOrders: true,
     waitTime: usualWait,
+    premiumFee: null,
     menu: {
       items: [
         item(
@@ -186,6 +196,7 @@ const moreRestaurants: MockRestaurant[] = [
     name: "Грузинский дворик",
     acceptingOrders: true,
     waitTime: usualWait,
+    premiumFee: null,
     menu: {
       items: [
         item("menu-khachapuri", "Хачапури по-аджарски", "520.00"),
@@ -198,6 +209,7 @@ const moreRestaurants: MockRestaurant[] = [
     name: "Рамен-бар Сора",
     acceptingOrders: true,
     waitTime: usualWait,
+    premiumFee: null,
     menu: {
       items: [item("menu-shoyu", "Сёю рамен", "640.00", "Курица, яйцо, нори")],
     },
@@ -207,6 +219,7 @@ const moreRestaurants: MockRestaurant[] = [
     name: "Овощи и злаки",
     acceptingOrders: true,
     waitTime: usualWait,
+    premiumFee: null,
     menu: {
       items: [item("menu-buddha-bowl", "Боул с киноа", "480.50")],
     },
@@ -216,6 +229,7 @@ const moreRestaurants: MockRestaurant[] = [
     name: "Пицца у моста",
     acceptingOrders: true,
     waitTime: usualWait,
+    premiumFee: null,
     menu: {
       items: [item("menu-margherita", "Маргарита", "560.00")],
     },
@@ -225,6 +239,7 @@ const moreRestaurants: MockRestaurant[] = [
     name: "Кофейня на углу",
     acceptingOrders: true,
     waitTime: usualWait,
+    premiumFee: null,
     menu: null,
   },
 ];
@@ -255,4 +270,9 @@ export function orderTotal(items: readonly MockOrderItem[]): MockMoney {
   return fromMinor(
     items.reduce((sum, item) => sum + toMinor(item.lineTotal), 0),
   );
+}
+
+// Total with the premium fee fixed at checkout (FR-650).
+export function withFee(total: MockMoney, fee: MockMoney): MockMoney {
+  return fromMinor(toMinor(total) + toMinor(fee));
 }

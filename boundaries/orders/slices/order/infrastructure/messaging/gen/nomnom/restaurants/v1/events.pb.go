@@ -29,7 +29,9 @@ type RestaurantOrderAccepted struct {
 	OrderId         string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	ExpectedReadyAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expected_ready_at,json=expectedReadyAt,proto3" json:"expected_ready_at,omitempty"`
 	// Market of the aggregate (ADR 41).
-	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	MarketId string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+	RestaurantId  string `protobuf:"bytes,4,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,6 +83,13 @@ func (x *RestaurantOrderAccepted) GetExpectedReadyAt() *timestamppb.Timestamp {
 func (x *RestaurantOrderAccepted) GetMarketId() string {
 	if x != nil {
 		return x.MarketId
+	}
+	return ""
+}
+
+func (x *RestaurantOrderAccepted) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
 	}
 	return ""
 }
@@ -269,7 +278,9 @@ type PreparationFailed struct {
 	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	Reason  string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 	// Market of the aggregate (ADR 41).
-	MarketId      string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	MarketId string `protobuf:"bytes,3,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+	RestaurantId  string `protobuf:"bytes,4,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -325,12 +336,21 @@ func (x *PreparationFailed) GetMarketId() string {
 	return ""
 }
 
+func (x *PreparationFailed) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
 // Kitchen Order готов к Pickup.
 type RestaurantOrderReady struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	// Market of the aggregate (ADR 41).
-	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	MarketId string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+	RestaurantId  string `protobuf:"bytes,3,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -379,6 +399,13 @@ func (x *RestaurantOrderReady) GetMarketId() string {
 	return ""
 }
 
+func (x *RestaurantOrderReady) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
 // Kitchen Order отменён по запросу orders (Cancel Restaurant Order);
 // preparation_started — отмена произошла после начала Preparation.
 type RestaurantOrderCancelled struct {
@@ -387,7 +414,9 @@ type RestaurantOrderCancelled struct {
 	Reason             string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 	PreparationStarted bool                   `protobuf:"varint,3,opt,name=preparation_started,json=preparationStarted,proto3" json:"preparation_started,omitempty"`
 	// Market of the aggregate (ADR 41).
-	MarketId      string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	MarketId string `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
+	RestaurantId  string `protobuf:"bytes,5,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -446,6 +475,13 @@ func (x *RestaurantOrderCancelled) GetPreparationStarted() bool {
 func (x *RestaurantOrderCancelled) GetMarketId() string {
 	if x != nil {
 		return x.MarketId
+	}
+	return ""
+}
+
+func (x *RestaurantOrderCancelled) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
 	}
 	return ""
 }
@@ -559,6 +595,70 @@ func (x *RestaurantClosed) GetMarketId() string {
 	return ""
 }
 
+// Уровень ожидания ресторана сменился (Wait Time Statistics, FR-646):
+// elevated — текущее ожидание повышено относительно базового времени ресторана.
+// aggregate_type RestaurantWaitTime, aggregate_id — restaurant_id.
+type RestaurantWaitLevelChanged struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RestaurantId string                 `protobuf:"bytes,1,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
+	// Market of the restaurant (ADR 41).
+	MarketId      string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	Elevated      bool   `protobuf:"varint,3,opt,name=elevated,proto3" json:"elevated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestaurantWaitLevelChanged) Reset() {
+	*x = RestaurantWaitLevelChanged{}
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestaurantWaitLevelChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestaurantWaitLevelChanged) ProtoMessage() {}
+
+func (x *RestaurantWaitLevelChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestaurantWaitLevelChanged.ProtoReflect.Descriptor instead.
+func (*RestaurantWaitLevelChanged) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RestaurantWaitLevelChanged) GetRestaurantId() string {
+	if x != nil {
+		return x.RestaurantId
+	}
+	return ""
+}
+
+func (x *RestaurantWaitLevelChanged) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
+func (x *RestaurantWaitLevelChanged) GetElevated() bool {
+	if x != nil {
+		return x.Elevated
+	}
+	return false
+}
+
 // В меню добавлен Menu Item (Add Menu Item). Состав и цену соседи читают через
 // GetMenu: событие несёт только ключи.
 type MenuItemAdded struct {
@@ -574,7 +674,7 @@ type MenuItemAdded struct {
 
 func (x *MenuItemAdded) Reset() {
 	*x = MenuItemAdded{}
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -586,7 +686,7 @@ func (x *MenuItemAdded) String() string {
 func (*MenuItemAdded) ProtoMessage() {}
 
 func (x *MenuItemAdded) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[9]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -599,7 +699,7 @@ func (x *MenuItemAdded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItemAdded.ProtoReflect.Descriptor instead.
 func (*MenuItemAdded) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{9}
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MenuItemAdded) GetMenuId() string {
@@ -646,7 +746,7 @@ type MenuItemUpdated struct {
 
 func (x *MenuItemUpdated) Reset() {
 	*x = MenuItemUpdated{}
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[10]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -658,7 +758,7 @@ func (x *MenuItemUpdated) String() string {
 func (*MenuItemUpdated) ProtoMessage() {}
 
 func (x *MenuItemUpdated) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[10]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -671,7 +771,7 @@ func (x *MenuItemUpdated) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItemUpdated.ProtoReflect.Descriptor instead.
 func (*MenuItemUpdated) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{10}
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MenuItemUpdated) GetMenuId() string {
@@ -718,7 +818,7 @@ type MenuItemAvailabilityChanged struct {
 
 func (x *MenuItemAvailabilityChanged) Reset() {
 	*x = MenuItemAvailabilityChanged{}
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[11]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -730,7 +830,7 @@ func (x *MenuItemAvailabilityChanged) String() string {
 func (*MenuItemAvailabilityChanged) ProtoMessage() {}
 
 func (x *MenuItemAvailabilityChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[11]
+	mi := &file_nomnom_restaurants_v1_events_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -743,7 +843,7 @@ func (x *MenuItemAvailabilityChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItemAvailabilityChanged.ProtoReflect.Descriptor instead.
 func (*MenuItemAvailabilityChanged) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{11}
+	return file_nomnom_restaurants_v1_events_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *MenuItemAvailabilityChanged) GetMenuId() string {
@@ -785,11 +885,12 @@ var File_nomnom_restaurants_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\"nomnom/restaurants/v1/events.proto\x12\x15nomnom.restaurants.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x99\x01\n" +
+	"\"nomnom/restaurants/v1/events.proto\x12\x15nomnom.restaurants.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x01\n" +
 	"\x17RestaurantOrderAccepted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12F\n" +
 	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12\x1b\n" +
-	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"i\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\x12#\n" +
+	"\rrestaurant_id\x18\x04 \x01(\tR\frestaurantId\"i\n" +
 	"\x17RestaurantOrderRejected\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1b\n" +
@@ -800,25 +901,32 @@ const file_nomnom_restaurants_v1_events_proto_rawDesc = "" +
 	"\x12PreparationDelayed\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12F\n" +
 	"\x11expected_ready_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12\x1b\n" +
-	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"c\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"\x88\x01\n" +
 	"\x11PreparationFailed\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1b\n" +
-	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\"N\n" +
+	"\tmarket_id\x18\x03 \x01(\tR\bmarketId\x12#\n" +
+	"\rrestaurant_id\x18\x04 \x01(\tR\frestaurantId\"s\n" +
 	"\x14RestaurantOrderReady\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
-	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x9b\x01\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\x12#\n" +
+	"\rrestaurant_id\x18\x03 \x01(\tR\frestaurantId\"\xc0\x01\n" +
 	"\x18RestaurantOrderCancelled\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12/\n" +
 	"\x13preparation_started\x18\x03 \x01(\bR\x12preparationStarted\x12\x1b\n" +
-	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\"T\n" +
+	"\tmarket_id\x18\x04 \x01(\tR\bmarketId\x12#\n" +
+	"\rrestaurant_id\x18\x05 \x01(\tR\frestaurantId\"T\n" +
 	"\x10RestaurantOpened\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x1b\n" +
 	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"T\n" +
 	"\x10RestaurantClosed\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x1b\n" +
-	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x8c\x01\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"z\n" +
+	"\x1aRestaurantWaitLevelChanged\x12#\n" +
+	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\x12\x1a\n" +
+	"\belevated\x18\x03 \x01(\bR\belevated\"\x8c\x01\n" +
 	"\rMenuItemAdded\x12\x17\n" +
 	"\amenu_id\x18\x01 \x01(\tR\x06menuId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12 \n" +
@@ -852,7 +960,7 @@ func file_nomnom_restaurants_v1_events_proto_rawDescGZIP() []byte {
 	return file_nomnom_restaurants_v1_events_proto_rawDescData
 }
 
-var file_nomnom_restaurants_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_nomnom_restaurants_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_nomnom_restaurants_v1_events_proto_goTypes = []any{
 	(*RestaurantOrderAccepted)(nil),     // 0: nomnom.restaurants.v1.RestaurantOrderAccepted
 	(*RestaurantOrderRejected)(nil),     // 1: nomnom.restaurants.v1.RestaurantOrderRejected
@@ -863,14 +971,15 @@ var file_nomnom_restaurants_v1_events_proto_goTypes = []any{
 	(*RestaurantOrderCancelled)(nil),    // 6: nomnom.restaurants.v1.RestaurantOrderCancelled
 	(*RestaurantOpened)(nil),            // 7: nomnom.restaurants.v1.RestaurantOpened
 	(*RestaurantClosed)(nil),            // 8: nomnom.restaurants.v1.RestaurantClosed
-	(*MenuItemAdded)(nil),               // 9: nomnom.restaurants.v1.MenuItemAdded
-	(*MenuItemUpdated)(nil),             // 10: nomnom.restaurants.v1.MenuItemUpdated
-	(*MenuItemAvailabilityChanged)(nil), // 11: nomnom.restaurants.v1.MenuItemAvailabilityChanged
-	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
+	(*RestaurantWaitLevelChanged)(nil),  // 9: nomnom.restaurants.v1.RestaurantWaitLevelChanged
+	(*MenuItemAdded)(nil),               // 10: nomnom.restaurants.v1.MenuItemAdded
+	(*MenuItemUpdated)(nil),             // 11: nomnom.restaurants.v1.MenuItemUpdated
+	(*MenuItemAvailabilityChanged)(nil), // 12: nomnom.restaurants.v1.MenuItemAvailabilityChanged
+	(*timestamppb.Timestamp)(nil),       // 13: google.protobuf.Timestamp
 }
 var file_nomnom_restaurants_v1_events_proto_depIdxs = []int32{
-	12, // 0: nomnom.restaurants.v1.RestaurantOrderAccepted.expected_ready_at:type_name -> google.protobuf.Timestamp
-	12, // 1: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
+	13, // 0: nomnom.restaurants.v1.RestaurantOrderAccepted.expected_ready_at:type_name -> google.protobuf.Timestamp
+	13, // 1: nomnom.restaurants.v1.PreparationDelayed.expected_ready_at:type_name -> google.protobuf.Timestamp
 	2,  // [2:2] is the sub-list for method output_type
 	2,  // [2:2] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
@@ -889,7 +998,7 @@ func file_nomnom_restaurants_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_restaurants_v1_events_proto_rawDesc), len(file_nomnom_restaurants_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -26,6 +26,8 @@ export type ReceiveOrderRequest = Readonly<{
   /** Contract `Order ID` from `orders`; one Restaurant Order per Order. */
   orderId: string;
   items: readonly PreparationItemInput[];
+  /** Premium Priority chosen at Place Order (FR-651). */
+  priority: string;
 }>;
 
 /** Market of a registered restaurant; `undefined` when it is not registered. */
@@ -92,6 +94,7 @@ export class ReceiveOrderRequestHandler {
       restaurantId: command.restaurantId,
       marketId: marketId.value,
       items: command.items,
+      priority: command.priority,
       receivedAt: this.#clock.now(),
     });
     try {

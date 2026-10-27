@@ -1,4 +1,7 @@
-import type { RestaurantOrderState } from "../../domains/restaurantorder/restaurantorder.ts";
+import type {
+  OrderPriority,
+  RestaurantOrderState,
+} from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control.ts";
 import {
   authorizeKitchenBoard,
@@ -12,6 +15,7 @@ export type ActiveRestaurantOrder = Readonly<{
   restaurantOrderId: string;
   orderId: string;
   state: RestaurantOrderState;
+  priority: OrderPriority;
   items: readonly KitchenBoardItem[];
   /** Unset on orders received before the timeline recorded it. */
   receivedAt: Date | undefined;

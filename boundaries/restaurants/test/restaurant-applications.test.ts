@@ -6,6 +6,7 @@ import {
   PermissionDeniedError,
 } from "../pkg/application/errors.ts";
 import type { Outbox } from "../pkg/application/outbox.ts";
+import { InvalidMoneyError } from "../slices/menu/domains/menu/vo/money.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import {
@@ -13,7 +14,10 @@ import {
   ListRestaurantsHandler,
 } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
-import { UpdateRestaurantHandler } from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
+import {
+  type PremiumFeeChange,
+  UpdateRestaurantHandler,
+} from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
 import {
   InvalidMarketIdError,
   InvalidRestaurantError,
@@ -164,11 +168,13 @@ test("AC-205 update restaurant renames without touching the opening", async () =
     subject: owner,
     restaurantId,
     name: "Ramen Bar",
+    premiumFee: { kind: "keep" },
   });
   const unchanged = await update.execute({
     subject: owner,
     restaurantId,
     name: "Ramen Bar",
+    premiumFee: { kind: "keep" },
   });
 
   assert.deepEqual(result, {
@@ -184,6 +190,70 @@ test("AC-205 update restaurant renames without touching the opening", async () =
   assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
+test("AC-849 AC-850 update restaurant sets and clears the premium fee", async () => {
+  const world = await createRestaurantWorld();
+  const restaurantId = await world.givenRestaurant("Pho Bar");
+  const get = new GetRestaurantHandler({ reader: world.catalog });
+  const updateFee = (premiumFee: PremiumFeeChange) =>
+    world.update.execute({
+      subject: owner,
+      restaurantId,
+      name: "Pho Bar",
+      premiumFee,
+    });
+
+  const set = await updateFee({
+    kind: "set",
+    fee: { amount: "99.00", currency: "RUB" },
+  });
+  const kept = await updateFee({ kind: "keep" });
+  const repeated = await updateFee({
+    kind: "set",
+    fee: { amount: "99.00", currency: "RUB" },
+  });
+
+  assert.equal(set.changed, true);
+  assert.deepEqual(set.premiumFee, { amount: "99.00", currency: "RUB" });
+  assert.deepEqual([kept.changed, repeated.changed], [false, false]);
+  assert.deepEqual((await get.execute({ restaurantId })).premiumFee, {
+    amount: "99.00",
+    currency: "RUB",
+  });
+
+  const cleared = await updateFee({ kind: "clear" });
+
+  assert.equal(cleared.changed, true);
+  assert.equal(cleared.premiumFee, undefined);
+  assert.equal(
+    (await get.execute({ restaurantId })).premiumFee,
+    undefined,
+    "no premium is offered",
+  );
+});
+
+test("AC-851 update restaurant rejects a zero or malformed premium fee", async () => {
+  const world = await createRestaurantWorld();
+  const restaurantId = await world.givenRestaurant("Pho Bar");
+  const before = await world.restaurants.get(restaurantId);
+
+  for (const amount of ["0", "0.00", "-1.00"]) {
+    await assert.rejects(
+      world.update.execute({
+        subject: owner,
+        restaurantId,
+        name: "Pho Bar",
+        premiumFee: { kind: "set", fee: { amount, currency: "RUB" } },
+      }),
+      (error: unknown) =>
+        error instanceof InvalidRestaurantError ||
+        error instanceof InvalidMoneyError,
+    );
+  }
+  const after = await world.restaurants.get(restaurantId);
+  assert.equal(after?.version, before?.version);
+  assert.equal(after?.premiumFee, undefined);
+});
+
 test("AC-206 update of an unknown restaurant is not found", async () => {
   const world = await createRestaurantWorld();
   world.authorization.grantManager(owner, "missing");
@@ -194,7 +264,12 @@ test("AC-206 update of an unknown restaurant is not found", async () => {
   });
 
   await assert.rejects(
-    update.execute({ subject: owner, restaurantId: "missing", name: "Pho" }),
+    update.execute({
+      subject: owner,
+      restaurantId: "missing",
+      name: "Pho",
+      premiumFee: { kind: "keep" },
+    }),
     NotFoundError,
   );
 });
@@ -209,7 +284,12 @@ test("AC-200 manager commands are denied without the manage permission", async (
   });
 
   await assert.rejects(
-    update.execute({ subject: stranger, restaurantId, name: "Ramen" }),
+    update.execute({
+      subject: stranger,
+      restaurantId,
+      name: "Ramen",
+      premiumFee: { kind: "keep" },
+    }),
     PermissionDeniedError,
   );
   await assert.rejects(
@@ -241,7 +321,12 @@ test("AC-201 authorization failure fails closed", async () => {
   });
 
   await assert.rejects(
-    update.execute({ subject: owner, restaurantId, name: "Ramen" }),
+    update.execute({
+      subject: owner,
+      restaurantId,
+      name: "Ramen",
+      premiumFee: { kind: "keep" },
+    }),
     /authorization timeout/,
   );
   assert.equal((await world.restaurants.get(restaurantId))?.name, "Pho Bar");

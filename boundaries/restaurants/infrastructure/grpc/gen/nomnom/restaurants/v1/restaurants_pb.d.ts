@@ -42,6 +42,14 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
    * @generated from field: nomnom.restaurants.v1.RestaurantWaitTime wait_time = 6;
    */
   waitTime?: RestaurantWaitTime | undefined;
+
+  /**
+   * Fee of Premium Priority in the currency of the restaurant (FR-202); unset
+   * when the restaurant offers no premium.
+   *
+   * @generated from field: nomnom.restaurants.v1.Money premium_fee = 7;
+   */
+  premiumFee?: Money | undefined;
 };
 
 /**

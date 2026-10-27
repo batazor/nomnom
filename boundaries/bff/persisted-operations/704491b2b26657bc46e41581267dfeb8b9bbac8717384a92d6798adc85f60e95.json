@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query E2eOrder($id: ID!) {\n  order(id: $id) {\n    id\n    status\n    milestones {\n      kind\n    }\n  }\n}"
+}

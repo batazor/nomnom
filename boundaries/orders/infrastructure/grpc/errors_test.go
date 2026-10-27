@@ -40,6 +40,7 @@ func TestTransportErrorKeepsPublishedCodesAndReasons(t *testing.T) {
 		{application.FailClosed(fmt.Errorf("spicedb: %w", application.ErrDependencyUnavailable)), codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
 		{placeorder.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
 		{placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
+		{placeorder.ErrPremiumUnavailable, codes.FailedPrecondition, "PREMIUM_UNAVAILABLE"},
 		{application.InvalidInput("order_id", "is required"), codes.InvalidArgument, "INVALID_ARGUMENT"},
 		{order.NotOrderable{}, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
 		{vo.ErrInvalidQuantity, codes.InvalidArgument, "INVALID_ORDER"},

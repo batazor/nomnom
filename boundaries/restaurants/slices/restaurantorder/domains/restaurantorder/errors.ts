@@ -6,6 +6,8 @@ export const InvalidRestaurantOrderReason = {
   EmptyFailureReason: "empty_failure_reason",
   ExpectedReadyAtNotLater: "expected_ready_at_not_later",
   EmptyCookId: "empty_cook_id",
+  EmptyStartRequestId: "empty_start_request_id",
+  UnknownPriority: "unknown_priority",
 } as const;
 
 export type InvalidRestaurantOrderReason =

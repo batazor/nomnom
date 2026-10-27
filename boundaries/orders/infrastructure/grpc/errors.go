@@ -58,6 +58,8 @@ func transportError(err error) error {
 		answer.reason = "RESTAURANT_NOT_FOUND"
 	case errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders):
 		answer.reason = "RESTAURANT_NOT_ACCEPTING_ORDERS"
+	case errors.Is(err, placeorder.ErrPremiumUnavailable):
+		answer.reason = "PREMIUM_UNAVAILABLE"
 	case errors.Is(err, application.ErrInvalidInput):
 	case errors.As(err, &notOrderable):
 		answer.reason = "ORDER_NOT_ORDERABLE"

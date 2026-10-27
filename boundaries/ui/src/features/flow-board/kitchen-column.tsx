@@ -1,5 +1,5 @@
 import { AnimatePresence, m } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useSubscription } from "urql";
 
 import { EtaBar, type EtaSpan, type RemainingCopy } from "../../shared/eta";
@@ -11,6 +11,7 @@ import {
   BoardOwnedRestaurantsDocument,
   type KitchenAction,
   type KitchenOrderStage,
+  StartNextPreparationDocument,
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
@@ -33,16 +34,15 @@ const stageLabel: Record<KitchenOrderStage, MessageKey> = {
   READY: "board.kitchen.stage.READY",
 };
 
-// The next command of the kitchen at each stage; READY waits for the courier.
+// The next command of the kitchen at each stage. A QUEUED order has none:
+// the kitchen takes the head of the queue (FR-655); READY waits for the
+// courier.
 const nextAction: Record<
   KitchenOrderStage,
   { action: KitchenAction; label: MessageKey } | null
 > = {
   RECEIVED: { action: "ACCEPT", label: "board.kitchen.action.ACCEPT" },
-  QUEUED: {
-    action: "START_PREPARATION",
-    label: "board.kitchen.action.START_PREPARATION",
-  },
+  QUEUED: null,
   PREPARING: {
     action: "MARK_ASSEMBLED",
     label: "board.kitchen.action.MARK_ASSEMBLED",
@@ -221,6 +221,10 @@ function KitchenOrders({
   return (
     <>
       {pool}
+      <TakeNext
+        queued={kitchen.orders.some((order) => order.stage === "QUEUED")}
+        restaurantId={restaurantId}
+      />
       <ul aria-label={t("board.kitchen.orders")} className="board-cards">
         {/* Orders arrive with kitchenChanged: new ones slide in, finished
           ones fade out, and the rest move to their new place. */}
@@ -246,6 +250,55 @@ function KitchenOrders({
         </AnimatePresence>
       </ul>
     </>
+  );
+}
+
+// Starts the head of the Kitchen Queue (FR-655): premium orders first, the
+// kitchen does not choose. One request id per attempt, kept for a manual
+// retry after a failed send so the retry starts no other order.
+function TakeNext({
+  restaurantId,
+  queued,
+}: {
+  restaurantId: string;
+  queued: boolean;
+}) {
+  const { t } = useI18n();
+  const [{ fetching }, start] = useMutation(StartNextPreparationDocument);
+  const [problem, setProblem] = useState<MessageKey | null>(null);
+  const attempt = useRef<string | null>(null);
+
+  async function takeNext() {
+    setProblem(null);
+    attempt.current ??= crypto.randomUUID();
+    const result = await start({ restaurantId, requestId: attempt.current });
+    const payload = result.data?.startNextPreparation;
+    if (result.error || !payload) {
+      setProblem("board.actionFailed");
+      return;
+    }
+    attempt.current = null;
+    if (payload.problem === "NO_COOK_AVAILABLE") {
+      setProblem("board.kitchen.noCook");
+    } else if (payload.problem) setProblem("board.kitchen.conflict");
+  }
+
+  return (
+    <div className="board-take-next">
+      <Button
+        disabled={!queued}
+        isPending={fetching}
+        onClick={takeNext}
+        size="sm"
+      >
+        {t("board.kitchen.takeNext")}
+      </Button>
+      {problem ? (
+        <p className="board-error" role="alert">
+          {t(problem)}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -299,6 +352,11 @@ function KitchenOrderCard({
           {t("board.kitchen.order", { time: receivedTime })}
         </span>
         <span className="board-badge">{t(stageLabel[order.stage])}</span>
+        {order.priority === "PREMIUM" ? (
+          <span className="board-badge" data-priority="premium">
+            {t("board.kitchen.premium")}
+          </span>
+        ) : null}
       </button>
       <ul className="board-card-items">
         {order.items.map((item, index) => (
@@ -346,7 +404,11 @@ function KitchenOrderCard({
           </Button>
         ) : (
           <span className="board-card-wait">
-            {t("board.kitchen.waitCourier")}
+            {t(
+              order.stage === "QUEUED"
+                ? "board.kitchen.waitQueue"
+                : "board.kitchen.waitCourier",
+            )}
           </span>
         )}
         {order.stage === "RECEIVED" ? (

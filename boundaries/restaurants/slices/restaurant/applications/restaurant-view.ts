@@ -1,3 +1,4 @@
+import type { MoneyValue } from "../../menu/domains/menu/vo/money.ts";
 import type { Restaurant } from "../domains/restaurant/restaurant.ts";
 
 /** Public representation of a restaurant returned by commands and queries. */
@@ -7,6 +8,8 @@ export type RestaurantView = Readonly<{
   /** Market of the restaurant (ADR 41). */
   marketId: string;
   isOpen: boolean;
+  /** Fee of Premium Priority; absent when no premium is offered (FR-202). */
+  premiumFee?: MoneyValue;
 }>;
 
 /** Wait for a new order of the restaurant, computed when read (FR-645). */
@@ -33,4 +36,7 @@ export const toRestaurantView = (restaurant: Restaurant): RestaurantView => ({
   name: restaurant.name,
   marketId: restaurant.marketId.value,
   isOpen: restaurant.isOpen,
+  ...(restaurant.premiumFee === undefined
+    ? {}
+    : { premiumFee: restaurant.premiumFee.toValue() }),
 });

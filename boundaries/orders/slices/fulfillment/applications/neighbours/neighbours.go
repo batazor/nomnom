@@ -51,9 +51,12 @@ type RestaurantOrderItem struct {
 }
 
 type RestaurantOrderRequest struct {
-	OrderID        string
-	RestaurantID   string
-	Items          []RestaurantOrderItem
+	OrderID      string
+	RestaurantID string
+	Items        []RestaurantOrderItem
+	// Priority chosen at Place Order: the kitchen starts a premium order first
+	// (FR-650).
+	Priority       order.Priority
 	IdempotencyKey string
 }
 
@@ -100,6 +103,7 @@ func NewRestaurantOrderRequest(current *order.Order, idempotencyKey string) Rest
 		OrderID:        string(current.ID()),
 		RestaurantID:   string(current.RestaurantID()),
 		Items:          items,
+		Priority:       current.Service().Priority(),
 		IdempotencyKey: idempotencyKey,
 	}
 }

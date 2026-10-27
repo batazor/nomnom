@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query BrowseRestaurants($after: String, $first: Int!) { restaurants(first: $first, after: $after) { edges { cursor node { acceptingOrders id menu { items { id name } } name waitTime { elevated expectedWaitMinutes } } } pageInfo { endCursor hasNextPage } } }"
+}

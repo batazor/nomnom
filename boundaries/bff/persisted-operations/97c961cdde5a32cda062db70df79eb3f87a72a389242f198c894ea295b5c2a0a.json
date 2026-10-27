@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CookPoolView on CookPool { busy cooks { currentKitchenOrderId id name onLine } onLine queued size } mutation HireCook($name: String!, $restaurantId: ID!) { hireCook(restaurantId: $restaurantId, name: $name) { cookPool { ...CookPoolView } problem } }"
+}

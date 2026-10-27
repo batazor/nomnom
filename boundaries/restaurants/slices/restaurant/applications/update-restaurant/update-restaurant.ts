@@ -1,6 +1,7 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import { requirePermission } from "../../../../pkg/application/require-permission.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
+import type { MoneyValue } from "../../../menu/domains/menu/vo/money.ts";
 import type { RestaurantRepository } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantAccessControl } from "../access-control.ts";
 import { loadRestaurant } from "../load-restaurant.ts";
@@ -9,13 +10,23 @@ import {
   toRestaurantView,
 } from "../restaurant-view.ts";
 
+/** What Update Restaurant does with the premium fee (FR-202). */
+export type PremiumFeeChange =
+  | Readonly<{ kind: "keep" }>
+  | Readonly<{ kind: "set"; fee: MoneyValue }>
+  | Readonly<{ kind: "clear" }>;
+
 export type UpdateRestaurant = Readonly<{
   subject: Subject;
   restaurantId: string;
   name: string;
+  premiumFee: PremiumFeeChange;
 }>;
 
-/** Changes the basic restaurant data; no business fact is published. */
+/**
+ * Changes the name and the premium fee of the restaurant; no business fact is
+ * published.
+ */
 export class UpdateRestaurantHandler {
   readonly #accessControl: RestaurantAccessControl;
   readonly #restaurants: RestaurantRepository;
@@ -43,7 +54,16 @@ export class UpdateRestaurantHandler {
       this.#restaurants,
       command.restaurantId,
     );
-    if (!restaurant.rename(command.name, this.#clock.now())) {
+    const renamed = restaurant.rename(command.name, this.#clock.now());
+    const feeChanged =
+      command.premiumFee.kind === "keep"
+        ? false
+        : restaurant.changePremiumFee(
+            command.premiumFee.kind === "set"
+              ? command.premiumFee.fee
+              : undefined,
+          );
+    if (!renamed && !feeChanged) {
       return {
         ...toRestaurantView(restaurant),
         version: restaurant.version,

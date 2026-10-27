@@ -63,6 +63,8 @@ export const messages = {
     "checkout.title": "Доставка",
     "checkout.submit": "Оформить заказ",
     "checkout.expectedWait": "Ожидание ≈{minutes} мин",
+    "checkout.premium": "Приоритет — приготовим первым, +{fee}",
+    "checkout.totalWithPremium": "С приоритетом: {total}",
     "checkout.retry": "Отправить ещё раз",
     "checkout.sending": "Оформляем заказ",
     "checkout.transportError":
@@ -75,6 +77,8 @@ export const messages = {
       "Сумма заказа меньше минимальной. Добавьте ещё блюда.",
     "checkout.problem.ORDER_TOTAL_ABOVE_MAXIMUM":
       "Сумма заказа больше допустимой. Уберите часть блюд.",
+    "checkout.problem.PREMIUM_UNAVAILABLE":
+      "Ресторан больше не предлагает приоритет. Оформите заказ без него.",
     "checkout.problem.RESTAURANT_NOT_ACCEPTING_ORDERS":
       "Ресторан сейчас не принимает заказы. Попробуйте позже.",
     "checkout.itemProblem.unavailable": "Закончилось, уберите из корзины",
@@ -163,6 +167,8 @@ export const messages = {
     "order.unnamedItem": "Позиция меню",
     "order.quantity": "× {count}",
     "order.total": "Итого",
+    "order.premium": "Приоритет",
+    "order.premiumFee": "Доплата за приоритет",
     "order.cancel.action": "Отменить заказ",
     "order.cancel.until": "Отменить можно до {time}",
     "order.cancel.confirmTitle": "Отменить заказ?",
@@ -273,6 +279,9 @@ export const messages = {
     "board.kitchen.order": "Заказ от {time}",
     "board.kitchen.conflict": "Заказ уже на другом этапе — список обновлён.",
     "board.kitchen.waitCourier": "Ждёт курьера",
+    "board.kitchen.waitQueue": "Ждёт в очереди",
+    "board.kitchen.takeNext": "Взять следующий",
+    "board.kitchen.premium": "Приоритет",
     "board.kitchen.noCook":
       "Нет свободного повара на линии — заказ ждёт в очереди.",
     "board.kitchen.cook": "Готовит: {name}",
@@ -326,7 +335,6 @@ export const messages = {
     "board.kitchen.stage.READY": "Готов",
     "board.kitchen.action.ACCEPT": "Принять",
     "board.kitchen.action.REJECT": "Отклонить",
-    "board.kitchen.action.START_PREPARATION": "Начать готовить",
     "board.kitchen.action.MARK_ASSEMBLED": "Собран",
     "board.kitchen.action.MARK_READY": "Готов к выдаче",
     "board.courier.AVAILABLE": "На линии",
@@ -417,6 +425,8 @@ export const messages = {
     "checkout.title": "Delivery",
     "checkout.submit": "Place order",
     "checkout.expectedWait": "Wait ≈{minutes} min",
+    "checkout.premium": "Priority — cooked first, +{fee}",
+    "checkout.totalWithPremium": "With priority: {total}",
     "checkout.retry": "Send again",
     "checkout.sending": "Placing the order",
     "checkout.transportError":
@@ -429,6 +439,8 @@ export const messages = {
       "The order total is below the minimum. Add more dishes.",
     "checkout.problem.ORDER_TOTAL_ABOVE_MAXIMUM":
       "The order total is above the limit. Remove some dishes.",
+    "checkout.problem.PREMIUM_UNAVAILABLE":
+      "The restaurant no longer offers priority. Place the order without it.",
     "checkout.problem.RESTAURANT_NOT_ACCEPTING_ORDERS":
       "The restaurant is not taking orders right now. Try again later.",
     "checkout.itemProblem.unavailable": "Sold out, remove it from the cart",
@@ -519,6 +531,8 @@ export const messages = {
     "order.unnamedItem": "Menu item",
     "order.quantity": "× {count}",
     "order.total": "Total",
+    "order.premium": "Priority",
+    "order.premiumFee": "Priority fee",
     "order.cancel.action": "Cancel order",
     "order.cancel.until": "You can cancel until {time}",
     "order.cancel.confirmTitle": "Cancel the order?",
@@ -633,6 +647,9 @@ export const messages = {
     "board.kitchen.conflict":
       "The order is at another stage already — the list is refreshed.",
     "board.kitchen.waitCourier": "Waiting for the courier",
+    "board.kitchen.waitQueue": "Waiting in the queue",
+    "board.kitchen.takeNext": "Take next",
+    "board.kitchen.premium": "Priority",
     "board.kitchen.noCook":
       "No free cook on line: the order waits in the queue.",
     "board.kitchen.cook": "Cooking: {name}",
@@ -688,7 +705,6 @@ export const messages = {
     "board.kitchen.stage.READY": "Ready",
     "board.kitchen.action.ACCEPT": "Accept",
     "board.kitchen.action.REJECT": "Reject",
-    "board.kitchen.action.START_PREPARATION": "Start cooking",
     "board.kitchen.action.MARK_ASSEMBLED": "Assembled",
     "board.kitchen.action.MARK_READY": "Ready for pickup",
     "board.courier.AVAILABLE": "Online",

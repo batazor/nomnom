@@ -41,11 +41,19 @@ const (
 type Action string
 
 const (
-	ActionAccept           Action = "accept"
-	ActionReject           Action = "reject"
-	ActionStartPreparation Action = "start_preparation"
-	ActionMarkAssembled    Action = "mark_assembled"
-	ActionMarkReady        Action = "mark_ready"
+	ActionAccept        Action = "accept"
+	ActionReject        Action = "reject"
+	ActionMarkAssembled Action = "mark_assembled"
+	ActionMarkReady     Action = "mark_ready"
+)
+
+// Priority is the Premium Priority of a restaurant order: premium orders are
+// taken first from the Kitchen Queue.
+type Priority string
+
+const (
+	PriorityStandard Priority = "standard"
+	PriorityPremium  Priority = "premium"
 )
 
 // Restaurant is the public data of the restaurant the kitchen belongs to.
@@ -74,7 +82,8 @@ type ActiveOrder struct {
 	// preparation delays.
 	ExpectedReadyAt *time.Time
 	// CookID is the cook assigned at the start of preparation; empty before.
-	CookID string
+	CookID   string
+	Priority Priority
 }
 
 // KitchenBoard reads the kitchen board of restaurants on behalf of the user
@@ -96,6 +105,10 @@ type KitchenBoard interface {
 // ErrNoCookAvailable when no cook on line is free to start preparing.
 type KitchenCommands interface {
 	Apply(ctx context.Context, restaurantID, kitchenOrderID string, action Action) error
+	// StartNext starts the head of the Kitchen Queue and returns its id;
+	// empty when the queue is empty. A repeat with requestID starts no other
+	// order. ErrNoCookAvailable without a free cook on line.
+	StartNext(ctx context.Context, restaurantID, requestID string) (string, error)
 }
 
 // Catalog reads public data of restaurants: no user is involved.
@@ -126,7 +139,8 @@ type OrderView struct {
 	ExpectedReadyAt *time.Time
 	// Cook is nil before the start of preparation and for a cook who left
 	// the pool.
-	Cook *Cook
+	Cook     *Cook
+	Priority Priority
 }
 
 // KitchenView is the kitchen screen of one restaurant.
@@ -149,6 +163,7 @@ func orderView(order ActiveOrder, names map[string]string, cooks map[string]Cook
 		ReceivedAt:      order.ReceivedAt,
 		AcceptedAt:      order.AcceptedAt,
 		ExpectedReadyAt: order.ExpectedReadyAt,
+		Priority:        order.Priority,
 	}
 	if cook, ok := cooks[order.CookID]; ok {
 		view.Cook = &cook

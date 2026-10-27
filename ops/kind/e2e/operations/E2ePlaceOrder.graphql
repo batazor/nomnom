@@ -1,0 +1,12 @@
+mutation E2ePlaceOrder($input: PlaceOrderInput!) {
+  placeOrder(input: $input) {
+    order {
+      id
+      status
+    }
+    problems {
+      code
+      menuItemIds
+    }
+  }
+}

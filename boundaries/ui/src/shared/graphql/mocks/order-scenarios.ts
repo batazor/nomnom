@@ -56,6 +56,8 @@ function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
     restaurant: kitchenEight,
     items: defaultItems,
     total: orderTotal(defaultItems),
+    priority: "STANDARD",
+    premiumFee: null,
     placedAt: at(now, placed),
     milestones: [
       { kind: "PLACED", occurredAt: at(now, placed) },

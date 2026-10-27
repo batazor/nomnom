@@ -1,5 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError } from "@connectrpc/connect";
 import type {
   MenuItemView,
   MenuView,
@@ -21,6 +22,7 @@ import {
   ActiveRestaurantOrderSchema,
   IncomingOrderSchema,
   KitchenQueueEntrySchema,
+  OrderPriority as OrderPriorityMessage,
   RestaurantOrderSchema,
   RestaurantOrderState,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
@@ -31,6 +33,9 @@ export const toRestaurantMessage = (view: RestaurantView) =>
     name: view.name,
     isOpen: view.isOpen,
     marketId: view.marketId,
+    ...(view.premiumFee === undefined
+      ? {}
+      : { premiumFee: { ...view.premiumFee } }),
   });
 
 /** Get Restaurant and List Restaurants also carry the wait (FR-204). */
@@ -40,6 +45,9 @@ export const toCatalogRestaurantMessage = (view: CatalogRestaurantView) =>
     name: view.name,
     isOpen: view.isOpen,
     marketId: view.marketId,
+    ...(view.premiumFee === undefined
+      ? {}
+      : { premiumFee: { ...view.premiumFee } }),
     waitTime: {
       elevated: view.waitTime.elevated,
       expectedWaitMinutes: view.waitTime.expectedWaitMinutes,
@@ -76,6 +84,30 @@ const STATE_MESSAGES: Readonly<
   FAILED: RestaurantOrderState.FAILED,
 };
 
+const PRIORITY_MESSAGES: Readonly<
+  Record<RestaurantOrderView["priority"], OrderPriorityMessage>
+> = {
+  STANDARD: OrderPriorityMessage.STANDARD,
+  PREMIUM: OrderPriorityMessage.PREMIUM,
+};
+
+/** Required in ReceiveOrderRequest (FR-651); UNSPECIFIED is invalid input. */
+export const fromPriorityMessage = (
+  priority: OrderPriorityMessage,
+): RestaurantOrderView["priority"] => {
+  switch (priority) {
+    case OrderPriorityMessage.STANDARD:
+      return "STANDARD";
+    case OrderPriorityMessage.PREMIUM:
+      return "PREMIUM";
+    default:
+      throw new ConnectError(
+        `priority ${priority} is not STANDARD or PREMIUM`,
+        Code.InvalidArgument,
+      );
+  }
+};
+
 export const toRestaurantOrderMessage = (view: RestaurantOrderView) =>
   create(RestaurantOrderSchema, {
     restaurantOrderId: view.restaurantOrderId,
@@ -85,6 +117,7 @@ export const toRestaurantOrderMessage = (view: RestaurantOrderView) =>
     expectedReadyAt: optionalTimestamp(view.timeline.expectedReadyAt),
     version: BigInt(view.version),
     cookId: view.cookId ?? "",
+    priority: PRIORITY_MESSAGES[view.priority],
   });
 
 export const toKitchenQueueEntryMessage = (
@@ -97,6 +130,7 @@ export const toKitchenQueueEntryMessage = (
       orderId: entry.orderId,
       restaurantId,
       state: STATE_MESSAGES[entry.state],
+      priority: PRIORITY_MESSAGES[entry.priority],
       expectedReadyAt: optionalTimestamp(entry.expectedReadyAt),
       version: BigInt(entry.version),
     },
@@ -137,6 +171,7 @@ export const toActiveRestaurantOrderMessage = (
       expectedReadyAt: optionalTimestamp(order.expectedReadyAt),
       version: BigInt(order.version),
       cookId: order.cookId ?? "",
+      priority: PRIORITY_MESSAGES[order.priority],
     },
     items: order.items.map((item) => ({
       menuItemId: item.menuItemId,

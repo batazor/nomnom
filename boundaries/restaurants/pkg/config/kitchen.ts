@@ -2,9 +2,11 @@ import { z } from "zod";
 import {
   DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION,
   DEFAULT_KITCHEN_PREPARATION_TIME,
+  DEFAULT_KITCHEN_QUEUE_AGING_FACTOR,
   DEFAULT_KITCHEN_REPEAT_POLICY,
   KITCHEN_CANCELLATION_DURING_PREPARATION_ENV,
   KITCHEN_PREPARATION_TIME_ENV,
+  KITCHEN_QUEUE_AGING_FACTOR_ENV,
   KITCHEN_REPEAT_POLICY_ENV,
 } from "./env.ts";
 import { durationSchema } from "./schemas.ts";
@@ -26,6 +28,11 @@ export interface KitchenConfig {
   readonly repeatPolicy: "succeed-without-event" | "reject";
   /** Cancel Restaurant Order during Preparation: `reject` keeps it going. */
   readonly cancellationDuringPreparation: "allow" | "reject";
+  /**
+   * Kitchen Queue (FR-241): a standard order waiting longer than this many
+   * baseline waits of the restaurant is taken together with premium orders.
+   */
+  readonly queueAgingFactor: number;
 }
 
 export function loadKitchenConfig(
@@ -53,9 +60,17 @@ export function loadKitchenConfig(
       environment[KITCHEN_CANCELLATION_DURING_PREPARATION_ENV]?.trim() ||
         DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION,
     );
+  const queueAgingFactor = z.coerce
+    .number({ error: `${KITCHEN_QUEUE_AGING_FACTOR_ENV}: expected a number` })
+    .positive(`${KITCHEN_QUEUE_AGING_FACTOR_ENV}: expected a positive number`)
+    .parse(
+      environment[KITCHEN_QUEUE_AGING_FACTOR_ENV]?.trim() ||
+        DEFAULT_KITCHEN_QUEUE_AGING_FACTOR,
+    );
   return Object.freeze({
     preparationTimeMs,
     repeatPolicy,
     cancellationDuringPreparation,
+    queueAgingFactor,
   });
 }

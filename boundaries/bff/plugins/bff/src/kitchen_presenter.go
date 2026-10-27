@@ -16,11 +16,14 @@ var (
 		applications.StageReady:     service.KitchenOrderStage_KITCHEN_ORDER_STAGE_READY,
 	}
 	kitchenActions = map[service.KitchenAction]applications.Action{
-		service.KitchenAction_KITCHEN_ACTION_ACCEPT:            applications.ActionAccept,
-		service.KitchenAction_KITCHEN_ACTION_REJECT:            applications.ActionReject,
-		service.KitchenAction_KITCHEN_ACTION_START_PREPARATION: applications.ActionStartPreparation,
-		service.KitchenAction_KITCHEN_ACTION_MARK_ASSEMBLED:    applications.ActionMarkAssembled,
-		service.KitchenAction_KITCHEN_ACTION_MARK_READY:        applications.ActionMarkReady,
+		service.KitchenAction_KITCHEN_ACTION_ACCEPT:         applications.ActionAccept,
+		service.KitchenAction_KITCHEN_ACTION_REJECT:         applications.ActionReject,
+		service.KitchenAction_KITCHEN_ACTION_MARK_ASSEMBLED: applications.ActionMarkAssembled,
+		service.KitchenAction_KITCHEN_ACTION_MARK_READY:     applications.ActionMarkReady,
+	}
+	kitchenPriorities = map[applications.Priority]service.OrderPriority{
+		applications.PriorityStandard: service.OrderPriority_ORDER_PRIORITY_STANDARD,
+		applications.PriorityPremium:  service.OrderPriority_ORDER_PRIORITY_PREMIUM,
 	}
 	kitchenProblems = map[applications.Problem]service.KitchenActionProblemCode{
 		applications.ProblemOrderStageConflict: service.KitchenActionProblemCode_KITCHEN_ACTION_PROBLEM_CODE_ORDER_STAGE_CONFLICT,
@@ -61,6 +64,10 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 	if err != nil {
 		return nil, err
 	}
+	priority, err := enumValue(kitchenPriorities, "kitchen order priority", order.Priority)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]*service.KitchenOrderItem, 0, len(order.Items))
 	for _, item := range order.Items {
 		items = append(items, &service.KitchenOrderItem{Name: item.Name, Quantity: int32(item.Quantity)})
@@ -73,6 +80,7 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 		ReceivedAt:      timestamp(order.ReceivedAt),
 		AcceptedAt:      deadline(order.AcceptedAt),
 		ExpectedReadyAt: deadline(order.ExpectedReadyAt),
+		Priority:        priority,
 	}
 	if order.Cook != nil {
 		message.Cook = cookMessage(*order.Cook)

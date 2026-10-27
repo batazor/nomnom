@@ -16,7 +16,7 @@ import {
   ReportPreparationDelayResponseSchema,
   ReportPreparationFailureResponseSchema,
   type RestaurantsService,
-  StartPreparationResponseSchema,
+  StartNextPreparationResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { toRestaurantOrderMessage } from "./messages.ts";
 import { withRequestRevision } from "./revision.ts";
@@ -27,7 +27,7 @@ type KitchenRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
   | "acceptRestaurantOrder"
   | "rejectRestaurantOrder"
-  | "startPreparation"
+  | "startNextPreparation"
   | "markRestaurantOrderAssembled"
   | "markRestaurantOrderReady"
   | "reportPreparationDelay"
@@ -90,13 +90,27 @@ export const createKitchenRpcs = (
       }
     },
 
-    async startPreparation(request, context) {
+    // FR-225: the Kitchen Queue chooses the order; an empty queue starts
+    // nothing and answers without restaurant_order.
+    async startNextPreparation(request, context) {
       try {
-        const command = await kitchenCommand(request, context);
-        const view = await dependencies.startPreparation.execute(command);
-        return create(StartPreparationResponseSchema, {
-          restaurantOrder: toRestaurantOrderMessage(view),
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
+        requireField("restaurant_id", request.restaurantId);
+        requireField("request_id", request.requestId);
+        const view = await dependencies.startPreparation.execute({
+          subject,
+          restaurantId: request.restaurantId,
+          requestId: request.requestId,
         });
+        return create(
+          StartNextPreparationResponseSchema,
+          view === undefined
+            ? {}
+            : { restaurantOrder: toRestaurantOrderMessage(view) },
+        );
       } catch (error) {
         throw transportError(error);
       }

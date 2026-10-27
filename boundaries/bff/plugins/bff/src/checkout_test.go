@@ -51,9 +51,9 @@ func TestPlaceOrderReturnsTheOrder(t *testing.T) {
 		return ok && user.ID == "customer-1"
 	}), applications.Input{
 		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
-		IdempotencyKey: "attempt-1",
+		Priority: applications.PriorityStandard, IdempotencyKey: "attempt-1",
 	}).Return(applications.Result{Order: &tracking.OrderView{
-		ID: "order-1", Status: tracking.StatusReceived, PlacedAt: placed,
+		ID: "order-1", Status: tracking.StatusReceived, PlacedAt: placed, Priority: tracking.PriorityStandard,
 		Restaurant: tracking.Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true},
 		Total:      tracking.Money{Amount: "19.00", Currency: "EUR"},
 	}}, nil).Once()

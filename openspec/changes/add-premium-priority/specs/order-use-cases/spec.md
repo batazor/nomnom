@@ -5,7 +5,7 @@
 ### Requirement: Place Order принимает приоритет и фиксирует доплату
 **ID:** FR-650
 
-Place Order SHALL требовать `priority` (`STANDARD` или `PREMIUM`); отсутствующее или неизвестное значение MUST отклоняться как некорректный заказ. Для `PREMIUM` доплата SHALL браться из snapshot ресторана, фиксироваться в Order и входить в `total`. Ресторан без доплаты MUST давать отказ `PREMIUM_UNAVAILABLE` (`FAILED_PRECONDITION`) без сохранения Order. Order SHALL хранить `priority`, и Activity `RequestRestaurantOrder` SHALL передавать его в `ReceiveOrderRequest`.
+Place Order SHALL принимать `priority`: не задан — `STANDARD`, неизвестный — некорректный заказ. Доплата `PREMIUM` SHALL браться из snapshot ресторана, фиксироваться в Order и входить в `total`; ресторан без доплаты MUST давать `PREMIUM_UNAVAILABLE` (`FAILED_PRECONDITION`) без сохранения Order. Activity `RequestRestaurantOrder` SHALL передавать `priority` Order в `ReceiveOrderRequest`.
 
 #### Scenario: Премиум-заказ
 **ID:** AC-854
@@ -13,6 +13,12 @@ Place Order SHALL требовать `priority` (`STANDARD` или `PREMIUM`); �
 - **GIVEN** доплата ресторана 99.00 RUB, позиции на 500.00 RUB
 - **WHEN** Customer оформляет заказ с `priority = PREMIUM`
 - **THEN** Order хранит `priority = PREMIUM`, доплату 99.00 RUB и `total` 599.00 RUB
+
+#### Scenario: Заказ без приоритета
+**ID:** AC-870
+
+- **WHEN** Customer оформляет заказ, не указав `priority`
+- **THEN** Order сохранён с `priority = STANDARD` без доплаты
 
 #### Scenario: Ресторан без премиума
 **ID:** AC-855

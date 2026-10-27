@@ -76,6 +76,7 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 		OrderID:        orderID,
 		RestaurantID:   "restaurant-1",
 		Items:          []ports.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
+		Priority:       order.PriorityStandard,
 		IdempotencyKey: step.IdempotencyKey,
 	}).Return(nil).Once()
 	delivery.EXPECT().Create(mock.Anything, ports.DeliveryRequest{

@@ -170,11 +170,13 @@ describe("mock store", () => {
       "mutation ($offerId: ID!) { acceptDeliveryOffer(offerId: $offerId) { problem } }",
       { offerId: `offer-${id}` },
     );
-    for (const action of [
-      "START_PREPARATION",
-      "MARK_ASSEMBLED",
-      "MARK_READY",
-    ]) {
+    // The kitchen takes the head of the queue: the only queued order here.
+    await run(
+      store,
+      "mutation ($restaurantId: ID!, $requestId: String!) { startNextPreparation(restaurantId: $restaurantId, requestId: $requestId) { problem } }",
+      { restaurantId: kitchenEight.id, requestId: "attempt-1" },
+    );
+    for (const action of ["MARK_ASSEMBLED", "MARK_READY"]) {
       await act(action);
     }
     now = new Date(start.getTime() + 20 * 60_000);

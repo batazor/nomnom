@@ -1,4 +1,8 @@
-import type { RestaurantOrderState } from "../../domains/restaurantorder/restaurantorder.ts";
+import type { Clock } from "../../../../pkg/application/clock.ts";
+import type {
+  OrderPriority,
+  RestaurantOrderState,
+} from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control.ts";
 import {
   authorizeKitchenBoard,
@@ -12,6 +16,7 @@ export type KitchenQueueEntry = Readonly<{
   restaurantOrderId: string;
   orderId: string;
   state: RestaurantOrderState;
+  priority: OrderPriority;
   items: readonly KitchenBoardItem[];
   acceptedAt: Date | undefined;
   queuedAt: Date | undefined;
@@ -31,28 +36,34 @@ export interface KitchenQueueReader {
 }
 
 /**
- * Kitchen Queue policy: the recommended order of queued Restaurant Orders.
- * The scheduling algorithm (FIFO, priority, courier ETA, manual order) is an
- * open product decision and lives behind this port.
+ * Kitchen Queue policy (FR-241): the order in which Start Next Preparation
+ * takes queued Restaurant Orders of a restaurant at `now`.
  */
 export interface KitchenQueueOrdering {
-  order(entries: readonly KitchenQueueEntry[]): readonly KitchenQueueEntry[];
+  order(
+    restaurantId: string,
+    entries: readonly KitchenQueueEntry[],
+    now: Date,
+  ): Promise<readonly KitchenQueueEntry[]>;
 }
 
-/** Returns queued orders in the order given by the Kitchen Queue policy. */
+/** Returns queued orders in the order Start Next Preparation takes them. */
 export class GetKitchenQueueHandler {
   readonly #accessControl: KitchenStaffAccess;
   readonly #reader: KitchenQueueReader;
   readonly #ordering: KitchenQueueOrdering;
+  readonly #clock: Clock;
 
   constructor(dependencies: {
     accessControl: KitchenStaffAccess;
     reader: KitchenQueueReader;
     ordering: KitchenQueueOrdering;
+    clock: Clock;
   }) {
     this.#accessControl = dependencies.accessControl;
     this.#reader = dependencies.reader;
     this.#ordering = dependencies.ordering;
+    this.#clock = dependencies.clock;
   }
 
   async execute(query: GetKitchenQueue): Promise<KitchenQueueResult> {
@@ -64,7 +75,11 @@ export class GetKitchenQueueHandler {
     const entries = await this.#reader.listQueued(query.restaurantId);
     return {
       restaurantId: query.restaurantId,
-      entries: this.#ordering.order(entries),
+      entries: await this.#ordering.order(
+        query.restaurantId,
+        entries,
+        this.#clock.now(),
+      ),
     };
   }
 }

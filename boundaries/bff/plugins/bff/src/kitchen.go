@@ -93,6 +93,38 @@ func (s *BffService) MutationApplyKitchenAction(ctx context.Context, request *se
 	return &service.MutationApplyKitchenActionResponse{ApplyKitchenAction: payload}, nil
 }
 
+// MutationStartNextPreparation starts the head of the Kitchen Queue on behalf
+// of the verified user. An empty queue is a payload without order; no free
+// cook is the problem NO_COOK_AVAILABLE.
+func (s *BffService) MutationStartNextPreparation(ctx context.Context, request *service.MutationStartNextPreparationRequest) (*service.MutationStartNextPreparationResponse, error) {
+	if request.GetRestaurantId() == "" || request.GetRequestId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "restaurantId and requestId are required")
+	}
+	ctx, err := s.requireCustomer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.kitchen.startNext.Handle(ctx, applications.StartNextRequest{
+		RestaurantID: request.GetRestaurantId(),
+		RequestID:    request.GetRequestId(),
+	})
+	switch {
+	case errors.Is(err, applications.ErrOrderNotFound):
+		return nil, status.Error(codes.NotFound, "restaurant not found")
+	case errors.Is(err, applications.ErrNotPermitted):
+		return nil, status.Error(codes.PermissionDenied, "kitchen operation is not permitted")
+	case errors.Is(err, applications.ErrInvalidCommand):
+		return nil, status.Error(codes.InvalidArgument, "kitchen command is invalid")
+	case err != nil:
+		return nil, internalError("startNextPreparation", err)
+	}
+	payload, err := kitchenActionPayload(result)
+	if err != nil {
+		return nil, internalError("startNextPreparation", err)
+	}
+	return &service.MutationStartNextPreparationResponse{StartNextPreparation: payload}, nil
+}
+
 // changeCookPool runs a Cook Pool command on behalf of the verified user:
 // business refusals are problems of the payload; a missing cook, a missing
 // right and an unknown restaurant are GraphQL errors.

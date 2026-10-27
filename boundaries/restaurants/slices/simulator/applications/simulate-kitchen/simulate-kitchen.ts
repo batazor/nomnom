@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { AcceptOrderHandler } from "../../../restaurantorder/applications/accept-order/accept-order.ts";
@@ -279,21 +281,40 @@ export class KitchenSimulator {
   }
 
   /**
-   * Starts Preparation by a free cook (FR-618): without one the planned step
-   * stays due and is tried again on the next pass. The remaining steps move
-   * by how late the start was; a `READY` later than `expectedReadyAt` is
-   * reported as a delay.
+   * Takes the next order of the Kitchen Queue like the kitchen does (FR-225,
+   * FR-655): the queue may start another order than the one whose step is
+   * due, e.g. a premium one. Without a free cook (FR-618) the step stays due
+   * and is tried again on the next pass. The remaining steps of the started
+   * order move by how late its start was; a `READY` later than its
+   * `expectedReadyAt` is reported as a delay.
    */
   async #startPreparation(
-    order: PendingKitchenOrder,
+    due: PendingKitchenOrder,
     command: KitchenOrderCommand,
   ): Promise<void> {
+    let started: Awaited<
+      ReturnType<SimulatedKitchenCommands["startPreparation"]["execute"]>
+    >;
     try {
-      await this.#commands.startPreparation.execute(command);
+      started = await this.#commands.startPreparation.execute({
+        subject: command.subject,
+        restaurantId: command.restaurantId,
+        requestId: randomUUID(),
+      });
     } catch (error) {
       if (error instanceof NoCookAvailableError) return;
       throw error;
     }
+    if (started === undefined) return;
+    const order: PendingKitchenOrder = {
+      restaurantOrderId: started.restaurantOrderId,
+      restaurantId: due.restaurantId,
+      marketId: due.marketId,
+      state: RestaurantOrderState.Queued,
+      ...(started.timeline.expectedReadyAt === undefined
+        ? {}
+        : { expectedReadyAt: started.timeline.expectedReadyAt }),
+    };
     const plan = this.planOf(order.restaurantOrderId);
     const start = plan?.steps.find(
       (step) => step.state === RestaurantOrderState.Queued,

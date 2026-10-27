@@ -32,6 +32,7 @@ fragment KitchenBoardView on Kitchen {
     receivedAt
     acceptedAt
     expectedReadyAt
+    priority
     cook {
       id
       name
@@ -77,6 +78,29 @@ mutation ApplyKitchenAction($input: KitchenActionInput!) {
         quantity
       }
       receivedAt
+      priority
+      cook {
+        id
+        name
+      }
+    }
+    problem
+  }
+}
+
+# The kitchen takes the head of the queue: premium orders first (FR-655).
+mutation StartNextPreparation($restaurantId: ID!, $requestId: String!) {
+  startNextPreparation(restaurantId: $restaurantId, requestId: $requestId) {
+    order {
+      id
+      orderId
+      stage
+      items {
+        name
+        quantity
+      }
+      receivedAt
+      priority
       cook {
         id
         name

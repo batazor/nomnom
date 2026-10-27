@@ -12,6 +12,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { schemaMismatches } from "./conformance";
+import { trackingChannel } from "./courier-tracks";
 import {
   createOrderScenarios,
   kitchenEight,
@@ -20,7 +21,6 @@ import {
   nightBakery,
   restaurantFixtures,
 } from "./fixtures";
-import { trackingChannel } from "./courier-tracks";
 import { mockCourierId } from "./fulfillment";
 import { publicSchema } from "./schema";
 import { createMockStore } from "./store";
@@ -60,6 +60,10 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
       kitchenOrderId: "kitchen-order-paid",
       action: "ACCEPT",
     },
+  },
+  StartNextPreparation: {
+    restaurantId: kitchenEight.id,
+    requestId: "attempt-1",
   },
   BoardCourier: {},
   DemoSimulator: {},

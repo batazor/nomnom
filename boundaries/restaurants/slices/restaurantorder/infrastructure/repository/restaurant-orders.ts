@@ -37,9 +37,11 @@ import {
   type RestaurantOrderView,
   snapshotToView,
 } from "../../applications/restaurant-order-view.ts";
+import type { StartedOrders } from "../../applications/start-preparation/start-preparation.ts";
 import {
   DuplicateOrderIdError,
   leavesOf,
+  type OrderPriority,
   RestaurantOrder,
   RestaurantOrderCompoundState,
   type RestaurantOrderRepository,
@@ -49,7 +51,7 @@ import {
 import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
 
 export const RESTAURANT_ORDERS_COLLECTION = "restaurant_orders";
-export const RESTAURANT_ORDER_SCHEMA_VERSION = 4;
+export const RESTAURANT_ORDER_SCHEMA_VERSION = 5;
 
 /**
  * One document per Restaurant Order with its Preparation Items and timeline
@@ -74,8 +76,12 @@ export type RestaurantOrderDocument = VersionedDocument & {
     /** Since schemaVersion 4. */
     pickedUpAt?: Date;
   };
+  /** Since schemaVersion 5 (FR-651); orders received before are `STANDARD`. */
+  priority: OrderPriority;
   /** Since schemaVersion 2; required in `PREPARING` and `ASSEMBLED`. */
   cookId?: string;
+  /** Since schemaVersion 5: request_id of the Start Next Preparation. */
+  startRequestId?: string;
   rejectionReason?: string;
   failureReason?: string;
   cancellation?: { stage: RestaurantOrderState; reason?: string };
@@ -95,7 +101,9 @@ const toSnapshot = (
   })),
   state: document.state,
   timeline: { ...document.timeline },
+  priority: document.priority,
   cookId: document.cookId,
+  startRequestId: document.startRequestId,
   rejectionReason: document.rejectionReason,
   failureReason: document.failureReason,
   cancellation:
@@ -113,11 +121,12 @@ export const createRestaurantOrderCollection = (
     name: RESTAURANT_ORDERS_COLLECTION,
     aggregateType: "RestaurantOrder",
     unitOfWork,
-    // Two active orders of one cook (FR-617) lose like a concurrent write.
+    // Two active orders of one cook (FR-617) and two orders started by one
+    // Start Next Preparation request lose like a concurrent write.
     duplicateKey: (keyPattern, document) =>
       "orderId" in keyPattern
         ? new DuplicateOrderIdError(document.orderId)
-        : "cookId" in keyPattern
+        : "cookId" in keyPattern || "startRequestId" in keyPattern
           ? new ConcurrencyConflictError("RestaurantOrder", document._id)
           : undefined,
   });
@@ -164,7 +173,9 @@ export class DatabaseRestaurantOrderRepository
           })),
           state: snapshot.state,
           timeline: { ...snapshot.timeline },
+          priority: snapshot.priority,
           cookId: snapshot.cookId,
+          startRequestId: snapshot.startRequestId,
           rejectionReason: snapshot.rejectionReason,
           failureReason: snapshot.failureReason,
           cancellation:
@@ -204,7 +215,8 @@ export class DatabaseKitchenBoard
     ReadyOrdersReader,
     ActiveRestaurantOrdersReader,
     PendingKitchenOrdersReader,
-    CookWorkload
+    CookWorkload,
+    StartedOrders
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
 
@@ -219,6 +231,20 @@ export class DatabaseKitchenBoard
     const document = await this.#collection.findOne({
       _id: restaurantOrderId,
       restaurantId,
+    });
+    return document === undefined
+      ? undefined
+      : snapshotToView(toSnapshot(document), document.version);
+  }
+
+  /** The order a Start Next Preparation `requestId` started (FR-225). */
+  async findStarted(
+    restaurantId: string,
+    requestId: string,
+  ): Promise<RestaurantOrderView | undefined> {
+    const document = await this.#collection.findOne({
+      restaurantId,
+      startRequestId: requestId,
     });
     return document === undefined
       ? undefined
@@ -261,6 +287,7 @@ export class DatabaseKitchenBoard
       restaurantOrderId: document._id,
       orderId: document.orderId,
       state: document.state,
+      priority: document.priority,
       items: boardItems(document),
       receivedAt: document.timeline.receivedAt,
       acceptedAt: document.timeline.acceptedAt,
@@ -281,6 +308,7 @@ export class DatabaseKitchenBoard
       restaurantOrderId: document._id,
       orderId: document.orderId,
       state: document.state,
+      priority: document.priority,
       items: boardItems(document),
       acceptedAt: document.timeline.acceptedAt,
       queuedAt: document.timeline.queuedAt,

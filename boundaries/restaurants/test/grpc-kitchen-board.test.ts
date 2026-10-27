@@ -4,7 +4,10 @@ import test from "node:test";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 
-import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import {
+  OrderPriority,
+  RestaurantOrderState,
+} from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import {
   type ActiveRestaurantOrder,
@@ -28,10 +31,10 @@ test("AC-737 GetKitchenQueue lists the received and accepted order for kitchen s
   const { restaurantId, phoId } = await world.givenKitchen();
   const other = await world.givenKitchen("Noodle Bar");
   const waiting = await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const first = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   world.clock.advance(minutes(1));
   const second = await world.givenOrderIn("QUEUED", restaurantId, phoId);
-  await world.givenOrderIn("PREPARING", restaurantId, phoId);
   await world.givenOrderIn("QUEUED", other.restaurantId, other.phoId);
 
   const response = await service.getKitchenQueue({ restaurantId }, context);
@@ -56,6 +59,7 @@ test("AC-737 GetKitchenQueue lists the received and accepted order for kitchen s
   const stored = await world.restaurantOrders.get(first.restaurantOrderId);
   assert.equal(entry?.restaurantOrder?.restaurantId, restaurantId);
   assert.equal(entry?.restaurantOrder?.state, RestaurantOrderState.QUEUED);
+  assert.equal(entry?.restaurantOrder?.priority, OrderPriority.STANDARD);
   assert.equal(entry?.restaurantOrder?.version, BigInt(stored?.version ?? 0));
   assert.ok(entry?.acceptedAt !== undefined && entry.queuedAt !== undefined);
   const expectedReadyAt = entry?.restaurantOrder?.expectedReadyAt;
@@ -236,6 +240,7 @@ const ACTIVE: readonly ActiveRestaurantOrder[] = [
     restaurantOrderId: "restaurant-order-3",
     orderId: "order-3",
     state: DomainRestaurantOrderState.Assembled,
+    priority: "PREMIUM",
     items: [{ menuItemId: "pho", quantity: 1, options: [] }],
     receivedAt: RECEIVED_AT,
     cookId: "cook-1",
@@ -280,6 +285,7 @@ test("ListActiveRestaurantOrders answers the orders with state, items, version, 
   assert.equal(order?.restaurantOrder?.orderId, "order-3");
   assert.equal(order?.restaurantOrder?.restaurantId, ACTIVE_RESTAURANT);
   assert.equal(order?.restaurantOrder?.state, RestaurantOrderState.ASSEMBLED);
+  assert.equal(order?.restaurantOrder?.priority, OrderPriority.PREMIUM);
   assert.equal(order?.restaurantOrder?.version, 4n);
   assert.deepEqual(
     order?.items.map((item) => [item.menuItemId, item.quantity]),

@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CourierWork on Courier { availability currentDelivery { id orderId stage } id offers { deliveryId expiresAt id orderId } } mutation AcceptDeliveryOffer($offerId: ID!) { acceptDeliveryOffer(offerId: $offerId) { courier { ...CourierWork } problem } }"
+}

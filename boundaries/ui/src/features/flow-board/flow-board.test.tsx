@@ -87,6 +87,15 @@ function dataTransfer() {
 }
 
 // The kitchen card of the order the board highlights.
+// The kitchen takes the head of its queue (FR-655), not a chosen card.
+async function takeNext(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await within(column("Кухня")).findByRole("button", {
+      name: "Взять следующий",
+    }),
+  );
+}
+
 function selectedKitchenCard() {
   const card = column("Кухня").querySelector<HTMLElement>(
     '.board-card[data-selected="true"]',
@@ -136,14 +145,18 @@ describe("flow board", () => {
     expect(paidStep).toHaveAttribute("data-state", "current");
     expect(within(paidStep as HTMLElement).getByText("Оплата")).toBeVisible();
 
-    // The kitchen moves the new order through its stages.
-    for (const action of [
-      "Принять",
-      "Начать готовить",
-      "Собран",
-      "Готов к выдаче",
-    ]) {
+    // The kitchen moves the new order through its stages; it starts the
+    // head of the queue, here the new order.
+    for (const action of ["Принять", null, "Собран", "Готов к выдаче"]) {
       const card = await waitFor(selectedKitchenCard);
+      if (action === null) {
+        await within(card).findByText("Ждёт в очереди");
+        await takeNext(user);
+        await within(selectedKitchenCard()).findByRole("button", {
+          name: "Собран",
+        });
+        continue;
+      }
       await user.click(within(card).getByRole("button", { name: action }));
     }
     expect(
@@ -431,16 +444,18 @@ describe("kitchen cooking bar", () => {
       within(selectedKitchenCard()).getByText("Готово через ~15 мин"),
     ).toBeVisible();
 
-    for (const action of ["Начать готовить", "Собран"]) {
-      await user.click(
-        await within(selectedKitchenCard()).findByRole("button", {
-          name: action,
-        }),
-      );
-      expect(
-        await within(selectedKitchenCard()).findByRole("progressbar"),
-      ).toBeInTheDocument();
-    }
+    await takeNext(user);
+    expect(
+      await within(selectedKitchenCard()).findByRole("progressbar"),
+    ).toBeInTheDocument();
+    await user.click(
+      await within(selectedKitchenCard()).findByRole("button", {
+        name: "Собран",
+      }),
+    );
+    expect(
+      await within(selectedKitchenCard()).findByRole("progressbar"),
+    ).toBeInTheDocument();
     await user.click(
       await within(selectedKitchenCard()).findByRole("button", {
         name: "Готов к выдаче",
@@ -559,13 +574,88 @@ describe("cook and courier pools", () => {
     renderBoard();
     await placeOrder(user);
 
-    for (const action of ["Принять", "Начать готовить"]) {
-      const card = await waitFor(selectedKitchenCard);
-      await user.click(within(card).getByRole("button", { name: action }));
-    }
+    const card = await waitFor(selectedKitchenCard);
+    await user.click(within(card).getByRole("button", { name: "Принять" }));
+    await within(selectedKitchenCard()).findByText("Ждёт в очереди");
+    await takeNext(user);
 
     expect(
       await within(selectedKitchenCard()).findByText(/^Готовит: /),
+    ).toBeVisible();
+  });
+
+  it("AC-867 takes a premium order before an earlier standard one", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    // A standard order first, then a premium one.
+    await placeOrder(user);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить в корзину: Манго и клейкий рис",
+      }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: /Приоритет — приготовим первым/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("button", { name: /Кухня №8.*Оплачен/ }),
+      ).toHaveLength(2),
+    );
+    const kitchen = column("Кухня");
+    for (const accept of await within(kitchen).findAllByRole("button", {
+      name: "Принять",
+    })) {
+      await user.click(accept);
+    }
+    // Every received order is accepted, the fixed paid ones included.
+    await waitFor(() =>
+      expect(
+        within(kitchen).queryAllByRole("button", { name: "Принять" }),
+      ).toHaveLength(0),
+    );
+    const queued = within(kitchen).getAllByText("Ждёт в очереди").length;
+    expect(queued).toBeGreaterThanOrEqual(2);
+    const premiumCard = within(kitchen)
+      .getAllByText("Приоритет")[0]
+      ?.closest("article");
+    if (!premiumCard) throw new Error("No premium kitchen card");
+
+    await takeNext(user);
+
+    await waitFor(() =>
+      expect(premiumCard).toHaveAttribute("data-stage", "PREPARING"),
+    );
+    expect(within(kitchen).getAllByText("Ждёт в очереди")).toHaveLength(
+      queued - 1,
+    );
+  });
+
+  it("AC-868 says when no cook is free to take the next order", async () => {
+    const user = userEvent.setup();
+    mockServer.use(
+      publicGraphql.mutation("StartNextPreparation", () =>
+        HttpResponse.json({
+          data: {
+            startNextPreparation: { order: null, problem: "NO_COOK_AVAILABLE" },
+          },
+        }),
+      ),
+    );
+    renderBoard();
+    await placeOrder(user);
+    const card = await waitFor(selectedKitchenCard);
+    await user.click(within(card).getByRole("button", { name: "Принять" }));
+    await within(selectedKitchenCard()).findByText("Ждёт в очереди");
+
+    await takeNext(user);
+
+    expect(await within(column("Кухня")).findByRole("alert")).toHaveTextContent(
+      /повар/i,
+    );
+    expect(
+      within(selectedKitchenCard()).getByText("Ждёт в очереди"),
     ).toBeVisible();
   });
 

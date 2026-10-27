@@ -28,7 +28,7 @@ type ActionResult struct {
 	Problem Problem
 }
 
-var knownActions = []Action{ActionAccept, ActionReject, ActionStartPreparation, ActionMarkAssembled, ActionMarkReady}
+var knownActions = []Action{ActionAccept, ActionReject, ActionMarkAssembled, ActionMarkReady}
 
 // ApplyKitchenAction runs a kitchen command and reads the order back from the
 // kitchen board: the command answers no items and no receipt time.
@@ -67,19 +67,25 @@ func (h ApplyKitchenAction) Handle(ctx context.Context, request ActionRequest) (
 	if request.Action == ActionReject {
 		return ActionResult{}, nil
 	}
-	active, err := h.board.ActiveOrders(ctx, request.RestaurantID)
+	return readBack(ctx, h.board, h.catalog, request.RestaurantID, request.KitchenOrderID)
+}
+
+// readBack reads the order after a command from the kitchen board: the
+// command answers no items and no receipt time.
+func readBack(ctx context.Context, board KitchenBoard, catalog Catalog, restaurantID, kitchenOrderID string) (ActionResult, error) {
+	active, err := board.ActiveOrders(ctx, restaurantID)
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("read the order back: %w", err)
 	}
 	for _, order := range active {
-		if order.ID != request.KitchenOrderID {
+		if order.ID != kitchenOrderID {
 			continue
 		}
-		names, err := h.catalog.MenuItemNames(ctx, request.RestaurantID)
+		names, err := catalog.MenuItemNames(ctx, restaurantID)
 		if err != nil {
 			return ActionResult{}, fmt.Errorf("read menu: %w", err)
 		}
-		pool, err := h.board.CookPool(ctx, request.RestaurantID)
+		pool, err := board.CookPool(ctx, restaurantID)
 		if err != nil {
 			return ActionResult{}, fmt.Errorf("read cook pool: %w", err)
 		}
@@ -88,4 +94,38 @@ func (h ApplyKitchenAction) Handle(ctx context.Context, request ActionRequest) (
 	}
 	// The order left the kitchen between the command and the read.
 	return ActionResult{}, nil
+}
+
+// StartNextRequest takes the head of the Kitchen Queue of a restaurant.
+type StartNextRequest struct {
+	RestaurantID string
+	// RequestID is chosen per attempt and reused on a manual retry.
+	RequestID string
+}
+
+// StartNextPreparation starts the head of the Kitchen Queue (restaurants
+// FR-225): the kitchen does not choose the order. An empty queue is an empty
+// result, not a problem; no free cook is ProblemNoCookAvailable.
+type StartNextPreparation struct {
+	commands KitchenCommands
+	board    KitchenBoard
+	catalog  Catalog
+}
+
+func NewStartNextPreparation(commands KitchenCommands, board KitchenBoard, catalog Catalog) StartNextPreparation {
+	return StartNextPreparation{commands: commands, board: board, catalog: catalog}
+}
+
+func (h StartNextPreparation) Handle(ctx context.Context, request StartNextRequest) (ActionResult, error) {
+	started, err := h.commands.StartNext(ctx, request.RestaurantID, request.RequestID)
+	if errors.Is(err, ErrNoCookAvailable) {
+		return ActionResult{Problem: ProblemNoCookAvailable}, nil
+	}
+	if err != nil {
+		return ActionResult{}, err
+	}
+	if started == "" {
+		return ActionResult{}, nil
+	}
+	return readBack(ctx, h.board, h.catalog, request.RestaurantID, started)
 }

@@ -22,8 +22,12 @@ type KitchenOrder = {
   restaurantId: string;
   stage: KitchenOrderStage;
   receivedAt: string;
+  // Moment the order joined the Kitchen Queue: set by ACCEPT.
+  queuedAt?: string;
   // Cook assigned at the start of preparation (FR-225).
   cookId?: string;
+  // Request of startNextPreparation that started the order.
+  startRequestId?: string;
 };
 
 type MockCook = {
@@ -63,13 +67,12 @@ const kitchenTransitions: Record<
   readonly [KitchenOrderStage, KitchenOrderStage]
 > = {
   ACCEPT: ["RECEIVED", "QUEUED"],
-  START_PREPARATION: ["QUEUED", "PREPARING"],
   MARK_ASSEMBLED: ["PREPARING", "ASSEMBLED"],
   MARK_READY: ["ASSEMBLED", "READY"],
 };
 
-// Repeating these succeeds without a change, like restaurants does.
-const repeatable = new Set<KitchenAction>(["START_PREPARATION", "MARK_READY"]);
+// Repeating it succeeds without a change, like restaurants does.
+const repeatable = new Set<KitchenAction>(["MARK_READY"]);
 
 const stageOrder: KitchenOrderStage[] = [
   "RECEIVED",
@@ -336,17 +339,21 @@ export function createFulfillment({
       acceptedAt: accepted ? (confirmations.at(-1)?.occurredAt ?? null) : null,
       expectedReadyAt: accepted ? placed.expectedReadyAt : null,
       cook: cook ? cookView(cook) : null,
+      priority: placed.priority,
     };
   }
 
   function kitchen(restaurantId: string) {
     const found = restaurant(restaurantId);
     if (!found) return null;
+    // QUEUED orders in the order of the Kitchen Queue, like the BFF.
+    const queue = queueOf(restaurantId);
     const active = [...kitchenOrders.values()]
       .filter((order) => order.restaurantId === restaurantId)
       .sort(
         (a, b) =>
           stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage) ||
+          queue.indexOf(a) - queue.indexOf(b) ||
           a.receivedAt.localeCompare(b.receivedAt),
       );
     return {
@@ -387,23 +394,55 @@ export function createFulfillment({
     if (order.stage !== from) {
       return { order: kitchenView(order), problem: "ORDER_STAGE_CONFLICT" };
     }
-    if (action === "START_PREPARATION" && !assignCook(order)) {
-      return { order: kitchenView(order), problem: "NO_COOK_AVAILABLE" };
-    }
     order.stage = to;
     if (action === "ACCEPT") {
+      order.queuedAt = clock().toISOString();
       advanceOrder(order.orderId, "CONFIRMED", "CONFIRMED", {
         expectedReadyAt: after(preparationMs),
       });
       createDelivery(order);
     }
-    if (action === "START_PREPARATION") {
-      advanceOrder(order.orderId, "PREPARING", "PREPARATION_STARTED");
-    }
     if (action === "MARK_READY") {
       advanceOrder(order.orderId, "READY_FOR_PICKUP", "READY_FOR_PICKUP");
     }
     return { order: kitchenView(order), problem: null };
+  }
+
+  // Kitchen Queue of a restaurant like restaurants orders it (FR-241):
+  // premium orders first, then by the moment they were queued.
+  function queueOf(restaurantId: string): KitchenOrder[] {
+    const premium = (order: KitchenOrder) =>
+      orders.get(order.orderId)?.priority === "PREMIUM" ? 0 : 1;
+    return [...kitchenOrders.values()]
+      .filter(
+        (order) =>
+          order.restaurantId === restaurantId && order.stage === "QUEUED",
+      )
+      .sort(
+        (a, b) =>
+          premium(a) - premium(b) ||
+          (a.queuedAt ?? a.receivedAt).localeCompare(
+            b.queuedAt ?? b.receivedAt,
+          ),
+      );
+  }
+
+  // Starts the head of the queue (FR-225): a repeated request answers the
+  // order it started, an empty queue starts nothing.
+  function startNextPreparation(restaurantId: string, requestId: string) {
+    const repeated = [...kitchenOrders.values()].find(
+      (order) =>
+        order.restaurantId === restaurantId &&
+        order.startRequestId === requestId,
+    );
+    if (repeated) return { order: kitchenView(repeated), problem: null };
+    const [head] = queueOf(restaurantId);
+    if (!head) return { order: null, problem: null };
+    if (!assignCook(head)) return { order: null, problem: "NO_COOK_AVAILABLE" };
+    head.stage = "PREPARING";
+    head.startRequestId = requestId;
+    advanceOrder(head.orderId, "PREPARING", "PREPARATION_STARTED");
+    return { order: kitchenView(head), problem: null };
   }
 
   function currentDelivery() {
@@ -608,6 +647,7 @@ export function createFulfillment({
     setCourierOnLine,
     retireCourier,
     applyKitchenAction,
+    startNextPreparation,
     courier,
     setAvailability,
     acceptOffer,

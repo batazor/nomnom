@@ -24,7 +24,7 @@ Receive Order Request SHALL требовать `priority` (`STANDARD` или `PR
 ### Requirement: Start Preparation начинает приготовление заказа из очереди
 **ID:** FR-225
 
-Start Next Preparation SHALL принимать `restaurant_id` и обязательный `request_id`, выбирать голову Kitchen Queue ресторана по правилу очереди (FR-241), переводить её из `QUEUED` в `PREPARING` с `preparation_started_at`, `cook_id` и `request_id` и MUST атомарно записывать `PreparationStarted`. Кухня MUST NOT выбирать заказ сама. Cook SHALL выбираться автоматически: свободный Cook ресторана на линии с самым ранним последним назначением, никогда не назначенные — первыми. Без свободного Cook команда MUST отклоняться как `NoCookAvailable`; заказ остаётся в `QUEUED`, Outbox не меняется. Пустая очередь MUST давать отказ `KitchenQueueEmpty`. Повтор с тем же `request_id` MUST NOT начинать другой заказ; его поведение MUST задаваться явной политикой composition root: успешный no-op с начатым заказом без бизнес-факта и без нового назначения Cook либо отказ как already in state.
+Start Next Preparation SHALL принимать `restaurant_id` и обязательный `request_id`, выбирать голову Kitchen Queue ресторана по правилу очереди (FR-241), переводить её из `QUEUED` в `PREPARING` с `preparation_started_at`, `cook_id` и `request_id` и MUST атомарно записывать `PreparationStarted`. Кухня MUST NOT выбирать заказ сама. Cook SHALL выбираться автоматически: свободный Cook ресторана на линии с самым ранним последним назначением, никогда не назначенные — первыми. Без свободного Cook команда MUST отклоняться как `NoCookAvailable`; заказ остаётся в `QUEUED`, Outbox не меняется. Пустая очередь SHALL давать пустой результат без ошибки: ничего не начато. Повтор с тем же `request_id` MUST NOT начинать другой заказ; его поведение MUST задаваться явной политикой composition root: успешный no-op с начатым заказом без бизнес-факта и без нового назначения Cook либо отказ как already in state.
 
 #### Scenario: Кухня начинает приготовление
 **ID:** AC-253
@@ -57,7 +57,7 @@ Start Next Preparation SHALL принимать `restaurant_id` и обязат�
 **ID:** AC-861
 
 - **WHEN** сотрудник кухни берёт следующий заказ, а очередь пуста
-- **THEN** операция отклоняется как `KitchenQueueEmpty`, Outbox не меняется
+- **THEN** результат пустой, ни один заказ не начат, Outbox не меняется
 
 #### Scenario: Повтор при политике no-op
 **ID:** AC-254

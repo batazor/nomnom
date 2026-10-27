@@ -46,6 +46,9 @@ export function AppProviders({
   const settings = useMemo(
     () => ({
       subscriptions: config.enableMocks ? mockSubscriptions : undefined,
+      // BFF accepts only operation hashes (ADR 3 of BFF), so every build
+      // sends them, the dev server against kind too; mocks execute the text.
+      persistedOperations: !config.enableMocks,
       reportError(report: Parameters<typeof reportGraphqlError>[1]) {
         if (import.meta.env.DEV) {
           console.error("GraphQL request failed", report);

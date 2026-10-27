@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment TrackedPosition on CourierPosition { latitude longitude recordedAt } subscription CourierMoved($channel: ID!) { courierMoved(channel: $channel) { ...TrackedPosition } }"
+}

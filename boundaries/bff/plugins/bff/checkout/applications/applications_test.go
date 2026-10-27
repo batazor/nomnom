@@ -54,6 +54,11 @@ func TestPlaceOrderTurnsRefusalsIntoProblems(t *testing.T) {
 			PlacementRefused{Reason: "RESTAURANT_NOT_ACCEPTING_ORDERS"},
 			[]Problem{{Code: ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}}},
 		},
+		// AC-863: the restaurant offers no Premium Priority.
+		"no premium": {
+			PlacementRefused{Reason: "PREMIUM_UNAVAILABLE"},
+			[]Problem{{Code: ProblemPremiumUnavailable, MenuItemIDs: []string{}}},
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

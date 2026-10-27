@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CourierPoolView on CourierPool { busy couriers { availability currentOrderId id name offeredOrderId } id onLine size waiting } subscription BoardCourierPoolChanged($marketId: ID!) { courierPoolChanged(marketId: $marketId) { ...CourierPoolView } }"
+}

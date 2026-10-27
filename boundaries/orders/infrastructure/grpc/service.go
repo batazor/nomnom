@@ -127,6 +127,7 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 		IdempotencyKey: request.GetIdempotencyKey(),
 		RestaurantID:   order.RestaurantID(request.GetRestaurantId()),
 		Items:          items,
+		Priority:       placementPriority(request.GetPriority()),
 	})
 	if err != nil {
 		return nil, transportError(err)
@@ -135,6 +136,30 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 		OrderId:  string(result.OrderID),
 		Replayed: result.Replayed,
 	}, nil
+}
+
+// priorityOf maps the API priority to Place Order (FR-650): UNSPECIFIED is
+// the empty priority, which Place Order takes as STANDARD.
+var priorityOf = map[ordersv1.OrderPriority]string{
+	ordersv1.OrderPriority_ORDER_PRIORITY_UNSPECIFIED: "",
+	ordersv1.OrderPriority_ORDER_PRIORITY_STANDARD:    string(order.PriorityStandard),
+	ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM:     string(order.PriorityPremium),
+}
+
+// placementPriority passes an unknown enum value on by its number, so Place
+// Order refuses it as invalid input instead of taking it as STANDARD.
+func placementPriority(priority ordersv1.OrderPriority) string {
+	if mapped, known := priorityOf[priority]; known {
+		return mapped
+	}
+	return priority.String()
+}
+
+// orderPriority is the API form of a stored priority; the domain knows only
+// these two.
+var orderPriority = map[order.Priority]ordersv1.OrderPriority{
+	order.PriorityStandard: ordersv1.OrderPriority_ORDER_PRIORITY_STANDARD,
+	order.PriorityPremium:  ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
 }
 
 func (s *Service) RequestOrderCancellation(ctx context.Context, request *ordersv1.RequestOrderCancellationRequest) (*ordersv1.RequestOrderCancellationResponse, error) {
@@ -173,6 +198,7 @@ func orderView(view orderdetails.View) *ordersv1.Order {
 		MarketId:         view.MarketID.String(),
 		Items:            make([]*ordersv1.OrderItem, 0, len(view.Items)),
 		Total:            money(view.Total),
+		Priority:         orderPriority[view.Service.Priority()],
 		State:            orderState(view.State),
 		PlacedAt:         timestamppb.New(view.PlacedAt),
 		FulfillmentFacts: make([]*ordersv1.FulfillmentFact, 0, len(view.Facts)),
@@ -198,6 +224,9 @@ func orderView(view orderdetails.View) *ordersv1.Order {
 			ReasonCode:  view.Cancellation.ReasonCode,
 			CancelledAt: timestamppb.New(view.Cancellation.CancelledAt),
 		}
+	}
+	if fee, premium := view.Service.PremiumFee(); premium {
+		result.PremiumFee = money(fee)
 	}
 	result.ExpectedReadyAt = expectedTime(view.Expected.ReadyAt)
 	result.ExpectedPickupAt = expectedTime(view.Expected.PickupAt)

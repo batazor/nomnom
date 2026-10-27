@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query BoardOwnedRestaurants { myRestaurants(first: 20) { edges { node { acceptingOrders id name } } } }"
+}

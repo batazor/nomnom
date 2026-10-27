@@ -61,7 +61,7 @@ RPS, VU, p95/p99 и error budget не придумываются. Thresholds в�
 
 ### Idempotency, GraphQL и cache
 
-Каждый `PlaceOrder` получает уникальный ключ; повтор одного ключа — отдельный сценарий. Используются реальные GraphQL-операции с operation names, каждая измеряется отдельно, размер ответа контролируется, persisted operations применяются в production-like режиме. Состояние cache (cold/warm, hit/miss) фиксируется до прогона; warm-cache результат не выдаётся за cold path.
+Каждый `PlaceOrder` получает уникальный ключ; повтор одного ключа — отдельный сценарий. Используются реальные GraphQL-операции с operation names, каждая измеряется отдельно, размер ответа контролируется, persisted operations применяются в production-like режиме: BFF в kind и production принимает только операции своего manifest (локальный ADR 3 BFF), поэтому операции k6 лежат файлами и добавляются в manifest, как операции e2e (`ops/kind/e2e/operations`). Состояние cache (cold/warm, hit/miss) фиксируется до прогона; warm-cache результат не выдаётся за cold path.
 
 ### Request latency и бизнес-процесс
 

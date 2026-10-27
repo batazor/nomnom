@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment TrackedPosition on CourierPosition { latitude longitude recordedAt } fragment ViewedOrder on Order { cancellation { availableUntil } courier { name } endReason expectedDeliveredAt expectedPickupAt expectedReadyAt id items { lineTotal { amount currency } menuItem { id name } quantity unitPrice { amount currency } } milestones { kind occurredAt } placedAt premiumFee { amount currency } priority restaurant { id name } status total { amount currency } tracking { channel city { blockMeters blocks origin { latitude longitude } } courierPosition { ...TrackedPosition } dropoff { latitude longitude } pickup { latitude longitude } } } subscription OrderChanged($id: ID!) { orderChanged(id: $id) { ...ViewedOrder } }"
+}

@@ -32,6 +32,9 @@ func restaurantWithMenu(view applications.RestaurantView) *service.Restaurant {
 		Elevated:            view.Restaurant.WaitTime.Elevated,
 		ExpectedWaitMinutes: int32(view.Restaurant.WaitTime.ExpectedWaitMinutes),
 	}
+	if fee := view.Restaurant.PremiumFee; fee != nil {
+		restaurant.PremiumFee = &service.Money{Amount: fee.Amount, Currency: fee.Currency}
+	}
 	if view.Menu != nil {
 		restaurant.Menu = &service.Menu{Items: make([]*service.MenuItem, 0, len(view.Menu))}
 		for _, item := range view.Menu {

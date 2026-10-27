@@ -2,6 +2,7 @@ export const InvalidRestaurantReason = {
   EmptyName: "empty_name",
   EmptyOwner: "empty_owner",
   EmptyStaff: "empty_staff",
+  NonPositivePremiumFee: "non_positive_premium_fee",
 } as const;
 
 export type InvalidRestaurantReason =

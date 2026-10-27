@@ -1,19 +1,68 @@
+import { NotFoundError } from "../../../../pkg/application/errors.ts";
+import type { WaitTimeStatisticsStore } from "../../../restaurant/applications/record-wait-time/record-wait-time.ts";
+import type { WaitTimePolicy } from "../../../restaurant/domains/restaurant/wait-time.ts";
 import type {
   KitchenQueueEntry,
   KitchenQueueOrdering,
 } from "../../applications/get-kitchen-queue/get-kitchen-queue.ts";
+import { OrderPriority } from "../../domains/restaurantorder/restaurantorder.ts";
 
 /**
- * MVP Kitchen Queue policy until the scheduling algorithm is decided: FIFO by
- * `accepted_at`, then by id. Priority, courier ETA and manual order remain an
- * open product decision behind {@link KitchenQueueOrdering}.
+ * Kitchen Queue policy of Premium Priority (FR-241): first premium orders and
+ * standard ones waiting longer than the baseline wait of the restaurant times
+ * `agingFactor`, then the other standard orders; FIFO by `queued_at`, then by
+ * id inside a class. The baseline comes from the Wait Time Statistics, read
+ * in the active Unit of Work.
  */
-export class FifoKitchenQueueOrdering implements KitchenQueueOrdering {
-  order(entries: readonly KitchenQueueEntry[]): readonly KitchenQueueEntry[] {
+export class PriorityKitchenQueueOrdering implements KitchenQueueOrdering {
+  readonly #store: Pick<WaitTimeStatisticsStore, "load">;
+  readonly #policy: WaitTimePolicy;
+  readonly #agingFactor: number;
+
+  constructor(dependencies: {
+    store: Pick<WaitTimeStatisticsStore, "load">;
+    policy: WaitTimePolicy;
+    agingFactor: number;
+  }) {
+    if (
+      !Number.isFinite(dependencies.agingFactor) ||
+      dependencies.agingFactor <= 0
+    ) {
+      throw new Error("aging factor must be positive");
+    }
+    this.#store = dependencies.store;
+    this.#policy = dependencies.policy;
+    this.#agingFactor = dependencies.agingFactor;
+  }
+
+  async order(
+    restaurantId: string,
+    entries: readonly KitchenQueueEntry[],
+    now: Date,
+  ): Promise<readonly KitchenQueueEntry[]> {
+    if (entries.length === 0) return entries;
+    const stored = await this.#store.load(restaurantId);
+    if (stored === undefined) {
+      throw new NotFoundError("Restaurant", restaurantId);
+    }
+    const agingLimitMs =
+      this.#policy.estimate(stored.statistics, now).baselineMs *
+      this.#agingFactor;
+    const queuedAt = (entry: KitchenQueueEntry): number => {
+      if (entry.queuedAt === undefined) {
+        throw new Error(
+          `queued restaurant order ${entry.restaurantOrderId} has no queued_at`,
+        );
+      }
+      return entry.queuedAt.getTime();
+    };
+    const first = (entry: KitchenQueueEntry): boolean =>
+      entry.priority === OrderPriority.Premium ||
+      now.getTime() - queuedAt(entry) > agingLimitMs;
     return [...entries].sort(
       (left, right) =>
-        (left.acceptedAt?.getTime() ?? 0) -
-          (right.acceptedAt?.getTime() ?? 0) ||
+        Number(first(right)) - Number(first(left)) ||
+        queuedAt(left) - queuedAt(right) ||
         (left.restaurantOrderId < right.restaurantOrderId ? -1 : 1),
     );
   }

@@ -125,6 +125,7 @@
         "openRestaurant": 3,
         "closeRestaurant": 4,
         "applyKitchenAction": 5,
+        "startNextPreparation": 16,
         "hireCook": 10,
         "setCookOnLine": 11,
         "retireCook": 12,
@@ -134,8 +135,7 @@
         "addCourier": 13,
         "setCourierOnLine": 14,
         "retireCourier": 15,
-        "setSimulatorEnabled": 9,
-        "startNextPreparation": 16
+        "setSimulatorEnabled": 9
       }
     },
     "MutationPlaceOrderRequest": {
@@ -195,6 +195,8 @@
         "restaurant": 4,
         "items": 5,
         "total": 6,
+        "priority": 16,
+        "premiumFee": 17,
         "placedAt": 8,
         "milestones": 9,
         "cancellation": 10,
@@ -202,9 +204,7 @@
         "expectedPickupAt": 12,
         "expectedDeliveredAt": 13,
         "courier": 14,
-        "tracking": 15,
-        "priority": 16,
-        "premiumFee": 17
+        "tracking": 15
       },
       "reservedNumbers": [
         7

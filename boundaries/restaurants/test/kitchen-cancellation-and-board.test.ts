@@ -261,10 +261,10 @@ test("AC-281 kitchen queue lists queued orders in the policy order", async () =>
   const { restaurantId, phoId } = await world.givenKitchen();
   const other = await world.givenKitchen("Other");
   await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const first = await world.givenOrderIn("QUEUED", restaurantId, phoId);
   world.clock.advance(minutes(1));
   const second = await world.givenOrderIn("QUEUED", restaurantId, phoId);
-  await world.givenOrderIn("PREPARING", restaurantId, phoId);
   await world.givenOrderIn("QUEUED", other.restaurantId, other.phoId);
 
   const queue = await world.getKitchenQueue.execute({
@@ -274,7 +274,8 @@ test("AC-281 kitchen queue lists queued orders in the policy order", async () =>
   const reversed = await new GetKitchenQueueHandler({
     accessControl: world.kitchenAccessControl,
     reader: world.board,
-    ordering: { order: (entries) => [...entries].reverse() },
+    ordering: { order: async (_, entries) => [...entries].reverse() },
+    clock: world.clock,
   }).execute({ subject: cook, restaurantId });
 
   assert.deepEqual(
@@ -290,13 +291,50 @@ test("AC-281 kitchen queue lists queued orders in the policy order", async () =>
   );
 });
 
+test("AC-860 AC-862 premium orders come first, a long waiting standard order joins them", async () => {
+  const world = await createKitchenWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const aged = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  world.clock.advance(minutes(5));
+  const standard = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const received = await world.givenReceivedOrder(
+    restaurantId,
+    phoId,
+    "PREMIUM",
+  );
+  await world.accept.execute({
+    subject: cook,
+    restaurantId,
+    restaurantOrderId: received.restaurantOrderId,
+  });
+  const queueOrder = async () =>
+    (
+      await world.getKitchenQueue.execute({ subject: cook, restaurantId })
+    ).entries.map((entry) => [entry.restaurantOrderId, entry.priority]);
+
+  // Baseline 20 minutes, aging factor 2: nobody waits longer than 40.
+  assert.deepEqual(await queueOrder(), [
+    [received.restaurantOrderId, "PREMIUM"],
+    [aged.restaurantOrderId, "STANDARD"],
+    [standard.restaurantOrderId, "STANDARD"],
+  ]);
+
+  // The first standard order waits 45 minutes: it goes before the premium one.
+  world.clock.advance(minutes(40));
+  assert.deepEqual(await queueOrder(), [
+    [aged.restaurantOrderId, "STANDARD"],
+    [received.restaurantOrderId, "PREMIUM"],
+    [standard.restaurantOrderId, "STANDARD"],
+  ]);
+});
+
 test("AC-282 active preparations list preparing and assembled orders with delays", async () => {
   const world = await createKitchenWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
-  await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const assembled = await world.givenOrderIn("ASSEMBLED", restaurantId, phoId);
   await world.givenOrderIn("READY", restaurantId, phoId);
+  await world.givenOrderIn("QUEUED", restaurantId, phoId);
   const delayedUntil = new Date(world.clock.now().getTime() + minutes(45));
   await world.reportDelay.execute({
     ...preparing,

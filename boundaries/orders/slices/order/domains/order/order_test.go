@@ -59,11 +59,11 @@ func TestOrderComputesTotalAndRejectsDuplicateItems(t *testing.T) {
 	require.NoError(t, err)
 	item := NewItem("menu-1", "Margherita", quantity, price)
 
-	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{item})
+	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{item}, StandardService())
 	require.NoError(t, err)
 	assert.Equal(t, "5 EUR", order.Total().String())
 
-	_, err = New("order-2", "customer-1", "restaurant-1", testMarket(t), []Item{item, item})
+	_, err = New("order-2", "customer-1", "restaurant-1", testMarket(t), []Item{item, item}, StandardService())
 	require.ErrorIs(t, err, ErrDuplicateMenuItem)
 }
 
@@ -74,13 +74,66 @@ func TestOrderRequiresMarket(t *testing.T) {
 	quantity, err := vo.NewQuantity(1)
 	require.NoError(t, err)
 
-	_, err = New("order-1", "customer-1", "restaurant-1", vo.MarketID{}, []Item{NewItem("menu-1", "Margherita", quantity, price)})
+	_, err = New("order-1", "customer-1", "restaurant-1", vo.MarketID{}, []Item{NewItem("menu-1", "Margherita", quantity, price)}, StandardService())
 	require.ErrorIs(t, err, ErrMarketRequired)
 	require.ErrorIs(t, err, vo.ErrInvalidValue)
 
-	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{NewItem("menu-1", "Margherita", quantity, price)})
+	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{NewItem("menu-1", "Margherita", quantity, price)}, StandardService())
 	require.NoError(t, err)
 	assert.Equal(t, "berlin", order.MarketID().String())
+}
+
+// AC-854: the premium fee is part of the total.
+func TestPremiumOrderAddsTheFeeToTheTotal(t *testing.T) {
+	price, err := vo.ParseMoney("250.00", "RUB")
+	require.NoError(t, err)
+	quantity, err := vo.NewQuantity(2)
+	require.NoError(t, err)
+	fee, err := vo.ParseMoney("99.00", "RUB")
+	require.NoError(t, err)
+	service, err := PremiumService(fee)
+	require.NoError(t, err)
+
+	order, err := New("order-1", "customer-1", "restaurant-1", testMarket(t), []Item{NewItem("menu-1", "Pho", quantity, price)}, service)
+
+	require.NoError(t, err)
+	assert.Equal(t, "599 RUB", order.Total().String())
+	assert.Equal(t, PriorityPremium, order.Service().Priority())
+	stored, ok := order.Service().PremiumFee()
+	require.True(t, ok)
+	assert.True(t, stored.Equal(fee))
+}
+
+// FR-650: the fee is in the currency of the items and positive; a standard
+// Order has none.
+func TestPremiumServiceRules(t *testing.T) {
+	price, err := vo.ParseMoney("10", "EUR")
+	require.NoError(t, err)
+	quantity, err := vo.NewQuantity(1)
+	require.NoError(t, err)
+	items := []Item{NewItem("menu-1", "Pho", quantity, price)}
+
+	zero, err := vo.ZeroMoney("EUR")
+	require.NoError(t, err)
+	_, err = PremiumService(zero)
+	require.ErrorIs(t, err, ErrInvalidPremiumFee)
+
+	rub, err := vo.ParseMoney("99", "RUB")
+	require.NoError(t, err)
+	service, err := PremiumService(rub)
+	require.NoError(t, err)
+	_, err = New("order-1", "customer-1", "restaurant-1", testMarket(t), items, service)
+	require.ErrorIs(t, err, vo.ErrCurrencyMismatch)
+
+	_, err = New("order-1", "customer-1", "restaurant-1", testMarket(t), items, Service{})
+	require.ErrorIs(t, err, ErrUnknownPriority)
+
+	_, err = RestoreService(PriorityStandard, &rub)
+	require.ErrorIs(t, err, ErrInvalidPremiumFee)
+	_, err = RestoreService(PriorityPremium, nil)
+	require.ErrorIs(t, err, ErrInvalidPremiumFee)
+	_, err = ParsePriority("")
+	require.ErrorIs(t, err, ErrUnknownPriority)
 }
 
 func testMarket(t testing.TB) vo.MarketID {
@@ -102,6 +155,7 @@ func newTestOrder(t *testing.T) *Order {
 		"restaurant-1",
 		testMarket(t),
 		[]Item{NewItem("menu-1", "Margherita", quantity, price)},
+		StandardService(),
 	)
 	require.NoError(t, err)
 	return order

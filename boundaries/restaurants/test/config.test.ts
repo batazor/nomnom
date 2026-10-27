@@ -210,6 +210,7 @@ test("kitchen tunables default to the MVP decisions", () => {
     preparationTimeMs: 20 * 60_000,
     repeatPolicy: "succeed-without-event",
     cancellationDuringPreparation: "reject",
+    queueAgingFactor: 2,
   });
 });
 
@@ -219,11 +220,13 @@ test("kitchen tunables are read from the environment", () => {
       KITCHEN__PREPARATION_TIME: "45m",
       KITCHEN__REPEAT_POLICY: "reject",
       KITCHEN__CANCELLATION_DURING_PREPARATION: "allow",
+      KITCHEN_QUEUE__AGING_FACTOR: "3.5",
     }).kitchen,
     {
       preparationTimeMs: 45 * 60_000,
       repeatPolicy: "reject",
       cancellationDuringPreparation: "allow",
+      queueAgingFactor: 3.5,
     },
   );
 });
@@ -239,6 +242,12 @@ test("kitchen tunables reject malformed values", () => {
     () => loadConfig({ KITCHEN__CANCELLATION_DURING_PREPARATION: "maybe" }),
     /KITCHEN__CANCELLATION_DURING_PREPARATION/,
   );
+  for (const factor of ["0", "-1", "soon"]) {
+    assert.throws(
+      () => loadConfig({ KITCHEN_QUEUE__AGING_FACTOR: factor }),
+      /KITCHEN_QUEUE__AGING_FACTOR/,
+    );
+  }
 });
 
 test("FR-657 reads the wait time parameters and rejects inverted thresholds", () => {

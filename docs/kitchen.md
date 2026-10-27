@@ -117,7 +117,7 @@ Restaurant Order received → accepted → queued → preparation started
 | **Accept Order** | `AcceptRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `ACCEPTED`, затем `QUEUED`; `accepted_at`, `expected_ready_at` | `RestaurantOrderAccepted` |
 | **Reject Order** | `RejectRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `REJECTED` с причиной | `RestaurantOrderRejected` |
 | **Queue Restaurant Order** | `QueueRestaurantOrder` | Система `restaurants` | `ACCEPTED` | `QUEUED`, `queued_at`; место определяется политикой очереди | `RestaurantOrderQueued` |
-| **Start Preparation** | `StartRestaurantOrderPreparation` | Сотрудник кухни | `QUEUED`; есть свободный Cook на линии | `PREPARING`, `preparation_started_at`, `cook_id`; без свободного Cook — `NoCookAvailable` | `PreparationStarted` |
+| **Start Preparation** | `StartNextPreparation` | Сотрудник кухни | Голова Kitchen Queue в `QUEUED`; есть свободный Cook на линии | `PREPARING`, `preparation_started_at`, `cook_id`, `start_request_id`; без свободного Cook — `NoCookAvailable`; пустая очередь — пустой результат | `PreparationStarted` |
 | **Start Preparation Item** | `StartPreparationItem` | Сотрудник станции | Заказ `PREPARING`, item `PENDING` | Item `PREPARING` | `PreparationItemStarted` |
 | **Complete Preparation Item** | `CompletePreparationItem` | Сотрудник станции | Заказ `PREPARING`, item `PREPARING` | Item `READY` | `PreparationItemCompleted` |
 | **Mark Assembled** | `MarkRestaurantOrderAssembled` | Сотрудник кухни | `PREPARING`; все required items готовы | `ASSEMBLED` | `RestaurantOrderAssembled` |
@@ -135,7 +135,7 @@ Start/Complete Preparation Item существуют только при item-le
 
 #### Start Preparation
 
-Кухня берёт заказ из очереди, система назначает ему свободного Cook на линии ([Kitchen Capacity](#kitchen-capacity)). Нет свободного Cook — бизнес-отказ `NoCookAvailable`, заказ остаётся в `QUEUED`. Повтор команды для заказа, уже находящегося в `PREPARING`, даёт `AlreadyInState{PREPARING}` ([FSM](fsm.md#transition-table-и-результат)).
+Start Next Preparation: кухня называет ресторан и `request_id` попытки, команда берёт голову [Kitchen Queue](#kitchen-queue) и назначает ей свободного Cook на линии ([Kitchen Capacity](#kitchen-capacity)). Нет свободного Cook — бизнес-отказ `NoCookAvailable`, очередь не меняется. Пустая очередь — пустой результат, а не отказ: ничего не начато. Повтор с тем же `request_id` не начинает другой заказ: заказ хранит `start_request_id`, и политика повтора отвечает начатым заказом или `AlreadyInState{PREPARING}` ([FSM](fsm.md#transition-table-и-результат)).
 
 **Политика повтора (предложение для MVP):** kitchen board — общий экран нескольких сотрудников, повторное нажатие и повтор запроса после потери ответа являются нормальным UX. Handler превращает `AlreadyInState{PREPARING}` в успешный no-op: возвращает текущее состояние, не создаёт Domain Event и не публикует `PreparationStarted` повторно. Если заказ уже ушёл дальше (`ASSEMBLED`, `READY`) или в terminal state, FSM возвращает `InvalidTransition`, и UI показывает актуальное состояние. BDD-сценарий повтора остаётся `@pending` до подтверждения политики продуктом.
 
@@ -187,9 +187,13 @@ Queries читают собственные read models `restaurants`; kitchen b
 
 Kitchen Queue — бизнес-очередь кухни: порядок, в котором принятые заказы ожидают начала Preparation. Это не Kafka topic, не Temporal task queue и не job queue.
 
-**MVP:** очередь — projection по заказам в `QUEUED` с ключами `accepted_at` и `priority`. Она не является aggregate: порядок вычисляется из данных `RestaurantOrder`, а не хранится. Start Preparation не обязан брать первый заказ — кухня выбирает заказ, очередь показывает рекомендованный порядок.
+Очередь — projection по заказам в `QUEUED` с ключами `priority` и `queued_at`. Она не является aggregate: порядок вычисляется из данных `RestaurantOrder`, а не хранится. Порядок строгий (change [`add-premium-priority`](../openspec/changes/add-premium-priority/design.md)): Start Preparation берёт голову очереди, кухня заказ не выбирает.
 
-Scheduling-алгоритм не выбирается. Открытые варианты: FIFO по `accepted_at`; priority orders; зависимость от courier ETA (начинать так, чтобы Ready совпал с прибытием курьера); ручной порядок.
+1. **Первыми** — `PREMIUM` и `STANDARD`, ждущие в очереди дольше базового времени ожидания ресторана ([Wait Time Statistics](#wait-time-statistics)) × `KITCHEN_QUEUE__AGING_FACTOR`: так обычные заказы не ждут бесконечно.
+2. **Затем** — остальные `STANDARD`.
+3. Внутри класса — FIFO по `queued_at`, затем по id.
+
+Premium Priority — платная опция ресторана с доплатой (`Restaurant.premiumFee`); покупатель выбирает её при Place Order, `priority` заказа не меняется. Курьерский приоритет и привязка к courier ETA не вводятся.
 
 **Следствие ручного порядка:** если кухня может переставлять заказы, порядок становится хранимым состоянием с собственным инвариантом (одна позиция на заказ, согласованность при конкурентных перестановках). Тогда очередь становится aggregate — например `KitchenQueue` на ресторан, — а `RestaurantOrder` перестаёт быть единственным источником порядка. Это открытый вопрос.
 
@@ -414,7 +418,7 @@ Feature: Order ready for pickup
 - Нужна ли Assembly как отдельный длительный шаг (`ASSEMBLING` + `ASSEMBLED`) или достаточно мгновенной операции.
 - Может ли ресторан отказаться после Acceptance и до какой стадии. Текущее допущение реализации — `InvalidTransition`.
 - Политика unavailable item: cancel, substitution, удаление с компенсацией, ожидание Customer.
-- Порядок Kitchen Queue: FIFO, priority, courier ETA, ручной порядок; ручная перестановка делает очередь aggregate.
+- Kitchen Queue по courier ETA и ручной порядок; ручная перестановка делает очередь aggregate.
 - Kitchen Capacity: ручное назначение Cook ([Kitchen Capacity](#kitchen-capacity)).
 - Когда начинается поиск курьера относительно Preparation.
 - Нужен ли кухне courier ETA.

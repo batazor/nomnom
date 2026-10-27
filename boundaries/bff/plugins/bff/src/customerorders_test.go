@@ -31,7 +31,7 @@ func TestCustomerOrdersOfTheVerifiedCustomer(t *testing.T) {
 	list := newMockListCustomerOrdersHandler(t)
 	list.EXPECT().Handle(mock.Anything, customer, 1, "c0").Return(applications.OrderPage{
 		Edges: []applications.OrderEdge{{Cursor: "c1", Order: applications.OrderView{
-			ID: "order-1", Status: applications.StatusReceived, PlacedAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
+			ID: "order-1", Status: applications.StatusReceived, Priority: applications.PriorityStandard, PlacedAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
 		}}},
 		HasNextPage: true,
 		EndCursor:   "c1",

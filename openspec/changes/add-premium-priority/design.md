@@ -10,7 +10,7 @@
 
 ## Place Order
 
-- `PlaceOrderRequest.priority`: `ORDER_PRIORITY_STANDARD` / `ORDER_PRIORITY_PREMIUM`. `UNSPECIFIED` и неизвестные значения — `INVALID_ARGUMENT`.
+- `PlaceOrderRequest.priority`: `ORDER_PRIORITY_STANDARD` / `ORDER_PRIORITY_PREMIUM`; не задан (`UNSPECIFIED`) — `STANDARD` по решению пользователя, неизвестное значение — `INVALID_ARGUMENT`.
 - Catalog snapshot уже читает `GetRestaurant`; для премиума он берёт `premium_fee`:
   - доплаты нет — `FAILED_PRECONDITION`, reason `PREMIUM_UNAVAILABLE`;
   - валюта доплаты не совпадает с валютой позиций — та же ошибка, что и при смешении валют в `total` (арифметика Money только в одной валюте).
@@ -35,10 +35,10 @@
 
 ## Start Next Preparation
 
-`StartNextPreparation(restaurant_id, request_id)` заменяет `StartPreparation`. В одной UoW команда:
+`StartNextPreparation(restaurant_id, request_id)` заменяет `StartPreparation`. В одной UoW команда (`NoCookAvailable` — `RESOURCE_EXHAUSTED`, как и раньше):
 
 1. Ищет Restaurant Order ресторана с этим `start_request_id`. Нашёлся — это повтор: срабатывает политика повтора composition root (успешный no-op с текущим заказом или already in state), как в FR-225.
-2. Читает очередь и выбирает голову по правилу выше. Очередь пуста — бизнес-отказ `KitchenQueueEmpty` (`FAILED_PRECONDITION`).
+2. Читает очередь и выбирает голову по правилу выше. Очередь пуста — пустой результат: ничего не начато, ответ без `restaurant_order`, Outbox не меняется. Это нормальное состояние кухни, а не отказ.
 3. Назначает свободного Cook (`add-cook-and-courier-pools`). Нет Cook — `NoCookAvailable`, заказ остаётся в `QUEUED`.
 4. Переводит заказ в `PREPARING` с `start_request_id` и записывает `PreparationStarted`.
 

@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CookPoolView on CookPool { busy cooks { currentKitchenOrderId id name onLine } onLine queued size } mutation SetCookOnLine($cookId: ID!, $onLine: Boolean!, $restaurantId: ID!) { setCookOnLine(restaurantId: $restaurantId, cookId: $cookId, onLine: $onLine) { cookPool { ...CookPoolView } problem } }"
+}

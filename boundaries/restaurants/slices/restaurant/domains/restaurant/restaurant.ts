@@ -1,3 +1,4 @@
+import { Money, type MoneyValue } from "../../../menu/domains/menu/vo/money.ts";
 import { InvalidRestaurantError, InvalidRestaurantReason } from "./errors.ts";
 import type { RestaurantEvent } from "./events.ts";
 import { MarketId } from "./vo/market-id.ts";
@@ -27,6 +28,11 @@ export type RestaurantSnapshot = Readonly<{
    * opaque to the domain. Absent until the first write is recorded.
    */
   authorizationRevision?: string;
+  /**
+   * Fee of Premium Priority in the currency of the restaurant (FR-202);
+   * absent when the restaurant offers no premium.
+   */
+  premiumFee?: MoneyValue;
 }>;
 
 /**
@@ -43,6 +49,19 @@ const restaurantName = (name: string): string => {
     throw new InvalidRestaurantError(InvalidRestaurantReason.EmptyName);
   }
   return normalized;
+};
+
+const ZERO_AMOUNT = /^0+(\.0+)?$/;
+
+/** Premium fee: exact money greater than zero. */
+const premiumFee = (value: MoneyValue): Money => {
+  const fee = Money.from(value);
+  if (ZERO_AMOUNT.test(fee.amount)) {
+    throw new InvalidRestaurantError(
+      InvalidRestaurantReason.NonPositivePremiumFee,
+    );
+  }
+  return fee;
 };
 
 /** Staff member: a non-empty trimmed user id. */
@@ -67,6 +86,7 @@ export class Restaurant {
   #isOpen: boolean;
   readonly #staff: Set<string>;
   #authorizationRevision: string | undefined;
+  #premiumFee: Money | undefined;
   #events: RestaurantEvent[] = [];
 
   private constructor(snapshot: StoredRestaurantSnapshot, version: number) {
@@ -77,6 +97,10 @@ export class Restaurant {
     this.#isOpen = snapshot.isOpen;
     this.#staff = new Set(snapshot.staff ?? []);
     this.#authorizationRevision = snapshot.authorizationRevision;
+    this.#premiumFee =
+      snapshot.premiumFee === undefined
+        ? undefined
+        : Money.from(snapshot.premiumFee);
     this.#version = version;
   }
 
@@ -184,6 +208,31 @@ export class Restaurant {
     return true;
   }
 
+  /** Fee of Premium Priority; `undefined` when no premium is offered. */
+  get premiumFee(): Money | undefined {
+    return this.#premiumFee;
+  }
+
+  /**
+   * Sets the premium fee, or removes the premium option with `undefined`.
+   * Returns `false` when the fee is already current.
+   */
+  changePremiumFee(fee: MoneyValue | undefined): boolean {
+    const next = fee === undefined ? undefined : premiumFee(fee);
+    const current = this.#premiumFee;
+    if (
+      next === undefined
+        ? current === undefined
+        : current !== undefined &&
+          next.equals(current) &&
+          next.amount === current.amount
+    ) {
+      return false;
+    }
+    this.#premiumFee = next;
+    return true;
+  }
+
   /** Allows new Restaurant Orders; returns `false` when already open. */
   open(openedAt: Date): boolean {
     if (this.#isOpen) {
@@ -246,6 +295,9 @@ export class Restaurant {
       ...(this.#authorizationRevision === undefined
         ? {}
         : { authorizationRevision: this.#authorizationRevision }),
+      ...(this.#premiumFee === undefined
+        ? {}
+        : { premiumFee: this.#premiumFee.toValue() }),
     };
   }
 

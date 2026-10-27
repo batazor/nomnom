@@ -33,6 +33,24 @@ plugins:
   enabled: true
   path: plugins
 
+# Local ADR 3: the Router serves only the operations in persisted-operations/, one
+# <sha256>.json per operation (UI codegen and kind e2e operations, npm run operations); it
+# checks the hash against the body. A request without an operation hash is blocked, one
+# with an unknown hash is PersistedQueryNotFound; no condition lets a client bypass it.
+# Router 0.363 loads a PQL manifest only from S3 or the CDN, so there is no manifest.
+storage_providers:
+  file_system:
+    - id: operations
+      path: persisted-operations
+
+persisted_operations:
+  storage:
+    provider_id: operations
+
+security:
+  block_non_persisted_operations:
+    enabled: true
+
 # No Cosmo control plane: no usage metrics. Traces go only to the OTLP collector of the
 # environment: TRACING_ENABLED (false in the image, Dockerfile) turns them on, the
 # endpoint comes from BFF__OTLP_TRACES_ENDPOINT (OTLP/HTTP, e.g. Alloy :4318). With an

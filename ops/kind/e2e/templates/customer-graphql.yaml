@@ -4,8 +4,12 @@
 # уходит изнутри кластера из fixture e2e-driver в Service bff (manifests/netpol/fixtures.yaml),
 # без port-forward.
 #
+# BFF принимает только persisted operations (локальный ADR 3 BFF): запрос несёт SHA-256 текста
+# операции ops/kind/e2e/operations/<operation>.graphql, тело собирает scripts/graphql-body.sh.
+#
 # Состояние прогона — ConfigMap $state теста; jq-программы видят его как $s. Bindings:
-#   body  — jq: тело запроса {query, variables}; покупатель — $s.customer;
+#   operation — имя операции (файл ops/kind/e2e/operations/<operation>.graphql);
+#   variables — jq: variables операции; покупатель — $s.customer;
 #   until — jq над ответом: запрос повторяется, пока результат не true (по умолчанию —
 #           ответ без errors);
 #   wait  — сколько секунд повторять; 0 — одна попытка;
@@ -35,8 +39,10 @@ spec:
         env:
           - name: STATE
             value: ($state)
-          - name: BODY
-            value: ($body)
+          - name: OPERATION
+            value: ($operation)
+          - name: VARIABLES
+            value: ($variables)
           - name: UNTIL
             value: ($until)
           - name: WAIT
@@ -52,7 +58,7 @@ spec:
           root="$(git rev-parse --show-toplevel)"
           fixtures="$root/tests/identity/fixtures"
           state="$(kubectl -n nomnom-bff get configmap "$STATE" -o json | jq -c .data)"
-          body="$(jq -cn --argjson s "$state" "$BODY")"
+          body="$("$root/ops/kind/scripts/graphql-body.sh" "$OPERATION" "$(jq -cn --argjson s "$state" "$VARIABLES")")"
           customer="$(printf '%s' "$state" | jq -r .customer)"
           deadline=$(($(date +%s) + WAIT))
           while :; do

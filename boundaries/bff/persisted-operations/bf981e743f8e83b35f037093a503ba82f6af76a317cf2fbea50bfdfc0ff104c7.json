@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CookPoolView on CookPool { busy cooks { currentKitchenOrderId id name onLine } onLine queued size } fragment KitchenBoardView on Kitchen { cookPool { ...CookPoolView } orders { acceptedAt cook { id name } expectedReadyAt id items { name quantity } orderId priority receivedAt stage } restaurant { acceptingOrders id name } restaurantId } subscription BoardKitchenChanged($restaurantId: ID!) { kitchenChanged(restaurantId: $restaurantId) { ...KitchenBoardView } }"
+}

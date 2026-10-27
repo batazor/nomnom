@@ -56,14 +56,6 @@ const KITCHEN_RPCS: ReadonlyArray<{
     published: "RestaurantOrderRejected",
   },
   {
-    rpc: "StartPreparation",
-    from: "QUEUED",
-    invalidFrom: "RECEIVED",
-    call: (service, order) => service.startPreparation(order, context),
-    state: RestaurantOrderState.PREPARING,
-    published: "PreparationStarted",
-  },
-  {
     rpc: "MarkRestaurantOrderAssembled",
     from: "PREPARING",
     invalidFrom: "QUEUED",
@@ -221,10 +213,7 @@ test("AC-543 kitchen commands validate required fields as INVALID_ARGUMENT", asy
 
   await assert.rejects(
     async () =>
-      service.startPreparation(
-        { restaurantId, restaurantOrderId: "" },
-        context,
-      ),
+      service.startNextPreparation({ restaurantId, requestId: "" }, context),
     rejectsWith(Code.InvalidArgument),
   );
   await assert.rejects(
@@ -238,18 +227,91 @@ test("AC-543 kitchen commands validate required fields as INVALID_ARGUMENT", asy
   );
 });
 
-test("AC-544 repeated StartPreparation and MarkRestaurantOrderReady succeed without a new fact", async () => {
+test("AC-544 repeated StartNextPreparation and MarkRestaurantOrderReady succeed without a new fact", async () => {
   const { world, service } = await createKitchenCallerWorld();
   const { restaurantId, phoId } = await world.givenKitchen();
-  const preparing = await world.givenOrderIn("PREPARING", restaurantId, phoId);
   const ready = await world.givenOrderIn("READY", restaurantId, phoId);
+  const preparing = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  await service.startNextPreparation(
+    { restaurantId, requestId: "request-1" },
+    context,
+  );
   const before = (await world.outbox.eventTypes()).length;
 
-  const started = await service.startPreparation(preparing, context);
+  const started = await service.startNextPreparation(
+    { restaurantId, requestId: "request-1" },
+    context,
+  );
   const markedReady = await service.markRestaurantOrderReady(ready, context);
 
+  assert.equal(
+    started.restaurantOrder?.restaurantOrderId,
+    preparing.restaurantOrderId,
+  );
   assert.equal(started.restaurantOrder?.state, RestaurantOrderState.PREPARING);
   assert.equal(markedReady.restaurantOrder?.state, RestaurantOrderState.READY);
+  assert.equal((await world.outbox.eventTypes()).length, before);
+});
+
+test("FR-225 StartNextPreparation starts the queue head and publishes PreparationStarted", async () => {
+  const { world, service } = await createKitchenCallerWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  const head = await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const before = (await world.outbox.eventTypes()).length;
+
+  const response = await service.startNextPreparation(
+    { restaurantId, requestId: "request-1" },
+    context,
+  );
+
+  assert.equal(
+    response.restaurantOrder?.restaurantOrderId,
+    head.restaurantOrderId,
+  );
+  assert.equal(response.restaurantOrder?.state, RestaurantOrderState.PREPARING);
+  assert.deepEqual((await world.outbox.eventTypes()).slice(before), [
+    "PreparationStarted",
+  ]);
+});
+
+test("AC-861 StartNextPreparation on an empty queue answers without an order", async () => {
+  const { world, service } = await createKitchenCallerWorld();
+  const { restaurantId, phoId } = await world.givenKitchen();
+  await world.givenOrderIn("RECEIVED", restaurantId, phoId);
+  const before = (await world.outbox.eventTypes()).length;
+
+  const response = await service.startNextPreparation(
+    { restaurantId, requestId: "request-1" },
+    context,
+  );
+
+  assert.equal(response.restaurantOrder, undefined);
+  assert.equal((await world.outbox.eventTypes()).length, before);
+});
+
+test("FR-482 StartNextPreparation without a free cook is RESOURCE_EXHAUSTED, without restaurant#operate_kitchen PERMISSION_DENIED", async () => {
+  const { world, service, callAs } = await createKitchenCallerWorld();
+  const { restaurantId, phoId } = await world.givenKitchen("Pho Bar", []);
+  await world.givenOrderIn("QUEUED", restaurantId, phoId);
+  const before = (await world.outbox.eventTypes()).length;
+
+  await assert.rejects(
+    async () =>
+      service.startNextPreparation(
+        { restaurantId, requestId: "request-1" },
+        context,
+      ),
+    rejectsWith(Code.ResourceExhausted),
+  );
+  callAs({ type: "user", id: "stranger" });
+  await assert.rejects(
+    async () =>
+      service.startNextPreparation(
+        { restaurantId, requestId: "request-2" },
+        context,
+      ),
+    rejectsWith(Code.PermissionDenied),
+  );
   assert.equal((await world.outbox.eventTypes()).length, before);
 });
 

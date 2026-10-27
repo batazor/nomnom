@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"nomnom/orders/slices/fulfillment/applications/neighbours"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -19,6 +18,8 @@ import (
 	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
 	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/slices/fulfillment/applications/neighbours"
+	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrOperationPending is retryable: the Activity repeats the same idempotency key
@@ -139,12 +140,23 @@ func (r *Restaurants) RequestOrder(ctx context.Context, request neighbours.Resta
 	for _, item := range request.Items {
 		items = append(items, &restaurantsv1.OrderRequestItem{MenuItemId: item.MenuItemID, Quantity: int32(item.Quantity)}) //nolint:gosec // quantities are small positive values validated by the Order.
 	}
+	priority, known := restaurantPriority[request.Priority]
+	if !known {
+		return fmt.Errorf("%w: order %s has priority %q", application.ErrInvalidInput, request.OrderID, request.Priority)
+	}
 	_, err := r.client.ReceiveOrderRequest(ctx, &restaurantsv1.ReceiveOrderRequestRequest{
 		RestaurantId: request.RestaurantID,
 		OrderId:      request.OrderID,
 		Items:        items,
+		Priority:     priority,
 	})
 	return mapError("restaurants.ReceiveOrderRequest", err)
+}
+
+// restaurantPriority is the restaurants form of the priority of an Order.
+var restaurantPriority = map[order.Priority]restaurantsv1.OrderPriority{
+	order.PriorityStandard: restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD,
+	order.PriorityPremium:  restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
 }
 
 // CancelOrder treats a rejection by stage as done: the owner has already closed

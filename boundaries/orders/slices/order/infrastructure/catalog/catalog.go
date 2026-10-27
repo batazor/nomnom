@@ -38,7 +38,8 @@ type Limits struct {
 }
 
 // Catalog reads the current menu of restaurants. Each Snapshot makes two calls
-// bounded by one timeout: GetRestaurant for is_open, then GetMenu.
+// bounded by one timeout: GetRestaurant for is_open and the premium fee, then
+// GetMenu.
 type Catalog struct {
 	client  restaurantsv1.RestaurantsServiceClient
 	limits  Limits
@@ -82,6 +83,13 @@ func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID,
 		return placeorder.CatalogSnapshot{}, err
 	}
 	snapshot.MarketID = marketID
+	if fee := restaurant.GetRestaurant().GetPremiumFee(); fee != nil {
+		premiumFee, err := vo.ParseMoney(fee.GetAmount(), fee.GetCurrency())
+		if err != nil {
+			return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q premium_fee: %w: %v", restaurantID, ErrInvalidRestaurant, err)
+		}
+		snapshot.PremiumFee = &premiumFee
+	}
 	return snapshot, nil
 }
 

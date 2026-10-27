@@ -23,6 +23,8 @@ env:
   WAIT_TIME__RECENT_WINDOW: 30m
   WAIT_TIME__ELEVATED_FACTOR: "1.5"
   WAIT_TIME__NORMAL_FACTOR: "1.2"
+  # Kitchen Queue (FR-241): обычный заказ после стольких базовых времён ожидания идёт с премиум-заказами.
+  KITCHEN_QUEUE__AGING_FACTOR: "2"
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.

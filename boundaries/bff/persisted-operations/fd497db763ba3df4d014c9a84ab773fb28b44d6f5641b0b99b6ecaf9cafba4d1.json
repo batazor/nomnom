@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation SetSimulatorEnabled($enabled: Boolean!) { setSimulatorEnabled(enabled: $enabled) { enabled } }"
+}

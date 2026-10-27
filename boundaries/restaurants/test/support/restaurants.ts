@@ -13,6 +13,7 @@ import { CloseRestaurantHandler } from "../../slices/restaurant/applications/clo
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import { UpdateRestaurantHandler } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
 import { WaitTimePolicy } from "../../slices/restaurant/domains/restaurant/wait-time.ts";
 import {
   createRestaurantCollection,
@@ -99,6 +100,11 @@ export const createRestaurantWorld = async (
     ids,
     clock: infrastructure.clock,
   });
+  const update = new UpdateRestaurantHandler({
+    accessControl: authorization,
+    restaurants,
+    clock: infrastructure.clock,
+  });
   const open = new OpenRestaurantHandler(changeOpening);
   const close = new CloseRestaurantHandler(changeOpening);
   const changeStaff = {
@@ -138,6 +144,7 @@ export const createRestaurantWorld = async (
     authorization,
     ids,
     register,
+    update,
     open,
     close,
     assignStaff,

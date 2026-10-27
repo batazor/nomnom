@@ -23,6 +23,8 @@ function order(
     restaurant: { id: "restaurant-1", name: "Кухня №8" },
     items: [],
     total: money,
+    priority: "STANDARD",
+    premiumFee: null,
     placedAt: "2026-10-25T12:00:00Z",
     milestones: [
       { kind: "PLACED", occurredAt: "2026-10-25T12:00:00Z" },

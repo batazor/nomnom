@@ -251,6 +251,142 @@ func (_c *MockRestaurantsServiceServer_AssignStaff_Call) RunAndReturn(run func(c
 	return _c
 }
 
+// BatchGetMenus provides a mock function for the type MockRestaurantsServiceServer
+func (_mock *MockRestaurantsServiceServer) BatchGetMenus(context1 context.Context, batchGetMenusRequest *restaurantsv1.BatchGetMenusRequest) (*restaurantsv1.BatchGetMenusResponse, error) {
+	ret := _mock.Called(context1, batchGetMenusRequest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BatchGetMenus")
+	}
+
+	var r0 *restaurantsv1.BatchGetMenusResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.BatchGetMenusRequest) (*restaurantsv1.BatchGetMenusResponse, error)); ok {
+		return returnFunc(context1, batchGetMenusRequest)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.BatchGetMenusRequest) *restaurantsv1.BatchGetMenusResponse); ok {
+		r0 = returnFunc(context1, batchGetMenusRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*restaurantsv1.BatchGetMenusResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *restaurantsv1.BatchGetMenusRequest) error); ok {
+		r1 = returnFunc(context1, batchGetMenusRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRestaurantsServiceServer_BatchGetMenus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BatchGetMenus'
+type MockRestaurantsServiceServer_BatchGetMenus_Call struct {
+	*mock.Call
+}
+
+// BatchGetMenus is a helper method to define mock.On call
+//   - context1 context.Context
+//   - batchGetMenusRequest *restaurantsv1.BatchGetMenusRequest
+func (_e *MockRestaurantsServiceServer_Expecter) BatchGetMenus(context1 any, batchGetMenusRequest any) *MockRestaurantsServiceServer_BatchGetMenus_Call {
+	return &MockRestaurantsServiceServer_BatchGetMenus_Call{Call: _e.mock.On("BatchGetMenus", context1, batchGetMenusRequest)}
+}
+
+func (_c *MockRestaurantsServiceServer_BatchGetMenus_Call) Run(run func(context1 context.Context, batchGetMenusRequest *restaurantsv1.BatchGetMenusRequest)) *MockRestaurantsServiceServer_BatchGetMenus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *restaurantsv1.BatchGetMenusRequest
+		if args[1] != nil {
+			arg1 = args[1].(*restaurantsv1.BatchGetMenusRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_BatchGetMenus_Call) Return(batchGetMenusResponse *restaurantsv1.BatchGetMenusResponse, err error) *MockRestaurantsServiceServer_BatchGetMenus_Call {
+	_c.Call.Return(batchGetMenusResponse, err)
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_BatchGetMenus_Call) RunAndReturn(run func(context1 context.Context, batchGetMenusRequest *restaurantsv1.BatchGetMenusRequest) (*restaurantsv1.BatchGetMenusResponse, error)) *MockRestaurantsServiceServer_BatchGetMenus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BatchGetRestaurants provides a mock function for the type MockRestaurantsServiceServer
+func (_mock *MockRestaurantsServiceServer) BatchGetRestaurants(context1 context.Context, batchGetRestaurantsRequest *restaurantsv1.BatchGetRestaurantsRequest) (*restaurantsv1.BatchGetRestaurantsResponse, error) {
+	ret := _mock.Called(context1, batchGetRestaurantsRequest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BatchGetRestaurants")
+	}
+
+	var r0 *restaurantsv1.BatchGetRestaurantsResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.BatchGetRestaurantsRequest) (*restaurantsv1.BatchGetRestaurantsResponse, error)); ok {
+		return returnFunc(context1, batchGetRestaurantsRequest)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.BatchGetRestaurantsRequest) *restaurantsv1.BatchGetRestaurantsResponse); ok {
+		r0 = returnFunc(context1, batchGetRestaurantsRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*restaurantsv1.BatchGetRestaurantsResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *restaurantsv1.BatchGetRestaurantsRequest) error); ok {
+		r1 = returnFunc(context1, batchGetRestaurantsRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRestaurantsServiceServer_BatchGetRestaurants_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BatchGetRestaurants'
+type MockRestaurantsServiceServer_BatchGetRestaurants_Call struct {
+	*mock.Call
+}
+
+// BatchGetRestaurants is a helper method to define mock.On call
+//   - context1 context.Context
+//   - batchGetRestaurantsRequest *restaurantsv1.BatchGetRestaurantsRequest
+func (_e *MockRestaurantsServiceServer_Expecter) BatchGetRestaurants(context1 any, batchGetRestaurantsRequest any) *MockRestaurantsServiceServer_BatchGetRestaurants_Call {
+	return &MockRestaurantsServiceServer_BatchGetRestaurants_Call{Call: _e.mock.On("BatchGetRestaurants", context1, batchGetRestaurantsRequest)}
+}
+
+func (_c *MockRestaurantsServiceServer_BatchGetRestaurants_Call) Run(run func(context1 context.Context, batchGetRestaurantsRequest *restaurantsv1.BatchGetRestaurantsRequest)) *MockRestaurantsServiceServer_BatchGetRestaurants_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *restaurantsv1.BatchGetRestaurantsRequest
+		if args[1] != nil {
+			arg1 = args[1].(*restaurantsv1.BatchGetRestaurantsRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_BatchGetRestaurants_Call) Return(batchGetRestaurantsResponse *restaurantsv1.BatchGetRestaurantsResponse, err error) *MockRestaurantsServiceServer_BatchGetRestaurants_Call {
+	_c.Call.Return(batchGetRestaurantsResponse, err)
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_BatchGetRestaurants_Call) RunAndReturn(run func(context1 context.Context, batchGetRestaurantsRequest *restaurantsv1.BatchGetRestaurantsRequest) (*restaurantsv1.BatchGetRestaurantsResponse, error)) *MockRestaurantsServiceServer_BatchGetRestaurants_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CancelRestaurantOrder provides a mock function for the type MockRestaurantsServiceServer
 func (_mock *MockRestaurantsServiceServer) CancelRestaurantOrder(context1 context.Context, cancelRestaurantOrderRequest *restaurantsv1.CancelRestaurantOrderRequest) (*restaurantsv1.CancelRestaurantOrderResponse, error) {
 	ret := _mock.Called(context1, cancelRestaurantOrderRequest)
@@ -2019,55 +2155,55 @@ func (_c *MockRestaurantsServiceServer_SetSimulatorEnabled_Call) RunAndReturn(ru
 	return _c
 }
 
-// StartPreparation provides a mock function for the type MockRestaurantsServiceServer
-func (_mock *MockRestaurantsServiceServer) StartPreparation(context1 context.Context, startPreparationRequest *restaurantsv1.StartPreparationRequest) (*restaurantsv1.StartPreparationResponse, error) {
-	ret := _mock.Called(context1, startPreparationRequest)
+// StartNextPreparation provides a mock function for the type MockRestaurantsServiceServer
+func (_mock *MockRestaurantsServiceServer) StartNextPreparation(context1 context.Context, startNextPreparationRequest *restaurantsv1.StartNextPreparationRequest) (*restaurantsv1.StartNextPreparationResponse, error) {
+	ret := _mock.Called(context1, startNextPreparationRequest)
 
 	if len(ret) == 0 {
-		panic("no return value specified for StartPreparation")
+		panic("no return value specified for StartNextPreparation")
 	}
 
-	var r0 *restaurantsv1.StartPreparationResponse
+	var r0 *restaurantsv1.StartNextPreparationResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.StartPreparationRequest) (*restaurantsv1.StartPreparationResponse, error)); ok {
-		return returnFunc(context1, startPreparationRequest)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.StartNextPreparationRequest) (*restaurantsv1.StartNextPreparationResponse, error)); ok {
+		return returnFunc(context1, startNextPreparationRequest)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.StartPreparationRequest) *restaurantsv1.StartPreparationResponse); ok {
-		r0 = returnFunc(context1, startPreparationRequest)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.StartNextPreparationRequest) *restaurantsv1.StartNextPreparationResponse); ok {
+		r0 = returnFunc(context1, startNextPreparationRequest)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*restaurantsv1.StartPreparationResponse)
+			r0 = ret.Get(0).(*restaurantsv1.StartNextPreparationResponse)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *restaurantsv1.StartPreparationRequest) error); ok {
-		r1 = returnFunc(context1, startPreparationRequest)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *restaurantsv1.StartNextPreparationRequest) error); ok {
+		r1 = returnFunc(context1, startNextPreparationRequest)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockRestaurantsServiceServer_StartPreparation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StartPreparation'
-type MockRestaurantsServiceServer_StartPreparation_Call struct {
+// MockRestaurantsServiceServer_StartNextPreparation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StartNextPreparation'
+type MockRestaurantsServiceServer_StartNextPreparation_Call struct {
 	*mock.Call
 }
 
-// StartPreparation is a helper method to define mock.On call
+// StartNextPreparation is a helper method to define mock.On call
 //   - context1 context.Context
-//   - startPreparationRequest *restaurantsv1.StartPreparationRequest
-func (_e *MockRestaurantsServiceServer_Expecter) StartPreparation(context1 any, startPreparationRequest any) *MockRestaurantsServiceServer_StartPreparation_Call {
-	return &MockRestaurantsServiceServer_StartPreparation_Call{Call: _e.mock.On("StartPreparation", context1, startPreparationRequest)}
+//   - startNextPreparationRequest *restaurantsv1.StartNextPreparationRequest
+func (_e *MockRestaurantsServiceServer_Expecter) StartNextPreparation(context1 any, startNextPreparationRequest any) *MockRestaurantsServiceServer_StartNextPreparation_Call {
+	return &MockRestaurantsServiceServer_StartNextPreparation_Call{Call: _e.mock.On("StartNextPreparation", context1, startNextPreparationRequest)}
 }
 
-func (_c *MockRestaurantsServiceServer_StartPreparation_Call) Run(run func(context1 context.Context, startPreparationRequest *restaurantsv1.StartPreparationRequest)) *MockRestaurantsServiceServer_StartPreparation_Call {
+func (_c *MockRestaurantsServiceServer_StartNextPreparation_Call) Run(run func(context1 context.Context, startNextPreparationRequest *restaurantsv1.StartNextPreparationRequest)) *MockRestaurantsServiceServer_StartNextPreparation_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *restaurantsv1.StartPreparationRequest
+		var arg1 *restaurantsv1.StartNextPreparationRequest
 		if args[1] != nil {
-			arg1 = args[1].(*restaurantsv1.StartPreparationRequest)
+			arg1 = args[1].(*restaurantsv1.StartNextPreparationRequest)
 		}
 		run(
 			arg0,
@@ -2077,12 +2213,12 @@ func (_c *MockRestaurantsServiceServer_StartPreparation_Call) Run(run func(conte
 	return _c
 }
 
-func (_c *MockRestaurantsServiceServer_StartPreparation_Call) Return(startPreparationResponse *restaurantsv1.StartPreparationResponse, err error) *MockRestaurantsServiceServer_StartPreparation_Call {
-	_c.Call.Return(startPreparationResponse, err)
+func (_c *MockRestaurantsServiceServer_StartNextPreparation_Call) Return(startNextPreparationResponse *restaurantsv1.StartNextPreparationResponse, err error) *MockRestaurantsServiceServer_StartNextPreparation_Call {
+	_c.Call.Return(startNextPreparationResponse, err)
 	return _c
 }
 
-func (_c *MockRestaurantsServiceServer_StartPreparation_Call) RunAndReturn(run func(context1 context.Context, startPreparationRequest *restaurantsv1.StartPreparationRequest) (*restaurantsv1.StartPreparationResponse, error)) *MockRestaurantsServiceServer_StartPreparation_Call {
+func (_c *MockRestaurantsServiceServer_StartNextPreparation_Call) RunAndReturn(run func(context1 context.Context, startNextPreparationRequest *restaurantsv1.StartNextPreparationRequest) (*restaurantsv1.StartNextPreparationResponse, error)) *MockRestaurantsServiceServer_StartNextPreparation_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2219,6 +2355,74 @@ func (_c *MockRestaurantsServiceServer_UpdateMenuItem_Call) Return(updateMenuIte
 }
 
 func (_c *MockRestaurantsServiceServer_UpdateMenuItem_Call) RunAndReturn(run func(context1 context.Context, updateMenuItemRequest *restaurantsv1.UpdateMenuItemRequest) (*restaurantsv1.UpdateMenuItemResponse, error)) *MockRestaurantsServiceServer_UpdateMenuItem_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateRestaurant provides a mock function for the type MockRestaurantsServiceServer
+func (_mock *MockRestaurantsServiceServer) UpdateRestaurant(context1 context.Context, updateRestaurantRequest *restaurantsv1.UpdateRestaurantRequest) (*restaurantsv1.UpdateRestaurantResponse, error) {
+	ret := _mock.Called(context1, updateRestaurantRequest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateRestaurant")
+	}
+
+	var r0 *restaurantsv1.UpdateRestaurantResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.UpdateRestaurantRequest) (*restaurantsv1.UpdateRestaurantResponse, error)); ok {
+		return returnFunc(context1, updateRestaurantRequest)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.UpdateRestaurantRequest) *restaurantsv1.UpdateRestaurantResponse); ok {
+		r0 = returnFunc(context1, updateRestaurantRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*restaurantsv1.UpdateRestaurantResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *restaurantsv1.UpdateRestaurantRequest) error); ok {
+		r1 = returnFunc(context1, updateRestaurantRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRestaurantsServiceServer_UpdateRestaurant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateRestaurant'
+type MockRestaurantsServiceServer_UpdateRestaurant_Call struct {
+	*mock.Call
+}
+
+// UpdateRestaurant is a helper method to define mock.On call
+//   - context1 context.Context
+//   - updateRestaurantRequest *restaurantsv1.UpdateRestaurantRequest
+func (_e *MockRestaurantsServiceServer_Expecter) UpdateRestaurant(context1 any, updateRestaurantRequest any) *MockRestaurantsServiceServer_UpdateRestaurant_Call {
+	return &MockRestaurantsServiceServer_UpdateRestaurant_Call{Call: _e.mock.On("UpdateRestaurant", context1, updateRestaurantRequest)}
+}
+
+func (_c *MockRestaurantsServiceServer_UpdateRestaurant_Call) Run(run func(context1 context.Context, updateRestaurantRequest *restaurantsv1.UpdateRestaurantRequest)) *MockRestaurantsServiceServer_UpdateRestaurant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *restaurantsv1.UpdateRestaurantRequest
+		if args[1] != nil {
+			arg1 = args[1].(*restaurantsv1.UpdateRestaurantRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_UpdateRestaurant_Call) Return(updateRestaurantResponse *restaurantsv1.UpdateRestaurantResponse, err error) *MockRestaurantsServiceServer_UpdateRestaurant_Call {
+	_c.Call.Return(updateRestaurantResponse, err)
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_UpdateRestaurant_Call) RunAndReturn(run func(context1 context.Context, updateRestaurantRequest *restaurantsv1.UpdateRestaurantRequest) (*restaurantsv1.UpdateRestaurantResponse, error)) *MockRestaurantsServiceServer_UpdateRestaurant_Call {
 	_c.Call.Return(run)
 	return _c
 }

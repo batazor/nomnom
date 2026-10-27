@@ -13,6 +13,10 @@ import (
 // The tables name the GraphQL value of every application value. A value that
 // is missing is an error of the resolver, never UNSPECIFIED (AC-641).
 var (
+	orderPriorities = map[applications.Priority]service.OrderPriority{
+		applications.PriorityStandard: service.OrderPriority_ORDER_PRIORITY_STANDARD,
+		applications.PriorityPremium:  service.OrderPriority_ORDER_PRIORITY_PREMIUM,
+	}
 	orderStatuses = map[applications.Status]service.OrderStatus{
 		applications.StatusReceived:       service.OrderStatus_ORDER_STATUS_RECEIVED,
 		applications.StatusPaid:           service.OrderStatus_ORDER_STATUS_PAID,
@@ -71,6 +75,12 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 		},
 		Total:    money(view.Total),
 		PlacedAt: timestamp(view.PlacedAt),
+	}
+	if order.Priority, err = enumValue(orderPriorities, "order priority", view.Priority); err != nil {
+		return nil, err
+	}
+	if view.PremiumFee != nil {
+		order.PremiumFee = money(*view.PremiumFee)
 	}
 	if view.EndReason != "" {
 		if order.EndReason, err = enumValue(orderEndReasons, "order end reason", view.EndReason); err != nil {

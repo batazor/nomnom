@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query BffInfo { bffInfo { name version } }"
+}

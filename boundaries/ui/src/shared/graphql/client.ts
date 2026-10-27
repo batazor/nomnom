@@ -1,5 +1,9 @@
+import { persistedExchange } from "@urql/exchange-persisted";
 import type { ExecutionResult } from "graphql";
-import { createClient as createSseClient } from "graphql-sse";
+import {
+  createClient as createSseClient,
+  type RequestParams,
+} from "graphql-sse";
 import {
   type Client,
   cacheExchange,
@@ -19,11 +23,13 @@ export type GraphqlErrorReport = Readonly<{
 
 // Delivers the results of one subscription to sink and calls connected when
 // its stream is open; returns the unsubscribe. Default: SSE to the Router.
+// A persisted operation carries its hash in extensions and no query.
 export type SubscriptionTransport = (
   request: Readonly<{
-    query: string;
+    query?: string;
     variables?: Record<string, unknown>;
     operationName?: string;
+    extensions?: Record<string, unknown>;
   }>,
   sink: Readonly<{
     next: (result: ExecutionResult) => void;
@@ -41,7 +47,21 @@ type ClientOptions = Readonly<{
   // Access token of the user BFF acts for; without it only public reads work.
   getAccessToken?: () => string | undefined;
   reportError?: (report: GraphqlErrorReport) => void;
+  // BFF accepts only the operations of its manifest (ADR 3 of BFF): every
+  // operation is sent as the SHA-256 hash codegen put in the document, never
+  // as text. Off only for mocks, which execute the text.
+  persistedOperations: boolean;
 }>;
+
+// Hash of the operation computed by codegen (persistedDocuments); a document
+// without one was not generated and is not in the manifest of BFF.
+function documentHash(_query: string, document: unknown): string {
+  const hash = (document as { __meta__?: { hash?: unknown } }).__meta__?.hash;
+  if (typeof hash !== "string") {
+    throw new Error("GraphQL document has no persisted operation hash");
+  }
+  return hash;
+}
 
 export function createGraphqlClient({
   url,
@@ -49,6 +69,7 @@ export function createGraphqlClient({
   getAccessToken,
   reportError,
   subscriptions,
+  persistedOperations,
 }: ClientOptions) {
   function headers(): Record<string, string> {
     const result: Record<string, string> = {};
@@ -87,7 +108,9 @@ export function createGraphqlClient({
         retryAttempts: Number.POSITIVE_INFINITY,
         on: { connected: refetchActiveQueries },
       });
-      return (request, sink) => sse.subscribe(request, sink);
+      // graphql-sse types require a query; a persisted subscription sends
+      // only its hash in extensions, which the Router resolves.
+      return (request, sink) => sse.subscribe(request as RequestParams, sink);
     })();
 
   client = createClient({
@@ -111,16 +134,23 @@ export function createGraphqlClient({
           });
         },
       }),
+      ...(persistedOperations
+        ? [
+            persistedExchange({
+              enforcePersistedQueries: true,
+              enableForMutation: true,
+              enableForSubscriptions: true,
+              generateHash: async (query, document) =>
+                documentHash(query, document),
+            }),
+          ]
+        : []),
       fetchExchange,
       subscriptionExchange({
         forwardSubscription(request) {
           return {
             subscribe: (sink) => ({
-              unsubscribe: transport(
-                { ...request, query: request.query ?? "" },
-                sink,
-                refetchActiveQueries,
-              ),
+              unsubscribe: transport(request, sink, refetchActiveQueries),
             }),
           };
         },

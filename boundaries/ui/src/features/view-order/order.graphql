@@ -27,6 +27,11 @@ fragment ViewedOrder on Order {
     amount
     currency
   }
+  priority
+  premiumFee {
+    amount
+    currency
+  }
   placedAt
   milestones {
     kind

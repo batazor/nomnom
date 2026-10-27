@@ -26,6 +26,7 @@ const receive = (items = [{ menuItemId: "pho", quantity: 2 }]) =>
     restaurantId: "r-1",
     marketId: "berlin",
     items,
+    priority: "STANDARD",
     receivedAt: at(0),
   });
 
@@ -78,7 +79,7 @@ test("composition must be non-empty, positive and without duplicate options", ()
   assert.equal(sameItemOtherOptions.items.length, 2);
 });
 
-test("matchesRequest compares restaurant and normalized composition", () => {
+test("matchesRequest compares restaurant, priority and normalized composition", () => {
   const order = receive([
     { menuItemId: "pho", quantity: 1, options: ["b", "a"] },
     { menuItemId: "tea", quantity: 2 },
@@ -87,6 +88,7 @@ test("matchesRequest compares restaurant and normalized composition", () => {
   assert.ok(
     order.matchesRequest({
       restaurantId: "r-1",
+      priority: "STANDARD",
       items: [
         { menuItemId: "tea", quantity: 2 },
         { menuItemId: "pho", quantity: 1, options: ["a", "b"] },
@@ -96,12 +98,24 @@ test("matchesRequest compares restaurant and normalized composition", () => {
   assert.ok(
     !order.matchesRequest({
       restaurantId: "r-1",
+      priority: "STANDARD",
       items: [{ menuItemId: "tea", quantity: 2 }],
     }),
   );
   assert.ok(
     !order.matchesRequest({
       restaurantId: "r-2",
+      priority: "STANDARD",
+      items: [
+        { menuItemId: "tea", quantity: 2 },
+        { menuItemId: "pho", quantity: 1, options: ["a", "b"] },
+      ],
+    }),
+  );
+  assert.ok(
+    !order.matchesRequest({
+      restaurantId: "r-1",
+      priority: "PREMIUM",
       items: [
         { menuItemId: "tea", quantity: 2 },
         { menuItemId: "pho", quantity: 1, options: ["a", "b"] },
@@ -120,7 +134,11 @@ test("happy path fills the timeline and records each fact", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(5), cookId: "cook-1" });
+  order.startPreparation({
+    startedAt: at(5),
+    cookId: "cook-1",
+    requestId: "start-1",
+  });
   order.reportDelay({
     reportedAt: at(10),
     expectedReadyAt: at(40),
@@ -213,7 +231,11 @@ test("failure requires a reason and records the stage", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
+  order.startPreparation({
+    startedAt: at(2),
+    cookId: "cook-1",
+    requestId: "start-1",
+  });
   order.pullEvents();
 
   assert.throws(
@@ -238,7 +260,11 @@ test("cancel stores the stage and whether preparation started", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
+  order.startPreparation({
+    startedAt: at(2),
+    cookId: "cook-1",
+    requestId: "start-1",
+  });
   order.markAssembled({ assembledAt: at(3) });
   order.pullEvents();
 
@@ -262,7 +288,11 @@ test("cancel decides the outcome by stage without throwing", () => {
     eligibility: accepted,
   });
   order.queue({ queuedAt: at(1) });
-  order.startPreparation({ startedAt: at(2), cookId: "cook-1" });
+  order.startPreparation({
+    startedAt: at(2),
+    cookId: "cook-1",
+    requestId: "start-1",
+  });
   const policy = { duringPreparation: "reject" } as const;
 
   assert.deepEqual(order.cancel({ cancelledAt: at(3), policy }), {

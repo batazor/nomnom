@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation ApplyKitchenAction($input: KitchenActionInput!) { applyKitchenAction(input: $input) { order { cook { id name } id items { name quantity } orderId priority receivedAt stage } problem } }"
+}

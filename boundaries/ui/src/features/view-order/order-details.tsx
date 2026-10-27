@@ -136,6 +136,10 @@ function OrderView({
         >
           <h4 id="order-summary-title">{t("order.summary")}</h4>
           <p className="order-restaurant">{order.restaurant.name}</p>
+          {order.priority === "PREMIUM" ? (
+            // FR-654: priority, without a promised time.
+            <p className="order-premium">{t("order.premium")}</p>
+          ) : null}
           <ul className="order-items">
             {order.items.map((item) => (
               <li key={item.menuItem.id}>
@@ -150,6 +154,14 @@ function OrderView({
             ))}
           </ul>
           <dl className="order-facts">
+            {order.premiumFee ? (
+              <div>
+                <dt>{t("order.premiumFee")}</dt>
+                <dd data-testid="order-premium-fee">
+                  {money(order.premiumFee)}
+                </dd>
+              </div>
+            ) : null}
             <div className="order-total">
               <dt>{t("order.total")}</dt>
               <dd data-testid="order-total">{money(order.total)}</dd>

@@ -29,14 +29,21 @@ func (s *Store) Get(ctx context.Context, id order.ID) (*order.Order, error) {
 func (s *Store) Add(ctx context.Context, created *order.Order) error {
 	snap := created.Snapshot()
 	outcome, code := cancellation(snap.CancellationReason)
+	var feeAmount, feeCurrency *string
+	if fee, premium := snap.Service.PremiumFee(); premium {
+		amount, currency := fee.Amount().String(), fee.Currency()
+		feeAmount, feeCurrency = &amount, &currency
+	}
 	_, err := s.exec(ctx, psql.Insert("orders").
 		Columns("id", "customer_id", "restaurant_id", "market_id", "total_amount", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
-			"expected_ready_at", "expected_pickup_at", "expected_delivered_at").
+			"expected_ready_at", "expected_pickup_at", "expected_delivered_at",
+			"priority", "premium_fee_amount", "premium_fee_currency").
 		Values(snap.ID, snap.CustomerID, snap.RestaurantID, snap.MarketID.String(),
 			created.Total().Amount().String(), created.Total().Currency(),
 			snap.State, snap.PlacedAt, nullTime(snap.CancelledAt), outcome, code, snap.Version+1,
-			nullTime(snap.Expected.ReadyAt), nullTime(snap.Expected.PickupAt), nullTime(snap.Expected.DeliveredAt)))
+			nullTime(snap.Expected.ReadyAt), nullTime(snap.Expected.PickupAt), nullTime(snap.Expected.DeliveredAt),
+			string(snap.Service.Priority()), feeAmount, feeCurrency))
 	if isUniqueViolation(err) {
 		return fmt.Errorf("%w: %q", order.ErrOrderAlreadyExists, snap.ID)
 	}
@@ -116,15 +123,19 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 		readyAt          *time.Time
 		pickupAt         *time.Time
 		deliveredAt      *time.Time
+		priority         string
+		feeAmount        *string
+		feeCurrency      *string
 	)
 	err := s.queryRow(ctx, psql.
 		Select("customer_id", "restaurant_id", "market_id", "total_amount::text", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
-			"expected_ready_at", "expected_pickup_at", "expected_delivered_at").
+			"expected_ready_at", "expected_pickup_at", "expected_delivered_at",
+			"priority", "premium_fee_amount::text", "premium_fee_currency").
 		From("orders").Where(sq.Eq{"id": id}),
 		&snap.CustomerID, &snap.RestaurantID, &marketID, &amount, &currency,
 		&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version,
-		&readyAt, &pickupAt, &deliveredAt)
+		&readyAt, &pickupAt, &deliveredAt, &priority, &feeAmount, &feeCurrency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return order.Snapshot{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, id)
 	}
@@ -134,6 +145,17 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	snap.ID = id
 	if snap.MarketID, err = vo.NewMarketID(marketID); err != nil {
 		return order.Snapshot{}, fmt.Errorf("order %s market: %w", id, err)
+	}
+	var fee *vo.Money
+	if feeAmount != nil && feeCurrency != nil {
+		parsed, err := vo.ParseMoney(*feeAmount, *feeCurrency)
+		if err != nil {
+			return order.Snapshot{}, fmt.Errorf("order %s premium fee: %w", id, err)
+		}
+		fee = &parsed
+	}
+	if snap.Service, err = order.RestoreService(order.Priority(priority), fee); err != nil {
+		return order.Snapshot{}, fmt.Errorf("order %s priority: %w", id, err)
 	}
 	snap.PlacedAt = snap.PlacedAt.UTC()
 	snap.CancelledAt = utcTime(cancelledAt)

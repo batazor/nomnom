@@ -30,6 +30,7 @@ const (
 	ProblemOrderTotalBelowMinimum       ProblemCode = "ORDER_TOTAL_BELOW_MINIMUM"
 	ProblemOrderTotalAboveMaximum       ProblemCode = "ORDER_TOTAL_ABOVE_MAXIMUM"
 	ProblemRestaurantNotAcceptingOrders ProblemCode = "RESTAURANT_NOT_ACCEPTING_ORDERS"
+	ProblemPremiumUnavailable           ProblemCode = "PREMIUM_UNAVAILABLE"
 )
 
 // Problem refers to Menu Items, or to the whole Order when MenuItemIDs is empty.
@@ -53,9 +54,18 @@ type Line struct {
 	Quantity   int
 }
 
+// Priority is the Premium Priority chosen at checkout (orders FR-650).
+type Priority string
+
+const (
+	PriorityStandard Priority = "standard"
+	PriorityPremium  Priority = "premium"
+)
+
 type Input struct {
 	RestaurantID string
 	Lines        []Line
+	Priority     Priority
 	// IdempotencyKey identifies the checkout attempt; a retry with the same key
 	// returns the Order placed by the first attempt.
 	IdempotencyKey string
@@ -124,6 +134,8 @@ func problemsOf(refused PlacementRefused) []Problem {
 	switch refused.Reason {
 	case "RESTAURANT_NOT_ACCEPTING_ORDERS":
 		return []Problem{{Code: ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}}}
+	case "PREMIUM_UNAVAILABLE":
+		return []Problem{{Code: ProblemPremiumUnavailable, MenuItemIDs: []string{}}}
 	case "ORDER_NOT_ORDERABLE":
 		problems := make([]Problem, 0, len(refused.Codes))
 		for _, reason := range refused.Codes {

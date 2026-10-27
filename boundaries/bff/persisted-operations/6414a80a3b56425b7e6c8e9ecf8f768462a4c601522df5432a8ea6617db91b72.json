@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation PlaceOrder($input: PlaceOrderInput!) { placeOrder(input: $input) { order { id } problems { code menuItemIds } } }"
+}

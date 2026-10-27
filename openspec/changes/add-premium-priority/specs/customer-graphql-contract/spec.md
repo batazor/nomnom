@@ -5,7 +5,7 @@
 ### Requirement: Премиум-приоритет в customer-схеме
 **ID:** FR-652
 
-`Restaurant` SHALL иметь `premiumFee: Money` (null — опции нет), `PlaceOrderInput` — обязательный `priority: OrderPriority!` (`STANDARD`, `PREMIUM`), `Order` — `priority: OrderPriority!` и `premiumFee: Money` (null для `STANDARD`). Отказ `PREMIUM_UNAVAILABLE` SHALL возвращаться problem в payload `placeOrder`. MSW-моки SHALL покрывать ресторан с доплатой и без неё.
+`Restaurant` SHALL иметь `premiumFee: Money` (null — опции нет), `PlaceOrderInput` — необязательный `priority: OrderPriority` (`STANDARD`, `PREMIUM`; не задан — `STANDARD`), `Order` — `priority: OrderPriority!` и `premiumFee: Money` (null для `STANDARD`). Отказ `PREMIUM_UNAVAILABLE` SHALL возвращаться problem в payload `placeOrder`. MSW-моки SHALL покрывать ресторан с доплатой и без неё.
 
 #### Scenario: Ресторан без премиума
 **ID:** AC-863

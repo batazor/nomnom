@@ -75,21 +75,33 @@ spec:
             env:
               - name: URL
                 value: ($graphql)
-              - name: BODY
-                value: "(to_string({query: '{ bffInfo { name version } }'}))"
             content: >-
-              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -d "$BODY"
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin'
+              -d "$(../../scripts/graphql-body.sh E2eBffInfo '{}')"
             check:
               ($error): ~
               (to_string(json_parse($stdout))): '{"data":{"bffInfo":{"name":"nomnom-bff","version":"0.1.0"}}}'
+        # ADR 3 BFF: операция не из manifest отклоняется до plugin, даже известная по тексту.
         - script:
             env:
               - name: URL
                 value: ($graphql)
-              - name: BODY
-                value: "(to_string({query: join('', ['{ order(id: \"', $missing_order, '\") { id status } }'])}))"
             content: >-
-              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -d "$BODY"
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin'
+              -d '{"query":"query E2eBffInfo { bffInfo { name version } }"}'
+            check:
+              ($error): ~
+              (json_parse($stdout).data): ~
+              (length(json_parse($stdout).errors) > `0`): true
+        - script:
+            env:
+              - name: URL
+                value: ($graphql)
+              - name: ORDER
+                value: ($missing_order)
+            content: >-
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin'
+              -d "$(../../scripts/graphql-body.sh E2eOrder "$(jq -cn --arg id "$ORDER" '{id: $id}')")"
             check:
               ($error): ~
               (json_parse($stdout).data.order): ~
@@ -108,10 +120,11 @@ spec:
                 value: ($graphql)
               - name: TOKEN
                 value: ($token)
-              - name: BODY
-                value: "(to_string({query: join('', ['{ order(id: \"', $missing_order, '\") { id status } }'])}))"
+              - name: ORDER
+                value: ($missing_order)
             content: >-
-              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -H "authorization: Bearer $TOKEN" -d "$BODY"
+              kubectl -n nomnom-outsider exec deploy/net-probe -- curl -sS --max-time 10 "$URL" -H 'content-type: application/json' -H 'x-nomnom-market: berlin' -H "authorization: Bearer $TOKEN"
+              -d "$(../../scripts/graphql-body.sh E2eOrder "$(jq -cn --arg id "$ORDER" '{id: $id}')")"
             check:
               ($error): ~
               (to_string(json_parse($stdout))): '{"data":{"order":null}}'

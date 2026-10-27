@@ -57,6 +57,7 @@ import {
   RestaurantOrderState,
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { up as restaurantOrdersMarket } from "../slices/restaurantorder/infrastructure/repository/migrations/0003-market.ts";
+import { up as restaurantOrdersPremiumPriority } from "../slices/restaurantorder/infrastructure/repository/migrations/0005-premium-priority.ts";
 import {
   createRestaurantOrderCollection,
   DatabaseKitchenBoard,
@@ -300,6 +301,9 @@ describe("startup migration", () => {
         orderId: "o-legacy",
         restaurantId: "r-legacy",
         items: [{ menuItemId: "pho", quantity: 1, options: [] }],
+        // The update of 0003 runs under the current validator, which
+        // requires the priority given to old orders by 0005.
+        priority: "STANDARD",
         state: "RECEIVED",
         timeline: { receivedAt: now },
       } as never,
@@ -359,6 +363,56 @@ describe("startup migration", () => {
     for (const name of ["restaurants_open_by_id", "restaurants_owner"]) {
       assert.equal(indexes.includes(name), false, name);
     }
+  });
+
+  test("FR-651 orders stored before Premium Priority are STANDARD and one start request starts one order", async (t) => {
+    const db = freshDatabase(t);
+    await migrateRestaurantsDatabase(db);
+    await db.collection<{ _id: string }>("restaurant_orders").insertOne(
+      {
+        _id: "ro-legacy",
+        version: 1,
+        schemaVersion: 4,
+        orderId: "o-legacy",
+        restaurantId: "r-legacy",
+        marketId: "berlin",
+        items: [{ menuItemId: "pho", quantity: 1, options: [] }],
+        state: "RECEIVED",
+        timeline: { receivedAt: now },
+      } as never,
+      { bypassDocumentValidation: true },
+    );
+
+    // Idempotent: the startup run applied it already, a repeat migrates.
+    for (let run = 0; run < 2; run += 1) {
+      await restaurantOrdersPremiumPriority(db);
+    }
+
+    const orders = new DatabaseRestaurantOrderRepository(
+      createRestaurantOrderCollection(
+        db,
+        new DatabaseUnitOfWork(database.client),
+      ),
+      noKitchenChanges,
+    );
+    assert.equal((await orders.get("ro-legacy"))?.priority, "STANDARD");
+    // The priority is required and known from now on.
+    for (const update of [
+      { $unset: { priority: "" } },
+      { $set: { priority: "URGENT" } },
+    ]) {
+      await assert.rejects(
+        db
+          .collection<{ _id: string }>("restaurant_orders")
+          .updateOne({ _id: "ro-legacy" }, update as never),
+        (error) => error instanceof MongoServerError && error.code === 121,
+      );
+    }
+    const index = (await db.collection("restaurant_orders").indexes()).find(
+      (candidate) =>
+        candidate.name === "restaurant_orders_start_request_unique",
+    );
+    assert.equal(index?.unique, true);
   });
 
   test("runs of one process are queued", async (t) => {
@@ -479,6 +533,7 @@ describe("MongoDB storage", () => {
       restaurantId,
       marketId: "berlin",
       items: [{ menuItemId: "pho", quantity: 2, options: ["extra-herbs"] }],
+      priority: "STANDARD",
       receivedAt: now,
     });
 

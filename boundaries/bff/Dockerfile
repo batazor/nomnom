@@ -4,7 +4,8 @@
 #   router  — pinned Cosmo Router release, verified by SHA-256 (mismatch fails the build)
 #   plugin  — Go router plugin, plugins/bff/bin/<os>_<arch> as the Router expects it
 #   config  — config.json composed by wgc from graph.yaml (package-lock.json, offline)
-#   runtime — distroless static, nonroot: router, plugin, config.json, config.production.yaml
+#   runtime — distroless static, nonroot: router, plugin, config.json, config.production.yaml,
+#             persisted-operations/
 
 # Cosmo Router release https://github.com/wundergraph/cosmo/releases/tag/router%400.363.0
 # (latest stable router@ release on 2026-10-25). SHA-256 of the release archives
@@ -77,6 +78,8 @@ COPY --from=router /out/router /app/router
 COPY --from=plugin /out/plugins/ /app/plugins/
 COPY --from=config /out/config.json /app/config.json
 COPY config.production.yaml /app/config.yaml
+# Local ADR 3: the operations the Router accepts, one <sha256>.json each (npm run operations).
+COPY persisted-operations/ /app/persisted-operations/
 
 # Tracing is opt-in per environment (config.production.yaml, telemetry.tracing).
 ENV TRACING_ENABLED=false

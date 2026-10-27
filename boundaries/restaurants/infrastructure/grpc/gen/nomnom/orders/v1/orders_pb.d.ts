@@ -221,6 +221,21 @@ export declare type Order = Message<"nomnom.orders.v1.Order"> & {
    * @generated from field: string market_id = 15;
    */
   marketId: string;
+
+  /**
+   * Premium Priority chosen at Place Order (FR-650).
+   *
+   * @generated from field: nomnom.orders.v1.OrderPriority priority = 16;
+   */
+  priority: OrderPriority;
+
+  /**
+   * Fee of Premium Priority fixed at Place Order and included in total; unset
+   * for a standard Order.
+   *
+   * @generated from field: nomnom.orders.v1.Money premium_fee = 17;
+   */
+  premiumFee?: Money | undefined;
 };
 
 /**
@@ -279,6 +294,33 @@ export declare type OrderSummary = Message<"nomnom.orders.v1.OrderSummary"> & {
  * Use `create(OrderSummarySchema)` to create a new message.
  */
 export declare const OrderSummarySchema: GenMessage<OrderSummary>;
+
+/**
+ * Premium Priority of an Order (FR-650): a premium Order is prepared first.
+ *
+ * @generated from enum nomnom.orders.v1.OrderPriority
+ */
+export enum OrderPriority {
+  /**
+   * @generated from enum value: ORDER_PRIORITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ORDER_PRIORITY_STANDARD = 1;
+   */
+  STANDARD = 1,
+
+  /**
+   * @generated from enum value: ORDER_PRIORITY_PREMIUM = 2;
+   */
+  PREMIUM = 2,
+}
+
+/**
+ * Describes the enum nomnom.orders.v1.OrderPriority.
+ */
+export declare const OrderPrioritySchema: GenEnum<OrderPriority>;
 
 /**
  * @generated from enum nomnom.orders.v1.OrderState

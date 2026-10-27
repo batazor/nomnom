@@ -26,10 +26,20 @@ func NewOrders(conn grpc.ClientConnInterface) *Orders {
 
 var _ applications.OrderPlacer = (*Orders)(nil)
 
+var priorities = map[applications.Priority]ordersv1.OrderPriority{
+	applications.PriorityStandard: ordersv1.OrderPriority_ORDER_PRIORITY_STANDARD,
+	applications.PriorityPremium:  ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
+}
+
 func (o *Orders) PlaceOrder(ctx context.Context, input applications.Input) (string, error) {
+	priority, ok := priorities[input.Priority]
+	if !ok {
+		return "", fmt.Errorf("%w: priority %q", applications.ErrInvalidOrder, input.Priority)
+	}
 	request := &ordersv1.PlaceOrderRequest{
 		IdempotencyKey: input.IdempotencyKey,
 		RestaurantId:   input.RestaurantID,
+		Priority:       priority,
 	}
 	for _, line := range input.Lines {
 		request.Items = append(request.Items, &ordersv1.PlaceOrderItem{

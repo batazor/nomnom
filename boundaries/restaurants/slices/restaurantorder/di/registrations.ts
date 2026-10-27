@@ -28,7 +28,10 @@ import type {
   RestaurantOrderViewAccess,
 } from "../applications/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
-import { GetKitchenQueueHandler } from "../applications/get-kitchen-queue/get-kitchen-queue.ts";
+import {
+  GetKitchenQueueHandler,
+  type KitchenQueueOrdering,
+} from "../applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
 import { ListActiveRestaurantOrdersHandler } from "../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import { ListIncomingOrdersHandler } from "../applications/list-incoming-orders/list-incoming-orders.ts";
@@ -47,7 +50,7 @@ import { UnconstrainedAcceptanceConditions } from "../infrastructure/acceptance/
 import { WaitTimeReadyTimeEstimator } from "../infrastructure/acceptance/wait-time.ts";
 import type { KitchenChangeNotifier } from "../infrastructure/integration/kitchen-changes.ts";
 import { restaurantOrderEventMapper } from "../infrastructure/integration/restaurant-order-events.ts";
-import { FifoKitchenQueueOrdering } from "../infrastructure/kitchen-queue/mvp.ts";
+import { PriorityKitchenQueueOrdering } from "../infrastructure/kitchen-queue/priority.ts";
 import {
   cancellationRejection,
   ObservedRestaurantOrderRepository,
@@ -110,6 +113,8 @@ export interface RestaurantOrderCradle {
   readonly acceptanceFacts: AcceptanceFactsReader;
   readonly acceptanceConditions: AcceptanceConditionsProvider;
   readonly readyTimeEstimator: ReadyTimeEstimator;
+  /** Order in which Start Next Preparation takes queued orders (FR-241). */
+  readonly kitchenQueueOrdering: KitchenQueueOrdering;
   readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly cancelRestaurantOrder: CancelRestaurantOrderHandler;
   readonly acceptRestaurantOrder: AcceptOrderHandler;
@@ -226,10 +231,21 @@ export const registerRestaurantOrder = (
         cradle.domainMetrics,
       ),
     ).singleton(),
+    kitchenQueueOrdering: asFunction(
+      ({ restaurantWaitTimes, waitTimePolicy, kitchenConfig }: Cradle) =>
+        new PriorityKitchenQueueOrdering({
+          store: restaurantWaitTimes,
+          policy: waitTimePolicy,
+          agingFactor: kitchenConfig.queueAgingFactor,
+        }),
+    ).singleton(),
     startPreparation: asFunction((cradle: Cradle) =>
       observeTransitionRejections(
         new StartPreparationHandler({
           ...commandDependencies(cradle),
+          started: cradle.kitchenBoard,
+          queue: cradle.kitchenBoard,
+          ordering: cradle.kitchenQueueOrdering,
           cooks: cradle.cookAssigner,
           onRepeat: cradle.kitchenConfig.repeatPolicy,
         }),
@@ -280,14 +296,19 @@ export const registerRestaurantOrder = (
           createRestaurantOrderCollection(db, unitOfWork),
         ),
     ).singleton(),
-    // The order of the queue is the MVP FIFO policy until the scheduling
-    // decision.
+    // The same order Start Next Preparation takes (FR-241).
     getKitchenQueue: asFunction(
-      ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
+      ({
+        kitchenBoard,
+        kitchenAccessControl,
+        kitchenQueueOrdering,
+        clock,
+      }: Cradle) =>
         new GetKitchenQueueHandler({
           accessControl: kitchenAccessControl,
           reader: kitchenBoard,
-          ordering: new FifoKitchenQueueOrdering(),
+          ordering: kitchenQueueOrdering,
+          clock,
         }),
     ).singleton(),
     listIncomingOrders: asFunction(

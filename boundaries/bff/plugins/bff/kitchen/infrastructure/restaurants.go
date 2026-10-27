@@ -36,6 +36,12 @@ var (
 	_ applications.CookCommands    = (*Restaurants)(nil)
 )
 
+// priorities has no UNSPECIFIED: restaurants always sets the priority.
+var priorities = map[restaurantsv1.OrderPriority]applications.Priority{
+	restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD: applications.PriorityStandard,
+	restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM:  applications.PriorityPremium,
+}
+
 var stages = map[restaurantsv1.RestaurantOrderState]applications.Stage{
 	restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_RECEIVED:  applications.StageReceived,
 	restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_QUEUED:    applications.StageQueued,
@@ -59,6 +65,10 @@ func (r *Restaurants) ActiveOrders(ctx context.Context, restaurantID string) ([]
 		if !ok {
 			return nil, fmt.Errorf("restaurant order %s in unexpected state %s", order.GetRestaurantOrder().GetRestaurantOrderId(), state)
 		}
+		priority, ok := priorities[order.GetRestaurantOrder().GetPriority()]
+		if !ok {
+			return nil, fmt.Errorf("restaurant order %s has unexpected priority %s", order.GetRestaurantOrder().GetRestaurantOrderId(), order.GetRestaurantOrder().GetPriority())
+		}
 		lines := make([]applications.ActiveOrderLine, 0, len(order.GetItems()))
 		for _, item := range order.GetItems() {
 			lines = append(lines, applications.ActiveOrderLine{MenuItemID: item.GetMenuItemId(), Quantity: int(item.GetQuantity())})
@@ -71,6 +81,7 @@ func (r *Restaurants) ActiveOrders(ctx context.Context, restaurantID string) ([]
 			AcceptedAt:      moment(order.GetAcceptedAt()),
 			ExpectedReadyAt: moment(order.GetRestaurantOrder().GetExpectedReadyAt()),
 			CookID:          order.GetRestaurantOrder().GetCookId(),
+			Priority:        priority,
 		}
 		if order.GetReceivedAt() != nil {
 			active.ReceivedAt = order.GetReceivedAt().AsTime()
@@ -163,8 +174,6 @@ func (r *Restaurants) Apply(ctx context.Context, restaurantID, kitchenOrderID st
 		_, err = r.client.AcceptRestaurantOrder(ctx, &restaurantsv1.AcceptRestaurantOrderRequest{RestaurantId: restaurantID, RestaurantOrderId: kitchenOrderID})
 	case applications.ActionReject:
 		_, err = r.client.RejectRestaurantOrder(ctx, &restaurantsv1.RejectRestaurantOrderRequest{RestaurantId: restaurantID, RestaurantOrderId: kitchenOrderID})
-	case applications.ActionStartPreparation:
-		_, err = r.client.StartPreparation(ctx, &restaurantsv1.StartPreparationRequest{RestaurantId: restaurantID, RestaurantOrderId: kitchenOrderID})
 	case applications.ActionMarkAssembled:
 		_, err = r.client.MarkRestaurantOrderAssembled(ctx, &restaurantsv1.MarkRestaurantOrderAssembledRequest{RestaurantId: restaurantID, RestaurantOrderId: kitchenOrderID})
 	case applications.ActionMarkReady:
@@ -176,6 +185,16 @@ func (r *Restaurants) Apply(ctx context.Context, restaurantID, kitchenOrderID st
 		return commandError(string(action), err)
 	}
 	return nil
+}
+
+// StartNext keeps the user of ctx like Apply; an unset restaurant_order is an
+// empty Kitchen Queue.
+func (r *Restaurants) StartNext(ctx context.Context, restaurantID, requestID string) (string, error) {
+	response, err := r.client.StartNextPreparation(ctx, &restaurantsv1.StartNextPreparationRequest{RestaurantId: restaurantID, RequestId: requestID})
+	if err != nil {
+		return "", commandError("start next preparation", err)
+	}
+	return response.GetRestaurantOrder().GetRestaurantOrderId(), nil
 }
 
 func (r *Restaurants) Restaurant(ctx context.Context, restaurantID string) (applications.Restaurant, error) {

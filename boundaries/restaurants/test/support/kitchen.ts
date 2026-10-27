@@ -10,6 +10,10 @@ import { RetireCookHandler } from "../../slices/cook/applications/retire-cook/re
 import { TakeCookOffLineHandler } from "../../slices/cook/applications/take-cook-off-line/take-cook-off-line.ts";
 import { DatabaseCookRepository } from "../../slices/cook/infrastructure/repository/cooks.ts";
 import {
+  createRestaurantCollection,
+  DatabaseRestaurantWaitTimes,
+} from "../../slices/restaurant/infrastructure/repository/restaurants.ts";
+import {
   type AcceptanceConditionsProvider,
   AcceptOrderHandler,
   type ReadyTimeEstimator,
@@ -35,7 +39,7 @@ import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/ap
 import { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
 import type { AcceptanceConditions } from "../../slices/restaurantorder/domains/restaurantorder/acceptance.ts";
 import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
-import { FifoKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/mvp.ts";
+import { PriorityKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/priority.ts";
 import {
   createRestaurantOrderCollection,
   DatabaseKitchenBoard,
@@ -51,12 +55,15 @@ import {
   createInfrastructure,
   type Infrastructure,
   SequentialIdGenerator,
+  testWaitTimePolicy,
 } from "./restaurants.ts";
 
 export const cook: Subject = { type: "user", id: "cook" };
 export const ordersService: Subject = { type: "service", id: "orders-worker" };
 export const PREPARATION_MINUTES = 20;
 export const minutes = (value: number): number => value * 60_000;
+/** KITCHEN_QUEUE__AGING_FACTOR of the tests (the .env.example value). */
+export const QUEUE_AGING_FACTOR = 2;
 
 export const createKitchenWorld = async (
   options: {
@@ -86,6 +93,16 @@ export const createKitchenWorld = async (
     noKitchenChanges,
   );
   const accessControl = new TestKitchenAccessControl();
+  // Kitchen Queue policy over the Wait Time Statistics of the restaurants;
+  // without history the baseline is the preparation time of the tests.
+  const ordering = new PriorityKitchenQueueOrdering({
+    store: new DatabaseRestaurantWaitTimes(
+      createRestaurantCollection(infrastructure.db, infrastructure.unitOfWork),
+    ),
+    policy: testWaitTimePolicy(minutes(PREPARATION_MINUTES)),
+    agingFactor: QUEUE_AGING_FACTOR,
+  });
+  const startRequests = new SequentialIdGenerator("start-request");
   const conditions = new StaticAcceptanceConditions();
   const outbox = options.outbox ?? infrastructure.outbox;
   const ids = new SequentialIdGenerator("restaurant-order");
@@ -128,6 +145,9 @@ export const createKitchenWorld = async (
     }),
     startPreparation: new StartPreparationHandler({
       ...commandDependencies,
+      started: board,
+      queue: board,
+      ordering,
       cooks: new PoolCookAssigner({ cooks, workload: board }),
       onRepeat,
     }),
@@ -168,7 +188,8 @@ export const createKitchenWorld = async (
     getKitchenQueue: new GetKitchenQueueHandler({
       accessControl,
       reader: board,
-      ordering: new FifoKitchenQueueOrdering(),
+      ordering,
+      clock: infrastructure.clock,
     }),
     listActivePreparations: new ListActivePreparationsHandler({
       accessControl,
@@ -223,10 +244,22 @@ export const createKitchenWorld = async (
     return { restaurantId, phoId, cookIds };
   };
 
+  /** Start Next Preparation by the kitchen with a fresh request id. */
+  const startNext = (
+    restaurantId: string,
+    requestId: string = startRequests.next(),
+  ) =>
+    handlers.startPreparation.execute({
+      subject: cook,
+      restaurantId,
+      requestId,
+    });
+
   let orderSequence = 0;
   const givenReceivedOrder = async (
     restaurantId: string,
     menuItemId: string,
+    priority: "STANDARD" | "PREMIUM" = "STANDARD",
   ) => {
     orderSequence += 1;
     const { restaurantOrder } = await handlers.receive.execute({
@@ -234,6 +267,7 @@ export const createKitchenWorld = async (
       restaurantId,
       orderId: `order-${orderSequence}`,
       items: [{ menuItemId, quantity: 2 }],
+      priority,
     });
     return restaurantOrder;
   };
@@ -252,7 +286,16 @@ export const createKitchenWorld = async (
     };
     const steps: Array<() => Promise<unknown>> = [
       () => handlers.accept.execute(command),
-      () => handlers.startPreparation.execute(command),
+      // The Kitchen Queue chooses the order: the setup must make this one
+      // its head, otherwise the test would silently start another order.
+      async () => {
+        const started = await startNext(restaurantId);
+        if (started?.restaurantOrderId !== command.restaurantOrderId) {
+          throw new Error(
+            `queue head ${started?.restaurantOrderId} is not ${command.restaurantOrderId}`,
+          );
+        }
+      },
       () => handlers.markAssembled.execute(command),
       () => handlers.markReady.execute(command),
     ];
@@ -283,6 +326,7 @@ export const createKitchenWorld = async (
     givenCooksOnLine,
     givenReceivedOrder,
     givenOrderIn,
+    startNext,
   };
 };
 

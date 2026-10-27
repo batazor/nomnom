@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "mutation CloseRestaurant($restaurantId: ID!) { closeRestaurant(restaurantId: $restaurantId) { changed restaurant { acceptingOrders id name } } }"
+}

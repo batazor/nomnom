@@ -74,6 +74,7 @@ func refusal(code codes.Code, reason string, metadata map[string]string) error {
 var input = applications.Input{
 	RestaurantID:   "restaurant-1",
 	Lines:          []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
+	Priority:       applications.PriorityStandard,
 	IdempotencyKey: "attempt-1",
 }
 
@@ -89,6 +90,7 @@ func TestPlaceOrderCarriesCustomerAndIdempotencyKey(t *testing.T) {
 	assert.Equal(t, "restaurant-1", server.got.GetRestaurantId())
 	assert.Equal(t, "menu-pho", server.got.GetItems()[0].GetMenuItemId())
 	assert.Equal(t, int32(2), server.got.GetItems()[0].GetQuantity())
+	assert.Equal(t, ordersv1.OrderPriority_ORDER_PRIORITY_STANDARD, server.got.GetPriority())
 	assert.Equal(t, []string{"Bearer token-nomnom.orders"}, server.seenMD.Get("authorization"))
 	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
 }
@@ -125,4 +127,18 @@ func TestPlaceOrderNamesOtherErrors(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, applications.ErrInvalidOrder)
 	assert.NotErrorAs(t, err, new(applications.PlacementRefused))
+}
+
+// FR-650: a premium checkout reaches orders; PREMIUM_UNAVAILABLE is a refusal.
+func TestPlaceOrderCarriesPremiumAndNamesItsRefusal(t *testing.T) {
+	server := &ordersServer{}
+	premium := input
+	premium.Priority = applications.PriorityPremium
+	_, err := connect(t, server).PlaceOrder(customerContext(), premium)
+	require.NoError(t, err)
+	assert.Equal(t, ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM, server.got.GetPriority())
+
+	server = &ordersServer{err: refusal(codes.FailedPrecondition, "PREMIUM_UNAVAILABLE", nil)}
+	_, err = connect(t, server).PlaceOrder(customerContext(), premium)
+	assert.Equal(t, applications.PlacementRefused{Reason: "PREMIUM_UNAVAILABLE"}, err)
 }

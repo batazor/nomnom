@@ -25,9 +25,14 @@ type CheckoutState =
 // cart starts a new attempt.
 type Attempt = { key: string; request: string };
 
+// Premium Priority offered by the restaurant (FR-653): its fee and the cart
+// total with it, both formatted by the caller; no estimate of time.
+export type PremiumOffer = Readonly<{ fee: string; total: string | null }>;
+
 export function PlaceOrder({
   restaurantId,
   expectedWaitMinutes,
+  premium,
   lines,
   onItemProblems,
   onPlaced,
@@ -35,6 +40,8 @@ export function PlaceOrder({
   restaurantId: string;
   // Estimate of the restaurant for an order placed now, not a promise.
   expectedWaitMinutes: number | undefined;
+  // Undefined when the restaurant offers no Premium Priority.
+  premium: PremiumOffer | undefined;
   lines: readonly OrderLine[];
   onItemProblems: (problems: ItemProblems) => void;
   onPlaced: (orderId: string) => void;
@@ -42,6 +49,8 @@ export function PlaceOrder({
   const { t } = useI18n();
   const [, placeOrder] = useMutation(PlaceOrderDocument);
   const [state, setState] = useState<CheckoutState>({ kind: "idle" });
+  const [prioritized, setPrioritized] = useState(false);
+  const priority = premium && prioritized ? "PREMIUM" : "STANDARD";
   const attempt = useRef<Attempt | null>(null);
 
   async function submit(event?: FormEvent) {
@@ -51,7 +60,7 @@ export function PlaceOrder({
       menuItemId,
       quantity,
     }));
-    const request = JSON.stringify({ restaurantId, items });
+    const request = JSON.stringify({ restaurantId, items, priority });
     if (attempt.current?.request !== request) {
       attempt.current = { key: crypto.randomUUID(), request };
     }
@@ -61,6 +70,7 @@ export function PlaceOrder({
       input: {
         restaurantId,
         items,
+        priority,
         idempotencyKey: attempt.current.key,
       },
     });
@@ -115,6 +125,21 @@ export function PlaceOrder({
         </p>
       ) : null}
 
+      {premium ? (
+        <label className="checkout-premium">
+          <input
+            checked={prioritized}
+            onChange={(event) => setPrioritized(event.target.checked)}
+            type="checkbox"
+          />
+          <span>{t("checkout.premium", { fee: premium.fee })}</span>
+        </label>
+      ) : null}
+      {premium && prioritized && premium.total ? (
+        <p className="checkout-premium-total">
+          {t("checkout.totalWithPremium", { total: premium.total })}
+        </p>
+      ) : null}
       {expectedWaitMinutes === undefined ? null : (
         <p className="checkout-wait">
           {t("checkout.expectedWait", { minutes: expectedWaitMinutes })}

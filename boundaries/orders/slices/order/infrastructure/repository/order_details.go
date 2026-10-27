@@ -23,7 +23,7 @@ import (
 // OrderDetailsProjectionVersion is the shape of order_details.details. A change
 // of the document increments it: catch-up at process start projects every row
 // of an older version again.
-const OrderDetailsProjectionVersion = 1
+const OrderDetailsProjectionVersion = 2
 
 // projectionBatch bounds the Orders projected again in one pass of catch-up
 // and rebuild; each Order is projected in its own transaction.
@@ -37,6 +37,8 @@ const projectionLockKey int64 = 0x6f72645f64657461
 type detailsDocument struct {
 	RestaurantID string                `json:"restaurant_id"`
 	Items        []itemDocument        `json:"items"`
+	Priority     string                `json:"priority"`
+	PremiumFee   *moneyDocument        `json:"premium_fee"`
 	Total        moneyDocument         `json:"total"`
 	State        string                `json:"state"`
 	Facts        []factDocument        `json:"facts"`
@@ -79,6 +81,7 @@ func newDetailsDocument(snap order.Snapshot, total vo.Money) detailsDocument {
 	doc := detailsDocument{
 		RestaurantID: string(snap.RestaurantID),
 		Items:        make([]itemDocument, 0, len(snap.Items)),
+		Priority:     string(snap.Service.Priority()),
 		Total:        moneyDocument{Amount: total.Amount().String(), Currency: total.Currency()},
 		State:        string(snap.State),
 		Facts:        make([]factDocument, 0, len(snap.Facts)),
@@ -87,6 +90,9 @@ func newDetailsDocument(snap order.Snapshot, total vo.Money) detailsDocument {
 			PickupAt:    nullTime(snap.Expected.PickupAt),
 			DeliveredAt: nullTime(snap.Expected.DeliveredAt),
 		},
+	}
+	if fee, premium := snap.Service.PremiumFee(); premium {
+		doc.PremiumFee = &moneyDocument{Amount: fee.Amount().String(), Currency: fee.Currency()}
 	}
 	for _, item := range snap.Items {
 		doc.Items = append(doc.Items, itemDocument{
@@ -118,12 +124,25 @@ func (d detailsDocument) details(id order.ID, customerID order.CustomerID, marke
 	if err != nil {
 		return orderdetails.Details{}, fmt.Errorf("order %s total: %w", id, err)
 	}
+	var fee *vo.Money
+	if d.PremiumFee != nil {
+		parsed, err := vo.ParseMoney(d.PremiumFee.Amount, d.PremiumFee.Currency)
+		if err != nil {
+			return orderdetails.Details{}, fmt.Errorf("order %s premium fee: %w", id, err)
+		}
+		fee = &parsed
+	}
+	service, err := order.RestoreService(order.Priority(d.Priority), fee)
+	if err != nil {
+		return orderdetails.Details{}, fmt.Errorf("order %s priority: %w", id, err)
+	}
 	result := orderdetails.Details{
 		OrderID:      id,
 		CustomerID:   customerID,
 		MarketID:     market,
 		RestaurantID: order.RestaurantID(d.RestaurantID),
 		Items:        make([]orderdetails.Item, 0, len(d.Items)),
+		Service:      service,
 		Total:        total,
 		State:        order.State(d.State),
 		PlacedAt:     placedAt.UTC(),

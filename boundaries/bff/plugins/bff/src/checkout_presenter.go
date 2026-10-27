@@ -10,6 +10,7 @@ var placeOrderProblemCodes = map[applications.ProblemCode]service.PlaceOrderProb
 	applications.ProblemOrderTotalBelowMinimum:       service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_BELOW_MINIMUM,
 	applications.ProblemOrderTotalAboveMaximum:       service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM,
 	applications.ProblemRestaurantNotAcceptingOrders: service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS,
+	applications.ProblemPremiumUnavailable:           service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_PREMIUM_UNAVAILABLE,
 }
 
 // placeOrderPayload carries the placed Order or the problems.

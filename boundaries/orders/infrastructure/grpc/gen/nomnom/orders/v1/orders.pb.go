@@ -22,6 +22,56 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Premium Priority of an Order (FR-650): a premium Order is prepared first.
+type OrderPriority int32
+
+const (
+	OrderPriority_ORDER_PRIORITY_UNSPECIFIED OrderPriority = 0
+	OrderPriority_ORDER_PRIORITY_STANDARD    OrderPriority = 1
+	OrderPriority_ORDER_PRIORITY_PREMIUM     OrderPriority = 2
+)
+
+// Enum value maps for OrderPriority.
+var (
+	OrderPriority_name = map[int32]string{
+		0: "ORDER_PRIORITY_UNSPECIFIED",
+		1: "ORDER_PRIORITY_STANDARD",
+		2: "ORDER_PRIORITY_PREMIUM",
+	}
+	OrderPriority_value = map[string]int32{
+		"ORDER_PRIORITY_UNSPECIFIED": 0,
+		"ORDER_PRIORITY_STANDARD":    1,
+		"ORDER_PRIORITY_PREMIUM":     2,
+	}
+)
+
+func (x OrderPriority) Enum() *OrderPriority {
+	p := new(OrderPriority)
+	*p = x
+	return p
+}
+
+func (x OrderPriority) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrderPriority) Descriptor() protoreflect.EnumDescriptor {
+	return file_nomnom_orders_v1_orders_proto_enumTypes[0].Descriptor()
+}
+
+func (OrderPriority) Type() protoreflect.EnumType {
+	return &file_nomnom_orders_v1_orders_proto_enumTypes[0]
+}
+
+func (x OrderPriority) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OrderPriority.Descriptor instead.
+func (OrderPriority) EnumDescriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{0}
+}
+
 type OrderState int32
 
 const (
@@ -61,11 +111,11 @@ func (x OrderState) String() string {
 }
 
 func (OrderState) Descriptor() protoreflect.EnumDescriptor {
-	return file_nomnom_orders_v1_orders_proto_enumTypes[0].Descriptor()
+	return file_nomnom_orders_v1_orders_proto_enumTypes[1].Descriptor()
 }
 
 func (OrderState) Type() protoreflect.EnumType {
-	return &file_nomnom_orders_v1_orders_proto_enumTypes[0]
+	return &file_nomnom_orders_v1_orders_proto_enumTypes[1]
 }
 
 func (x OrderState) Number() protoreflect.EnumNumber {
@@ -74,7 +124,7 @@ func (x OrderState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OrderState.Descriptor instead.
 func (OrderState) EnumDescriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{0}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{1}
 }
 
 type Money struct {
@@ -391,7 +441,12 @@ type Order struct {
 	ExpectedPickupAt    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=expected_pickup_at,json=expectedPickupAt,proto3" json:"expected_pickup_at,omitempty"`
 	ExpectedDeliveredAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expected_delivered_at,json=expectedDeliveredAt,proto3" json:"expected_delivered_at,omitempty"`
 	// Market of the Restaurant at Place Order (ADR 41); immutable.
-	MarketId      string `protobuf:"bytes,15,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	MarketId string `protobuf:"bytes,15,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Premium Priority chosen at Place Order (FR-650).
+	Priority OrderPriority `protobuf:"varint,16,opt,name=priority,proto3,enum=nomnom.orders.v1.OrderPriority" json:"priority,omitempty"`
+	// Fee of Premium Priority fixed at Place Order and included in total; unset
+	// for a standard Order.
+	PremiumFee    *Money `protobuf:"bytes,17,opt,name=premium_fee,json=premiumFee,proto3" json:"premium_fee,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -524,6 +579,20 @@ func (x *Order) GetMarketId() string {
 	return ""
 }
 
+func (x *Order) GetPriority() OrderPriority {
+	if x != nil {
+		return x.Priority
+	}
+	return OrderPriority_ORDER_PRIORITY_UNSPECIFIED
+}
+
+func (x *Order) GetPremiumFee() *Money {
+	if x != nil {
+		return x.PremiumFee
+	}
+	return nil
+}
+
 type OrderSummary struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	OrderId      string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -646,7 +715,7 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
 	"\x12CancellationWindow\x125\n" +
 	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
-	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xb9\x06\n" +
+	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xb0\a\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -663,7 +732,10 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x11expected_ready_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0fexpectedReadyAt\x12H\n" +
 	"\x12expected_pickup_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x10expectedPickupAt\x12N\n" +
 	"\x15expected_delivered_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x13expectedDeliveredAt\x12\x1b\n" +
-	"\tmarket_id\x18\x0f \x01(\tR\bmarketIdJ\x04\b\x05\x10\x06R\x10delivery_address\"\xb1\x02\n" +
+	"\tmarket_id\x18\x0f \x01(\tR\bmarketId\x12;\n" +
+	"\bpriority\x18\x10 \x01(\x0e2\x1f.nomnom.orders.v1.OrderPriorityR\bpriority\x128\n" +
+	"\vpremium_fee\x18\x11 \x01(\v2\x17.nomnom.orders.v1.MoneyR\n" +
+	"premiumFeeJ\x04\b\x05\x10\x06R\x10delivery_address\"\xb1\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +
@@ -671,7 +743,11 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x05total\x18\x04 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x127\n" +
 	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x12\x16\n" +
 	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x12-\n" +
-	"\x05order\x18\a \x01(\v2\x17.nomnom.orders.v1.OrderR\x05order*\x92\x01\n" +
+	"\x05order\x18\a \x01(\v2\x17.nomnom.orders.v1.OrderR\x05order*h\n" +
+	"\rOrderPriority\x12\x1e\n" +
+	"\x1aORDER_PRIORITY_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17ORDER_PRIORITY_STANDARD\x10\x01\x12\x1a\n" +
+	"\x16ORDER_PRIORITY_PREMIUM\x10\x02*\x92\x01\n" +
 	"\n" +
 	"OrderState\x12\x1b\n" +
 	"\x17ORDER_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -693,44 +769,47 @@ func file_nomnom_orders_v1_orders_proto_rawDescGZIP() []byte {
 	return file_nomnom_orders_v1_orders_proto_rawDescData
 }
 
-var file_nomnom_orders_v1_orders_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_nomnom_orders_v1_orders_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_nomnom_orders_v1_orders_proto_goTypes = []any{
-	(OrderState)(0),               // 0: nomnom.orders.v1.OrderState
-	(*Money)(nil),                 // 1: nomnom.orders.v1.Money
-	(*OrderItem)(nil),             // 2: nomnom.orders.v1.OrderItem
-	(*FulfillmentFact)(nil),       // 3: nomnom.orders.v1.FulfillmentFact
-	(*Cancellation)(nil),          // 4: nomnom.orders.v1.Cancellation
-	(*CancellationWindow)(nil),    // 5: nomnom.orders.v1.CancellationWindow
-	(*Order)(nil),                 // 6: nomnom.orders.v1.Order
-	(*OrderSummary)(nil),          // 7: nomnom.orders.v1.OrderSummary
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(OrderPriority)(0),            // 0: nomnom.orders.v1.OrderPriority
+	(OrderState)(0),               // 1: nomnom.orders.v1.OrderState
+	(*Money)(nil),                 // 2: nomnom.orders.v1.Money
+	(*OrderItem)(nil),             // 3: nomnom.orders.v1.OrderItem
+	(*FulfillmentFact)(nil),       // 4: nomnom.orders.v1.FulfillmentFact
+	(*Cancellation)(nil),          // 5: nomnom.orders.v1.Cancellation
+	(*CancellationWindow)(nil),    // 6: nomnom.orders.v1.CancellationWindow
+	(*Order)(nil),                 // 7: nomnom.orders.v1.Order
+	(*OrderSummary)(nil),          // 8: nomnom.orders.v1.OrderSummary
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_nomnom_orders_v1_orders_proto_depIdxs = []int32{
-	1,  // 0: nomnom.orders.v1.OrderItem.unit_price:type_name -> nomnom.orders.v1.Money
-	8,  // 1: nomnom.orders.v1.FulfillmentFact.occurred_at:type_name -> google.protobuf.Timestamp
-	8,  // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
-	8,  // 3: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
-	8,  // 4: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
-	2,  // 5: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
-	1,  // 6: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
-	0,  // 7: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
-	8,  // 8: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
-	3,  // 9: nomnom.orders.v1.Order.fulfillment_facts:type_name -> nomnom.orders.v1.FulfillmentFact
-	4,  // 10: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
-	5,  // 11: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
-	8,  // 12: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
-	8,  // 13: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
-	8,  // 14: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
-	0,  // 15: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
-	1,  // 16: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
-	8,  // 17: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
-	6,  // 18: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	2,  // 0: nomnom.orders.v1.OrderItem.unit_price:type_name -> nomnom.orders.v1.Money
+	9,  // 1: nomnom.orders.v1.FulfillmentFact.occurred_at:type_name -> google.protobuf.Timestamp
+	9,  // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
+	9,  // 4: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
+	3,  // 5: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
+	2,  // 6: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
+	1,  // 7: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
+	9,  // 8: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
+	4,  // 9: nomnom.orders.v1.Order.fulfillment_facts:type_name -> nomnom.orders.v1.FulfillmentFact
+	5,  // 10: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
+	6,  // 11: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
+	9,  // 12: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
+	9,  // 13: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	9,  // 14: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	0,  // 15: nomnom.orders.v1.Order.priority:type_name -> nomnom.orders.v1.OrderPriority
+	2,  // 16: nomnom.orders.v1.Order.premium_fee:type_name -> nomnom.orders.v1.Money
+	1,  // 17: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
+	2,  // 18: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
+	9,  // 19: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
+	7,  // 20: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_orders_proto_init() }
@@ -743,7 +822,7 @@ func file_nomnom_orders_v1_orders_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_orders_v1_orders_proto_rawDesc), len(file_nomnom_orders_v1_orders_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,

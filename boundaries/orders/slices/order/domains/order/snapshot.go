@@ -14,6 +14,7 @@ type Snapshot struct {
 	RestaurantID       RestaurantID
 	MarketID           vo.MarketID
 	Items              []Item
+	Service            Service
 	PlacedAt           time.Time
 	State              State
 	Version            uint64
@@ -30,6 +31,7 @@ func (o *Order) Snapshot() Snapshot {
 		RestaurantID:       o.restaurantID,
 		MarketID:           o.marketID,
 		Items:              o.Items(),
+		Service:            o.service,
 		PlacedAt:           o.placedAt,
 		State:              o.state,
 		Version:            o.version,
@@ -45,7 +47,7 @@ func Restore(snapshot Snapshot) (*Order, error) {
 	if !isKnownState(snapshot.State) {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownOrderState, snapshot.State)
 	}
-	order, err := New(snapshot.ID, snapshot.CustomerID, snapshot.RestaurantID, snapshot.MarketID, snapshot.Items)
+	order, err := New(snapshot.ID, snapshot.CustomerID, snapshot.RestaurantID, snapshot.MarketID, snapshot.Items, snapshot.Service)
 	if err != nil {
 		return nil, err
 	}

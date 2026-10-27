@@ -19,7 +19,7 @@ import { useCart } from "./cart";
 import { CartBar } from "./cart-bar";
 import { type CartEntry, CartPanel } from "./cart-panel";
 import { Menu, type MenuEntry } from "./menu";
-import { estimateSubtotal } from "./money";
+import { estimateSubtotal, useMoney } from "./money";
 import "./view-restaurant.css";
 
 type ViewedRestaurant = NonNullable<ViewRestaurantQuery["restaurant"]>;
@@ -109,12 +109,26 @@ function RestaurantView({
   const quantities = new Map(
     entries.map(({ line }) => [line.menuItemId, line.quantity]),
   );
-  const subtotal = estimateSubtotal(
-    entries.map(({ line, item }) => ({
-      price: item.price,
-      quantity: line.quantity,
-    })),
-  );
+  const priced = entries.map(({ line, item }) => ({
+    price: item.price,
+    quantity: line.quantity,
+  }));
+  const subtotal = estimateSubtotal(priced);
+  const money = useMoney();
+  // FR-653: the cart total with the premium fee, an estimate like the
+  // subtotal; placeOrder computes the real total.
+  const fee = restaurant.premiumFee;
+  const premium = fee
+    ? {
+        fee: money(fee),
+        total: (() => {
+          const total = subtotal
+            ? estimateSubtotal([...priced, { price: fee, quantity: 1 }])
+            : null;
+          return total ? money(total) : null;
+        })(),
+      }
+    : undefined;
 
   function add(item: MenuEntry) {
     cart.add(item.id);
@@ -185,6 +199,7 @@ function RestaurantView({
               {restaurant.acceptingOrders ? (
                 <PlaceOrder
                   expectedWaitMinutes={restaurant.waitTime?.expectedWaitMinutes}
+                  premium={premium}
                   lines={entries.map(({ line }) => line)}
                   onItemProblems={setItemProblems}
                   onPlaced={(orderId) => {

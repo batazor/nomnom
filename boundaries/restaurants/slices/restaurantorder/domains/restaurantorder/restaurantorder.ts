@@ -53,6 +53,23 @@ export {
 } from "./fsm.ts";
 export type { PreparationItem, PreparationItemInput } from "./items.ts";
 
+/** Premium Priority chosen at Place Order (FR-651); never changes. */
+export const OrderPriority = {
+  Standard: "STANDARD",
+  Premium: "PREMIUM",
+} as const;
+
+export type OrderPriority = (typeof OrderPriority)[keyof typeof OrderPriority];
+
+const orderPriority = (value: string): OrderPriority => {
+  if (value !== OrderPriority.Standard && value !== OrderPriority.Premium) {
+    throw new InvalidRestaurantOrderError(
+      InvalidRestaurantOrderReason.UnknownPriority,
+    );
+  }
+  return value;
+};
+
 export type RestaurantOrderTimeline = Readonly<{
   /** Unset on orders received before the timeline recorded it. */
   receivedAt?: Date;
@@ -78,8 +95,11 @@ export type RestaurantOrderSnapshot = Readonly<{
   }>[];
   state: RestaurantOrderState;
   timeline: RestaurantOrderTimeline;
+  priority: OrderPriority;
   /** Cook assigned by Start Preparation; kept after the order is closed. */
   cookId?: string;
+  /** `request_id` of the Start Next Preparation that started the order. */
+  startRequestId?: string;
   rejectionReason?: string;
   failureReason?: string;
   cancellation?: Readonly<{ stage: RestaurantOrderState; reason?: string }>;
@@ -98,9 +118,11 @@ export class RestaurantOrder {
   readonly #marketId: MarketId;
   readonly #items: readonly PreparationItem[];
   readonly #version: number;
+  readonly #priority: OrderPriority;
   #state: RestaurantOrderState;
   #timeline: RestaurantOrderTimeline;
   #cookId: string | undefined;
+  #startRequestId: string | undefined;
   #rejectionReason: string | undefined;
   #failureReason: string | undefined;
   #cancellation: RestaurantOrderSnapshot["cancellation"];
@@ -118,7 +140,9 @@ export class RestaurantOrder {
     this.#items = items;
     this.#state = snapshot.state;
     this.#timeline = { ...snapshot.timeline };
+    this.#priority = orderPriority(snapshot.priority);
     this.#cookId = snapshot.cookId;
+    this.#startRequestId = snapshot.startRequestId;
     this.#rejectionReason = snapshot.rejectionReason;
     this.#failureReason = snapshot.failureReason;
     this.#cancellation = snapshot.cancellation;
@@ -153,9 +177,18 @@ export class RestaurantOrder {
     return this.#timeline;
   }
 
+  get priority(): OrderPriority {
+    return this.#priority;
+  }
+
   /** Cook assigned by Start Preparation, if it happened. */
   get cookId(): string | undefined {
     return this.#cookId;
+  }
+
+  /** `request_id` of the Start Next Preparation that started the order. */
+  get startRequestId(): string | undefined {
+    return this.#startRequestId;
   }
 
   get rejectionReason(): string | undefined {
@@ -188,7 +221,11 @@ export class RestaurantOrder {
       })),
       state: this.#state,
       timeline: { ...this.#timeline },
+      priority: this.#priority,
       ...(this.#cookId === undefined ? {} : { cookId: this.#cookId }),
+      ...(this.#startRequestId === undefined
+        ? {}
+        : { startRequestId: this.#startRequestId }),
       ...(this.#rejectionReason === undefined
         ? {}
         : { rejectionReason: this.#rejectionReason }),
@@ -262,6 +299,7 @@ export class RestaurantOrder {
     restaurantId: string;
     marketId: string;
     items: readonly PreparationItemInput[];
+    priority: string;
     receivedAt: Date;
   }): RestaurantOrder {
     const order = new RestaurantOrder(
@@ -270,6 +308,7 @@ export class RestaurantOrder {
         orderId: input.orderId,
         restaurantId: input.restaurantId,
         marketId: input.marketId,
+        priority: orderPriority(input.priority),
         state: RestaurantOrderState.Received,
         timeline: { receivedAt: input.receivedAt },
       },
@@ -299,8 +338,12 @@ export class RestaurantOrder {
   matchesRequest(input: {
     restaurantId: string;
     items: readonly PreparationItemInput[];
+    priority: string;
   }): boolean {
-    if (input.restaurantId !== this.restaurantId) {
+    if (
+      input.restaurantId !== this.restaurantId ||
+      input.priority !== this.#priority
+    ) {
       return false;
     }
     let items: PreparationItem[];
@@ -378,16 +421,30 @@ export class RestaurantOrder {
     }
   }
 
-  /** Starts Preparation by the cook assigned from the Cook Pool. */
-  startPreparation(input: { startedAt: Date; cookId: string }): void {
+  /**
+   * Starts Preparation by the cook assigned from the Cook Pool on the Start
+   * Next Preparation `requestId` that chose the order.
+   */
+  startPreparation(input: {
+    startedAt: Date;
+    cookId: string;
+    requestId: string;
+  }): void {
     const cookId = optionalText(input.cookId);
     if (cookId === undefined) {
       throw new InvalidRestaurantOrderError(
         InvalidRestaurantOrderReason.EmptyCookId,
       );
     }
+    const requestId = optionalText(input.requestId);
+    if (requestId === undefined) {
+      throw new InvalidRestaurantOrderError(
+        InvalidRestaurantOrderReason.EmptyStartRequestId,
+      );
+    }
     this.apply({ trigger: "StartPreparation" });
     this.#cookId = cookId;
+    this.#startRequestId = requestId;
     this.extendTimeline({ preparationStartedAt: input.startedAt });
     this.record(
       {

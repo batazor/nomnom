@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query E2eBffInfo {\n  bffInfo {\n    name\n    version\n  }\n}"
+}

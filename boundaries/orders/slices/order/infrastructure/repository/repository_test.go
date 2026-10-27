@@ -46,6 +46,32 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	assert.Equal(t, ordertest.New(t, id).Items(), saved.Items())
 }
 
+// AC-856: the priority and the premium fee fixed at Place Order are stored
+// with the Order and its details projection.
+func TestRepositoryKeepsPremiumPriority(t *testing.T) {
+	store := open(t)
+	ctx := context.Background()
+	premium, standard := uniqueID("premium"), uniqueID("standard")
+
+	require.NoError(t, store.Add(ctx, ordertest.New(t, premium, ordertest.WithPremium(t, "1.50"))))
+	require.NoError(t, store.Add(ctx, ordertest.New(t, standard)))
+
+	loaded, err := store.Get(ctx, premium)
+	require.NoError(t, err)
+	assert.Equal(t, order.PriorityPremium, loaded.Service().Priority())
+	fee, ok := loaded.Service().PremiumFee()
+	require.True(t, ok)
+	assert.True(t, fee.Equal(ordertest.Money(t, "1.50")))
+	assert.Equal(t, "21.5", loaded.Total().Amount().String())
+	details, err := store.OrderDetails(ctx, premium)
+	require.NoError(t, err)
+	assert.Equal(t, loaded.Service(), details.Service)
+
+	plain, err := store.Get(ctx, standard)
+	require.NoError(t, err)
+	assert.Equal(t, order.StandardService(), plain.Service())
+}
+
 func TestRepositoryKeepsCancellation(t *testing.T) {
 	store := open(t)
 	ctx := context.Background()

@@ -7,7 +7,7 @@
 ## What Changes
 
 - **Премиум-опция ресторана.** У ресторана появляется необязательная доплата `premium_fee` (Money в валюте ресторана, больше 0). Владелец задаёт и убирает её через Update Restaurant, для этого появляется gRPC `UpdateRestaurant`. Нет доплаты — нет опции.
-- **Place Order с приоритетом.** `PlaceOrderRequest.priority` (`STANDARD`/`PREMIUM`), неизвестное значение — `INVALID_ARGUMENT`. Для `PREMIUM` доплата берётся из snapshot ресторана, фиксируется в Order отдельной строкой и входит в `total`. Если у ресторана нет доплаты — `FAILED_PRECONDITION`. Оплата не меняется: `payments` списывает `total`.
+- **Place Order с приоритетом.** `PlaceOrderRequest.priority` (`STANDARD`/`PREMIUM`), не задан — `STANDARD`, неизвестное значение — `INVALID_ARGUMENT`. Для `PREMIUM` доплата берётся из snapshot ресторана, фиксируется в Order отдельной строкой и входит в `total`. Если у ресторана нет доплаты — `FAILED_PRECONDITION`. Оплата не меняется: `payments` списывает `total`.
 - **Приоритет на кухне.** `ReceiveOrderRequest` получает `priority` от workflow, Restaurant Order хранит его. Kitchen board и экран заказа показывают метку «Приоритет».
 - **Строгая очередь.** **BREAKING:** `StartPreparation(restaurant_order_id)` заменяется `StartNextPreparation(restaurant_id, request_id)`: кухня не выбирает заказ, команда берёт голову очереди. Порядок:
   1. премиум-заказы и обычные, прождавшие в очереди дольше базового времени ресторана × `KITCHEN_QUEUE__AGING_FACTOR`;

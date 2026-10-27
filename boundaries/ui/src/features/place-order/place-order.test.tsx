@@ -43,6 +43,7 @@ type PlaceOrderVariables = {
     restaurantId: string;
     items: { menuItemId: string; quantity: number }[];
     idempotencyKey: string;
+    priority?: string | null;
   };
 };
 
@@ -111,10 +112,72 @@ describe("place order", () => {
           { menuItemId: "menu-tom-yum", quantity: 2 },
           { menuItemId: "menu-bao", quantity: 1 },
         ],
+        priority: "STANDARD",
         idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       },
     ]);
     expect(localStorage.getItem(cartKey)).toBeNull();
+  });
+
+  it("AC-864 AC-866 places a premium order with the fee in its total", async () => {
+    // 2 × Том ям 690 ₽ + Бао 420 ₽ = 1 800 ₽; priority adds 99 ₽.
+    storeCart([
+      { menuItemId: "menu-tom-yum", quantity: 2 },
+      { menuItemId: "menu-bao", quantity: 1 },
+    ]);
+    const requests = recordPlaceOrder();
+    const user = await openCheckout();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: /Приоритет — приготовим первым/ }),
+    );
+    expect(screen.getByText(/С приоритетом: 1.?899/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+
+    expect(
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
+    ).toBeInTheDocument();
+    expect(requests[0]?.priority).toBe("PREMIUM");
+    await user.click(
+      screen.getByRole("button", { name: "Подробнее о заказе" }),
+    );
+    expect(await screen.findByTestId("order-total")).toHaveTextContent(
+      /1.?899/,
+    );
+    expect(screen.getByTestId("order-premium-fee")).toHaveTextContent(/99/);
+    expect(screen.getAllByText("Приоритет").length).toBeGreaterThan(0);
+  });
+
+  it("AC-865 offers no priority where the restaurant has no fee", async () => {
+    localStorage.setItem(
+      "nomnom.cart.v1.restaurant-north-dumplings",
+      JSON.stringify({ lines: [{ menuItemId: "menu-pelmeni", quantity: 1 }] }),
+    );
+    const requests = recordPlaceOrder();
+    const user = userEvent.setup();
+    render(
+      <AppProviders config={config}>
+        <AppRouter initialEntries={["/"]} />
+      </AppProviders>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^Пельменная «Север»/ }),
+    );
+    await screen.findByRole("heading", {
+      level: 3,
+      name: "Пельменная «Север»",
+    });
+
+    expect(
+      screen.queryByRole("checkbox", { name: /Приоритет/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+    expect(
+      await screen.findByRole("button", {
+        name: /Пельменная «Север».*Оплачен/,
+      }),
+    ).toBeInTheDocument();
+    expect(requests[0]?.priority).toBe("STANDARD");
   });
 
   it("marks an item that ran out and keeps the cart", async () => {

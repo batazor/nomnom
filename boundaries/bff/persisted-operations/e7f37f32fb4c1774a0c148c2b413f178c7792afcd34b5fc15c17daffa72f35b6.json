@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query E2eRestaurants {\n  restaurants(first: 1) {\n    edges {\n      node {\n        id\n      }\n    }\n  }\n}"
+}

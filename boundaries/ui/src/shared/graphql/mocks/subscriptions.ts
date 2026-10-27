@@ -18,6 +18,10 @@ export const mockSubscriptions: SubscriptionTransport = (
   let stopped = false;
 
   async function run() {
+    // Mocks run without persisted operations, so the text is always there.
+    if (request.query === undefined) {
+      throw new Error("mock subscriptions need the operation text");
+    }
     const document = parse(request.query);
     const errors = validate(publicSchema, document);
     if (errors.length > 0) {

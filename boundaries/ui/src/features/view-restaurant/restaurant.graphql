@@ -7,6 +7,10 @@ query ViewRestaurant($id: ID!) {
       elevated
       expectedWaitMinutes
     }
+    premiumFee {
+      amount
+      currency
+    }
     menu {
       items {
         id
