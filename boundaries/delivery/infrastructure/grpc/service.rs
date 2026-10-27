@@ -18,7 +18,7 @@ use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::{CourierStatus as DomainCourierStatus, Location};
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    get_courier_current_delivery, get_courier_pool, get_order_courier, get_order_tracking,
+    get_courier_current_delivery, get_courier_pool, get_order_delivery,
     list_available_delivery_offers, reject_delivery_offer, replan_delivery,
     report_delivery_failure,
 };
@@ -34,15 +34,15 @@ use super::v1::{
     ConfirmPickupResponse, CourierAvailability, CourierLocation, CourierStatus,
     CreateDeliveryRequest, CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
     GeoPoint, GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse,
-    GetCourierPoolRequest, GetCourierPoolResponse, GetOrderCourierRequest, GetOrderCourierResponse,
-    GetOrderTrackingRequest, GetOrderTrackingResponse, GetSimulatorRequest, GetSimulatorResponse,
-    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse, PoolCourier,
-    RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
-    RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
-    ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, RetireCourierRequest,
-    RetireCourierResponse, SetCourierAvailabilityRequest, SetCourierAvailabilityResponse,
-    SetSimulatorEnabledRequest, SetSimulatorEnabledResponse, UpdateCourierLocationRequest,
-    UpdateCourierLocationResponse, VirtualCity,
+    GetCourierPoolRequest, GetCourierPoolResponse, GetOrderDeliveryRequest,
+    GetOrderDeliveryResponse, GetSimulatorRequest, GetSimulatorResponse,
+    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse, OrderCourier,
+    OrderTracking, PoolCourier, RegisterCourierRequest, RegisterCourierResponse,
+    RejectDeliveryOfferRequest, RejectDeliveryOfferResponse, ReplanDeliveryRequest,
+    ReplanDeliveryResponse, ReportDeliveryFailureRequest, ReportDeliveryFailureResponse,
+    RetireCourierRequest, RetireCourierResponse, SetCourierAvailabilityRequest,
+    SetCourierAvailabilityResponse, SetSimulatorEnabledRequest, SetSimulatorEnabledResponse,
+    UpdateCourierLocationRequest, UpdateCourierLocationResponse, VirtualCity,
 };
 
 mod status;
@@ -119,39 +119,23 @@ impl DeliveryService for DeliveryGrpcService {
         }))
     }
 
-    async fn get_order_courier(
+    async fn get_order_delivery(
         &self,
-        request: Request<GetOrderCourierRequest>,
-    ) -> Result<Response<GetOrderCourierResponse>, Status> {
+        request: Request<GetOrderDeliveryRequest>,
+    ) -> Result<Response<GetOrderDeliveryResponse>, Status> {
         let subject = self.subjects.resolve(request.metadata())?;
         let order_id = request.into_inner().order_id;
         let output = self
             .deliveries()
-            .get_order_courier(&subject, get_order_courier::Input { order_id })
+            .get_order_delivery(&subject, get_order_delivery::Input { order_id })
             .map_err(delivery_transport_error)?;
-        Ok(Response::new(output.courier.map_or_else(
-            GetOrderCourierResponse::default,
-            |courier| GetOrderCourierResponse {
+        Ok(Response::new(GetOrderDeliveryResponse {
+            courier: output.courier.map(|courier| OrderCourier {
                 courier_id: courier.courier_id.as_str().to_owned(),
                 name: courier.name.as_str().to_owned(),
-            },
-        )))
-    }
-
-    async fn get_order_tracking(
-        &self,
-        request: Request<GetOrderTrackingRequest>,
-    ) -> Result<Response<GetOrderTrackingResponse>, Status> {
-        let subject = self.subjects.resolve(request.metadata())?;
-        let order_id = request.into_inner().order_id;
-        let output = self
-            .deliveries()
-            .get_order_tracking(&subject, get_order_tracking::Input { order_id })
-            .map_err(delivery_transport_error)?;
-        Ok(Response::new(output.tracking.map_or_else(
-            GetOrderTrackingResponse::default,
-            order_tracking,
-        )))
+            }),
+            tracking: output.tracking.map(order_tracking),
+        }))
     }
 
     async fn create_delivery(
@@ -635,8 +619,8 @@ fn geo_point(location: Location) -> GeoPoint {
     }
 }
 
-fn order_tracking(tracking: get_order_tracking::OrderTrackingView) -> GetOrderTrackingResponse {
-    GetOrderTrackingResponse {
+fn order_tracking(tracking: get_order_delivery::OrderTrackingView) -> OrderTracking {
+    OrderTracking {
         tracking_channel: tracking.channel.as_str().to_owned(),
         city: Some(VirtualCity {
             origin: Some(geo_point(tracking.city.origin())),

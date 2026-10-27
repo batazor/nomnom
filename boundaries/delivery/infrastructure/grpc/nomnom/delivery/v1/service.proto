@@ -10,17 +10,14 @@ service DeliveryService {
   // Delivery. Requires courier#act; an unregistered courier
   // is NOT_FOUND.
   rpc GetCourierCurrentDelivery(GetCourierCurrentDeliveryRequest) returns (GetCourierCurrentDeliveryResponse);
-  // Courier of the Delivery of an order for whoever may view the order
-  // (order#view, FR-626): set while the Delivery is assigned, picked up or
-  // delivered, empty before an Assignment and after a failure or a
-  // cancellation. An order without a Delivery answers empty too.
-  rpc GetOrderCourier(GetOrderCourierRequest) returns (GetOrderCourierResponse);
-  // Live tracking of the Delivery of an order for whoever may view the order
-  // (order#view, FR-660): set while the Delivery is assigned or picked up and
-  // has a Tracking Channel, empty otherwise. tracking_channel is the
-  // capability of the courierMoved subscription: every courier position goes
-  // to the Valkey channel delivery.tracks.<tracking_channel> (FR-661).
-  rpc GetOrderTracking(GetOrderTrackingRequest) returns (GetOrderTrackingResponse);
+  // Delivery of an order for whoever may view the order (order#view, one
+  // check): the courier (FR-626) — set while the Delivery is assigned, picked
+  // up or delivered — and the live tracking (FR-660) — set while it is
+  // assigned or picked up and has a Tracking Channel. An order without a
+  // Delivery answers empty. tracking_channel is the capability of the
+  // courierMoved subscription: every courier position goes to the Valkey
+  // channel delivery.tracks.<tracking_channel> (FR-661).
+  rpc GetOrderDelivery(GetOrderDeliveryRequest) returns (GetOrderDeliveryResponse);
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
@@ -59,22 +56,23 @@ service DeliveryService {
   rpc SetSimulatorEnabled(SetSimulatorEnabledRequest) returns (SetSimulatorEnabledResponse);
 }
 
-message GetOrderCourierRequest {
+message GetOrderDeliveryRequest {
   string order_id = 1;
 }
 
-message GetOrderCourierResponse {
-  // Empty without a courier.
+message GetOrderDeliveryResponse {
+  // Unset without a courier.
+  OrderCourier courier = 1;
+  // Unset without live tracking.
+  OrderTracking tracking = 2;
+}
+
+message OrderCourier {
   string courier_id = 1;
   string name = 2;
 }
 
-message GetOrderTrackingRequest {
-  string order_id = 1;
-}
-
-message GetOrderTrackingResponse {
-  // Empty without tracking; the other fields are then unset.
+message OrderTracking {
   string tracking_channel = 1;
   // Virtual City of the points (FR-658).
   VirtualCity city = 2;

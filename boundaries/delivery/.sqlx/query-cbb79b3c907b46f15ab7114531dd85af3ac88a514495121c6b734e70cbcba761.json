@@ -1,11 +1,22 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT d.courier_id AS \"courier_id!\", d.pickup_x, d.pickup_y, d.dropoff_x,\n                 d.dropoff_y, d.tracking_channel,\n                 p.latitude AS \"latitude?\", p.longitude AS \"longitude?\",\n                 p.recorded_at AS \"recorded_at?\"\n             FROM deliveries d LEFT JOIN courier_positions p ON p.courier_id = d.courier_id\n             WHERE d.order_id = $1 AND d.state = ANY($2) AND d.courier_id IS NOT NULL\n               AND d.tracking_channel IS NOT NULL",
+  "query": "SELECT d.state, d.courier_id, c.name AS \"name?\", d.pickup_x, d.pickup_y,\n                 d.dropoff_x, d.dropoff_y, d.tracking_channel,\n                 p.latitude AS \"latitude?\", p.longitude AS \"longitude?\",\n                 p.recorded_at AS \"recorded_at?\"\n             FROM deliveries d\n             LEFT JOIN couriers c ON c.id = d.courier_id\n             LEFT JOIN courier_positions p ON p.courier_id = d.courier_id\n             WHERE d.order_id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "courier_id!",
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "courier_id",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -15,7 +26,18 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
+        "name": "name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "couriers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "pickup_x",
         "type_info": "Int4",
         "origin": {
@@ -26,7 +48,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 4,
         "name": "pickup_y",
         "type_info": "Int4",
         "origin": {
@@ -37,7 +59,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 5,
         "name": "dropoff_x",
         "type_info": "Int4",
         "origin": {
@@ -48,7 +70,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 6,
         "name": "dropoff_y",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +81,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "tracking_channel",
         "type_info": "Text",
         "origin": {
@@ -70,7 +92,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "latitude?",
         "type_info": "Float8",
         "origin": {
@@ -81,7 +103,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 9,
         "name": "longitude?",
         "type_info": "Float8",
         "origin": {
@@ -92,7 +114,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 10,
         "name": "recorded_at?",
         "type_info": "Int8",
         "origin": {
@@ -105,11 +127,12 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "TextArray"
+        "Text"
       ]
     },
     "nullable": [
+      false,
+      true,
       true,
       true,
       true,
@@ -121,5 +144,5 @@
       true
     ]
   },
-  "hash": "0cbe15559c8d521857689e03e89fb15c86655dcb12b295dce86f94217303a854"
+  "hash": "cbb79b3c907b46f15ab7114531dd85af3ac88a514495121c6b734e70cbcba761"
 }

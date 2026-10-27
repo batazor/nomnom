@@ -22,27 +22,27 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type GetOrderCourierRequest struct {
+type GetOrderDeliveryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetOrderCourierRequest) Reset() {
-	*x = GetOrderCourierRequest{}
+func (x *GetOrderDeliveryRequest) Reset() {
+	*x = GetOrderDeliveryRequest{}
 	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetOrderCourierRequest) String() string {
+func (x *GetOrderDeliveryRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetOrderCourierRequest) ProtoMessage() {}
+func (*GetOrderDeliveryRequest) ProtoMessage() {}
 
-func (x *GetOrderCourierRequest) ProtoReflect() protoreflect.Message {
+func (x *GetOrderDeliveryRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -54,41 +54,42 @@ func (x *GetOrderCourierRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetOrderCourierRequest.ProtoReflect.Descriptor instead.
-func (*GetOrderCourierRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetOrderDeliveryRequest.ProtoReflect.Descriptor instead.
+func (*GetOrderDeliveryRequest) Descriptor() ([]byte, []int) {
 	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GetOrderCourierRequest) GetOrderId() string {
+func (x *GetOrderDeliveryRequest) GetOrderId() string {
 	if x != nil {
 		return x.OrderId
 	}
 	return ""
 }
 
-type GetOrderCourierResponse struct {
+type GetOrderDeliveryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Empty without a courier.
-	CourierId     string `protobuf:"bytes,1,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
-	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Unset without a courier.
+	Courier *OrderCourier `protobuf:"bytes,1,opt,name=courier,proto3" json:"courier,omitempty"`
+	// Unset without live tracking.
+	Tracking      *OrderTracking `protobuf:"bytes,2,opt,name=tracking,proto3" json:"tracking,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetOrderCourierResponse) Reset() {
-	*x = GetOrderCourierResponse{}
+func (x *GetOrderDeliveryResponse) Reset() {
+	*x = GetOrderDeliveryResponse{}
 	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetOrderCourierResponse) String() string {
+func (x *GetOrderDeliveryResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetOrderCourierResponse) ProtoMessage() {}
+func (*GetOrderDeliveryResponse) ProtoMessage() {}
 
-func (x *GetOrderCourierResponse) ProtoReflect() protoreflect.Message {
+func (x *GetOrderDeliveryResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -100,73 +101,80 @@ func (x *GetOrderCourierResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetOrderCourierResponse.ProtoReflect.Descriptor instead.
-func (*GetOrderCourierResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetOrderDeliveryResponse.ProtoReflect.Descriptor instead.
+func (*GetOrderDeliveryResponse) Descriptor() ([]byte, []int) {
 	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetOrderCourierResponse) GetCourierId() string {
+func (x *GetOrderDeliveryResponse) GetCourier() *OrderCourier {
+	if x != nil {
+		return x.Courier
+	}
+	return nil
+}
+
+func (x *GetOrderDeliveryResponse) GetTracking() *OrderTracking {
+	if x != nil {
+		return x.Tracking
+	}
+	return nil
+}
+
+type OrderCourier struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CourierId     string                 `protobuf:"bytes,1,opt,name=courier_id,json=courierId,proto3" json:"courier_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrderCourier) Reset() {
+	*x = OrderCourier{}
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrderCourier) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderCourier) ProtoMessage() {}
+
+func (x *OrderCourier) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderCourier.ProtoReflect.Descriptor instead.
+func (*OrderCourier) Descriptor() ([]byte, []int) {
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *OrderCourier) GetCourierId() string {
 	if x != nil {
 		return x.CourierId
 	}
 	return ""
 }
 
-func (x *GetOrderCourierResponse) GetName() string {
+func (x *OrderCourier) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-type GetOrderTrackingRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetOrderTrackingRequest) Reset() {
-	*x = GetOrderTrackingRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetOrderTrackingRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetOrderTrackingRequest) ProtoMessage() {}
-
-func (x *GetOrderTrackingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetOrderTrackingRequest.ProtoReflect.Descriptor instead.
-func (*GetOrderTrackingRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *GetOrderTrackingRequest) GetOrderId() string {
-	if x != nil {
-		return x.OrderId
-	}
-	return ""
-}
-
-type GetOrderTrackingResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Empty without tracking; the other fields are then unset.
-	TrackingChannel string `protobuf:"bytes,1,opt,name=tracking_channel,json=trackingChannel,proto3" json:"tracking_channel,omitempty"`
+type OrderTracking struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TrackingChannel string                 `protobuf:"bytes,1,opt,name=tracking_channel,json=trackingChannel,proto3" json:"tracking_channel,omitempty"`
 	// Virtual City of the points (FR-658).
 	City    *VirtualCity `protobuf:"bytes,2,opt,name=city,proto3" json:"city,omitempty"`
 	Pickup  *GeoPoint    `protobuf:"bytes,3,opt,name=pickup,proto3" json:"pickup,omitempty"`
@@ -178,20 +186,20 @@ type GetOrderTrackingResponse struct {
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *GetOrderTrackingResponse) Reset() {
-	*x = GetOrderTrackingResponse{}
+func (x *OrderTracking) Reset() {
+	*x = OrderTracking{}
 	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetOrderTrackingResponse) String() string {
+func (x *OrderTracking) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetOrderTrackingResponse) ProtoMessage() {}
+func (*OrderTracking) ProtoMessage() {}
 
-func (x *GetOrderTrackingResponse) ProtoReflect() protoreflect.Message {
+func (x *OrderTracking) ProtoReflect() protoreflect.Message {
 	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -203,40 +211,40 @@ func (x *GetOrderTrackingResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetOrderTrackingResponse.ProtoReflect.Descriptor instead.
-func (*GetOrderTrackingResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use OrderTracking.ProtoReflect.Descriptor instead.
+func (*OrderTracking) Descriptor() ([]byte, []int) {
 	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetOrderTrackingResponse) GetTrackingChannel() string {
+func (x *OrderTracking) GetTrackingChannel() string {
 	if x != nil {
 		return x.TrackingChannel
 	}
 	return ""
 }
 
-func (x *GetOrderTrackingResponse) GetCity() *VirtualCity {
+func (x *OrderTracking) GetCity() *VirtualCity {
 	if x != nil {
 		return x.City
 	}
 	return nil
 }
 
-func (x *GetOrderTrackingResponse) GetPickup() *GeoPoint {
+func (x *OrderTracking) GetPickup() *GeoPoint {
 	if x != nil {
 		return x.Pickup
 	}
 	return nil
 }
 
-func (x *GetOrderTrackingResponse) GetDropoff() *GeoPoint {
+func (x *OrderTracking) GetDropoff() *GeoPoint {
 	if x != nil {
 		return x.Dropoff
 	}
 	return nil
 }
 
-func (x *GetOrderTrackingResponse) GetCourierPosition() *CourierLocation {
+func (x *OrderTracking) GetCourierPosition() *CourierLocation {
 	if x != nil {
 		return x.CourierPosition
 	}
@@ -2404,16 +2412,17 @@ var File_nomnom_delivery_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"\n" +
-	" nomnom/delivery/v1/service.proto\x12\x12nomnom.delivery.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!nomnom/delivery/v1/delivery.proto\"3\n" +
-	"\x16GetOrderCourierRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"L\n" +
-	"\x17GetOrderCourierResponse\x12\x1d\n" +
+	" nomnom/delivery/v1/service.proto\x12\x12nomnom.delivery.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!nomnom/delivery/v1/delivery.proto\"4\n" +
+	"\x17GetOrderDeliveryRequest\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"\x95\x01\n" +
+	"\x18GetOrderDeliveryResponse\x12:\n" +
+	"\acourier\x18\x01 \x01(\v2 .nomnom.delivery.v1.OrderCourierR\acourier\x12=\n" +
+	"\btracking\x18\x02 \x01(\v2!.nomnom.delivery.v1.OrderTrackingR\btracking\"A\n" +
+	"\fOrderCourier\x12\x1d\n" +
 	"\n" +
 	"courier_id\x18\x01 \x01(\tR\tcourierId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"4\n" +
-	"\x17GetOrderTrackingRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"\xb8\x02\n" +
-	"\x18GetOrderTrackingResponse\x12)\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xad\x02\n" +
+	"\rOrderTracking\x12)\n" +
 	"\x10tracking_channel\x18\x01 \x01(\tR\x0ftrackingChannel\x123\n" +
 	"\x04city\x18\x02 \x01(\v2\x1f.nomnom.delivery.v1.VirtualCityR\x04city\x124\n" +
 	"\x06pickup\x18\x03 \x01(\v2\x1c.nomnom.delivery.v1.GeoPointR\x06pickup\x126\n" +
@@ -2579,11 +2588,10 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"\x1aSetSimulatorEnabledRequest\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\"7\n" +
 	"\x1bSetSimulatorEnabledResponse\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled2\x98\x11\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled2\xac\x10\n" +
 	"\x0fDeliveryService\x12\x88\x01\n" +
-	"\x19GetCourierCurrentDelivery\x124.nomnom.delivery.v1.GetCourierCurrentDeliveryRequest\x1a5.nomnom.delivery.v1.GetCourierCurrentDeliveryResponse\x12j\n" +
-	"\x0fGetOrderCourier\x12*.nomnom.delivery.v1.GetOrderCourierRequest\x1a+.nomnom.delivery.v1.GetOrderCourierResponse\x12m\n" +
-	"\x10GetOrderTracking\x12+.nomnom.delivery.v1.GetOrderTrackingRequest\x1a,.nomnom.delivery.v1.GetOrderTrackingResponse\x12g\n" +
+	"\x19GetCourierCurrentDelivery\x124.nomnom.delivery.v1.GetCourierCurrentDeliveryRequest\x1a5.nomnom.delivery.v1.GetCourierCurrentDeliveryResponse\x12m\n" +
+	"\x10GetOrderDelivery\x12+.nomnom.delivery.v1.GetOrderDeliveryRequest\x1a,.nomnom.delivery.v1.GetOrderDeliveryResponse\x12g\n" +
 	"\x0eCreateDelivery\x12).nomnom.delivery.v1.CreateDeliveryRequest\x1a*.nomnom.delivery.v1.CreateDeliveryResponse\x12g\n" +
 	"\x0eReplanDelivery\x12).nomnom.delivery.v1.ReplanDeliveryRequest\x1a*.nomnom.delivery.v1.ReplanDeliveryResponse\x12g\n" +
 	"\x0eCancelDelivery\x12).nomnom.delivery.v1.CancelDeliveryRequest\x1a*.nomnom.delivery.v1.CancelDeliveryResponse\x12j\n" +
@@ -2616,10 +2624,10 @@ func file_nomnom_delivery_v1_service_proto_rawDescGZIP() []byte {
 
 var file_nomnom_delivery_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_nomnom_delivery_v1_service_proto_goTypes = []any{
-	(*GetOrderCourierRequest)(nil),              // 0: nomnom.delivery.v1.GetOrderCourierRequest
-	(*GetOrderCourierResponse)(nil),             // 1: nomnom.delivery.v1.GetOrderCourierResponse
-	(*GetOrderTrackingRequest)(nil),             // 2: nomnom.delivery.v1.GetOrderTrackingRequest
-	(*GetOrderTrackingResponse)(nil),            // 3: nomnom.delivery.v1.GetOrderTrackingResponse
+	(*GetOrderDeliveryRequest)(nil),             // 0: nomnom.delivery.v1.GetOrderDeliveryRequest
+	(*GetOrderDeliveryResponse)(nil),            // 1: nomnom.delivery.v1.GetOrderDeliveryResponse
+	(*OrderCourier)(nil),                        // 2: nomnom.delivery.v1.OrderCourier
+	(*OrderTracking)(nil),                       // 3: nomnom.delivery.v1.OrderTracking
 	(*VirtualCity)(nil),                         // 4: nomnom.delivery.v1.VirtualCity
 	(*GeoPoint)(nil),                            // 5: nomnom.delivery.v1.GeoPoint
 	(*CourierLocation)(nil),                     // 6: nomnom.delivery.v1.CourierLocation
@@ -2666,45 +2674,45 @@ var file_nomnom_delivery_v1_service_proto_goTypes = []any{
 	(DeliveryState)(0),                          // 47: nomnom.delivery.v1.DeliveryState
 }
 var file_nomnom_delivery_v1_service_proto_depIdxs = []int32{
-	4,  // 0: nomnom.delivery.v1.GetOrderTrackingResponse.city:type_name -> nomnom.delivery.v1.VirtualCity
-	5,  // 1: nomnom.delivery.v1.GetOrderTrackingResponse.pickup:type_name -> nomnom.delivery.v1.GeoPoint
-	5,  // 2: nomnom.delivery.v1.GetOrderTrackingResponse.dropoff:type_name -> nomnom.delivery.v1.GeoPoint
-	6,  // 3: nomnom.delivery.v1.GetOrderTrackingResponse.courier_position:type_name -> nomnom.delivery.v1.CourierLocation
-	5,  // 4: nomnom.delivery.v1.VirtualCity.origin:type_name -> nomnom.delivery.v1.GeoPoint
-	42, // 5: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.delivery:type_name -> nomnom.delivery.v1.Delivery
-	43, // 6: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.courier_status:type_name -> nomnom.delivery.v1.CourierStatus
-	43, // 7: nomnom.delivery.v1.RegisterCourierResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
-	43, // 8: nomnom.delivery.v1.PoolCourier.status:type_name -> nomnom.delivery.v1.CourierStatus
-	20, // 9: nomnom.delivery.v1.GetCourierPoolResponse.couriers:type_name -> nomnom.delivery.v1.PoolCourier
-	44, // 10: nomnom.delivery.v1.SetCourierAvailabilityRequest.availability:type_name -> nomnom.delivery.v1.CourierAvailability
-	43, // 11: nomnom.delivery.v1.SetCourierAvailabilityResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
-	45, // 12: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse.offers:type_name -> nomnom.delivery.v1.DeliveryOffer
-	46, // 13: nomnom.delivery.v1.AcceptDeliveryOfferRequest.expected_pickup_at:type_name -> google.protobuf.Timestamp
-	46, // 14: nomnom.delivery.v1.ConfirmPickupRequest.expected_delivered_at:type_name -> google.protobuf.Timestamp
-	47, // 15: nomnom.delivery.v1.ConfirmPickupResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
-	47, // 16: nomnom.delivery.v1.ConfirmDeliveryResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
-	7,  // 17: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:input_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryRequest
-	0,  // 18: nomnom.delivery.v1.DeliveryService.GetOrderCourier:input_type -> nomnom.delivery.v1.GetOrderCourierRequest
-	2,  // 19: nomnom.delivery.v1.DeliveryService.GetOrderTracking:input_type -> nomnom.delivery.v1.GetOrderTrackingRequest
-	9,  // 20: nomnom.delivery.v1.DeliveryService.CreateDelivery:input_type -> nomnom.delivery.v1.CreateDeliveryRequest
-	11, // 21: nomnom.delivery.v1.DeliveryService.ReplanDelivery:input_type -> nomnom.delivery.v1.ReplanDeliveryRequest
-	13, // 22: nomnom.delivery.v1.DeliveryService.CancelDelivery:input_type -> nomnom.delivery.v1.CancelDeliveryRequest
-	15, // 23: nomnom.delivery.v1.DeliveryService.RegisterCourier:input_type -> nomnom.delivery.v1.RegisterCourierRequest
-	17, // 24: nomnom.delivery.v1.DeliveryService.RetireCourier:input_type -> nomnom.delivery.v1.RetireCourierRequest
-	19, // 25: nomnom.delivery.v1.DeliveryService.GetCourierPool:input_type -> nomnom.delivery.v1.GetCourierPoolRequest
-	22, // 26: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:input_type -> nomnom.delivery.v1.UpdateCourierLocationRequest
-	24, // 27: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:input_type -> nomnom.delivery.v1.SetCourierAvailabilityRequest
-	26, // 28: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:input_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersRequest
-	28, // 29: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:input_type -> nomnom.delivery.v1.AcceptDeliveryOfferRequest
-	30, // 30: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:input_type -> nomnom.delivery.v1.RejectDeliveryOfferRequest
-	32, // 31: nomnom.delivery.v1.DeliveryService.ConfirmPickup:input_type -> nomnom.delivery.v1.ConfirmPickupRequest
-	34, // 32: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:input_type -> nomnom.delivery.v1.ConfirmDeliveryRequest
-	36, // 33: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:input_type -> nomnom.delivery.v1.ReportDeliveryFailureRequest
-	38, // 34: nomnom.delivery.v1.DeliveryService.GetSimulator:input_type -> nomnom.delivery.v1.GetSimulatorRequest
-	40, // 35: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:input_type -> nomnom.delivery.v1.SetSimulatorEnabledRequest
-	8,  // 36: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:output_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
-	1,  // 37: nomnom.delivery.v1.DeliveryService.GetOrderCourier:output_type -> nomnom.delivery.v1.GetOrderCourierResponse
-	3,  // 38: nomnom.delivery.v1.DeliveryService.GetOrderTracking:output_type -> nomnom.delivery.v1.GetOrderTrackingResponse
+	2,  // 0: nomnom.delivery.v1.GetOrderDeliveryResponse.courier:type_name -> nomnom.delivery.v1.OrderCourier
+	3,  // 1: nomnom.delivery.v1.GetOrderDeliveryResponse.tracking:type_name -> nomnom.delivery.v1.OrderTracking
+	4,  // 2: nomnom.delivery.v1.OrderTracking.city:type_name -> nomnom.delivery.v1.VirtualCity
+	5,  // 3: nomnom.delivery.v1.OrderTracking.pickup:type_name -> nomnom.delivery.v1.GeoPoint
+	5,  // 4: nomnom.delivery.v1.OrderTracking.dropoff:type_name -> nomnom.delivery.v1.GeoPoint
+	6,  // 5: nomnom.delivery.v1.OrderTracking.courier_position:type_name -> nomnom.delivery.v1.CourierLocation
+	5,  // 6: nomnom.delivery.v1.VirtualCity.origin:type_name -> nomnom.delivery.v1.GeoPoint
+	42, // 7: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.delivery:type_name -> nomnom.delivery.v1.Delivery
+	43, // 8: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.courier_status:type_name -> nomnom.delivery.v1.CourierStatus
+	43, // 9: nomnom.delivery.v1.RegisterCourierResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
+	43, // 10: nomnom.delivery.v1.PoolCourier.status:type_name -> nomnom.delivery.v1.CourierStatus
+	20, // 11: nomnom.delivery.v1.GetCourierPoolResponse.couriers:type_name -> nomnom.delivery.v1.PoolCourier
+	44, // 12: nomnom.delivery.v1.SetCourierAvailabilityRequest.availability:type_name -> nomnom.delivery.v1.CourierAvailability
+	43, // 13: nomnom.delivery.v1.SetCourierAvailabilityResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
+	45, // 14: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse.offers:type_name -> nomnom.delivery.v1.DeliveryOffer
+	46, // 15: nomnom.delivery.v1.AcceptDeliveryOfferRequest.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	46, // 16: nomnom.delivery.v1.ConfirmPickupRequest.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	47, // 17: nomnom.delivery.v1.ConfirmPickupResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
+	47, // 18: nomnom.delivery.v1.ConfirmDeliveryResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
+	7,  // 19: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:input_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryRequest
+	0,  // 20: nomnom.delivery.v1.DeliveryService.GetOrderDelivery:input_type -> nomnom.delivery.v1.GetOrderDeliveryRequest
+	9,  // 21: nomnom.delivery.v1.DeliveryService.CreateDelivery:input_type -> nomnom.delivery.v1.CreateDeliveryRequest
+	11, // 22: nomnom.delivery.v1.DeliveryService.ReplanDelivery:input_type -> nomnom.delivery.v1.ReplanDeliveryRequest
+	13, // 23: nomnom.delivery.v1.DeliveryService.CancelDelivery:input_type -> nomnom.delivery.v1.CancelDeliveryRequest
+	15, // 24: nomnom.delivery.v1.DeliveryService.RegisterCourier:input_type -> nomnom.delivery.v1.RegisterCourierRequest
+	17, // 25: nomnom.delivery.v1.DeliveryService.RetireCourier:input_type -> nomnom.delivery.v1.RetireCourierRequest
+	19, // 26: nomnom.delivery.v1.DeliveryService.GetCourierPool:input_type -> nomnom.delivery.v1.GetCourierPoolRequest
+	22, // 27: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:input_type -> nomnom.delivery.v1.UpdateCourierLocationRequest
+	24, // 28: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:input_type -> nomnom.delivery.v1.SetCourierAvailabilityRequest
+	26, // 29: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:input_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersRequest
+	28, // 30: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:input_type -> nomnom.delivery.v1.AcceptDeliveryOfferRequest
+	30, // 31: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:input_type -> nomnom.delivery.v1.RejectDeliveryOfferRequest
+	32, // 32: nomnom.delivery.v1.DeliveryService.ConfirmPickup:input_type -> nomnom.delivery.v1.ConfirmPickupRequest
+	34, // 33: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:input_type -> nomnom.delivery.v1.ConfirmDeliveryRequest
+	36, // 34: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:input_type -> nomnom.delivery.v1.ReportDeliveryFailureRequest
+	38, // 35: nomnom.delivery.v1.DeliveryService.GetSimulator:input_type -> nomnom.delivery.v1.GetSimulatorRequest
+	40, // 36: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:input_type -> nomnom.delivery.v1.SetSimulatorEnabledRequest
+	8,  // 37: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:output_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
+	1,  // 38: nomnom.delivery.v1.DeliveryService.GetOrderDelivery:output_type -> nomnom.delivery.v1.GetOrderDeliveryResponse
 	10, // 39: nomnom.delivery.v1.DeliveryService.CreateDelivery:output_type -> nomnom.delivery.v1.CreateDeliveryResponse
 	12, // 40: nomnom.delivery.v1.DeliveryService.ReplanDelivery:output_type -> nomnom.delivery.v1.ReplanDeliveryResponse
 	14, // 41: nomnom.delivery.v1.DeliveryService.CancelDelivery:output_type -> nomnom.delivery.v1.CancelDeliveryResponse
@@ -2721,11 +2729,11 @@ var file_nomnom_delivery_v1_service_proto_depIdxs = []int32{
 	37, // 52: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:output_type -> nomnom.delivery.v1.ReportDeliveryFailureResponse
 	39, // 53: nomnom.delivery.v1.DeliveryService.GetSimulator:output_type -> nomnom.delivery.v1.GetSimulatorResponse
 	41, // 54: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:output_type -> nomnom.delivery.v1.SetSimulatorEnabledResponse
-	36, // [36:55] is the sub-list for method output_type
-	17, // [17:36] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	37, // [37:55] is the sub-list for method output_type
+	19, // [19:37] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_delivery_v1_service_proto_init() }

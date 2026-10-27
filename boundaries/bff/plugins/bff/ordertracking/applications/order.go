@@ -38,8 +38,8 @@ type OrderSnapshot struct {
 	Priority Priority
 	// PremiumFee is nil for a standard Order.
 	PremiumFee *Money
-	PlacedAt     time.Time
-	Facts        []Fact
+	PlacedAt   time.Time
+	Facts      []Fact
 	// Cancellation is set only for a cancelled Order.
 	Cancellation *Cancellation
 	// Window is set only while the Order State admits cancellation.

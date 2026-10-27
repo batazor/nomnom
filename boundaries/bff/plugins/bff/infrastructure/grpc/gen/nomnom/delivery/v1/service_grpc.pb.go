@@ -20,8 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	DeliveryService_GetCourierCurrentDelivery_FullMethodName   = "/nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery"
-	DeliveryService_GetOrderCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/GetOrderCourier"
-	DeliveryService_GetOrderTracking_FullMethodName            = "/nomnom.delivery.v1.DeliveryService/GetOrderTracking"
+	DeliveryService_GetOrderDelivery_FullMethodName            = "/nomnom.delivery.v1.DeliveryService/GetOrderDelivery"
 	DeliveryService_CreateDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
 	DeliveryService_ReplanDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
 	DeliveryService_CancelDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
@@ -48,17 +47,14 @@ type DeliveryServiceClient interface {
 	// Delivery. Requires courier#act; an unregistered courier
 	// is NOT_FOUND.
 	GetCourierCurrentDelivery(ctx context.Context, in *GetCourierCurrentDeliveryRequest, opts ...grpc.CallOption) (*GetCourierCurrentDeliveryResponse, error)
-	// Courier of the Delivery of an order for whoever may view the order
-	// (order#view, FR-626): set while the Delivery is assigned, picked up or
-	// delivered, empty before an Assignment and after a failure or a
-	// cancellation. An order without a Delivery answers empty too.
-	GetOrderCourier(ctx context.Context, in *GetOrderCourierRequest, opts ...grpc.CallOption) (*GetOrderCourierResponse, error)
-	// Live tracking of the Delivery of an order for whoever may view the order
-	// (order#view, FR-660): set while the Delivery is assigned or picked up and
-	// has a Tracking Channel, empty otherwise. tracking_channel is the
-	// capability of the courierMoved subscription: every courier position goes
-	// to the Valkey channel delivery.tracks.<tracking_channel> (FR-661).
-	GetOrderTracking(ctx context.Context, in *GetOrderTrackingRequest, opts ...grpc.CallOption) (*GetOrderTrackingResponse, error)
+	// Delivery of an order for whoever may view the order (order#view, one
+	// check): the courier (FR-626) — set while the Delivery is assigned, picked
+	// up or delivered — and the live tracking (FR-660) — set while it is
+	// assigned or picked up and has a Tracking Channel. An order without a
+	// Delivery answers empty. tracking_channel is the capability of the
+	// courierMoved subscription: every courier position goes to the Valkey
+	// channel delivery.tracks.<tracking_channel> (FR-661).
+	GetOrderDelivery(ctx context.Context, in *GetOrderDeliveryRequest, opts ...grpc.CallOption) (*GetOrderDeliveryResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
 	ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error)
@@ -111,20 +107,10 @@ func (c *deliveryServiceClient) GetCourierCurrentDelivery(ctx context.Context, i
 	return out, nil
 }
 
-func (c *deliveryServiceClient) GetOrderCourier(ctx context.Context, in *GetOrderCourierRequest, opts ...grpc.CallOption) (*GetOrderCourierResponse, error) {
+func (c *deliveryServiceClient) GetOrderDelivery(ctx context.Context, in *GetOrderDeliveryRequest, opts ...grpc.CallOption) (*GetOrderDeliveryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetOrderCourierResponse)
-	err := c.cc.Invoke(ctx, DeliveryService_GetOrderCourier_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *deliveryServiceClient) GetOrderTracking(ctx context.Context, in *GetOrderTrackingRequest, opts ...grpc.CallOption) (*GetOrderTrackingResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetOrderTrackingResponse)
-	err := c.cc.Invoke(ctx, DeliveryService_GetOrderTracking_FullMethodName, in, out, cOpts...)
+	out := new(GetOrderDeliveryResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_GetOrderDelivery_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -299,17 +285,14 @@ type DeliveryServiceServer interface {
 	// Delivery. Requires courier#act; an unregistered courier
 	// is NOT_FOUND.
 	GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error)
-	// Courier of the Delivery of an order for whoever may view the order
-	// (order#view, FR-626): set while the Delivery is assigned, picked up or
-	// delivered, empty before an Assignment and after a failure or a
-	// cancellation. An order without a Delivery answers empty too.
-	GetOrderCourier(context.Context, *GetOrderCourierRequest) (*GetOrderCourierResponse, error)
-	// Live tracking of the Delivery of an order for whoever may view the order
-	// (order#view, FR-660): set while the Delivery is assigned or picked up and
-	// has a Tracking Channel, empty otherwise. tracking_channel is the
-	// capability of the courierMoved subscription: every courier position goes
-	// to the Valkey channel delivery.tracks.<tracking_channel> (FR-661).
-	GetOrderTracking(context.Context, *GetOrderTrackingRequest) (*GetOrderTrackingResponse, error)
+	// Delivery of an order for whoever may view the order (order#view, one
+	// check): the courier (FR-626) — set while the Delivery is assigned, picked
+	// up or delivered — and the live tracking (FR-660) — set while it is
+	// assigned or picked up and has a Tracking Channel. An order without a
+	// Delivery answers empty. tracking_channel is the capability of the
+	// courierMoved subscription: every courier position goes to the Valkey
+	// channel delivery.tracks.<tracking_channel> (FR-661).
+	GetOrderDelivery(context.Context, *GetOrderDeliveryRequest) (*GetOrderDeliveryResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)
 	ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error)
@@ -355,11 +338,8 @@ type UnimplementedDeliveryServiceServer struct{}
 func (UnimplementedDeliveryServiceServer) GetCourierCurrentDelivery(context.Context, *GetCourierCurrentDeliveryRequest) (*GetCourierCurrentDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCourierCurrentDelivery not implemented")
 }
-func (UnimplementedDeliveryServiceServer) GetOrderCourier(context.Context, *GetOrderCourierRequest) (*GetOrderCourierResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetOrderCourier not implemented")
-}
-func (UnimplementedDeliveryServiceServer) GetOrderTracking(context.Context, *GetOrderTrackingRequest) (*GetOrderTrackingResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetOrderTracking not implemented")
+func (UnimplementedDeliveryServiceServer) GetOrderDelivery(context.Context, *GetOrderDeliveryRequest) (*GetOrderDeliveryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrderDelivery not implemented")
 }
 func (UnimplementedDeliveryServiceServer) CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateDelivery not implemented")
@@ -448,38 +428,20 @@ func _DeliveryService_GetCourierCurrentDelivery_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DeliveryService_GetOrderCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetOrderCourierRequest)
+func _DeliveryService_GetOrderDelivery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrderDeliveryRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DeliveryServiceServer).GetOrderCourier(ctx, in)
+		return srv.(DeliveryServiceServer).GetOrderDelivery(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DeliveryService_GetOrderCourier_FullMethodName,
+		FullMethod: DeliveryService_GetOrderDelivery_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DeliveryServiceServer).GetOrderCourier(ctx, req.(*GetOrderCourierRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _DeliveryService_GetOrderTracking_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetOrderTrackingRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DeliveryServiceServer).GetOrderTracking(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DeliveryService_GetOrderTracking_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DeliveryServiceServer).GetOrderTracking(ctx, req.(*GetOrderTrackingRequest))
+		return srv.(DeliveryServiceServer).GetOrderDelivery(ctx, req.(*GetOrderDeliveryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -784,12 +746,8 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DeliveryService_GetCourierCurrentDelivery_Handler,
 		},
 		{
-			MethodName: "GetOrderCourier",
-			Handler:    _DeliveryService_GetOrderCourier_Handler,
-		},
-		{
-			MethodName: "GetOrderTracking",
-			Handler:    _DeliveryService_GetOrderTracking_Handler,
+			MethodName: "GetOrderDelivery",
+			Handler:    _DeliveryService_GetOrderDelivery_Handler,
 		},
 		{
 			MethodName: "CreateDelivery",

@@ -227,26 +227,28 @@ pub struct DeliveryCancelled {
     pub market_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetOrderCourierRequest {
+pub struct GetOrderDeliveryRequest {
     #[prost(string, tag="1")]
     pub order_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetOrderDeliveryResponse {
+    /// Unset without a courier.
+    #[prost(message, optional, tag="1")]
+    pub courier: ::core::option::Option<OrderCourier>,
+    /// Unset without live tracking.
+    #[prost(message, optional, tag="2")]
+    pub tracking: ::core::option::Option<OrderTracking>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetOrderCourierResponse {
-    /// Empty without a courier.
+pub struct OrderCourier {
     #[prost(string, tag="1")]
     pub courier_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub name: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetOrderTrackingRequest {
-    #[prost(string, tag="1")]
-    pub order_id: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetOrderTrackingResponse {
-    /// Empty without tracking; the other fields are then unset.
+pub struct OrderTracking {
     #[prost(string, tag="1")]
     pub tracking_channel: ::prost::alloc::string::String,
     /// Virtual City of the points (FR-658).

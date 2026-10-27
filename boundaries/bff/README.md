@@ -33,13 +33,14 @@ BFF — отдельный сервис и единая прикладная т�
 | `restaurant(id)` | ресторан с меню | реализована (`catalog`) |
 | `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
 | `customerOrders(first, after)` | история заказов покупателя от новых к старым (`orders.ListCustomerOrders` + `GetOrder` на каждый заказ) | реализована (`ordertracking`) |
-| `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey` | реализована (`checkout`) |
+| `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey`; `priority` не задан — `STANDARD`, `PREMIUM` без доплаты ресторана — problem `PREMIUM_UNAVAILABLE` | реализована (`checkout`) |
 | `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
 | `openRestaurant(restaurantId)`, `closeRestaurant(restaurantId)` | открытие ресторана владельцем, повтор — `changed = false` | реализованы (`restaurantmanagement`) |
 | `myRestaurants(first, after)` | открытые и закрытые рестораны текущего пользователя (`restaurants.ListOwnedRestaurants`), `menu = null`; нужен access token | реализован (`restaurantmanagement`) |
 | `simulator`, `setSimulatorEnabled(enabled)` | demo Simulator трёх контекстов, `enabled` — AND ответов; нужен оператор (`platform#operate_simulator`) | реализованы (`simulator`) |
 | `kitchen(restaurantId)` | активные заказы ресторана для кухни; `null` для отсутствующего ресторана и кухни, которой пользователь не управляет | реализован (`kitchen`) |
 | `applyKitchenAction(input)` | команда кухни над заказом ресторана; конфликт стадии — `problem` | реализована (`kitchen`) |
+| `startNextPreparation(restaurantId, requestId)` | кухня берёт голову Kitchen Queue (премиум первыми), заказ выбирает очередь; пустая очередь — `order = null` без problem, нет свободного повара — `NO_COOK_AVAILABLE` | реализована (`kitchen`) |
 | `courier` | работа текущего пользователя как курьера; `null`, если он не курьер | реализован (`courier`) |
 | `setCourierAvailability(availability)`, `acceptDeliveryOffer(offerId)`, `applyCourierDeliveryAction(deliveryId, action)` | команды курьера; payload — курьер после команды и `problem` | реализованы (`courier`) |
 
@@ -63,8 +64,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-
 
 Адрес internal gateway — `BFF__INTERNAL_GATEWAY_ADDR` (Helm `internalGateway.address`); без него или без identity операции заказа отвечают `UNAVAILABLE` (`order operations are not available`)/`UNAUTHENTICATED`, `bffInfo` работает. Сквозная проверка через gateway — тест `bff-end-to-end` в `make kind-test` ([ops/kind](../../ops/kind/README.md#проверки)).
 
-- **Курьер заказа** ([FR-626](../../openspec/changes/add-cook-and-courier-pools/)): `order(id)` и lookup `orderChanged` отдают `courier { name }` — `GetOrderCourier` `delivery` от имени покупателя (`order#view`, GRPCRoute `delivery-v1-courier-reads`), только когда у заказа есть milestone `COURIER_ASSIGNED`; без курьера (до Assignment, после Delivery Failure) — `null`. `customerOrders` его не читает и оставляет `null`. Сбой `delivery` — error, а не заказ без курьера. Имя повара покупателю не отдаётся.
-- **Live tracking** ([FR-663](../../openspec/changes/add-live-courier-tracking/)): `order(id)` и lookup `orderChanged` отдают `tracking { channel city pickup dropoff courierPosition }` — `GetOrderTracking` `delivery` от имени покупателя (`order#view`, GRPCRoute `delivery-v1-courier-reads`), только у незавершённого заказа с milestone `COURIER_ASSIGNED`; без активной доставки — `null`, `customerOrders` его не читает. Ответ с каналом, но без города или точек — error, а не заказ без трекинга. `channel` — капабилити подписки `courierMoved`.
+- **Доставка заказа** ([FR-626](../../openspec/changes/add-cook-and-courier-pools/), [FR-663](../../openspec/changes/add-live-courier-tracking/)): `order(id)` и lookup `orderChanged` отдают `courier { name }` и `tracking { channel city pickup dropoff courierPosition }` из одного вызова `GetOrderDelivery` `delivery` от имени покупателя (`order#view`, GRPCRoute `delivery-v1-courier-reads`), только когда у заказа есть milestone `COURIER_ASSIGNED`. Курьера нет до Assignment и после Delivery Failure — `null`; `tracking` отдаётся только незавершённому заказу. `customerOrders` доставку не читает и оставляет оба поля `null`. Сбой `delivery` или трекинг с каналом, но без города и точек — error, а не заказ без курьера. Имя повара покупателю не отдаётся. `channel` — капабилити подписки `courierMoved`.
 
 ### Слайс `catalog`
 
@@ -139,6 +139,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 
 - `kitchen(restaurantId)`: заказы в `RECEIVED`…`READY` из `ListActiveRestaurantOrders` (позиции, `received_at`, `accepted_at` и `expected_ready_at` → nullable `acceptedAt`/`expectedReadyAt` в RFC 3339, `null` до Acceptance; их же отдаёт lookup `kitchenChanged`); порядок — `RECEIVED` по `receivedAt`, затем `QUEUED` в порядке `GetKitchenQueue` (заказ, которого нет в очереди из-за гонки двух чтений, — после неё по `receivedAt`), затем остальные по `receivedAt`; названия позиций — из `GetMenu` (позиции, которой нет в меню, — пустое имя), `restaurant.menu = null`. `ListIncomingOrders` не нужен: новый RPC покрывает и `RECEIVED`.
 - `applyKitchenAction`: после команды заказ перечитывается из `ListActiveRestaurantOrders` (ответ команды без позиций и `receivedAt`); у `REJECT` и у заказа, ушедшего с доски, `order = null`. Причина отказа `RejectRestaurantOrder` не передаётся: в схеме её нет.
+- `startNextPreparation` (restaurants FR-225, FR-655): `StartNextPreparation` с `requestId` попытки; начатый заказ перечитывается так же, как после `applyKitchenAction`. Команды `START_PREPARATION` у `applyKitchenAction` нет. `KitchenOrder.priority`, `Order.priority`/`premiumFee` и `Restaurant.premiumFee` (только запросы каталога) — из `restaurants` и `orders`; не заданный ими приоритет — ошибка, а не значение по умолчанию.
 - **Cook Pool** ([FR-622, FR-625](../../openspec/changes/add-cook-and-courier-pools/)): `Kitchen.cookPool` — `GetCookPool` (`restaurant#view_orders`): размер, на линии, занято, очередь и повара по имени с текущим заказом; `KitchenOrder.cook` — повар из пула по `cook_id` заказа (`null` до старта и у выбывшего повара). Mutations `hireCook`, `setCookOnLine`, `retireCook` вызывают `HireCook`, `PutCookOnLine`/`TakeCookOffLine`, `RetireCook` (`restaurant#manage_cooks`, GRPCRoute `restaurants-v1-cook-pool`) и отвечают `CookPoolPayload` — пул перечитывается после команды. Изменения поваров приходят тем же `kitchenChanged`.
 
 | Ответ `restaurants` | GraphQL |
@@ -184,7 +185,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 - `courierPool`: `CourierPool @key(fields: "id")`, `id` — Market запроса (пул курьеров у каждого Market свой, ADR 41); размер, на линии, занято, доставки без курьера (`waiting`) и курьеры по имени с заказом оффера (`offeredOrderId`) и текущей доставки (`currentOrderId`). Пользователь без права получает error `PERMISSION_DENIED` — UI не показывает пул.
 - `addCourier(name)`: новый курьер регистрируется под UUIDv7 (за ним не стоит пользователь, действует Simulator) и ставится в стартовую точку `BFF__COURIER_START_LATITUDE`/`BFF__COURIER_START_LONGITUDE` (Helm `courierPool.startLatitude`/`startLongitude`, обязательны: без них плагин не стартует, chart не рендерится) — иначе Dispatch не предложит ему доставку. `setCourierOnLine` и `retireCourier` меняют любого курьера пула.
 - Mutations отвечают `CourierPoolPayload`: `INVALID_ARGUMENT` регистрации — `COURIER_NAME_INVALID`, `FAILED_PRECONDITION` доступности — `COURIER_STATUS_CONFLICT` (busy остаётся на линии, выбывший — вне её), `FAILED_PRECONDITION` выбытия — `COURIER_ON_LINE`; `NOT_FOUND` — error `NOT_FOUND`.
-- Имя курьера покупателю — `Order.courier` слайса `ordertracking` (`GetOrderCourier`, `order#view`).
+- Имя курьера покупателю — `Order.courier` слайса `ordertracking` (`GetOrderDelivery`, `order#view`).
 
 ## Subscriptions
 
@@ -196,6 +197,14 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 - `courierMoved(channel)` — исключение из notification + refetch: Router читает канал Valkey `delivery.tracks.{{ args.channel }}` (`@edfs__redisSubscribe`, `events.providers.redis` id `tracks`, `BFF__TRACKS_REDIS_URL`, Helm `tracks.redisUrlSecret` обязателен), а событие несёт все поля `CourierPosition`. Ключ `CourierPosition` — все её поля (`resolvable: false` в обоих subgraphs), поэтому Router plugin не вызывает. Права проверены при выдаче канала в `Order.tracking`. ACL-пользователь `bff` в Valkey только подписывается.
 - Клиенты подписываются по SSE (`POST /graphql`, `Accept: text/event-stream`). Первое событие приходит только после изменения, поэтому текущее состояние берётся query.
 - Клиентская схема — композиция subgraphs: `npm run compose` пишет `config.json` и [`client-schema.graphql`](client-schema.graphql) для codegen UI.
+
+## Persisted operations
+
+Router в образе (production и kind) выполняет только операции из [`persisted-operations/`](persisted-operations/) — по файлу `<sha256>.json` на операцию ([локальный ADR 3](docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md#allowlist-операций-persisted-operations)): клиент шлёт SHA-256 текста операции в `extensions.persistedQuery.sha256Hash`, запрос с текстом без хеша блокируется, неизвестный хеш — `PersistedQueryNotFound`. Subscriptions по SSE идут так же, с хешем.
+
+- `npm run operations` пишет файлы операций из `persisted-documents.json` codegen UI (`npm run codegen` в `boundaries/ui`) и `ops/kind/e2e/operations/*.graphql`; новые операции добавляются, прежние остаются. Файлы коммитятся; `npm run check` падает, если файла операции нет.
+- Новая операция UI: `npm run codegen` в `boundaries/ui`, затем `npm run operations` здесь, оба файла — в одном изменении. BFF выкатывается раньше UI или вместе с ним.
+- Локальный [`config.yaml`](config.yaml) читает те же файлы и принимает текст операций (`log_unknown`).
 
 ## BFF в Cell
 
@@ -347,6 +356,7 @@ npm run generate
 npm test
 npm run build
 npm run compose
+npm run operations
 ```
 
 Скачать Router и запустить его:

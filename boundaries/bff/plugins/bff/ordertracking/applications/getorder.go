@@ -13,12 +13,17 @@ type OrderReader interface {
 	GetOrder(ctx context.Context, orderID string) (OrderSnapshot, error)
 }
 
-// Couriers reads the courier of an Order and its live tracking from
-// delivery on behalf of the customer in the request context (order#view);
-// nil without one.
-type Couriers interface {
-	CourierOf(ctx context.Context, orderID string) (*Courier, error)
-	TrackingOf(ctx context.Context, orderID string) (*Tracking, error)
+// Deliveries reads the delivery of an Order — its courier and live
+// tracking — from delivery on behalf of the customer in the request context
+// (order#view); each part is nil without one.
+type Deliveries interface {
+	DeliveryOf(ctx context.Context, orderID string) (OrderDelivery, error)
+}
+
+// OrderDelivery is what the customer sees of the delivery of an Order.
+type OrderDelivery struct {
+	Courier  *Courier
+	Tracking *Tracking
 }
 
 // Catalog reads public data of restaurants: no customer is involved.
@@ -33,14 +38,14 @@ type Catalog interface {
 // customer with the item names kept at Place Order, restaurants for the
 // restaurant.
 type GetOrder struct {
-	orders   OrderReader
-	catalog  Catalog
-	couriers Couriers
-	now      func() time.Time
+	orders     OrderReader
+	catalog    Catalog
+	deliveries Deliveries
+	now        func() time.Time
 }
 
-func NewGetOrder(orders OrderReader, catalog Catalog, couriers Couriers) GetOrder {
-	return GetOrder{orders: orders, catalog: catalog, couriers: couriers, now: time.Now}
+func NewGetOrder(orders OrderReader, catalog Catalog, deliveries Deliveries) GetOrder {
+	return GetOrder{orders: orders, catalog: catalog, deliveries: deliveries, now: time.Now}
 }
 
 // Handle returns ErrOrderNotFound for a missing or foreign Order.
@@ -61,16 +66,15 @@ func (h GetOrder) Handle(ctx context.Context, orderID string) (OrderView, error)
 	if slices.ContainsFunc(view.Milestones, func(milestone Milestone) bool {
 		return milestone.Kind == MilestoneCourierAssigned
 	}) {
-		view.Courier, err = h.couriers.CourierOf(ctx, order.ID)
+		delivery, err := h.deliveries.DeliveryOf(ctx, order.ID)
 		if err != nil {
-			return OrderView{}, fmt.Errorf("read courier: %w", err)
+			return OrderView{}, fmt.Errorf("read delivery: %w", err)
 		}
-		// A final Order has no courier on the way.
+		view.Courier = delivery.Courier
+		// A final Order has no courier on the way, whatever delivery still
+		// reports.
 		if !view.Status.Final() {
-			view.Tracking, err = h.couriers.TrackingOf(ctx, order.ID)
-			if err != nil {
-				return OrderView{}, fmt.Errorf("read tracking: %w", err)
-			}
+			view.Tracking = delivery.Tracking
 		}
 	}
 	return view, nil

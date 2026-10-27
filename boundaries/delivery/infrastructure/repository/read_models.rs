@@ -18,18 +18,15 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
 use crate::slices::delivery::applications::get_courier_pool::{
     CourierPoolReadModel, PoolCourierView,
 };
-use crate::slices::delivery::applications::get_order_courier::{
-    OrderCourierReadModel, OrderCourierView,
-};
-use crate::slices::delivery::applications::get_order_tracking::{
-    OrderTrackingReadModel, OrderTrackingRecord,
+use crate::slices::delivery::applications::get_order_delivery::{
+    OrderCourierView, OrderDeliveryReadModel, OrderDeliveryRecord, OrderTrackingRecord,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::domains::delivery::{
-    Delivery, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
+    CompoundState, Delivery, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
 };
 
 use super::rows::{
@@ -121,50 +118,73 @@ impl CourierPoolReadModel for Store {
     }
 }
 
-impl OrderTrackingReadModel for Store {
-    fn tracking_of_order(
+impl OrderDeliveryReadModel for Store {
+    fn delivery_of_order(
         &self,
         order_id: &OrderId,
-    ) -> Result<Option<OrderTrackingRecord>, RepositoryError> {
-        // An active delivery always has a courier: `courier_id!`.
+    ) -> Result<OrderDeliveryRecord, RepositoryError> {
         let row = sql!(self, "SELECT", |connection| sqlx::query!(
-            r#"SELECT d.courier_id AS "courier_id!", d.pickup_x, d.pickup_y, d.dropoff_x,
-                 d.dropoff_y, d.tracking_channel,
+            r#"SELECT d.state, d.courier_id, c.name AS "name?", d.pickup_x, d.pickup_y,
+                 d.dropoff_x, d.dropoff_y, d.tracking_channel,
                  p.latitude AS "latitude?", p.longitude AS "longitude?",
                  p.recorded_at AS "recorded_at?"
-             FROM deliveries d LEFT JOIN courier_positions p ON p.courier_id = d.courier_id
-             WHERE d.order_id = $1 AND d.state = ANY($2) AND d.courier_id IS NOT NULL
-               AND d.tracking_channel IS NOT NULL"#,
-            order_id.as_str(),
-            &active_assignment_states()[..] as &[&str]
+             FROM deliveries d
+             LEFT JOIN couriers c ON c.id = d.courier_id
+             LEFT JOIN courier_positions p ON p.courier_id = d.courier_id
+             WHERE d.order_id = $1"#,
+            order_id.as_str()
         )
         .fetch_optional(connection))?;
         let Some(row) = row else {
-            return Ok(None);
+            return Ok(OrderDeliveryRecord::default());
         };
-        let Some(tracking) = delivery_tracking(
-            (row.pickup_x, row.pickup_y),
-            (row.dropoff_x, row.dropoff_y),
-            row.tracking_channel,
-        )?
-        else {
-            return Err(corrupt("delivery tracking", "selected without a channel"));
-        };
-        let courier_position = match (row.latitude, row.longitude, row.recorded_at) {
-            (Some(latitude), Some(longitude), Some(recorded_at)) => Some(CourierPosition {
-                courier_id: CourierId::new(row.courier_id),
-                location: Location::new(latitude, longitude)
-                    .map_err(|error| corrupt("courier position", error))?,
-                recorded_at_epoch_seconds: recorded_at,
+        let state = parse_delivery_state(&row.state)?;
+        // The courier stays after the handover (FR-626).
+        let shows_courier =
+            state.is_in(CompoundState::ActiveAssignment) || state == State::Delivered;
+        let courier = match (
+            shows_courier,
+            row.courier_id.as_deref(),
+            row.name.as_deref(),
+        ) {
+            (true, Some(id), Some(name)) => Some(OrderCourierView {
+                courier_id: CourierId::new(id),
+                name: courier_name(name)?,
             }),
             _ => None,
         };
-        Ok(Some(OrderTrackingRecord {
-            channel: tracking.channel,
-            pickup: tracking.pickup,
-            dropoff: tracking.dropoff,
-            courier_position,
-        }))
+        let stored_tracking = delivery_tracking(
+            (row.pickup_x, row.pickup_y),
+            (row.dropoff_x, row.dropoff_y),
+            row.tracking_channel,
+        )?;
+        let tracking = match (
+            state.is_in(CompoundState::ActiveAssignment),
+            stored_tracking,
+        ) {
+            (true, Some(tracking)) => {
+                let courier_position =
+                    match (row.courier_id, row.latitude, row.longitude, row.recorded_at) {
+                        (Some(id), Some(latitude), Some(longitude), Some(recorded_at)) => {
+                            Some(CourierPosition {
+                                courier_id: CourierId::new(id),
+                                location: Location::new(latitude, longitude)
+                                    .map_err(|error| corrupt("courier position", error))?,
+                                recorded_at_epoch_seconds: recorded_at,
+                            })
+                        }
+                        _ => None,
+                    };
+                Some(OrderTrackingRecord {
+                    channel: tracking.channel,
+                    pickup: tracking.pickup,
+                    dropoff: tracking.dropoff,
+                    courier_position,
+                })
+            }
+            _ => None,
+        };
+        Ok(OrderDeliveryRecord { courier, tracking })
     }
 }
 
@@ -178,32 +198,6 @@ impl ActiveTrackingChannel for Store {
             &active_assignment_states()[..] as &[&str]
         )
         .fetch_optional(connection))
-    }
-}
-
-impl OrderCourierReadModel for Store {
-    fn courier_of_order(
-        &self,
-        order_id: &OrderId,
-    ) -> Result<Option<OrderCourierView>, RepositoryError> {
-        sql!(self, "SELECT", |connection| sqlx::query!(
-            "SELECT c.id, c.name FROM deliveries d JOIN couriers c ON c.id = d.courier_id
-             WHERE d.order_id = $1 AND d.state = ANY($2)",
-            order_id.as_str(),
-            &[
-                delivery_state(State::Assigned),
-                delivery_state(State::PickedUp),
-                delivery_state(State::Delivered),
-            ][..] as &[&str]
-        )
-        .fetch_optional(connection))?
-        .map(|row| {
-            Ok(OrderCourierView {
-                courier_id: CourierId::new(row.id),
-                name: courier_name(&row.name)?,
-            })
-        })
-        .transpose()
     }
 }
 

@@ -1,8 +1,9 @@
 //! Live tracking (FR-658, FR-661, FR-665, FR-666): Virtual City, интервал
 //! записи позиции курьера и Valkey потока позиций. Значений по умолчанию
-//! нет: пустое или невалидное значение завершает startup. Рамку Virtual
-//! City в диапазонах широты и долготы проверяет сам Virtual City при сборке
-//! процесса — тоже до открытия портов.
+//! нет: пустое или нечисловое значение завершает startup. Правила сетки
+//! (не меньше 2 кварталов, положительный квартал, рамка в диапазонах широты
+//! и долготы) проверяет только сам Virtual City при сборке процесса — тоже
+//! до открытия портов.
 
 use std::time::Duration;
 
@@ -39,7 +40,7 @@ pub struct TrackingConfig {
     pub city_origin_latitude: f64,
     /// Долгота юго-западного угла Virtual City.
     pub city_origin_longitude: f64,
-    /// Кварталов по стороне сетки, не меньше 2.
+    /// Кварталов по стороне сетки.
     pub city_blocks: u32,
     /// Сторона квартала в метрах.
     pub block_meters: f64,
@@ -50,16 +51,6 @@ pub struct TrackingConfig {
 
 impl TrackingConfig {
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
-        if self.city_blocks < 2 {
-            return Err(ConfigError::Message(format!(
-                "{TRACKING_CITY_BLOCKS_ENV} must be at least 2"
-            )));
-        }
-        if !self.block_meters.is_finite() || self.block_meters <= 0.0 {
-            return Err(ConfigError::Message(format!(
-                "{TRACKING_BLOCK_METERS_ENV} must be a positive number"
-            )));
-        }
         if self.persist_interval.is_zero() {
             return Err(ConfigError::Message(format!(
                 "{TRACKING_PERSIST_INTERVAL_ENV} must be positive"

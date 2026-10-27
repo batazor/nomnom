@@ -5,7 +5,7 @@
 ### Requirement: Отслеживание курьера в заказе
 **ID:** FR-663
 
-`Order` SHALL иметь поле `tracking: OrderTracking` с `channel: ID!`, `city` (угол, число кварталов, сторона квартала), `pickup`, `dropoff` и `courierPosition` (широта, долгота, `recordedAt`) из Get Order Tracking `delivery`, запрошенного от имени покупателя. Без активной доставки поле MUST быть `null`. MSW-моки SHALL покрывать оба случая.
+`Order` SHALL иметь поле `tracking: OrderTracking` с `channel: ID!`, `city` (угол, число кварталов, сторона квартала), `pickup`, `dropoff` и `courierPosition` (широта, долгота, `recordedAt`) из Get Order Delivery `delivery`, запрошенного от имени покупателя. Без активной доставки поле MUST быть `null`. MSW-моки SHALL покрывать оба случая.
 
 #### Scenario: Заказ в пути
 **ID:** AC-884

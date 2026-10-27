@@ -19,8 +19,7 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
 };
 use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
-use crate::slices::delivery::applications::get_order_courier::{self, OrderCourierReadModel};
-use crate::slices::delivery::applications::get_order_tracking::{self, OrderTrackingReadModel};
+use crate::slices::delivery::applications::get_order_delivery::{self, OrderDeliveryReadModel};
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
@@ -72,8 +71,7 @@ pub trait DeliveryReadModels:
     PendingDeliveryOffersReadModel
     + CourierCurrentDeliveryReadModel
     + CourierPoolReadModel
-    + OrderCourierReadModel
-    + OrderTrackingReadModel
+    + OrderDeliveryReadModel
     + Send
     + Sync
 {
@@ -83,8 +81,7 @@ impl<T> DeliveryReadModels for T where
     T: PendingDeliveryOffersReadModel
         + CourierCurrentDeliveryReadModel
         + CourierPoolReadModel
-        + OrderCourierReadModel
-        + OrderTrackingReadModel
+        + OrderDeliveryReadModel
         + Send
         + Sync
 {
@@ -162,17 +159,11 @@ pub trait DeliveryUseCases: Interface {
         input: get_courier_pool::Input,
     ) -> Result<get_courier_pool::Output, DeliveryApplicationError>;
 
-    fn get_order_courier(
+    fn get_order_delivery(
         &self,
         subject: &Subject,
-        input: get_order_courier::Input,
-    ) -> Result<get_order_courier::Output, DeliveryApplicationError>;
-
-    fn get_order_tracking(
-        &self,
-        subject: &Subject,
-        input: get_order_tracking::Input,
-    ) -> Result<get_order_tracking::Output, DeliveryApplicationError>;
+        input: get_order_delivery::Input,
+    ) -> Result<get_order_delivery::Output, DeliveryApplicationError>;
 
     fn accept_delivery_offer(
         &self,
@@ -345,26 +336,14 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         .execute(subject, input)
     }
 
-    fn get_order_courier(
+    fn get_order_delivery(
         &self,
         subject: &Subject,
-        input: get_order_courier::Input,
-    ) -> Result<get_order_courier::Output, DeliveryApplicationError> {
-        get_order_courier::Handler {
+        input: get_order_delivery::Input,
+    ) -> Result<get_order_delivery::Output, DeliveryApplicationError> {
+        get_order_delivery::Handler {
             authorization: self.ports.authorization(),
-            couriers: self.ports.read_models(),
-        }
-        .execute(subject, input)
-    }
-
-    fn get_order_tracking(
-        &self,
-        subject: &Subject,
-        input: get_order_tracking::Input,
-    ) -> Result<get_order_tracking::Output, DeliveryApplicationError> {
-        get_order_tracking::Handler {
-            authorization: self.ports.authorization(),
-            tracking: self.ports.read_models(),
+            deliveries: self.ports.read_models(),
             city: self.ports.city(),
         }
         .execute(subject, input)

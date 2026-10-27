@@ -6,9 +6,9 @@
 
 ## 1. delivery: Virtual City и доставка
 
-- [x] 1.1 VO Virtual City (перекрёсток ↔ координаты, ближайший перекрёсток с прижатием к рамке), конфиг `TRACKING__CITY_*`, валидация на старте; unit-тесты (`FR-658`, `FR-665`, `AC-870`, `AC-871`).
+- [x] 1.1 VO Virtual City (перекрёсток ↔ координаты, ближайший перекрёсток с прижатием к рамке), конфиг `TRACKING__CITY_*`, правила сетки — только в `VirtualCity::new` при сборке процесса; unit-тесты (`FR-658`, `FR-665`, `AC-870`, `AC-871`).
 - [x] 1.2 Порт `RandomSource`; точки pickup/dropoff и Tracking Channel в `Delivery`, Create Delivery, миграция `0008_delivery_tracking.sql`, репозиторий; тесты (`FR-659`, `AC-872`, `AC-873`).
-- [x] 1.3 Query Get Order Tracking (`order#view`), RPC `GetOrderTracking` в `service.proto`, gRPC-адаптер, GRPCRoute; тесты (`FR-660`, `AC-874`–`AC-876`).
+- [x] 1.3 Query Get Order Delivery (`order#view`, вместо Get Order Courier), RPC `GetOrderDelivery` в `service.proto`, gRPC-адаптер, GRPCRoute; тесты (`FR-660`, `AC-874`–`AC-876`).
 
 ## 2. delivery: поток позиций
 
@@ -17,12 +17,12 @@
 
 ## 3. delivery: Simulator
 
-- [x] 3.1 Выборка работы Simulator с точками доставки; маршрут — случайный кратчайший путь по сетке; позиция по доле времени; unit-тесты (`FR-662`, `AC-882`).
+- [x] 3.1 Выборка работы Simulator с точками доставки; маршруты в `Movements` (`di/simulator_worker/movement.rs`); маршрут — случайный кратчайший путь по сетке; позиция по доле времени; unit-тесты (`FR-662`, `AC-882`).
 - [x] 3.2 Тик `SIMULATOR__TRACK_INTERVAL` в `di::SimulatorWorker`: маршрут при Accept и Pickup к запланированным моментам, вызов Update Courier Location от имени курьера, валидация конфига; тесты worker (`FR-667`, `AC-880`, `AC-881`, `AC-890`).
 
 ## 4. BFF
 
-- [x] 4.1 Клиент `delivery` `GetOrderTracking`, `Order.tracking` в plugin, presenter, тесты (`FR-663`, `AC-884`, `AC-886`).
+- [x] 4.1 Клиент `delivery` `GetOrderDelivery` (курьер и трекинг одним вызовом), `Order.tracking` в plugin, presenter, тесты (`FR-663`, `AC-884`, `AC-886`).
 - [x] 4.2 Events subgraph `courierMoved` с `@edfs__redisSubscribe`, провайдер `redis` `tracks` в `config.yaml` и `config.production.yaml`, `BFF__TRACKS_REDIS_URL`, `npm run compose` (`FR-668`, `AC-885`).
 
 ## 5. UI

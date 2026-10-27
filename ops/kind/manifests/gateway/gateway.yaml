@@ -205,6 +205,11 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: OpenRestaurant
+        # Название и доплата за премиум-приоритет (FR-649).
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: UpdateRestaurant
         - method:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
@@ -254,7 +259,7 @@ spec:
         - method:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
-            method: StartPreparation
+            method: StartNextPreparation
         - method:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
@@ -472,16 +477,11 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: GetCourierCurrentDelivery
-        # Курьер заказа для того, кто видит заказ (order#view): имя в отслеживании покупателя.
+        # Доставка заказа для того, кто видит заказ (order#view): имя курьера и live tracking.
         - method:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
-            method: GetOrderCourier
-        # Live tracking заказа для того, кто видит заказ (order#view): канал потока позиций курьера.
-        - method:
-            type: Exact
-            service: nomnom.delivery.v1.DeliveryService
-            method: GetOrderTracking
+            method: GetOrderDelivery
         # Courier Pool диспетчера (platform#manage_couriers): линия и загрузка курьеров.
         - method:
             type: Exact

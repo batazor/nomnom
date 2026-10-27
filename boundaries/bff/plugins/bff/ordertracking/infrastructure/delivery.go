@@ -11,47 +11,45 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
-// Couriers reads the courier of an Order and its live tracking from
-// delivery.v1.DeliveryService (GetOrderCourier, GetOrderTracking) on behalf
-// of the customer: delivery checks order#view.
-type Couriers struct {
+// Deliveries reads the delivery of an Order — its courier and live
+// tracking — from delivery.v1.DeliveryService (GetOrderDelivery) on behalf of
+// the customer: delivery checks order#view once.
+type Deliveries struct {
 	client deliveryv1.DeliveryServiceClient
 }
 
-func NewCouriers(conn grpc.ClientConnInterface) *Couriers {
-	return &Couriers{client: deliveryv1.NewDeliveryServiceClient(conn)}
+func NewDeliveries(conn grpc.ClientConnInterface) *Deliveries {
+	return &Deliveries{client: deliveryv1.NewDeliveryServiceClient(conn)}
 }
 
-var _ applications.Couriers = (*Couriers)(nil)
+var _ applications.Deliveries = (*Deliveries)(nil)
 
-// CourierOf keeps the customer of ctx; an empty answer is an Order without a
-// courier.
-func (c *Couriers) CourierOf(ctx context.Context, orderID string) (*applications.Courier, error) {
-	response, err := c.client.GetOrderCourier(ctx, &deliveryv1.GetOrderCourierRequest{OrderId: orderID})
+// DeliveryOf keeps the customer of ctx; an unset part is an Order without a
+// courier or without tracking. Tracking with a channel but without the city
+// or points is a broken contract, not an Order without tracking.
+func (d *Deliveries) DeliveryOf(ctx context.Context, orderID string) (applications.OrderDelivery, error) {
+	response, err := d.client.GetOrderDelivery(ctx, &deliveryv1.GetOrderDeliveryRequest{OrderId: orderID})
 	if err != nil {
-		return nil, fmt.Errorf("get order courier: %w", err)
+		return applications.OrderDelivery{}, fmt.Errorf("get order delivery: %w", err)
 	}
-	if response.GetCourierId() == "" {
-		return nil, nil
+	var delivery applications.OrderDelivery
+	if courier := response.GetCourier(); courier != nil {
+		delivery.Courier = &applications.Courier{Name: courier.GetName()}
 	}
-	return &applications.Courier{Name: response.GetName()}, nil
+	if tracking := response.GetTracking(); tracking != nil {
+		delivery.Tracking, err = trackingOf(orderID, tracking)
+		if err != nil {
+			return applications.OrderDelivery{}, err
+		}
+	}
+	return delivery, nil
 }
 
-// TrackingOf keeps the customer of ctx; an empty answer is an Order without
-// tracking. An answer with a channel but without the city or points is a
-// broken contract, not an Order without tracking.
-func (c *Couriers) TrackingOf(ctx context.Context, orderID string) (*applications.Tracking, error) {
-	response, err := c.client.GetOrderTracking(ctx, &deliveryv1.GetOrderTrackingRequest{OrderId: orderID})
-	if err != nil {
-		return nil, fmt.Errorf("get order tracking: %w", err)
-	}
+func trackingOf(orderID string, response *deliveryv1.OrderTracking) (*applications.Tracking, error) {
 	channel := response.GetTrackingChannel()
-	if channel == "" {
-		return nil, nil
-	}
 	city := response.GetCity()
-	if city == nil || city.GetOrigin() == nil || response.GetPickup() == nil || response.GetDropoff() == nil {
-		return nil, fmt.Errorf("get order tracking: incomplete tracking of order %s", orderID)
+	if channel == "" || city == nil || city.GetOrigin() == nil || response.GetPickup() == nil || response.GetDropoff() == nil {
+		return nil, fmt.Errorf("get order delivery: incomplete tracking of order %s", orderID)
 	}
 	tracking := &applications.Tracking{
 		Channel: channel,

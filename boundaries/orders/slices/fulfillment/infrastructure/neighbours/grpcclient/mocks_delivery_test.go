@@ -523,55 +523,55 @@ func (_c *MockDeliveryServiceServer_GetCourierPool_Call) RunAndReturn(run func(c
 	return _c
 }
 
-// GetOrderCourier provides a mock function for the type MockDeliveryServiceServer
-func (_mock *MockDeliveryServiceServer) GetOrderCourier(context1 context.Context, getOrderCourierRequest *deliveryv1.GetOrderCourierRequest) (*deliveryv1.GetOrderCourierResponse, error) {
-	ret := _mock.Called(context1, getOrderCourierRequest)
+// GetOrderDelivery provides a mock function for the type MockDeliveryServiceServer
+func (_mock *MockDeliveryServiceServer) GetOrderDelivery(context1 context.Context, getOrderDeliveryRequest *deliveryv1.GetOrderDeliveryRequest) (*deliveryv1.GetOrderDeliveryResponse, error) {
+	ret := _mock.Called(context1, getOrderDeliveryRequest)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetOrderCourier")
+		panic("no return value specified for GetOrderDelivery")
 	}
 
-	var r0 *deliveryv1.GetOrderCourierResponse
+	var r0 *deliveryv1.GetOrderDeliveryResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.GetOrderCourierRequest) (*deliveryv1.GetOrderCourierResponse, error)); ok {
-		return returnFunc(context1, getOrderCourierRequest)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.GetOrderDeliveryRequest) (*deliveryv1.GetOrderDeliveryResponse, error)); ok {
+		return returnFunc(context1, getOrderDeliveryRequest)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.GetOrderCourierRequest) *deliveryv1.GetOrderCourierResponse); ok {
-		r0 = returnFunc(context1, getOrderCourierRequest)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.GetOrderDeliveryRequest) *deliveryv1.GetOrderDeliveryResponse); ok {
+		r0 = returnFunc(context1, getOrderDeliveryRequest)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*deliveryv1.GetOrderCourierResponse)
+			r0 = ret.Get(0).(*deliveryv1.GetOrderDeliveryResponse)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *deliveryv1.GetOrderCourierRequest) error); ok {
-		r1 = returnFunc(context1, getOrderCourierRequest)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *deliveryv1.GetOrderDeliveryRequest) error); ok {
+		r1 = returnFunc(context1, getOrderDeliveryRequest)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockDeliveryServiceServer_GetOrderCourier_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetOrderCourier'
-type MockDeliveryServiceServer_GetOrderCourier_Call struct {
+// MockDeliveryServiceServer_GetOrderDelivery_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetOrderDelivery'
+type MockDeliveryServiceServer_GetOrderDelivery_Call struct {
 	*mock.Call
 }
 
-// GetOrderCourier is a helper method to define mock.On call
+// GetOrderDelivery is a helper method to define mock.On call
 //   - context1 context.Context
-//   - getOrderCourierRequest *deliveryv1.GetOrderCourierRequest
-func (_e *MockDeliveryServiceServer_Expecter) GetOrderCourier(context1 any, getOrderCourierRequest any) *MockDeliveryServiceServer_GetOrderCourier_Call {
-	return &MockDeliveryServiceServer_GetOrderCourier_Call{Call: _e.mock.On("GetOrderCourier", context1, getOrderCourierRequest)}
+//   - getOrderDeliveryRequest *deliveryv1.GetOrderDeliveryRequest
+func (_e *MockDeliveryServiceServer_Expecter) GetOrderDelivery(context1 any, getOrderDeliveryRequest any) *MockDeliveryServiceServer_GetOrderDelivery_Call {
+	return &MockDeliveryServiceServer_GetOrderDelivery_Call{Call: _e.mock.On("GetOrderDelivery", context1, getOrderDeliveryRequest)}
 }
 
-func (_c *MockDeliveryServiceServer_GetOrderCourier_Call) Run(run func(context1 context.Context, getOrderCourierRequest *deliveryv1.GetOrderCourierRequest)) *MockDeliveryServiceServer_GetOrderCourier_Call {
+func (_c *MockDeliveryServiceServer_GetOrderDelivery_Call) Run(run func(context1 context.Context, getOrderDeliveryRequest *deliveryv1.GetOrderDeliveryRequest)) *MockDeliveryServiceServer_GetOrderDelivery_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *deliveryv1.GetOrderCourierRequest
+		var arg1 *deliveryv1.GetOrderDeliveryRequest
 		if args[1] != nil {
-			arg1 = args[1].(*deliveryv1.GetOrderCourierRequest)
+			arg1 = args[1].(*deliveryv1.GetOrderDeliveryRequest)
 		}
 		run(
 			arg0,
@@ -581,12 +581,12 @@ func (_c *MockDeliveryServiceServer_GetOrderCourier_Call) Run(run func(context1 
 	return _c
 }
 
-func (_c *MockDeliveryServiceServer_GetOrderCourier_Call) Return(getOrderCourierResponse *deliveryv1.GetOrderCourierResponse, err error) *MockDeliveryServiceServer_GetOrderCourier_Call {
-	_c.Call.Return(getOrderCourierResponse, err)
+func (_c *MockDeliveryServiceServer_GetOrderDelivery_Call) Return(getOrderDeliveryResponse *deliveryv1.GetOrderDeliveryResponse, err error) *MockDeliveryServiceServer_GetOrderDelivery_Call {
+	_c.Call.Return(getOrderDeliveryResponse, err)
 	return _c
 }
 
-func (_c *MockDeliveryServiceServer_GetOrderCourier_Call) RunAndReturn(run func(context1 context.Context, getOrderCourierRequest *deliveryv1.GetOrderCourierRequest) (*deliveryv1.GetOrderCourierResponse, error)) *MockDeliveryServiceServer_GetOrderCourier_Call {
+func (_c *MockDeliveryServiceServer_GetOrderDelivery_Call) RunAndReturn(run func(context1 context.Context, getOrderDeliveryRequest *deliveryv1.GetOrderDeliveryRequest) (*deliveryv1.GetOrderDeliveryResponse, error)) *MockDeliveryServiceServer_GetOrderDelivery_Call {
 	_c.Call.Return(run)
 	return _c
 }

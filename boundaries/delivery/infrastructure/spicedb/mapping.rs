@@ -114,10 +114,7 @@ const fn coordinates_delivery(permission: DeliveryPermission) -> bool {
 
 /// Permissions that follow `order#view`.
 fn views_order(permission: DeliveryPermission) -> bool {
-    matches!(
-        permission,
-        DeliveryPermission::ViewOrderCourier | DeliveryPermission::ViewOrderTracking
-    )
+    permission == DeliveryPermission::ViewOrderDelivery
 }
 
 /// Check слайса `delivery`; `None` — сочетание не отображено и отклоняется.
@@ -167,7 +164,7 @@ mod tests {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
-    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 14] = [
+    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 13] = [
         DeliveryPermission::CreateDelivery,
         DeliveryPermission::FindCourier,
         DeliveryPermission::OfferDelivery,
@@ -180,8 +177,7 @@ mod tests {
         DeliveryPermission::ListAvailableDeliveryOffers,
         DeliveryPermission::CancelDelivery,
         DeliveryPermission::ReplanDelivery,
-        DeliveryPermission::ViewOrderCourier,
-        DeliveryPermission::ViewOrderTracking,
+        DeliveryPermission::ViewOrderDelivery,
     ];
 
     fn worker() -> Subject {
@@ -324,14 +320,11 @@ mod tests {
         }
     }
 
-    /// FR-626, FR-660: the courier and the tracking of an order follow
+    /// FR-626, FR-660: the delivery of an order — courier and tracking — follows
     /// `order#view`; other resources are not mapped.
     #[test]
     fn order_courier_and_tracking_check_order_view() {
-        for permission in [
-            DeliveryPermission::ViewOrderCourier,
-            DeliveryPermission::ViewOrderTracking,
-        ] {
+        for permission in [DeliveryPermission::ViewOrderDelivery] {
             assert_eq!(
                 rendered(delivery_check(
                     &user(),

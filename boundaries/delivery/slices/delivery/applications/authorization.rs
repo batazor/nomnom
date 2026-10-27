@@ -17,12 +17,9 @@ pub enum DeliveryPermission {
     ListAvailableDeliveryOffers,
     CancelDelivery,
     ReplanDelivery,
-    /// The name of the courier of an order, for whoever may view the order
-    /// (FR-626).
-    ViewOrderCourier,
-    /// The live tracking of an order and its Tracking Channel, for whoever
-    /// may view the order (FR-660).
-    ViewOrderTracking,
+    /// The delivery of an order — its courier (FR-626) and live tracking
+    /// with the Tracking Channel (FR-660) — for whoever may view the order.
+    ViewOrderDelivery,
 }
 
 /// Resource of a delivery permission check.

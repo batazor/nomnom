@@ -674,19 +674,22 @@ fn loads_tracking_and_valkey_from_toml() {
     assert_eq!(config.valkey.url, "redis://delivery:p@valkey:6379");
 }
 
-/// AC-871, FR-666: no defaults; an invalid grid, persist interval or
-/// Valkey URL fails startup.
+/// FR-665, FR-666: no defaults; a missing or malformed value, a zero persist
+/// interval or a bad Valkey URL fails startup. The grid rules belong to
+/// VirtualCity (AC-871, di::server).
 #[test]
 fn missing_or_invalid_tracking_settings_fail_startup() {
     for (name, contents) in [
         ("tracking-missing", "[tracking]\n"),
         (
-            "tracking-one-block",
-            "[tracking]\ncity_origin_latitude = 52.5\ncity_origin_longitude = 13.4\ncity_blocks = 1\nblock_meters = 150.0\npersist_interval = \"15s\"\n",
-        ),
-        (
-            "tracking-zero-block",
-            "[tracking]\ncity_origin_latitude = 52.5\ncity_origin_longitude = 13.4\ncity_blocks = 12\nblock_meters = 0.0\npersist_interval = \"15s\"\n",
+            "tracking-malformed-blocks",
+            "[tracking]
+city_origin_latitude = 52.5
+city_origin_longitude = 13.4
+city_blocks = \"many\"
+block_meters = 150.0
+persist_interval = \"15s\"
+",
         ),
         (
             "tracking-zero-persist",

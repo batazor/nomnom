@@ -500,6 +500,30 @@ mod tests {
         Subject::User("operator-1".to_owned())
     }
 
+    fn tracking_config(city_blocks: u32, block_meters: f64, latitude: f64) -> TrackingConfig {
+        TrackingConfig {
+            city_origin_latitude: latitude,
+            city_origin_longitude: 13.385,
+            city_blocks,
+            block_meters,
+            persist_interval: Duration::from_secs(15),
+        }
+    }
+
+    /// AC-871, FR-665: the grid rules live only in VirtualCity; an invalid
+    /// grid stops the process before ports open.
+    #[test]
+    fn invalid_virtual_city_fails_startup() {
+        assert!(virtual_city(&tracking_config(12, 150.0, 52.515)).is_ok());
+        for (name, config) in [
+            ("one block", tracking_config(1, 150.0, 52.515)),
+            ("zero block", tracking_config(12, 0.0, 52.515)),
+            ("beyond the pole", tracking_config(12, 150.0, 89.999)),
+        ] {
+            assert!(virtual_city(&config).is_err(), "{name}");
+        }
+    }
+
     /// Граф use cases с адаптерами процесса над тестовым PostgreSQL; новый
     /// граф над тем же хранилищем — перезапуск процесса.
     fn process(store: &Arc<TestStore>) -> ServiceModule {

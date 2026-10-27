@@ -17,7 +17,7 @@ Virtual City — value object домена `delivery` (слайс `delivery`): �
 | `TRACKING__BLOCK_METERS` | `150` | сторона квартала |
 | `TRACKING__PERSIST_INTERVAL` | `15s` | минимальный интервал записи позиции в PostgreSQL |
 
-Все переменные обязательны, значений по умолчанию нет. Пустое значение, нечисло, `blocks < 2`, неположительный размер или рамка за пределами диапазонов широты и долготы завершают startup. В kind рамка накрывает позиции курьеров из `ops/kind/demo/files/seed.json`. Virtual City одна на ячейку: Market координат не имеет (`controlplane` отдаёт только `id`, `name`, `currency`), а заводить их ради демо этот change не будет.
+Все переменные обязательны, значений по умолчанию нет. Пустое значение или нечисло завершают загрузку конфига; `blocks < 2`, неположительный размер или рамка за пределами диапазонов широты и долготы — сборку процесса (`VirtualCity::new`, правила сетки живут только там). Оба случая — до открытия портов. В kind рамка накрывает позиции курьеров из `ops/kind/demo/files/seed.json`. Virtual City одна на ячейку: Market координат не имеет (`controlplane` отдаёт только `id`, `name`, `currency`), а заводить их ради демо этот change не будет.
 
 ## Виртуальные точки доставки
 
@@ -34,7 +34,7 @@ Create Delivery выбирает два разных случайных пере
 - при 1 Hz запрос за данными с проверкой прав означал бы один gRPC-вызов `delivery` и один check SpiceDB на каждую точку и каждого подписчика;
 - проверить права при старте подписки без собственной сборки Router нельзя (ADR 36, `SubscriptionOnStart`).
 
-Поэтому права проверяются один раз, когда выдаётся канал: `GetOrderTracking` требует `order#view` так же, как `GetOrderCourier` (FR-626). Подписаться без канала нельзя, а угадать 128 бит нереально. После `Delivered`, `Failed` или `Cancelled` Update Courier Location в канал больше не публикует, поэтому утёкший токен ничего не даёт.
+Поэтому права проверяются один раз, когда выдаётся канал: `GetOrderDelivery` требует `order#view`. Подписаться без канала нельзя, а угадать 128 бит нереально. После `Delivered`, `Failed` или `Cancelled` Update Courier Location в канал больше не публикует, поэтому утёкший токен ничего не даёт.
 
 ## Update Courier Location
 
@@ -57,13 +57,18 @@ Handler после проверки прав и координат:
 
 Valkey — порт `CourierPositionPublisher` слайса `courier`, адаптер в `infrastructure/tracks.rs` (`PUBLISH`). `VALKEY__URL` обязателен: пусто — ошибка startup. Это pub/sub, а не кеш ADR 43: ничего не хранится, TTL нет.
 
-## Get Order Tracking
+## Get Order Delivery
 
-Query слайса `delivery`: `GetOrderTracking(order_id)` → `{ channel, city, pickup, dropoff, courier_position }`, только для доставки в `assigned` или `picked_up` с каналом. Иначе ответ пустой. `courier_position` — сохранённая позиция курьера с `recorded_at` (может быть старше на `TRACKING__PERSIST_INTERVAL`). `city` — параметры Virtual City (origin, blocks, block_meters), чтобы UI рисовал ту же сетку, что видит Simulator, без общих констант.
+Query слайса `delivery` заменяет прежний `GetOrderCourier` (FR-626): BFF спрашивает о доставке заказа один раз, с одной проверкой `order#view` и одним SQL-запросом. `GetOrderDelivery(order_id)` → `{ courier, tracking }`:
+
+- `courier` (`courier_id`, `name`) — пока доставка в `assigned`, `picked_up` или `delivered`;
+- `tracking` (`tracking_channel`, `city`, `pickup`, `dropoff`, `courier_position`) — пока доставка в `assigned` или `picked_up` с каналом.
+
+Незаданная часть — нет курьера или трекинга; заказ без доставки — пустой ответ. Удаление `GetOrderCourier` — несовместимое изменение контракта, допустимое до публикации модуля в BSR (ADR 7): единственный потребитель — BFF. `courier_position` — сохранённая позиция курьера с `recorded_at` (может быть старше на `TRACKING__PERSIST_INTERVAL`). `city` — параметры Virtual City (origin, blocks, block_meters), чтобы UI рисовал ту же сетку, что видит Simulator, без общих констант.
 
 ## BFF
 
-Plugin резолвит `Order.tracking: OrderTracking` вызовом `GetOrderTracking` от имени покупателя (ADR 32). Поле `null` без активной доставки.
+Plugin резолвит `Order.courier` и `Order.tracking: OrderTracking` одним вызовом `GetOrderDelivery` от имени покупателя (ADR 32), только у заказа с milestone `COURIER_ASSIGNED`. `tracking` отдаётся только незавершённому заказу, без активной доставки — `null`.
 
 Events subgraph:
 
@@ -88,7 +93,7 @@ courierMoved(channel: ID!): CourierPosition!
 - **Pickup.** Маршрут от `pickup_point` до `dropoff_point` до `expected_delivered_at`.
 - **Тик.** Каждые `SIMULATOR__TRACK_INTERVAL` для каждой движущейся доставки Simulator вычисляет точку на маршруте по доле прошедшего времени и вызывает Update Courier Location от имени курьера (`Subject::User(courier_id)`). Когда время вышло, курьер стоит в конечной точке до действия Pickup или вручения.
 
-Тик позиций идёт отдельно от `SIMULATOR__INTERVAL` (5s в kind): движение должно быть плавнее, чем шаги жизненного цикла. Один цикл worker шагает каждые `SIMULATOR__TRACK_INTERVAL` и раз в `SIMULATOR__INTERVAL` сначала делает проход расписания; маршрут шага строится на проходе, который видит доставку в этом шаге, поэтому курьер трогается в пределах `SIMULATOR__INTERVAL` после Accept или Pickup. `SIMULATOR__TRACK_INTERVAL` обязателен, ноль или значение больше `SIMULATOR__INTERVAL` завершают startup (kind: 1s). Маршруты живут в памяти процесса, как и остальное расписание: после рестарта или выключения маршрут строится заново от сохранённой позиции курьера. Ошибка Update Courier Location пишется в лог, движение продолжается.
+Тик позиций идёт отдельно от `SIMULATOR__INTERVAL` (5s в kind): движение должно быть плавнее, чем шаги жизненного цикла. Один цикл worker шагает каждые `SIMULATOR__TRACK_INTERVAL` и раз в `SIMULATOR__INTERVAL` сначала делает проход расписания; маршрут шага строится на проходе, который видит доставку в этом шаге, поэтому курьер трогается в пределах `SIMULATOR__INTERVAL` после Accept или Pickup. `SIMULATOR__TRACK_INTERVAL` обязателен, ноль или значение больше `SIMULATOR__INTERVAL` завершают startup (kind: 1s). Маршруты держит `Movements` (`di/simulator_worker/movement.rs`): расписание сообщает ему только моменты прибытия. Маршруты живут в памяти процесса, как и остальное расписание: после рестарта или выключения маршрут строится заново от сохранённой позиции курьера. Ошибка Update Courier Location пишется в лог, движение продолжается.
 
 Simulator читает точки доставки из своей выборки работы (`slices/simulator`): выборка `assigned`/`picked_up` получает `pickup_point` и `dropoff_point`. Доставки без точек Simulator не двигает.
 

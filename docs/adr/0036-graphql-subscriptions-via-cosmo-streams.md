@@ -83,7 +83,7 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
   `kafka.brokers`.
 - **Высокочастотные данные — в событии, права — каналом-капабилити.** Позиции курьера
   (change `add-live-courier-tracking`, FR-661, FR-668) идут раз в секунду: notification + refetch
-  означал бы `GetOrderTracking` и check SpiceDB на каждую точку каждого подписчика. Поэтому
+  означал бы `GetOrderDelivery` и check SpiceDB на каждую точку каждого подписчика. Поэтому
   `courierMoved(channel)` читает канал Valkey `delivery.tracks.<channel>` провайдером `redis`
   Cosmo Streams (не Kafka: точка не Integration Event и не идёт через Outbox), а событие несёт
   все поля `CourierPosition`. Event-driven subgraph может объявлять только поля ключа, поэтому

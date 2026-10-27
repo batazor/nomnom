@@ -1,11 +1,109 @@
 //! Движение курьера Simulator по Virtual City (FR-662): маршрут — случайный
 //! кратчайший путь по улицам, позиция — точка маршрута по доле прошедшего
-//! времени до запланированного момента прибытия.
+//! времени до запланированного момента прибытия. [`Movements`] держит
+//! маршруты шагов доставок; расписание действий им не владеет и только
+//! сообщает моменты прибытия.
 
-use crate::slices::courier::domains::courier::{Location, LocationError};
-use crate::slices::delivery::domains::delivery::{Intersection, VirtualCity};
+use std::collections::{HashMap, HashSet};
+
+use crate::slices::courier::domains::courier::{CourierId, Location, LocationError};
+use crate::slices::delivery::domains::delivery::{DeliveryId, Intersection, VirtualCity};
+use crate::slices::simulator::applications::work::{ActiveDeliveryWork, DeliveryStep};
 
 use super::Randomness;
+
+/// Шаг доставки, по которому едет курьер.
+type Leg = (DeliveryId, DeliveryStep);
+
+/// Курьер на маршруте шага доставки.
+#[derive(Clone, Debug)]
+struct Moving {
+    courier: CourierId,
+    movement: Movement,
+}
+
+/// Маршруты курьеров по шагам доставок. Шаг, которого больше нет в работе
+/// Simulator, забывается; маршруты живут в памяти процесса.
+pub struct Movements {
+    city: VirtualCity,
+    moving: HashMap<Leg, Moving>,
+}
+
+impl Movements {
+    #[must_use]
+    pub fn new(city: VirtualCity) -> Self {
+        Self {
+            city,
+            moving: HashMap::new(),
+        }
+    }
+
+    /// Выключенный Simulator никого не ведёт.
+    pub fn clear(&mut self) {
+        self.moving.clear();
+    }
+
+    /// Забывает маршруты исчезнувших шагов и строит маршруты новых шагов
+    /// доставок с точками: в `Assigned` — от перекрёстка у сохранённой
+    /// позиции курьера (неизвестна — стоит у pickup) к pickup, в `PickedUp` —
+    /// от pickup к dropoff. Прибытие — `arrive_at` шага, выход — `now`.
+    pub fn follow(
+        &mut self,
+        deliveries: &[ActiveDeliveryWork],
+        arrive_at: impl Fn(&ActiveDeliveryWork) -> i64,
+        now: i64,
+        random: &mut dyn Randomness,
+    ) {
+        let legs: HashSet<Leg> = deliveries
+            .iter()
+            .map(|delivery| (delivery.delivery_id.clone(), delivery.step))
+            .collect();
+        self.moving.retain(|leg, _| legs.contains(leg));
+        for delivery in deliveries {
+            let leg = (delivery.delivery_id.clone(), delivery.step);
+            if self.moving.contains_key(&leg) {
+                continue;
+            }
+            let Some(points) = delivery.points else {
+                continue;
+            };
+            let (from, to) = match delivery.step {
+                DeliveryStep::Pickup => (
+                    delivery
+                        .courier_location
+                        .map_or(points.pickup, |location| self.city.nearest(&location)),
+                    points.pickup,
+                ),
+                DeliveryStep::Handover => (points.pickup, points.dropoff),
+            };
+            self.moving.insert(
+                leg,
+                Moving {
+                    courier: delivery.courier_id.clone(),
+                    movement: Movement {
+                        route: route(from, to, random),
+                        start_at_epoch_seconds: now,
+                        arrive_at_epoch_seconds: arrive_at(delivery),
+                    },
+                },
+            );
+        }
+    }
+
+    /// Позиции ведомых курьеров в момент `now` (FR-667).
+    #[must_use]
+    pub fn positions(&self, now: i64) -> Vec<(CourierId, Result<Location, LocationError>)> {
+        self.moving
+            .values()
+            .map(|moving| {
+                (
+                    moving.courier.clone(),
+                    moving.movement.position(&self.city, now),
+                )
+            })
+            .collect()
+    }
+}
 
 /// Случайный кратчайший путь от `from` до `to`: каждый шаг — квартал по
 /// горизонтали или вертикали к цели. Горизонтальный шаг выбирается с
@@ -107,6 +205,83 @@ mod tests {
 
     fn city() -> VirtualCity {
         VirtualCity::new(52.515, 13.385, 12, 150.0).expect("city")
+    }
+
+    fn work(step: DeliveryStep, points: bool) -> ActiveDeliveryWork {
+        ActiveDeliveryWork {
+            delivery_id: DeliveryId::new("d-1"),
+            courier_id: CourierId::new("c-1"),
+            step,
+            points: points.then_some(
+                crate::slices::simulator::applications::work::DeliveryPoints {
+                    pickup: Intersection { x: 4, y: 0 },
+                    dropoff: Intersection { x: 4, y: 6 },
+                },
+            ),
+            courier_location: Some(city().location(Intersection { x: 0, y: 0 }).expect("start")),
+        }
+    }
+
+    /// FR-662: a leg starts once, the next step starts at pickup, a gone
+    /// delivery and one without points do not move.
+    #[test]
+    fn movements_follow_the_legs_of_the_work() {
+        let city = city();
+        let mut movements = Movements::new(city);
+
+        movements.follow(
+            &[work(DeliveryStep::Pickup, true)],
+            |_| 1_120,
+            1_000,
+            &mut First,
+        );
+        assert_eq!(
+            movements.positions(1_060),
+            vec![(
+                CourierId::new("c-1"),
+                city.location(Intersection { x: 2, y: 0 })
+            )]
+        );
+
+        // Seen again: the route stays, it does not restart from now.
+        movements.follow(
+            &[work(DeliveryStep::Pickup, true)],
+            |_| 9_999,
+            1_060,
+            &mut First,
+        );
+        assert_eq!(
+            movements.positions(1_120),
+            vec![(
+                CourierId::new("c-1"),
+                city.location(Intersection { x: 4, y: 0 })
+            )]
+        );
+
+        movements.follow(
+            &[work(DeliveryStep::Handover, true)],
+            |_| 1_180,
+            1_120,
+            &mut First,
+        );
+        assert_eq!(
+            movements.positions(1_120),
+            vec![(
+                CourierId::new("c-1"),
+                city.location(Intersection { x: 4, y: 0 })
+            )]
+        );
+
+        movements.follow(&[], |_| 0, 1_130, &mut First);
+        assert!(movements.positions(1_130).is_empty());
+
+        movements.follow(
+            &[work(DeliveryStep::Pickup, false)],
+            |_| 1_200,
+            1_140,
+            &mut First,
+        );
+        assert!(movements.positions(1_150).is_empty());
     }
 
     /// AC-882

@@ -33,7 +33,7 @@ packages:
     interfaces:
       CancellationRequester: {}
       Catalog: {}
-      Couriers: {}
+      Deliveries: {}
       OrderHistory: {}
       OrderReader: {}
   github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications:

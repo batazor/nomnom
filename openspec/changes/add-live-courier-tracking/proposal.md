@@ -39,11 +39,11 @@
 ## Impact
 
 - **`boundaries/delivery`:**
-  - слайс `delivery`: виртуальные точки и Tracking Channel в `Delivery`, миграция, query Get Order Tracking (`order#view`);
+  - слайс `delivery`: виртуальные точки и Tracking Channel в `Delivery`, миграция, query Get Order Delivery (`order#view`);
   - слайс `courier`: публикация точки и прореживание записи в Update Courier Location;
   - слайс `simulator` и `di::SimulatorWorker`: маршрут по сетке и тики позиций;
   - Valkey-адаптер публикации, конфиг `TRACKING__*`, `VALKEY__URL`, `SIMULATOR__TRACK_INTERVAL`;
-  - proto `service.proto` (`GetOrderTracking`).
+  - proto `service.proto` (`GetOrderDelivery`).
 - **`boundaries/bff`:** клиент `delivery`, `Order.tracking`, events subgraph `courierMoved` с провайдером Redis, `config.yaml` и `config.production.yaml`, composed client schema.
 - **`boundaries/ui`:** карта на экране заказа, подписка, i18n, моки (`mocks/subscriptions.ts`), тесты.
 - **ops:** Valkey `delivery` в `nomnom-data` с ACL-пользователями `delivery` (publish) и `bff` (subscribe), Secrets, NetworkPolicy egress `delivery` и `bff`, values kind, Helm `valkey.urlSecret` (`delivery`) и `tracks.redisUrlSecret` (`bff`).

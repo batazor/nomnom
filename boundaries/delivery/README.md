@@ -62,8 +62,7 @@ Rust.
 | Use Case | Actor | Intent | Result | Ключевые зависимости и взаимодействия |
 | --- | --- | --- | --- | --- |
 | **Get Courier Pool** | Оператор или диспетчер Courier Pool | Увидеть линию и загрузку курьеров | Размер пула, на линии, занято, Delivery в `Waiting` и невыбывшие курьеры с именем, pending offer и активной доставкой | Query model `delivery`; `platform#manage_couriers` ([FR-621](../../openspec/changes/add-cook-and-courier-pools/)) |
-| **Get Order Courier** | Тот, кто видит заказ (покупатель) | Узнать, кто везёт заказ | Имя курьера доставки в `Assigned`, `PickedUp`, `Delivered` либо пусто | `order#view`; query model `delivery` ([FR-626](../../openspec/changes/add-cook-and-courier-pools/)) |
-| **Get Order Tracking** | Тот, кто видит заказ (покупатель) | Следить за курьером | Tracking Channel, Virtual City, точки pickup и dropoff и сохранённая позиция курьера доставки в `Assigned`/`PickedUp` либо пусто | `order#view`; query model `delivery` ([FR-660](../../openspec/changes/add-live-courier-tracking/)) |
+| **Get Order Delivery** | Тот, кто видит заказ (покупатель) | Узнать, кто везёт заказ, и следить за ним | Имя курьера доставки в `Assigned`, `PickedUp`, `Delivered` и, пока доставка в `Assigned`/`PickedUp` с каналом, Tracking Channel, Virtual City, точки pickup и dropoff и сохранённая позиция курьера; без доставки — пусто | Одна проверка `order#view`, один запрос query model `delivery` ([FR-626](../../openspec/changes/add-cook-and-courier-pools/), [FR-660](../../openspec/changes/add-live-courier-tracking/)) |
 | **Get Courier Current Delivery** | Курьер | Получить свою активную доставку | Возвращено текущее назначение и разрешённое представление `Delivery` либо отсутствие активной доставки | Query model `delivery`; проверка принадлежности курьеру |
 | **List Available Delivery Offers** | Курьер | Получить актуальные предложения, доступные этому курьеру | Возвращён список непротухших `Delivery Offer` без изменения состояния | Query model `delivery`; проверка адресата offer |
 | **Get Simulator** | Оператор платформы | Узнать, включён ли демо Simulator | `enabled`; без записи в хранилище — `false` | `platform#operate_simulator`, иначе `PERMISSION_DENIED` (FR-604) |
@@ -92,7 +91,7 @@ Change [`add-live-courier-tracking`](../../openspec/changes/add-live-courier-tra
 
 - **Точки и канал.** Create Delivery выбирает два разных случайных перекрёстка (pickup, dropoff) и Tracking Channel — 128 случайных бит в 32 hex-символах (`RandomSource`, в процессе — ОС через `getrandom`) — и хранит их в `deliveries` (`pickup_x`, `pickup_y`, `dropoff_x`, `dropoff_y`, `tracking_channel`, миграция `0008_delivery_tracking.sql`); повтор возвращает сохранённые. Доставки до миграции живут без точек и канала.
 - **Поток позиций.** Update Courier Location пишет позицию в `courier_positions` условным upsert, только если сохранённая старше `TRACKING__PERSIST_INTERVAL`, затем читает канал активной доставки курьера (порт `ActiveTrackingChannel`: слайс `courier` не знает `Delivery`, читает адаптер `Store`) и публикует в Valkey канал `delivery.tracks.<channel>` JSON `{"__typename":"CourierPosition","channel",…,"recordedAt"}` (`infrastructure/tracks.rs`). Ни Integration Event, ни Outbox на точку нет. Ошибка публикации — `UNAVAILABLE`.
-- **Чтение.** Get Order Tracking (`order#view`, permission `ViewOrderTracking`) отдаёт канал, Virtual City, точки и сохранённую позицию; Router подписывает клиентов на канал сам (ADR 36).
+- **Чтение.** Get Order Delivery (`order#view`, permission `ViewOrderDelivery`, одна проверка и один SQL) отдаёт имя курьера и трекинг: канал, Virtual City, точки и сохранённую позицию; Router подписывает клиентов на канал сам (ADR 36).
 
 | Переменная | Ключ TOML | Значение |
 | --- | --- | --- |
@@ -132,8 +131,7 @@ RPC сервиса `DeliveryService`:
 | `CancelDelivery` | Cancel Delivery (`order_id`, `reason`) | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` (`already_picked_up`, `already_closed`) — бизнес-результат, не gRPC-ошибка |
 | `RegisterCourier` | Register Courier (`courier_id` = user id курьера, `name`, `market_id`) | `courier_id`, `status`, `name`; повтор — `ALREADY_EXISTS`; пустое или длиннее 64 символов имя, пустой или не slug `market_id` — `INVALID_ARGUMENT` |
 | `RetireCourier` | Retire Courier (`courier_id`) | `changed = false` при повторе; курьер на линии — `FAILED_PRECONDITION` |
-| `GetOrderCourier` | Get Order Courier (`order_id`) | `courier_id`, `name`; пусто без курьера; требует `order:<id>#view` |
-| `GetOrderTracking` | Get Order Tracking (`order_id`) | `tracking_channel`, `city`, `pickup`, `dropoff`, `courier_position`; пусто без активной доставки с каналом; требует `order:<id>#view` |
+| `GetOrderDelivery` | Get Order Delivery (`order_id`) | `courier` (`courier_id`, `name`) и `tracking` (`tracking_channel`, `city`, `pickup`, `dropoff`, `courier_position`); незаданная часть — нет курьера или трекинга; требует `order:<id>#view` |
 | `GetCourierPool` | Get Courier Pool (`market_id`) | Pool Load и `couriers[]` одного Market: `size`, `on_line`, `busy`, `waiting` (ожидающие доставки этого Market), `couriers[]` по имени (`pending_offer_id`, `active_delivery_id` пусты без них); пустой или не slug `market_id` — `INVALID_ARGUMENT` |
 | `UpdateCourierLocation` | Update Courier Location (`courier_id`, `latitude`, `longitude`) | позиция и `recorded_at_epoch_seconds`; координаты вне диапазона — `INVALID_ARGUMENT` |
 | `SetCourierAvailability` | Set Courier Availability (`courier_id`, `availability`) | `status`, `changed = false`, если доступность уже такая; `COURIER_AVAILABILITY_UNSPECIFIED` — `INVALID_ARGUMENT` |

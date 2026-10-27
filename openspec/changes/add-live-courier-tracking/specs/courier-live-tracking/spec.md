@@ -42,29 +42,29 @@ Create Delivery SHALL выбирать два разных случайных п
 - **WHEN** Create Delivery повторяется с тем же `order_id`
 - **THEN** точки и Tracking Channel не меняются
 
-### Requirement: Get Order Tracking выдаёт канал только тому, кто видит заказ
+### Requirement: Get Order Delivery выдаёт курьера и канал только тому, кто видит заказ
 **ID:** FR-660
 
-`delivery` SHALL публиковать query Get Order Tracking по `order_id` с permission `order#view`. Для доставки в `assigned` или `picked_up` с Tracking Channel ответ SHALL содержать канал, параметры Virtual City, точки pickup и dropoff и сохранённую позицию курьера с моментом фиксации. В остальных случаях ответ MUST быть пустым. Без `order#view` MUST возвращаться `PERMISSION_DENIED` без канала.
+`delivery` SHALL публиковать query Get Order Delivery по `order_id` с одной проверкой `order#view`: курьер доставки в `assigned`, `picked_up` или `delivered` и трекинг доставки в `assigned` или `picked_up` с Tracking Channel — канал, Virtual City, точки pickup и dropoff и сохранённая позиция курьера. Отсутствующая часть MUST быть незаданной. Без `order#view` MUST возвращаться `PERMISSION_DENIED` без канала.
 
 #### Scenario: Курьер едет
 **ID:** AC-874
 
 - **GIVEN** доставка заказа в `assigned`
-- **WHEN** покупатель запрашивает Get Order Tracking
+- **WHEN** покупатель запрашивает Get Order Delivery
 - **THEN** ответ содержит Tracking Channel, Virtual City, pickup, dropoff и позицию курьера
 
 #### Scenario: Чужой заказ
 **ID:** AC-875
 
-- **WHEN** пользователь без `order#view` запрашивает Get Order Tracking
+- **WHEN** пользователь без `order#view` запрашивает Get Order Delivery
 - **THEN** возвращается `PERMISSION_DENIED` без канала
 
 #### Scenario: Доставка завершена
 **ID:** AC-876
 
 - **WHEN** доставка в `delivered`, `failed` или `cancelled`
-- **THEN** ответ Get Order Tracking пустой
+- **THEN** трекинга в ответе Get Order Delivery нет, а курьер доставленного заказа остаётся
 
 ### Requirement: Позиции курьера идут через Valkey pub/sub без Kafka
 **ID:** FR-661

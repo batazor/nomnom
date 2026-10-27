@@ -150,9 +150,14 @@ type kitchenActionHandler interface {
 }
 
 // kitchen holds the scenarios of the kitchen screen.
+type startNextPreparationHandler interface {
+	Handle(ctx context.Context, request kitchenapp.StartNextRequest) (kitchenapp.ActionResult, error)
+}
+
 type kitchen struct {
 	getKitchen     getKitchenHandler
 	applyAction    kitchenActionHandler
+	startNext      startNextPreparationHandler
 	changeCookPool cookPoolHandler
 }
 
@@ -257,7 +262,7 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 func newOrderTracking(orders, restaurants, delivery grpc.ClientConnInterface) *orderTracking {
 	ordersAPI := trackinginfra.NewOrders(orders)
 	catalog := trackinginfra.NewCatalog(restaurants)
-	getOrder := trackingapp.NewGetOrder(ordersAPI, catalog, trackinginfra.NewCouriers(delivery))
+	getOrder := trackingapp.NewGetOrder(ordersAPI, catalog, trackinginfra.NewDeliveries(delivery))
 	return &orderTracking{
 		getOrder:            getOrder,
 		requestCancellation: trackingapp.NewRequestCancellation(ordersAPI),
@@ -271,6 +276,7 @@ func newKitchen(restaurants grpc.ClientConnInterface) *kitchen {
 	return &kitchen{
 		getKitchen:     kitchenapp.NewGetKitchen(restaurantsAPI, restaurantsAPI),
 		applyAction:    kitchenapp.NewApplyKitchenAction(restaurantsAPI, restaurantsAPI, restaurantsAPI),
+		startNext:      kitchenapp.NewStartNextPreparation(restaurantsAPI, restaurantsAPI, restaurantsAPI),
 		changeCookPool: kitchenapp.NewChangeCookPool(restaurantsAPI, restaurantsAPI),
 	}
 }

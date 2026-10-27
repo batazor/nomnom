@@ -35,11 +35,8 @@ use crate::slices::delivery::applications::get_courier_current_delivery::{
 use crate::slices::delivery::applications::get_courier_pool::{
     CourierPoolReadModel, PoolCourierView,
 };
-use crate::slices::delivery::applications::get_order_courier::{
-    OrderCourierReadModel, OrderCourierView,
-};
-use crate::slices::delivery::applications::get_order_tracking::{
-    OrderTrackingReadModel, OrderTrackingRecord,
+use crate::slices::delivery::applications::get_order_delivery::{
+    OrderDeliveryReadModel, OrderDeliveryRecord,
 };
 use crate::slices::delivery::applications::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
@@ -393,21 +390,12 @@ impl CourierPoolReadModel for TestStore {
     }
 }
 
-impl OrderCourierReadModel for TestStore {
-    fn courier_of_order(
+impl OrderDeliveryReadModel for TestStore {
+    fn delivery_of_order(
         &self,
         order_id: &OrderId,
-    ) -> Result<Option<OrderCourierView>, RepositoryError> {
-        self.available()?.courier_of_order(order_id)
-    }
-}
-
-impl OrderTrackingReadModel for TestStore {
-    fn tracking_of_order(
-        &self,
-        order_id: &OrderId,
-    ) -> Result<Option<OrderTrackingRecord>, RepositoryError> {
-        self.available()?.tracking_of_order(order_id)
+    ) -> Result<OrderDeliveryRecord, RepositoryError> {
+        self.available()?.delivery_of_order(order_id)
     }
 }
 

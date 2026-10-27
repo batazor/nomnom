@@ -239,14 +239,14 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `orders-v1` | остальные методы `OrdersService` (совпадение по сервису) | `commands` |
 | `restaurants-v1-reads` | `GetRestaurant`, `GetMenu`, `ListRestaurants`, `ListOwnedRestaurants` | `reads` |
 | `restaurants-v1-commands` | `ReceiveOrderRequest`, `CancelRestaurantOrder` | `commands` |
-| `restaurants-v1-management` | `OpenRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
-| `restaurants-v1-kitchen` | `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure` | `commands` |
+| `restaurants-v1-management` | `OpenRestaurant`, `UpdateRestaurant`, `CloseRestaurant`, `CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability` | `commands` |
+| `restaurants-v1-kitchen` | `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartNextPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure` | `commands` |
 | `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders`, `ListActiveRestaurantOrders`, `GetCookPool` | `reads` |
 | `restaurants-v1-cook-pool` | `HireCook`, `PutCookOnLine`, `TakeCookOffLine`, `RetireCook` | `commands` |
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
-| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderCourier` | `reads` |
+| `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderDelivery` | `reads` |
 | `delivery-v1-administration` | `RegisterCourier`, `RetireCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 | `controlplane-v1-reads` | `ListMarkets` | `reads` |

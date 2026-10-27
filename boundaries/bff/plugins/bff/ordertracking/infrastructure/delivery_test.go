@@ -17,95 +17,83 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
-// orderCouriers answers GetOrderCourier and records whether the call carried
-// the customer as a user assertion.
-type orderCouriers struct {
+// orderDeliveries answers GetOrderDelivery and records whether the call
+// carried the customer as a user assertion.
+type orderDeliveries struct {
 	deliveryv1.UnimplementedDeliveryServiceServer
-	response *deliveryv1.GetOrderCourierResponse
-	tracking *deliveryv1.GetOrderTrackingResponse
+	response *deliveryv1.GetOrderDeliveryResponse
 	err      error
 	asserted bool
 }
 
-func (s *orderCouriers) GetOrderTracking(ctx context.Context, _ *deliveryv1.GetOrderTrackingRequest) (*deliveryv1.GetOrderTrackingResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-	s.asserted = len(md.Get(identity.AssertionMetadata)) == 1
-	return s.tracking, s.err
-}
-
-func (s *orderCouriers) GetOrderCourier(ctx context.Context, _ *deliveryv1.GetOrderCourierRequest) (*deliveryv1.GetOrderCourierResponse, error) {
+func (s *orderDeliveries) GetOrderDelivery(ctx context.Context, _ *deliveryv1.GetOrderDeliveryRequest) (*deliveryv1.GetOrderDeliveryResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	s.asserted = len(md.Get(identity.AssertionMetadata)) == 1
 	return s.response, s.err
 }
 
-func couriersOver(t *testing.T, server *orderCouriers) *Couriers {
+func deliveriesOver(t *testing.T, server *orderDeliveries) *Deliveries {
 	t.Helper()
-	return NewCouriers(connect(t, "nomnom.delivery", func(s *grpc.Server) {
+	return NewDeliveries(connect(t, "nomnom.delivery", func(s *grpc.Server) {
 		deliveryv1.RegisterDeliveryServiceServer(s, server)
 	}))
 }
 
-// AC-795: the courier of the Order is read on behalf of the customer.
-func TestCourierOfTheOrderIsReadForTheCustomer(t *testing.T) {
-	server := &orderCouriers{response: &deliveryv1.GetOrderCourierResponse{CourierId: "courier-1", Name: "Тимур"}}
-
-	courier, err := couriersOver(t, server).CourierOf(customerContext(), "order-1")
-
-	require.NoError(t, err)
-	assert.Equal(t, &applications.Courier{Name: "Тимур"}, courier)
-	assert.True(t, server.asserted)
-
-	server.response = &deliveryv1.GetOrderCourierResponse{}
-	courier, err = couriersOver(t, server).CourierOf(customerContext(), "order-1")
-	require.NoError(t, err)
-	assert.Nil(t, courier, "an empty answer is no courier")
-
-	server.err = status.Error(codes.Unavailable, "down")
-	_, err = couriersOver(t, server).CourierOf(customerContext(), "order-1")
-	assert.Error(t, err)
+func point(latitude, longitude float64) *deliveryv1.GeoPoint {
+	return &deliveryv1.GeoPoint{Latitude: latitude, Longitude: longitude}
 }
 
-// AC-884, AC-886: the tracking is read on behalf of the customer; an empty
-// answer is no tracking, an incomplete one is an error.
-func TestTrackingOfTheOrderIsReadForTheCustomer(t *testing.T) {
-	point := func(latitude, longitude float64) *deliveryv1.GeoPoint {
-		return &deliveryv1.GeoPoint{Latitude: latitude, Longitude: longitude}
-	}
-	server := &orderCouriers{tracking: &deliveryv1.GetOrderTrackingResponse{
-		TrackingChannel: "cd",
-		City:            &deliveryv1.VirtualCity{Origin: point(52.515, 13.385), Blocks: 12, BlockMeters: 150},
-		Pickup:          point(52.52, 13.39),
-		Dropoff:         point(52.525, 13.40),
-		CourierPosition: &deliveryv1.CourierLocation{Latitude: 52.521, Longitude: 13.392, RecordedAtEpochSeconds: 1_793_100_000},
+// AC-795, AC-884: the courier and the tracking of the Order come in one call
+// on behalf of the customer.
+func TestDeliveryOfTheOrderIsReadForTheCustomer(t *testing.T) {
+	server := &orderDeliveries{response: &deliveryv1.GetOrderDeliveryResponse{
+		Courier: &deliveryv1.OrderCourier{CourierId: "courier-1", Name: "Тимур"},
+		Tracking: &deliveryv1.OrderTracking{
+			TrackingChannel: "cd",
+			City:            &deliveryv1.VirtualCity{Origin: point(52.515, 13.385), Blocks: 12, BlockMeters: 150},
+			Pickup:          point(52.52, 13.39),
+			Dropoff:         point(52.525, 13.40),
+			CourierPosition: &deliveryv1.CourierLocation{Latitude: 52.521, Longitude: 13.392, RecordedAtEpochSeconds: 1_793_100_000},
+		},
 	}}
 
-	tracking, err := couriersOver(t, server).TrackingOf(customerContext(), "order-1")
+	delivery, err := deliveriesOver(t, server).DeliveryOf(customerContext(), "order-1")
 
 	require.NoError(t, err)
 	assert.True(t, server.asserted)
-	assert.Equal(t, &applications.Tracking{
-		Channel: "cd",
-		City: applications.VirtualCity{
-			Origin:      applications.GeoPoint{Latitude: 52.515, Longitude: 13.385},
-			Blocks:      12,
-			BlockMeters: 150,
+	assert.Equal(t, applications.OrderDelivery{
+		Courier: &applications.Courier{Name: "Тимур"},
+		Tracking: &applications.Tracking{
+			Channel: "cd",
+			City: applications.VirtualCity{
+				Origin:      applications.GeoPoint{Latitude: 52.515, Longitude: 13.385},
+				Blocks:      12,
+				BlockMeters: 150,
+			},
+			Pickup:  applications.GeoPoint{Latitude: 52.52, Longitude: 13.39},
+			Dropoff: applications.GeoPoint{Latitude: 52.525, Longitude: 13.40},
+			CourierPosition: &applications.CourierPosition{
+				Channel:    "cd",
+				Point:      applications.GeoPoint{Latitude: 52.521, Longitude: 13.392},
+				RecordedAt: time.Unix(1_793_100_000, 0).UTC(),
+			},
 		},
-		Pickup:  applications.GeoPoint{Latitude: 52.52, Longitude: 13.39},
-		Dropoff: applications.GeoPoint{Latitude: 52.525, Longitude: 13.40},
-		CourierPosition: &applications.CourierPosition{
-			Channel:    "cd",
-			Point:      applications.GeoPoint{Latitude: 52.521, Longitude: 13.392},
-			RecordedAt: time.Unix(1_793_100_000, 0).UTC(),
-		},
-	}, tracking)
+	}, delivery)
+}
 
-	server.tracking = &deliveryv1.GetOrderTrackingResponse{}
-	tracking, err = couriersOver(t, server).TrackingOf(customerContext(), "order-1")
+// AC-886: unset parts are an Order without a courier or tracking; tracking
+// without the city is a broken contract; a failure is an error.
+func TestDeliveryOfTheOrderWithoutParts(t *testing.T) {
+	server := &orderDeliveries{response: &deliveryv1.GetOrderDeliveryResponse{}}
+	delivery, err := deliveriesOver(t, server).DeliveryOf(customerContext(), "order-1")
 	require.NoError(t, err)
-	assert.Nil(t, tracking, "an empty answer is no tracking")
+	assert.Equal(t, applications.OrderDelivery{}, delivery)
 
-	server.tracking = &deliveryv1.GetOrderTrackingResponse{TrackingChannel: "cd"}
-	_, err = couriersOver(t, server).TrackingOf(customerContext(), "order-1")
+	server.response = &deliveryv1.GetOrderDeliveryResponse{Tracking: &deliveryv1.OrderTracking{TrackingChannel: "cd"}}
+	_, err = deliveriesOver(t, server).DeliveryOf(customerContext(), "order-1")
 	assert.Error(t, err, "a channel without the city is a broken contract")
+
+	server.err = status.Error(codes.Unavailable, "down")
+	_, err = deliveriesOver(t, server).DeliveryOf(customerContext(), "order-1")
+	assert.Error(t, err)
 }

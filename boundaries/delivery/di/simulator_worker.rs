@@ -57,14 +57,14 @@ use crate::slices::delivery::applications::{
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureCode, DeliveryId, DeliveryOfferId, VirtualCity,
 };
-use crate::slices::simulator::applications::work::{ActiveDeliveryWork, DeliveryStep};
+use crate::slices::simulator::applications::work::DeliveryStep;
 use crate::slices::simulator::di::SimulatorStore;
 
 use super::ServiceModule;
 
 mod movement;
 
-use movement::{Movement, route};
+use movement::Movements;
 
 /// Веса исходов, проценты первого исхода (FR-605).
 const ACCEPT_OFFER_PERCENT: u32 = 85;
@@ -327,13 +327,6 @@ struct Due {
     at_epoch_seconds: i64,
 }
 
-/// Курьер, которого Simulator ведёт к точке шага доставки.
-#[derive(Clone, Debug)]
-struct Moving {
-    courier: CourierId,
-    movement: Movement,
-}
-
 /// Расписание и выбор действий Simulator; один проход — [`Self::tick`].
 pub struct Simulator {
     store: Arc<dyn SimulatorStore>,
@@ -341,10 +334,8 @@ pub struct Simulator {
     clock: Arc<dyn Clock + Send + Sync>,
     random: Box<dyn Randomness>,
     schedule: SimulatorSchedule,
-    city: VirtualCity,
     due: HashMap<Work, Due>,
-    /// Маршруты шагов доставок (`Work::Delivery`).
-    moving: HashMap<Work, Moving>,
+    movements: Movements,
 }
 
 fn seconds(duration: Duration) -> i64 {
@@ -377,9 +368,8 @@ impl Simulator {
             clock,
             random,
             schedule,
-            city,
             due: HashMap::new(),
-            moving: HashMap::new(),
+            movements: Movements::new(city),
         }
     }
 
@@ -390,7 +380,7 @@ impl Simulator {
             Ok(true) => {}
             Ok(false) => {
                 self.due.clear();
-                self.moving.clear();
+                self.movements.clear();
                 return;
             }
             Err(error) => {
@@ -430,7 +420,6 @@ impl Simulator {
             )
             .collect();
         self.due.retain(|work, _| seen.contains(work));
-        self.moving.retain(|work, _| seen.contains(work));
         for offer in offers {
             let work = Work::Offer(offer.offer_id);
             if !self.due.contains_key(&work) {
@@ -438,65 +427,39 @@ impl Simulator {
                 self.schedule_work(work, offer.courier_id, now, delay);
             }
         }
-        for delivery in deliveries {
+        for delivery in &deliveries {
             let work = Work::Delivery(delivery.delivery_id.clone(), delivery.step);
             if !self.due.contains_key(&work) {
                 let delay = self
                     .random
                     .delay(self.schedule.min_delay, self.schedule.max_delay);
-                self.schedule_work(work.clone(), delivery.courier_id.clone(), now, delay);
-            }
-            if !self.moving.contains_key(&work) {
-                self.start_moving(work, &delivery, now);
+                self.schedule_work(work, delivery.courier_id.clone(), now, delay);
             }
         }
-        Ok(())
-    }
-
-    /// Строит маршрут шага доставки с точками: в `Assigned` — от перекрёстка
-    /// у сохранённой позиции курьера (неизвестна — стоит у pickup) к pickup,
-    /// в `PickedUp` — от pickup к dropoff; прибытие — запланированный момент
-    /// шага.
-    fn start_moving(&mut self, work: Work, delivery: &ActiveDeliveryWork, now: i64) {
-        let Some(points) = delivery.points else {
-            return;
-        };
-        let (from, to) = match delivery.step {
-            DeliveryStep::Pickup => (
-                delivery
-                    .courier_location
-                    .map_or(points.pickup, |location| self.city.nearest(&location)),
-                points.pickup,
-            ),
-            DeliveryStep::Handover => (points.pickup, points.dropoff),
-        };
-        let arrive_at = self.due.get(&work).map_or(now, |due| due.at_epoch_seconds);
-        let path = route(from, to, &mut *self.random);
-        self.moving.insert(
-            work,
-            Moving {
-                courier: delivery.courier_id.clone(),
-                movement: Movement {
-                    route: path,
-                    start_at_epoch_seconds: now,
-                    arrive_at_epoch_seconds: arrive_at,
-                },
+        // Курьер прибывает к запланированному моменту шага.
+        let due = &self.due;
+        self.movements.follow(
+            &deliveries,
+            |delivery| {
+                due.get(&Work::Delivery(delivery.delivery_id.clone(), delivery.step))
+                    .map_or(now, |due| due.at_epoch_seconds)
             },
+            now,
+            &mut *self.random,
         );
+        Ok(())
     }
 
     /// Передаёт текущие точки маршрутов (FR-667). Маршруты есть, только пока
     /// Simulator включён: выключенный проход их сбрасывает.
     pub fn track(&mut self) {
         let now = self.clock.now_epoch_seconds();
-        for moving in self.moving.values() {
-            let result = moving
-                .movement
-                .position(&self.city, now)
+        for (courier, position) in self.movements.positions(now) {
+            let result = position
                 .map_err(|error| error.to_string())
                 .and_then(|location| {
                     self.actions
-                        .update_location(&moving.courier, location)
+                        .update_location(&courier, location)
                         .map_err(|error| error.to_string())
                 });
             if let Err(error) = result {
@@ -504,7 +467,7 @@ impl Simulator {
                     operation = "simulator",
                     outcome = "failure",
                     action = "update_courier_location",
-                    courier_id = moving.courier.as_str(),
+                    courier_id = courier.as_str(),
                     %error,
                     "simulated courier position rejected"
                 );
