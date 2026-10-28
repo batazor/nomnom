@@ -31,23 +31,41 @@ export function SelectField({
   return (
     <Field className={classes}>
       <Label className="nomnom-label">{label}</Label>
-      <Select
-        className="nomnom-select"
-        onChange={(event) => onChange(event.target.value)}
-        value={matches ? value : ""}
-        {...props}
-      >
-        {placeholder && !matches ? (
-          <option disabled value="">
-            {placeholder}
-          </option>
-        ) : null}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
+      {/* The native arrow differs per browser: the control draws its own. */}
+      <span className="nomnom-select-control">
+        <Select
+          className="nomnom-select"
+          onChange={(event) => onChange(event.target.value)}
+          value={matches ? value : ""}
+          {...props}
+        >
+          {placeholder && !matches ? (
+            <option disabled value="">
+              {placeholder}
+            </option>
+          ) : null}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        <svg
+          aria-hidden="true"
+          className="nomnom-select-arrow"
+          fill="none"
+          focusable="false"
+          viewBox="0 0 16 16"
+        >
+          <path
+            d="m4.5 6.5 3.5 3.5 3.5-3.5"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+          />
+        </svg>
+      </span>
     </Field>
   );
 }
