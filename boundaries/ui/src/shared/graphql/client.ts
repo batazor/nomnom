@@ -53,6 +53,10 @@ type ClientOptions = Readonly<{
   persistedOperations: boolean;
 }>;
 
+// Name of this client in the telemetry of the Cosmo Router (wg.client.name on
+// its metrics and spans): requests of the UI are told apart from e2e and k6.
+const clientName = "nomnom-ui";
+
 // Hash of the operation computed by codegen (persistedDocuments); a document
 // without one was not generated and is not in the manifest of BFF.
 function documentHash(_query: string, document: unknown): string {
@@ -72,7 +76,9 @@ export function createGraphqlClient({
   persistedOperations,
 }: ClientOptions) {
   function headers(): Record<string, string> {
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = {
+      "graphql-client-name": clientName,
+    };
     const traceparent = getTraceparent?.();
     if (traceparent) result.traceparent = traceparent;
     const token = getAccessToken?.();

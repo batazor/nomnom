@@ -70,6 +70,20 @@ Alloy для telemetry ([ADR 9](0009-использовать-opentelemetry-и-g
     (как transparent retries в [gRPC A6](https://github.com/grpc/proposal/blob/master/A6-client-retries.md)).
     `UNAVAILABLE` от приложения не повторяется: команда могла быть частично выполнена.
     Повтор после обработки — решение вызывающего с тем же idempotency key (activities Temporal).
+- Политики классов методов сливаются с политикой Gateway (`mergeType: StrategicMerge`):
+  верхний предел, circuit breaker и passive health check задаются один раз на Gateway,
+  класс добавляет только retries.
+- Circuit breaker на каждый backend маршрута (счётчики у каждой реплики Envoy свои):
+  ограниченная очередь к backend — сверх неё Envoy сразу отвечает `UNAVAILABLE`, а не копит
+  запросы до deadline; retry budget — параллельных повторов не больше 20% активных запросов
+  (минимум 3), чтобы повторы не умножали нагрузку на деградировавший backend.
+- Passive health check исключает endpoint, который несколько раз подряд не принял
+  соединение или сбросил stream, на время с ростом при повторах, но не больше половины
+  endpoints backend'а. gRPC-статусы приложения приходят с HTTP 200 и endpoint не исключают.
+- Вызывающее приложение задаёт deadline каждому вызову (`grpc-timeout`): верхний предел
+  gateway — только страховка от вызова без deadline. BFF ограничивает вызов значением
+  `BFF__INTERNAL_GATEWAY_CALL_TIMEOUT`, потому что Router не передаёт плагину deadline
+  клиентского запроса.
 - В реестр попадают только методы, у которых есть вызывающий; остальные получают
   `UNIMPLEMENTED` от gateway. Каждый новый метод добавляется с явным выбором класса.
 

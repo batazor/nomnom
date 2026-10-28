@@ -76,6 +76,9 @@ spec:
                   key: {{ required "tracks.redisUrlSecret.key is required (FR-668)" .Values.tracks.redisUrlSecret.key | quote }}
             - name: BFF__INTERNAL_GATEWAY_ADDR
               value: {{ required "internalGateway.address is required" .Values.internalGateway.address | quote }}
+            # ADR 15: верхний предел одного вызова контекста (Go duration).
+            - name: BFF__INTERNAL_GATEWAY_CALL_TIMEOUT
+              value: {{ required "internalGateway.callTimeout is required" .Values.internalGateway.callTimeout | quote }}
             # FR-623: стартовая точка курьеров, которых добавляет диспетчер.
             - name: BFF__COURIER_START_LATITUDE
               value: {{ required "courierPool.startLatitude is required" .Values.courierPool.startLatitude | quote }}

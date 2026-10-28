@@ -57,10 +57,22 @@ spec:
           - group: gateway.networking.k8s.io
             kind: GRPCRoute
 ---
-# Транспортные политики по умолчанию для всех маршрутов gateway.
+# Транспортные политики по умолчанию для всех маршрутов gateway (ADR 15).
 # Встроенный request timeout Envoy Gateway (15s) обрезал бы длинные gRPC deadlines,
 # поэтому задан явный верхний предел; фактический deadline определяет grpc-timeout клиента.
-# Retries задают политики reads и commands на route; Gateway по умолчанию не повторяет.
+# Retries задают политики reads и commands на route (mergeType StrategicMerge — поверх этой
+# политики); Gateway по умолчанию не повторяет.
+#
+# Circuit breaker — на каждый backend маршрута, счётчики у каждой реплики Envoy свои:
+# - очередь к backend ограничена: сверх maxPendingRequests Envoy сразу отвечает 503
+#   (клиент получает UNAVAILABLE), а не копит запросы до deadline;
+# - retryBudget: параллельных повторов не больше 20% активных запросов (минимум 3), чтобы
+#   повторы не умножали нагрузку на деградировавший backend; сверх бюджета — без повтора
+#   (envoy_cluster_upstream_rq_retry_overflow).
+# Passive health check: endpoint, который 5 раз подряд не принял соединение или сбросил
+# stream (gateway errors 502/503/504 и local origin failures), исключается на 30s и дольше
+# при повторах; не больше половины endpoints backend'а. Статусы gRPC приложения
+# (UNAVAILABLE, INTERNAL) приходят с HTTP 200 и endpoint не исключают.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
@@ -74,6 +86,22 @@ spec:
   timeout:
     http:
       requestTimeout: 300s
+  circuitBreaker:
+    maxConnections: 1024
+    maxPendingRequests: 256
+    maxParallelRequests: 1024
+    retryBudget:
+      percent:
+        numerator: 20
+      minRetryConcurrency: 3
+  healthCheck:
+    passive:
+      splitExternalLocalOriginErrors: true
+      consecutiveLocalOriginFailures: 5
+      consecutiveGatewayErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
 ---
 # Команды orders (PlaceOrder, RequestOrderCancellation): совпадение только по сервису —
 # самое общее правило; методы с точным совпадением ниже его перекрывают.
@@ -601,16 +629,17 @@ spec:
           namespace: nomnom-controlplane
           port: 8086
 ---
-# Retries идемпотентных чтений (ADR 15). Политика route заменяет политику Gateway, поэтому
-# верхний предел 300s повторяется. Не более 2 повторов на отказы до обработки и UNAVAILABLE;
-# без per-try timeout — все попытки укладываются в deadline клиента; cancelled и
-# deadline-exceeded не повторяются.
+# Retries идемпотентных чтений (ADR 15). Политика сливается с internal-gateway-defaults
+# (StrategicMerge): верхний предел 300s, circuit breaker и passive health check — оттуда.
+# Не более 2 повторов на отказы до обработки и UNAVAILABLE; без per-try timeout — все
+# попытки укладываются в deadline клиента; cancelled и deadline-exceeded не повторяются.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
   name: reads
   namespace: nomnom-gateway
 spec:
+  mergeType: StrategicMerge
   targetRefs:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
@@ -627,9 +656,6 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: controlplane-v1-reads
-  timeout:
-    http:
-      requestTimeout: 300s
   retry:
     numRetries: 2
     retryOn:
@@ -643,13 +669,15 @@ spec:
 # приложения — соединение не установлено, stream отклонён (REFUSED_STREAM) или headers не
 # отправлены. UNAVAILABLE от приложения не повторяется: команда могла быть частично
 # выполнена. Повторы после обработки — дело вызывающего: activities Temporal повторяются
-# с тем же idempotency key.
+# с тем же idempotency key. Политика сливается с internal-gateway-defaults (StrategicMerge),
+# как и reads.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
   name: commands
   namespace: nomnom-gateway
 spec:
+  mergeType: StrategicMerge
   targetRefs:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
@@ -684,9 +712,6 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: controlplane-v1-commands
-  timeout:
-    http:
-      requestTimeout: 300s
   retry:
     numRetries: 2
     retryOn:

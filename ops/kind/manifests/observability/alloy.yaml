@@ -115,14 +115,15 @@ data:
       }
     }
 
-    // Labels Router: клиент, версии router и operation name/hash размножают series, а
-    // dashboards BFF группируют только по типу операции, subgraph и HTTP-статусу.
+    // Labels Router: версии router и клиента, operation name/hash размножают series, а
+    // dashboards BFF группируют только по типу операции, subgraph, HTTP-статусу и клиенту
+    // (wg.client.name — GraphQL-Client-Name: nomnom-ui или unknown, единицы значений).
     otelcol.processor.transform "bff_metrics" {
       error_mode = "ignore"
       metric_statements {
         context    = "datapoint"
         statements = [
-          "keep_keys(attributes, [\"wg.operation.type\", \"wg.subgraph.name\", \"http.status_code\"]) where resource.attributes[\"service.name\"] == \"bff\"",
+          "keep_keys(attributes, [\"wg.operation.type\", \"wg.subgraph.name\", \"http.status_code\", \"wg.client.name\"]) where resource.attributes[\"service.name\"] == \"bff\"",
         ]
       }
       output {
@@ -485,8 +486,8 @@ data:
 
     // Internal gateway (ADR 15): stats Envoy на порту 19001 (NetworkPolicy internal-gateway-ingress
     // пускает только Alloy). Только clusters GRPCRoute и метрики, на которых строятся алерты:
-    // retries (скрывают отказ backend'а), pending overflow, timeouts, connect failures и
-    // latency. upstream_rq_xx — HTTP-класс финального ответа после retries; gRPC-ошибки
+    // retries (скрывают отказ backend'а), pending overflow, timeouts, connect failures,
+    // исключённые passive health check endpoints и latency. upstream_rq_xx — HTTP-класс финального ответа после retries; gRPC-ошибки
     // приходят с HTTP 200, поэтому статус вызова смотрится по метрикам сервисов.
     discovery.kubernetes "internal_gateway" {
       role = "pod"
@@ -523,7 +524,7 @@ data:
     prometheus.relabel "internal_gateway" {
       rule {
         source_labels = ["__name__"]
-        regex         = "envoy_cluster_upstream_rq_(total|xx|retry|retry_success|retry_overflow|retry_limit_exceeded|pending_overflow|timeout)|envoy_cluster_upstream_cx_(connect_fail|active)|envoy_cluster_external_upstream_rq_time_(bucket|sum|count)"
+        regex         = "envoy_cluster_upstream_rq_(total|xx|retry|retry_success|retry_overflow|retry_limit_exceeded|pending_overflow|timeout)|envoy_cluster_upstream_cx_(connect_fail|active)|envoy_cluster_outlier_detection_ejections_(active|enforced_total)|envoy_cluster_external_upstream_rq_time_(bucket|sum|count)"
         action        = "keep"
       }
       // Без xds_cluster, prometheus_stats и прочих служебных clusters Envoy.

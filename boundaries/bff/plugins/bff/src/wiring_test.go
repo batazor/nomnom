@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,16 +16,18 @@ import (
 
 // recordingDial dials lazily, as in production, and records the audiences.
 type recordingDial struct {
-	audiences []string
-	err       error
+	audiences    []string
+	callTimeouts []time.Duration
+	err          error
 }
 
-func (d *recordingDial) dial(address, audience string, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error) {
+func (d *recordingDial) dial(address, audience string, callTimeout time.Duration, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error) {
 	d.audiences = append(d.audiences, audience)
+	d.callTimeouts = append(d.callTimeouts, callTimeout)
 	if d.err != nil {
 		return nil, d.err
 	}
-	return gateway.Dial(address, audience, credentials)
+	return gateway.Dial(address, audience, callTimeout, credentials)
 }
 
 func identityConfig(t *testing.T) identity.Config {
@@ -58,6 +61,7 @@ func TestWiringDialsTheContextsOfTheCell(t *testing.T) {
 	bff, err := newBffService(validConfig(t), dial.dial)
 	require.NoError(t, err)
 	assert.Equal(t, []string{audienceOrders, audienceRestaurants, audienceDelivery}, dial.audiences)
+	assert.Equal(t, []time.Duration{5 * time.Second, 5 * time.Second, 5 * time.Second}, dial.callTimeouts)
 	assert.NotNil(t, bff.accessTokens)
 	assert.NotNil(t, bff.tracking)
 	assert.NotNil(t, bff.catalog)
@@ -77,6 +81,7 @@ func validConfig(t *testing.T) config {
 	return config{
 		identity:              identityConfig(t),
 		internalGateway:       "gateway:8080",
+		callTimeout:           "5s",
 		courierStartLatitude:  "52.5250",
 		courierStartLongitude: "13.4020",
 	}
@@ -89,6 +94,16 @@ func TestWiringRequiresTheCourierStartPoint(t *testing.T) {
 		cfg.courierStartLatitude, cfg.courierStartLongitude = point[0], point[1]
 		_, err := newBffService(cfg, (&recordingDial{}).dial)
 		assert.Error(t, err, "%v", point)
+	}
+}
+
+// ADR 15: every call to a context is bounded; the bound is required.
+func TestWiringRequiresTheCallTimeout(t *testing.T) {
+	for _, timeout := range []string{"", "5", "soon", "0s", "-1s"} {
+		cfg := validConfig(t)
+		cfg.callTimeout = timeout
+		_, err := newBffService(cfg, (&recordingDial{}).dial)
+		assert.ErrorContains(t, err, envCallTimeout, "%q", timeout)
 	}
 }
 

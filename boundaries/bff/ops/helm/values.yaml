@@ -121,9 +121,12 @@ readinessProbe:
   failureThreshold: 1
 
 # ADR 15, ADR 41: адрес internal gateway своей Cell (BFF__INTERNAL_GATEWAY_ADDR), через
-# который BFF вызывает orders, restaurants и delivery. Обязателен: без него chart не рендерится.
+# который BFF вызывает orders, restaurants и delivery, и верхний предел одного вызова
+# (BFF__INTERNAL_GATEWAY_CALL_TIMEOUT, Go duration): Router не даёт плагину deadline, без
+# предела вызов ждал бы до 300s gateway. Оба обязательны: без них chart не рендерится.
 internalGateway:
   address: ""
+  callTimeout: ""
 
 # ADR 41: публичный gateway маршрутизирует /m/{market_id} в Service BFF этой Cell. Chart даёт
 # ReferenceGrant — HTTPRoute из неймспейса публичного gateway могут ссылаться на Service BFF.

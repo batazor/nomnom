@@ -27,8 +27,10 @@ persisted_operations:
     provider_id: operations
 
 # Browser customer UI on another origin: Faro tracing adds W3C trace context to
-# BFF requests (boundaries/ui/src/shared/telemetry), so preflight must allow it;
-# the Router default allows only Origin, Content-Length and Content-Type.
+# BFF requests (boundaries/ui/src/shared/telemetry), and the UI names itself in
+# GraphQL-Client-Name (wg.client.name of Router metrics and spans), so preflight
+# must allow them; the Router default allows only Origin, Content-Length and
+# Content-Type.
 cors:
   allow_headers:
     - Origin
@@ -37,6 +39,7 @@ cors:
     - Authorization
     - traceparent
     - tracestate
+    - GraphQL-Client-Name
 
 # ADR 32: the plugin verifies the customer's access token itself, so the
 # Router forwards Authorization to it as gRPC metadata authorization. ADR 41:

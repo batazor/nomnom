@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -34,6 +35,10 @@ import (
 // Cell this BFF serves (ADR 41).
 const envInternalGateway = "BFF__INTERNAL_GATEWAY_ADDR"
 
+// envCallTimeout is the upper bound of one call to a context through the
+// internal gateway (ADR 15), a Go duration.
+const envCallTimeout = "BFF__INTERNAL_GATEWAY_CALL_TIMEOUT"
+
 // Start point of couriers a dispatcher adds on the flow board (FR-623): a new
 // courier has no position of its own, and delivery offers a delivery only to
 // couriers with one.
@@ -54,6 +59,8 @@ const (
 type config struct {
 	identity        identity.Config
 	internalGateway string
+	// callTimeout is the raw variable: newBffService validates it.
+	callTimeout string
 	// courierStartLatitude and courierStartLongitude are the raw variables:
 	// newBffService validates them.
 	courierStartLatitude  string
@@ -64,6 +71,7 @@ func configFromEnv(getenv func(string) string) config {
 	return config{
 		identity:              identity.ConfigFromEnv(getenv),
 		internalGateway:       getenv(envInternalGateway),
+		callTimeout:           getenv(envCallTimeout),
 		courierStartLatitude:  getenv(envCourierStartLatitude),
 		courierStartLongitude: getenv(envCourierStartLongitude),
 	}
@@ -87,9 +95,21 @@ func (c config) courierStart() (poolapp.Location, error) {
 	return location, nil
 }
 
+// timeout validates the upper bound of one call to a context; it is required.
+func (c config) timeout() (time.Duration, error) {
+	timeout, err := time.ParseDuration(c.callTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a duration: %w", envCallTimeout, err)
+	}
+	if timeout <= 0 {
+		return 0, fmt.Errorf("%s must be positive, got %s", envCallTimeout, timeout)
+	}
+	return timeout, nil
+}
+
 // dialFunc opens a connection to an internal gateway for one audience;
 // gateway.Dial in production.
-type dialFunc func(address, audience string, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error)
+type dialFunc func(address, audience string, callTimeout time.Duration, credentials identity.OutgoingCredentials) (*grpc.ClientConn, error)
 
 type getOrderHandler interface {
 	Handle(ctx context.Context, orderID string) (trackingapp.OrderView, error)
@@ -211,7 +231,7 @@ type simulator struct {
 // newBffService assembles BFF from cfg. BFF identity and the gateway address
 // are required: customer operations must not run without a verified customer
 // (ADR 32), and every slice calls contexts through the internal gateway of the
-// Cell (ADR 41). Every call needs the Market of the request; one without it is
+// Cell (ADR 41) with a bounded call time. Every call needs the Market of the request; one without it is
 // refused before a context is called. Connections are lazy: no I/O here.
 func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	customers, err := identity.Load(cfg.identity)
@@ -221,13 +241,17 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	if cfg.internalGateway == "" {
 		return nil, fmt.Errorf("%s is required", envInternalGateway)
 	}
+	callTimeout, err := cfg.timeout()
+	if err != nil {
+		return nil, err
+	}
 	courierStart, err := cfg.courierStart()
 	if err != nil {
 		return nil, err
 	}
 	var conns connections
 	connect := func(audience string) (grpc.ClientConnInterface, error) {
-		conn, err := dial(cfg.internalGateway, audience, customers.Outgoing)
+		conn, err := dial(cfg.internalGateway, audience, callTimeout, customers.Outgoing)
 		if err != nil {
 			return nil, errors.Join(err, conns.close())
 		}
