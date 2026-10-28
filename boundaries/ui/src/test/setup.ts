@@ -22,6 +22,8 @@ if (typeof window !== "undefined") {
       return [];
     }
   } as unknown as typeof IntersectionObserver;
+  // jsdom does not scroll either.
+  Element.prototype.scrollIntoView = () => {};
 }
 
 // Animations jump to their end: content that fades in after a card grows is

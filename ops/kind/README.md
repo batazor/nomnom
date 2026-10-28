@@ -356,7 +356,7 @@ Subject — Dex sub пользователя `nomnom-demo-owner` (`ChFub21ub20tZ
 
 **Топология.** Первым seed регистрирует в control plane Cell `cell-1` (gateway
 `internal-gateway.envoy-gateway-system.svc.cluster.local:8080`) и Market `berlin` (Berlin, EUR,
-`cell-1`) от имени `kind-operator` (`platform#manage_markets`); рестораны и курьеры создаются в
+`Europe/Berlin`, `cell-1`) от имени `kind-operator` (`platform#manage_markets`); рестораны и курьеры создаются в
 Market `berlin` (`market` в `seed.json`). Не hook chart `bootstrap` ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)):
 bootstrap ставится до charts приложений, control plane к тому моменту не запущен, а Job seed
 ждёт gateway и control plane повторами (`dependsOn: controlplane`). `RegisterCell` и
@@ -383,12 +383,10 @@ line in the run market» (GetCourierPool Market прогона) до оформ�
 Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180). API —
 публичный gateway `https://api.nomnom.localhost:18085`, но браузер ходит в него через proxy
 dev-сервера Vite: `http://localhost:4180/api` (`NOMNOM_API_PROXY_TARGET`, корень CA проверяет proxy,
-`NOMNOM_API_PROXY_CA`). Вход открывает Dex на `https://auth.nomnom.localhost:18085/dex`, поэтому
-корень локального CA должен быть в системном хранилище:
-
-```bash
-make kind-local-ca
-```
+`NOMNOM_API_PROXY_CA`). Dex так же: issuer страницы — `http://localhost:4180/dex`, proxy ведёт его в
+`https://auth.nomnom.localhost:18085/dex` (`NOMNOM_AUTH_PROXY_TARGET`) и подставляет origin
+dev-сервера в endpoints discovery; токены остаются с публичным issuer, который проверяет BFF.
+Браузер локальный CA не видит, добавлять его в системное хранилище не нужно.
 
 ## Проверки
 

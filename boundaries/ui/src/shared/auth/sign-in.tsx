@@ -211,60 +211,72 @@ export function AccountMenu({
   roleLabel: string;
 }) {
   const { t } = useI18n();
-  const { config, signIns, restoring, add, remove } = useContext(SignInContext);
+  const { config, signIns, remove } = useContext(SignInContext);
+  if (!config) return null;
+  const login = signIns[role];
+  if (!login) return <SignInButton role={role} roleLabel={roleLabel} />;
+  const letters = initials(login.user);
+  return (
+    <Menu as="div" className="account-menu">
+      <MenuButton
+        aria-label={t("auth.account", { user: login.user })}
+        className="account-avatar"
+      >
+        {letters}
+      </MenuButton>
+      <MenuItems anchor="bottom end" className="account-menu-items">
+        <div className="account-menu-header">
+          <span aria-hidden="true" className="account-avatar" data-static>
+            {letters}
+          </span>
+          <span className="account-menu-who">
+            <span className="account-menu-user">{login.user}</span>
+            <span className="account-menu-role">{roleLabel}</span>
+          </span>
+        </div>
+        <MenuSeparator className="account-menu-separator" />
+        <MenuItem>
+          <button
+            className="account-menu-item"
+            onClick={() => remove(role)}
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              focusable="false"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M6.5 2.75H4.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5H6.5M10.5 5.25 13.25 8l-2.75 2.75M13 8H6.25"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.25"
+              />
+            </svg>
+            {t("auth.signOut")}
+          </button>
+        </MenuItem>
+      </MenuItems>
+    </Menu>
+  );
+}
+
+// Signs role in: the demo user of kind with one press, anyone else through
+// the provider's form; nothing when login is not configured.
+export function SignInButton({
+  role,
+  roleLabel,
+}: {
+  role: string;
+  roleLabel: string;
+}) {
+  const { t } = useI18n();
+  const { config, restoring, add } = useContext(SignInContext);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   if (!config) return null;
-  const login = signIns[role];
-  if (login) {
-    const letters = initials(login.user);
-    return (
-      <Menu as="div" className="account-menu">
-        <MenuButton
-          aria-label={t("auth.account", { user: login.user })}
-          className="account-avatar"
-        >
-          {letters}
-        </MenuButton>
-        <MenuItems anchor="bottom end" className="account-menu-items">
-          <div className="account-menu-header">
-            <span aria-hidden="true" className="account-avatar" data-static>
-              {letters}
-            </span>
-            <span className="account-menu-who">
-              <span className="account-menu-user">{login.user}</span>
-              <span className="account-menu-role">{roleLabel}</span>
-            </span>
-          </div>
-          <MenuSeparator className="account-menu-separator" />
-          <MenuItem>
-            <button
-              className="account-menu-item"
-              onClick={() => remove(role)}
-              type="button"
-            >
-              <svg
-                aria-hidden="true"
-                fill="none"
-                focusable="false"
-                viewBox="0 0 16 16"
-              >
-                <path
-                  d="M6.5 2.75H4.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5H6.5M10.5 5.25 13.25 8l-2.75 2.75M13 8H6.25"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.25"
-                />
-              </svg>
-              {t("auth.signOut")}
-            </button>
-          </MenuItem>
-        </MenuItems>
-      </Menu>
-    );
-  }
-
   // The demo user of kind signs in with one press: no provider form to fill.
   const demo = config.demoEmailDomain && config.demoPassword;
   async function signIn() {

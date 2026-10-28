@@ -122,7 +122,7 @@ spec:
             - {name: subject, value: $s.operator}
             - {name: method, value: nomnom.controlplane.v1.ControlPlaneService/CreateMarket}
             - name: request
-              value: '{marketId: $s.market, name: ("Kind e2e " + $s.run), currency: "EUR", cellId: "cell-1"}'
+              value: '{marketId: $s.market, name: ("Kind e2e " + $s.run), currency: "EUR", timeZone: "Europe/Berlin", cellId: "cell-1"}'
 
     # 1. Оператор: ресторан и курьер.
     - name: operator registers restaurant
@@ -250,7 +250,7 @@ spec:
             - name: variables
               value: >-
                 {input: {restaurantId: $s.restaurant_id, items: [{menuItemId: $s.menu_item_id, quantity: 1}],
-                 idempotencyKey: $s.run}}
+                 priority: "STANDARD", idempotencyKey: $s.run}}
             - {name: until, value: '.data.placeOrder.order.id != null'}
             - {name: wait, value: 90}
             - {name: save, value: '{order_id: .data.placeOrder.order.id}'}

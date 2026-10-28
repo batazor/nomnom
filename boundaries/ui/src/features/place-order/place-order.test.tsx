@@ -43,7 +43,7 @@ type PlaceOrderVariables = {
     restaurantId: string;
     items: { menuItemId: string; quantity: number }[];
     idempotencyKey: string;
-    priority?: string | null;
+    priority: string;
   };
 };
 
@@ -238,6 +238,37 @@ describe("place order", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Ресторан сейчас не принимает заказы. Попробуйте позже.",
+    );
+    expect(cartLine("Бао с грибами")).toBeVisible();
+  });
+
+  it("asks to sign in when BFF refuses the token and keeps the cart", async () => {
+    storeCart([{ menuItemId: "menu-bao", quantity: 1 }]);
+    mockServer.use(
+      publicGraphql.mutation("PlaceOrder", () =>
+        HttpResponse.json({
+          data: null,
+          errors: [
+            {
+              message: "Failed to fetch from Subgraph 'bff'.",
+              extensions: {
+                errors: [
+                  {
+                    message: "authentication required",
+                    extensions: { code: "Unauthenticated" },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const user = await openCheckout();
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Войдите, чтобы оформить заказ. Корзина сохранится.",
     );
     expect(cartLine("Бао с грибами")).toBeVisible();
   });

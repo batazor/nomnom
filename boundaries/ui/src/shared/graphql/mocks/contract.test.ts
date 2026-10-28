@@ -98,6 +98,7 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
       restaurantId: kitchenEight.id,
       items: [{ menuItemId: "menu-bao", quantity: 1 }],
       idempotencyKey: "contract-place",
+      priority: "STANDARD",
     },
   },
 };

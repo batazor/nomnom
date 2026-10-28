@@ -171,40 +171,44 @@ function Board() {
               )}
             </BoardColumn>
 
-            <KitchenDropColumn>
-              {canAct ? (
-                <KitchenColumn
-                  onOpenOrder={(orderId) => openDetails(orderId, "kitchen")}
-                  preferredRestaurantId={kitchenRestaurantId}
-                  selectedOrderId={selectedOrderId}
-                />
-              ) : (
-                <div className="board-empty-state">
-                  <Illustration name="take-out-boxes" size="sm" />
-                  <p className="board-empty">
-                    {t("board.session.neededSignIn")}
-                  </p>
-                </div>
-              )}
-            </KitchenDropColumn>
-
-            <BoardColumn column="courier">
-              {canAct ? (
-                <AsRole as="courier">
-                  <CourierColumn
-                    onOpenOrder={(orderId) => openDetails(orderId, "courier")}
+            {/* Kitchen and courier stay in view while the menu scrolls, so
+            the cart can be dragged to the kitchen from anywhere in it. */}
+            <div className="board-side">
+              <KitchenDropColumn>
+                {canAct ? (
+                  <KitchenColumn
+                    onOpenOrder={(orderId) => openDetails(orderId, "kitchen")}
+                    preferredRestaurantId={kitchenRestaurantId}
                     selectedOrderId={selectedOrderId}
                   />
-                </AsRole>
-              ) : (
-                <div className="board-empty-state">
-                  <Illustration name="delivery-truck" size="sm" />
-                  <p className="board-empty">
-                    {t("board.session.neededSignIn")}
-                  </p>
-                </div>
-              )}
-            </BoardColumn>
+                ) : (
+                  <div className="board-empty-state">
+                    <Illustration name="take-out-boxes" size="sm" />
+                    <p className="board-empty">
+                      {t("board.session.neededSignIn")}
+                    </p>
+                  </div>
+                )}
+              </KitchenDropColumn>
+
+              <BoardColumn column="courier">
+                {canAct ? (
+                  <AsRole as="courier">
+                    <CourierColumn
+                      onOpenOrder={(orderId) => openDetails(orderId, "courier")}
+                      selectedOrderId={selectedOrderId}
+                    />
+                  </AsRole>
+                ) : (
+                  <div className="board-empty-state">
+                    <Illustration name="delivery-truck" size="sm" />
+                    <p className="board-empty">
+                      {t("board.session.neededSignIn")}
+                    </p>
+                  </div>
+                )}
+              </BoardColumn>
+            </div>
           </m.div>
         </CourierPoolProvider>
 

@@ -1,9 +1,12 @@
 import { type FormEvent, useRef, useState } from "react";
 import { useMutation } from "urql";
 
+import { boardUser, SignInButton } from "../../shared/auth/sign-in";
+import { bffErrorCodes } from "../../shared/graphql/errors";
 import { PlaceOrderDocument } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
+import { useCanAct } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
 import { type ItemProblems, splitProblems } from "./problems";
 import "./place-order.css";
@@ -18,7 +21,9 @@ type CheckoutState =
       orderProblems: MessageKey[];
       itemProblemIds: string[];
     }
-  | { kind: "transportError" };
+  | { kind: "transportError" }
+  // No user signed in, or BFF refused the token.
+  | { kind: "signInNeeded" };
 
 // One checkout attempt: its idempotency key and the exact request it was made
 // for. A manual retry of the same request reuses the key; any change to the
@@ -47,15 +52,28 @@ export function PlaceOrder({
   onPlaced: (orderId: string) => void;
 }) {
   const { t } = useI18n();
+  const canAct = useCanAct();
   const [, placeOrder] = useMutation(PlaceOrderDocument);
   const [state, setState] = useState<CheckoutState>({ kind: "idle" });
   const [prioritized, setPrioritized] = useState(false);
   const priority = premium && prioritized ? "PREMIUM" : "STANDARD";
   const attempt = useRef<Attempt | null>(null);
+  const form = useRef<HTMLFormElement>(null);
+
+  // The form may be sent from afar (the cart bar, a drop on the kitchen):
+  // what keeps the order from the kitchen is brought into view.
+  function show(next: CheckoutState) {
+    setState(next);
+    form.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     if (state.kind === "sending") return;
+    if (!canAct) {
+      show({ kind: "signInNeeded" });
+      return;
+    }
     const items = lines.map(({ menuItemId, quantity }) => ({
       menuItemId,
       quantity,
@@ -75,9 +93,16 @@ export function PlaceOrder({
       },
     });
     const payload = result.data?.placeOrder;
+    if (
+      result.error &&
+      bffErrorCodes(result.error).includes("Unauthenticated")
+    ) {
+      show({ kind: "signInNeeded" });
+      return;
+    }
     if (result.error || !payload) {
       // No automatic retry: the customer sends the same attempt again by hand.
-      setState({ kind: "transportError" });
+      show({ kind: "transportError" });
       return;
     }
 
@@ -89,7 +114,7 @@ export function PlaceOrder({
     }
     const { orderProblems, itemProblems } = splitProblems(payload.problems);
     onItemProblems(itemProblems);
-    setState({
+    show({
       kind: "problems",
       orderProblems,
       itemProblemIds: [...itemProblems.keys()],
@@ -108,6 +133,7 @@ export function PlaceOrder({
       id={checkoutFormId}
       noValidate
       onSubmit={submit}
+      ref={form}
     >
       {state.kind === "problems" &&
       (state.orderProblems.length > 0 || itemProblemsInCart) ? (
@@ -122,6 +148,11 @@ export function PlaceOrder({
       {state.kind === "transportError" ? (
         <p className="checkout-error" role="alert">
           {t("checkout.transportError")}
+        </p>
+      ) : null}
+      {state.kind === "signInNeeded" ? (
+        <p className="checkout-error" role="alert">
+          {t("checkout.signInNeeded")}
         </p>
       ) : null}
 
@@ -145,11 +176,20 @@ export function PlaceOrder({
           {t("checkout.expectedWait", { minutes: expectedWaitMinutes })}
         </p>
       )}
-      <Button fullWidth isPending={state.kind === "sending"} type="submit">
-        {state.kind === "transportError"
-          ? t("checkout.retry")
-          : t("checkout.submit")}
-      </Button>
+      {canAct ? (
+        <Button fullWidth isPending={state.kind === "sending"} type="submit">
+          {state.kind === "transportError"
+            ? t("checkout.retry")
+            : t("checkout.submit")}
+        </Button>
+      ) : (
+        <div className="checkout-sign-in">
+          {state.kind === "signInNeeded" ? null : (
+            <p>{t("checkout.signInNeeded")}</p>
+          )}
+          <SignInButton role={boardUser} roleLabel={t("auth.role.demo")} />
+        </div>
+      )}
       <p aria-live="polite" className="sr-only">
         {state.kind === "sending" ? t("checkout.sending") : ""}
       </p>

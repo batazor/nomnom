@@ -711,9 +711,9 @@ input PlaceOrderInput {
   """Client-generated key of this checkout attempt, reused on manual retry"""
   idempotencyKey: String!
   """
-  Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee
+  STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee
   """
-  priority: OrderPriority
+  priority: OrderPriority!
 }
 
 """Business reason why an order cannot be placed"""

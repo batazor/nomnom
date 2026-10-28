@@ -5096,7 +5096,7 @@ type PlaceOrderInput struct {
 	Items []*OrderLineInput `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
 	// Client-generated key of this checkout attempt, reused on manual retry
 	IdempotencyKey string `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee
+	// STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee
 	Priority OrderPriority `protobuf:"varint,5,opt,name=priority,proto3,enum=service.OrderPriority" json:"priority,omitempty"`
 }
 

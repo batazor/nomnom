@@ -67,6 +67,8 @@ export const messages = {
     "checkout.totalWithPremium": "С приоритетом: {total}",
     "checkout.retry": "Отправить ещё раз",
     "checkout.sending": "Оформляем заказ",
+    "checkout.signInNeeded":
+      "Войдите, чтобы оформить заказ. Корзина сохранится.",
     "checkout.transportError":
       "Не удалось отправить заказ. Проверьте соединение и попробуйте ещё раз.",
     "checkout.itemProblems":
@@ -429,6 +431,7 @@ export const messages = {
     "checkout.totalWithPremium": "With priority: {total}",
     "checkout.retry": "Send again",
     "checkout.sending": "Placing the order",
+    "checkout.signInNeeded": "Sign in to place the order. The cart stays.",
     "checkout.transportError":
       "Could not send the order. Check your connection and try again.",
     "checkout.itemProblems":

@@ -703,7 +703,7 @@ message PlaceOrderInput {
   repeated OrderLineInput items = 2;
   // Client-generated key of this checkout attempt, reused on manual retry
   string idempotency_key = 4;
-  // Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee
+  // STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee
   OrderPriority priority = 5;
 }
 

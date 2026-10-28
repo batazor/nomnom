@@ -184,8 +184,8 @@ export type PlaceOrderInput = {
   idempotencyKey: string;
   /** Ordered items */
   items: Array<OrderLineInput>;
-  /** Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee */
-  priority?: OrderPriority | null | undefined;
+  /** STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee */
+  priority: OrderPriority;
   /** Restaurant to order from */
   restaurantId: string | number;
 };

@@ -11,11 +11,11 @@ import {
   type MockRestaurant,
   type MockRestaurantSummary,
   managedRestaurantIds,
-  restaurantSummary,
   orderLine,
   orderTotal,
   preparationDelayed,
   restaurantFixtures,
+  restaurantSummary,
   withFee,
 } from "./fixtures";
 import { createFulfillment, mockCourierId } from "./fulfillment";
@@ -37,7 +37,7 @@ type PlaceOrderInput = {
   restaurantId: string;
   items: { menuItemId: string; quantity: number }[];
   idempotencyKey: string;
-  priority?: "STANDARD" | "PREMIUM" | null;
+  priority: "STANDARD" | "PREMIUM";
 };
 
 type PlaceOrderPayload = {
@@ -281,9 +281,9 @@ export function createMockStore({
       };
     }
 
-    // A null priority is STANDARD; PREMIUM needs the fee of the restaurant
-    // (FR-650), which is fixed in the order and added to its total.
-    const priority = input.priority ?? "STANDARD";
+    // PREMIUM needs the fee of the restaurant (FR-650), which is fixed in
+    // the order and added to its total.
+    const priority = input.priority;
     const premiumFee = priority === "PREMIUM" ? restaurant.premiumFee : null;
     if (priority === "PREMIUM" && !premiumFee) {
       return {

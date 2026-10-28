@@ -1134,9 +1134,9 @@ input PlaceOrderInput {
   """
   idempotencyKey: String!
   """
-  Premium Priority; null is STANDARD. PREMIUM needs a restaurant with a premium fee
+  STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee
   """
-  priority: OrderPriority
+  priority: OrderPriority!
 }
 
 """

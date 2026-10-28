@@ -190,35 +190,43 @@
   min-width: 0;
 }
 
+.board-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+  min-width: 0;
+}
+
 @container style(--viewport: xl) {
   .board-columns {
-    grid-template-columns: minmax(22rem, 1.5fr) minmax(18rem, 1fr) minmax(
-        18rem,
-        1fr
-      );
+    grid-template-columns:
+      minmax(22rem, 1.5fr)
+      minmax(calc(36rem + var(--space-4)), 2fr);
+  }
+
+  .board-side {
+    grid-template-columns: repeat(2, minmax(18rem, 1fr));
   }
 }
 
 @container style(--viewport: md) or style(--viewport: lg) {
   .board-columns {
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-    grid-template-areas:
-      "customer kitchen"
-      "customer courier";
-    grid-template-rows: auto 1fr;
-    overflow-x: visible;
   }
+}
 
-  .board-column[data-column="customer"] {
-    grid-area: customer;
-  }
-
-  .board-column[data-column="kitchen"] {
-    grid-area: kitchen;
-  }
-
-  .board-column[data-column="courier"] {
-    grid-area: courier;
+/* Beside the customer column, kitchen and courier stick to the window while
+   the menu scrolls; taller than the window, they scroll inside. */
+@container style(--viewport: md) or style(--viewport: lg) or style(
+  --viewport: xl
+) {
+  .board-side {
+    position: sticky;
+    top: var(--space-4);
+    max-height: calc(100vh - 2 * var(--space-4));
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 

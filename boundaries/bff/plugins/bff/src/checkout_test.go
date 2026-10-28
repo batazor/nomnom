@@ -30,6 +30,7 @@ func placeOrderRequest() *service.MutationPlaceOrderRequest {
 		RestaurantId:   "restaurant-1",
 		Items:          []*service.OrderLineInput{{MenuItemId: "menu-pho", Quantity: 2}},
 		IdempotencyKey: "attempt-1",
+		Priority:       service.OrderPriority_ORDER_PRIORITY_STANDARD,
 	}}
 }
 
@@ -119,4 +120,8 @@ func TestPlaceOrderErrors(t *testing.T) {
 	_, err := svc.MutationPlaceOrder(ctx, request)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
+	request = placeOrderRequest()
+	request.Input.Priority = service.OrderPriority_ORDER_PRIORITY_UNSPECIFIED
+	_, err = svc.MutationPlaceOrder(ctx, request)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
