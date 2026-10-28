@@ -1,402 +1,107 @@
 {
   "operator": "kind-operator",
   "cells": [
-    {
-      "id": "cell-1",
-      "router": {
-        "namespace": "nomnom-bff",
-        "name": "bff",
-        "port": 3010
-      }
-    }
+    {"id": "cell-1", "router": {"namespace": "nomnom-bff", "name": "bff", "port": 3010}}
   ],
   "markets": [
-    {
-      "id": "berlin",
-      "name": "Berlin",
-      "currency": "EUR",
-      "timeZone": "Europe/Berlin",
-      "cellId": "cell-1"
-    }
+    {"id": "berlin", "name": "Berlin", "currency": "EUR", "timeZone": "Europe/Berlin", "cellId": "cell-1"}
   ],
   "market": "berlin",
   "owner": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
   "kitchen": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
   "couriers": [
-    {
-      "id": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
-      "name": "Илья",
-      "latitude": 52.5262,
-      "longitude": 13.4006
-    },
-    {
-      "id": "demo-courier-timur",
-      "name": "Тимур",
-      "latitude": 52.5281,
-      "longitude": 13.3986
-    },
-    {
-      "id": "demo-courier-anna",
-      "name": "Анна",
-      "latitude": 52.5244,
-      "longitude": 13.4049
-    },
-    {
-      "id": "demo-courier-sergey",
-      "name": "Сергей",
-      "latitude": 52.5229,
-      "longitude": 13.4012
-    }
+    {"id": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw", "name": "Илья", "latitude": 52.5262, "longitude": 13.4006},
+    {"id": "demo-courier-timur", "name": "Тимур", "latitude": 52.5281, "longitude": 13.3986},
+    {"id": "demo-courier-anna", "name": "Анна", "latitude": 52.5244, "longitude": 13.4049},
+    {"id": "demo-courier-sergey", "name": "Сергей", "latitude": 52.5229, "longitude": 13.4012}
   ],
   "restaurants": [
     {
       "name": "Пельменная «Сибирь»",
       "items": [
-        {
-          "name": "Пельмени сибирские",
-          "description": "Говядина и свинина, сметана",
-          "price": "11.90"
-        },
-        {
-          "name": "Вареники с картошкой",
-          "description": "Жареный лук, сметана",
-          "price": "9.50"
-        },
-        {
-          "name": "Вареники с вишней",
-          "description": "Сладкие, со сметаной",
-          "price": "8.90"
-        },
-        {
-          "name": "Борщ",
-          "description": "Со сметаной и чесночной пампушкой",
-          "price": "7.80"
-        },
-        {
-          "name": "Салат оливье",
-          "description": "Классический",
-          "price": "6.50"
-        },
-        {
-          "name": "Морс клюквенный",
-          "description": "0,4 л",
-          "price": "3.20"
-        }
+        {"name": "Пельмени сибирские", "description": "Говядина и свинина, сметана", "price": "11.90"},
+        {"name": "Вареники с картошкой", "description": "Жареный лук, сметана", "price": "9.50"},
+        {"name": "Вареники с вишней", "description": "Сладкие, со сметаной", "price": "8.90"},
+        {"name": "Борщ", "description": "Со сметаной и чесночной пампушкой", "price": "7.80"},
+        {"name": "Салат оливье", "description": "Классический", "price": "6.50"},
+        {"name": "Морс клюквенный", "description": "0,4 л", "price": "3.20"}
       ],
-      "cooks": [
-        "Айгуль",
-        "Олег",
-        "Марат"
-      ],
+      "cooks": ["Айгуль", "Олег", "Марат"],
       "openingHours": [
-        {
-          "day": 1,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 1,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 2,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 2,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 3,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 3,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 4,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 4,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 5,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 5,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 6,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 6,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 7,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 7,
-          "opens": "12:00",
-          "closes": "00:00"
-        }
+        {"day": 1, "opens": "00:00", "closes": "12:00"},
+        {"day": 1, "opens": "12:00", "closes": "00:00"},
+        {"day": 2, "opens": "00:00", "closes": "12:00"},
+        {"day": 2, "opens": "12:00", "closes": "00:00"},
+        {"day": 3, "opens": "00:00", "closes": "12:00"},
+        {"day": 3, "opens": "12:00", "closes": "00:00"},
+        {"day": 4, "opens": "00:00", "closes": "12:00"},
+        {"day": 4, "opens": "12:00", "closes": "00:00"},
+        {"day": 5, "opens": "00:00", "closes": "12:00"},
+        {"day": 5, "opens": "12:00", "closes": "00:00"},
+        {"day": 6, "opens": "00:00", "closes": "12:00"},
+        {"day": 6, "opens": "12:00", "closes": "00:00"},
+        {"day": 7, "opens": "00:00", "closes": "12:00"},
+        {"day": 7, "opens": "12:00", "closes": "00:00"}
       ],
-      "scheduledOrders": {
-        "slotCapacity": 4,
-        "openingLead": "0s",
-        "closingGrace": "0s"
-      }
+      "scheduledOrders": {"slotCapacity": 4, "openingLead": "0s", "closingGrace": "0s"}
     },
     {
       "name": "Чайхана «Самарканд»",
       "items": [
-        {
-          "name": "Плов ферганский",
-          "description": "Баранина, жёлтая морковь, нут",
-          "price": "13.50"
-        },
-        {
-          "name": "Лагман",
-          "description": "Тянутая лапша, говядина, овощи",
-          "price": "12.40"
-        },
-        {
-          "name": "Самса с бараниной",
-          "description": "Из тандыра",
-          "price": "4.90"
-        },
-        {
-          "name": "Шашлык из курицы",
-          "description": "С маринованным луком",
-          "price": "14.20"
-        },
-        {
-          "name": "Салат ачучук",
-          "description": "Томаты, лук, базилик",
-          "price": "5.80"
-        },
-        {
-          "name": "Лепёшка тандырная",
-          "description": "",
-          "price": "2.50"
-        },
-        {
-          "name": "Чай зелёный",
-          "description": "Чайник 0,6 л",
-          "price": "3.90"
-        }
+        {"name": "Плов ферганский", "description": "Баранина, жёлтая морковь, нут", "price": "13.50"},
+        {"name": "Лагман", "description": "Тянутая лапша, говядина, овощи", "price": "12.40"},
+        {"name": "Самса с бараниной", "description": "Из тандыра", "price": "4.90"},
+        {"name": "Шашлык из курицы", "description": "С маринованным луком", "price": "14.20"},
+        {"name": "Салат ачучук", "description": "Томаты, лук, базилик", "price": "5.80"},
+        {"name": "Лепёшка тандырная", "description": "", "price": "2.50"},
+        {"name": "Чай зелёный", "description": "Чайник 0,6 л", "price": "3.90"}
       ],
-      "cooks": [
-        "Тимур",
-        "Дильноза"
-      ],
+      "cooks": ["Тимур", "Дильноза"],
       "openingHours": [
-        {
-          "day": 1,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 1,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 2,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 2,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 3,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 3,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 4,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 4,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 5,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 5,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 6,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 6,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 7,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 7,
-          "opens": "12:00",
-          "closes": "00:00"
-        }
+        {"day": 1, "opens": "00:00", "closes": "12:00"},
+        {"day": 1, "opens": "12:00", "closes": "00:00"},
+        {"day": 2, "opens": "00:00", "closes": "12:00"},
+        {"day": 2, "opens": "12:00", "closes": "00:00"},
+        {"day": 3, "opens": "00:00", "closes": "12:00"},
+        {"day": 3, "opens": "12:00", "closes": "00:00"},
+        {"day": 4, "opens": "00:00", "closes": "12:00"},
+        {"day": 4, "opens": "12:00", "closes": "00:00"},
+        {"day": 5, "opens": "00:00", "closes": "12:00"},
+        {"day": 5, "opens": "12:00", "closes": "00:00"},
+        {"day": 6, "opens": "00:00", "closes": "12:00"},
+        {"day": 6, "opens": "12:00", "closes": "00:00"},
+        {"day": 7, "opens": "00:00", "closes": "12:00"},
+        {"day": 7, "opens": "12:00", "closes": "00:00"}
       ],
-      "scheduledOrders": {
-        "slotCapacity": 4,
-        "openingLead": "0s",
-        "closingGrace": "0s"
-      }
+      "scheduledOrders": {"slotCapacity": 4, "openingLead": "0s", "closingGrace": "0s"}
     },
     {
       "name": "Блинная «Теремок у моста»",
       "items": [
-        {
-          "name": "Блин с ветчиной и сыром",
-          "description": "",
-          "price": "7.40"
-        },
-        {
-          "name": "Блин с грибами и сметаной",
-          "description": "",
-          "price": "7.90"
-        },
-        {
-          "name": "Блин со сгущёнкой",
-          "description": "",
-          "price": "5.20"
-        },
-        {
-          "name": "Сырники",
-          "description": "Три штуки, сметана и варенье",
-          "price": "8.30"
-        },
-        {
-          "name": "Квас домашний",
-          "description": "0,5 л",
-          "price": "3.40"
-        }
+        {"name": "Блин с ветчиной и сыром", "description": "", "price": "7.40"},
+        {"name": "Блин с грибами и сметаной", "description": "", "price": "7.90"},
+        {"name": "Блин со сгущёнкой", "description": "", "price": "5.20"},
+        {"name": "Сырники", "description": "Три штуки, сметана и варенье", "price": "8.30"},
+        {"name": "Квас домашний", "description": "0,5 л", "price": "3.40"}
       ],
-      "cooks": [
-        "Анна",
-        "Сергей"
-      ],
+      "cooks": ["Анна", "Сергей"],
       "openingHours": [
-        {
-          "day": 1,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 1,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 2,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 2,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 3,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 3,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 4,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 4,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 5,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 5,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 6,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 6,
-          "opens": "12:00",
-          "closes": "00:00"
-        },
-        {
-          "day": 7,
-          "opens": "00:00",
-          "closes": "12:00"
-        },
-        {
-          "day": 7,
-          "opens": "12:00",
-          "closes": "00:00"
-        }
+        {"day": 1, "opens": "00:00", "closes": "12:00"},
+        {"day": 1, "opens": "12:00", "closes": "00:00"},
+        {"day": 2, "opens": "00:00", "closes": "12:00"},
+        {"day": 2, "opens": "12:00", "closes": "00:00"},
+        {"day": 3, "opens": "00:00", "closes": "12:00"},
+        {"day": 3, "opens": "12:00", "closes": "00:00"},
+        {"day": 4, "opens": "00:00", "closes": "12:00"},
+        {"day": 4, "opens": "12:00", "closes": "00:00"},
+        {"day": 5, "opens": "00:00", "closes": "12:00"},
+        {"day": 5, "opens": "12:00", "closes": "00:00"},
+        {"day": 6, "opens": "00:00", "closes": "12:00"},
+        {"day": 6, "opens": "12:00", "closes": "00:00"},
+        {"day": 7, "opens": "00:00", "closes": "12:00"},
+        {"day": 7, "opens": "12:00", "closes": "00:00"}
       ],
-      "scheduledOrders": {
-        "slotCapacity": 4,
-        "openingLead": "0s",
-        "closingGrace": "0s"
-      }
+      "scheduledOrders": {"slotCapacity": 4, "openingLead": "0s", "closingGrace": "0s"}
     }
   ]
 }
