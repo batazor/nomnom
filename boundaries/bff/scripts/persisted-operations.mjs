@@ -23,6 +23,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildSchema, parse, validate } from "graphql";
 
 const bff = join(dirname(fileURLToPath(import.meta.url)), "..");
 const root = join(bff, "..", "..");
@@ -32,17 +33,23 @@ const uiDocuments = join(
 );
 const e2eOperations = join(root, "ops/kind/e2e/operations");
 const operationsDir = join(bff, "persisted-operations");
+const schema = buildSchema(
+  readFileSync(join(bff, "client-schema.graphql"), "utf8"),
+);
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 const fileContent = (body) =>
   `${JSON.stringify({ version: 1, body }, null, 2)}\n`;
 
 const sources = new Map();
+// Hash -> {source, body} of every operation, for the schema validation.
+const operations = new Map();
 const add = (hash, body, source) => {
   if (sha256(body) !== hash) {
     throw new Error(`${source}: ${hash} is not the SHA-256 of its text`);
   }
   sources.set(hash, body);
+  operations.set(hash, { source, body });
 };
 for (const [hash, body] of Object.entries(
   JSON.parse(readFileSync(uiDocuments, "utf8")),
@@ -70,6 +77,22 @@ for (const file of committed) {
   if (version !== 1 || sha256(body) !== file.replace(/\.json$/, "")) {
     throw new Error(`${join(operationsDir, file)} is not an operation file`);
   }
+  operations.set(file.replace(/\.json$/, ""), {
+    source: join(operationsDir, file),
+    body,
+  });
+}
+
+const invalid = [...operations.entries()].flatMap(([hash, { source, body }]) =>
+  validate(schema, parse(body)).map(
+    (error) => `${source} ${hash}: ${error.message}`,
+  ),
+);
+if (invalid.length > 0) {
+  console.error(
+    `operations do not validate against client-schema.graphql:\n${invalid.join("\n")}`,
+  );
+  process.exit(1);
 }
 
 const missing = [...sources.entries()].filter(

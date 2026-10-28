@@ -202,7 +202,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды (`acc
 
 Router в образе (production и kind) выполняет только операции из [`persisted-operations/`](persisted-operations/) — по файлу `<sha256>.json` на операцию ([локальный ADR 3](docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md#allowlist-операций-persisted-operations)): клиент шлёт SHA-256 текста операции в `extensions.persistedQuery.sha256Hash`, запрос с текстом без хеша блокируется, неизвестный хеш — `PersistedQueryNotFound`. Subscriptions по SSE идут так же, с хешем.
 
-- `npm run operations` пишет файлы операций из `persisted-documents.json` codegen UI (`npm run codegen` в `boundaries/ui`) и `ops/kind/e2e/operations/*.graphql`; новые операции добавляются, прежние остаются. Файлы коммитятся; `npm run check` падает, если файла операции нет.
+- `npm run operations` пишет файлы операций из `persisted-documents.json` codegen UI (`npm run codegen` в `boundaries/ui`) и `ops/kind/e2e/operations/*.graphql`; новые операции добавляются, прежние остаются. Файлы коммитятся; `npm run check` падает, если файла операции нет. Каждая операция, включая прежние, валидируется по [`client-schema.graphql`](client-schema.graphql): схема не может сломать операцию выпущенного клиента, такую операцию сначала удаляют вручную.
 - Новая операция UI: `npm run codegen` в `boundaries/ui`, затем `npm run operations` здесь, оба файла — в одном изменении. BFF выкатывается раньше UI или вместе с ним.
 - Локальный [`config.yaml`](config.yaml) читает те же файлы и принимает текст операций (`log_unknown`).
 
