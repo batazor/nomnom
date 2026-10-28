@@ -6,15 +6,15 @@
 
 ## 2. restaurants: окна и резервации
 
-- [ ] 2.1 `scheduledSlotCapacity`, gRPC `SetScheduledSlotCapacity` с `restaurant#manage`; конфиг `SCHEDULED_SLOT__*` с валидацией на старте; тесты (`FR-672`, `FR-694`, `AC-894`, `AC-895`, `AC-937`).
-- [ ] 2.2 Слайс резервации: aggregate `ScheduleSlot`, коллекция MongoDB и индексы, List Scheduled Slots, Reserve/Confirm/Release Scheduled Slot, gRPC; MongoDB testcontainers, включая конкурентную резервацию (`FR-673`–`FR-675`, `FR-695`, `AC-896`–`AC-903`).
+- [ ] 2.1 Настройки запланированных заказов (ёмкость, `openingLead`, `closingGrace`), gRPC `SetScheduledOrderSettings` с `restaurant#manage`; конфиг `SCHEDULED_SLOT__*` с валидацией на старте; тесты (`FR-672`, `FR-694`, `AC-894`, `AC-895`, `AC-937`).
+- [ ] 2.2 Слайс резервации: aggregate `ScheduleSlot`, допустимость окна по расписанию, коллекция MongoDB и индексы, List Scheduled Slots, Reserve/Confirm/Release Scheduled Slot, gRPC; MongoDB testcontainers, включая конкурентную резервацию (`FR-673`–`FR-675`, `FR-695`, `FR-703`, `AC-896`–`AC-903`, `AC-956`, `AC-957`).
 - [ ] 2.3 `baseline_preparation` в представлении ресторана и `restaurants.proto`.
 
 ## 3. restaurants: Restaurant Order
 
 - [ ] 3.1 Блок `schedule` в Receive Order Request и Restaurant Order (`FR-683`, `AC-921`).
 - [ ] 3.2 Accept для запланированного заказа и gRPC `QueueRestaurantOrder` для `service` identity `orders` (`FR-222`, `AC-922`, `AC-923`, `FR-224`, `AC-924`).
-- [ ] 3.3 List Scheduled Orders по gRPC (`FR-684`, `AC-925`).
+- [ ] 3.3 List Scheduled Orders по gRPC; класс запланированных в правиле очереди (`FR-684`, `AC-925`, `FR-241`, `AC-281`, `AC-862`, `AC-953`, `AC-954`).
 - [ ] 3.4 Wait Time Statistics от `queued_at` (`FR-644`, `AC-837`, `AC-926`).
 - [ ] 3.5 Симулятор кухни: приём запланированных заказов без срока.
 
@@ -33,7 +33,7 @@
 ## 6. BFF и UI
 
 - [ ] 6.1 BFF: клиенты `restaurants` и `orders`, `Restaurant.scheduledSlots`, `PlaceOrderInput.deliveryWindowStart`, `Order.deliveryWindow`, `OrderStatus.SCHEDULED`, problems, kitchen-query запланированных; тесты (`FR-685`, `FR-690`, `AC-927`, `AC-928`).
-- [ ] 6.2 UI покупателя: выбор окна во времени Market, альтернативы при отказе, экран запланированного заказа; i18n, generated types, моки, тесты (`FR-686`, `FR-687`, `AC-929`–`AC-931`).
+- [ ] 6.2 UI покупателя: выбор окна во времени Market, приоритет и для запланированного, альтернативы при отказе, экран запланированного заказа; i18n, generated types, моки, тесты (`FR-686`, `FR-687`, `AC-929`–`AC-931`).
 - [ ] 6.3 Флоу-борд: колонка «Запланированные» (`FR-688`, `AC-932`).
 
 ## 7. ops и документация

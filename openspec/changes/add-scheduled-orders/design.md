@@ -24,13 +24,19 @@
 
 ## Ёмкость и окна (`restaurants`)
 
-- `Restaurant.scheduledSlotCapacity?: int > 0` — сколько запланированных заказов ресторан берёт на одно окно. Задаётся и убирается `SetScheduledSlotCapacity(restaurant_id, capacity | clear)` с `restaurant#manage`. Отдельный RPC, а не поле `UpdateRestaurant`: ёмкость — настройка планирования, а не карточка ресторана. Нет ёмкости — ресторан не берёт запланированные заказы. Это пустое состояние, а не подмена.
+- `Restaurant.scheduledOrders?` — настройки запланированных заказов, задаются вместе и только вместе:
+  - `slotCapacity: int > 0` — сколько запланированных заказов ресторан берёт на одно окно;
+  - `openingLead: duration ≥ 0` — первое окно интервала начинается не раньше `opens_at + openingLead`, чтобы кухне не пришлось начинать до открытия;
+  - `closingGrace: duration ≥ 0` — последнее окно интервала начинается не позже `closes_at + closingGrace`.
+
+  Задаются и убираются `SetScheduledOrderSettings(restaurant_id, settings | clear)` с `restaurant#manage`. Отдельный RPC, а не поле `UpdateRestaurant`: это настройки планирования, а не карточка ресторана. Нет настроек — ресторан не берёт запланированные заказы. Это пустое состояние, а не подмена.
+- Интервалы работы и пояс ресторана — из change `add-restaurant-opening-hours`. Окно допустимо, если существует интервал, для которого `opens_at + openingLead ≤ window_start ≤ closes_at + closingGrace`. Между интервалами (обед, ночь) окон нет.
 - Обязательный конфиг `restaurants`: `SCHEDULED_SLOT__WIDTH`, `SCHEDULED_SLOT__MIN_LEAD`, `SCHEDULED_SLOT__MAX_HORIZON`, `SCHEDULED_SLOT__HOLD_TTL`, `SCHEDULED_SLOT__ALTERNATIVES`. Пустое или невалидное значение, ширина, не делящая 30 минут, и `MIN_LEAD ≥ MAX_HORIZON` — падение на старте. `MAX_HORIZON` MUST быть меньше срока жизни Authorization hold у provider; это ограничение записывается рядом со значением в values.
-- **List Scheduled Slots**(`restaurant_id`) — окна от первой границы сетки не раньше `now + MIN_LEAD` до `now + MAX_HORIZON`, каждое с `available`. Окно недоступно, если активных резерваций не меньше ёмкости. Ресторан без ёмкости или закрытый — пустой список. Query публичный, как Get Restaurant.
+- **List Scheduled Slots**(`restaurant_id`) — окна от первой границы сетки не раньше `now + MIN_LEAD` до `now + MAX_HORIZON`, только допустимые по расписанию, каждое с `available`. Окно недоступно, если активных резерваций не меньше ёмкости. Ресторан без настроек или не принимающий заказы сейчас — пустой список: кухня принимает запланированный заказ сразу, поэтому оформить его можно, только пока ресторан работает. Query публичный, как Get Restaurant.
 - Aggregate `ScheduleSlot` (`restaurantId`, `windowStart`) — документ на окно с резервациями и `version`. Активная резервация — `confirmed` или `held` с `expiresAt > now`. Просроченные `held` вычищаются при следующей записи этого окна; TTL-индекс только убирает пустые документы. Фоновых заданий нет.
 - **Reserve Scheduled Slot**(`restaurant_id`, `window_start`, `order_id`) — от `service` identity `orders`:
-  - окно не на сетке, раньше `now + MIN_LEAD` или позже горизонта — `INVALID_ARGUMENT`;
-  - ресторан закрыт или без ёмкости — `FAILED_PRECONDITION` `SCHEDULED_ORDERS_UNAVAILABLE`;
+  - окно не на сетке, раньше `now + MIN_LEAD`, позже горизонта или вне расписания — `INVALID_ARGUMENT`;
+  - ресторан не принимает заказы сейчас или без настроек — `FAILED_PRECONDITION` `SCHEDULED_ORDERS_UNAVAILABLE`;
   - мест нет — `FAILED_PRECONDITION` `SLOT_UNAVAILABLE` и до `ALTERNATIVES` ближайших доступных окон в деталях ошибки;
   - иначе резервация `held` с `expiresAt = now + HOLD_TTL`; ответ — окно (`window_start`, `window_end`);
   - повтор с тем же `order_id` возвращает ту же резервацию.
@@ -38,12 +44,12 @@
   Конкурентные резервации одного окна дают write conflict по `version`; use case повторяет попытку, и ёмкость не превышается.
 - **Confirm Scheduled Slot**(`order_id`) — `held` → `confirmed`, повтор — no-op. Если hold просрочен и вычищен, подтверждение заново проверяет ёмкость: есть место — `confirmed`, нет — `SLOT_UNAVAILABLE`.
 - **Release Scheduled Slot**(`order_id`) — удаляет резервацию; отсутствующая резервация — успешный no-op.
-- Уменьшение ёмкости не трогает существующие резервации, а новые отклоняются.
+- Изменение настроек или расписания не трогает существующие резервации, а новые проверяются по новым значениям.
 
 ## Place Order (`orders`)
 
 - `PlaceOrderRequest.delivery_window_start` — необязательный момент. Задан — заказ запланированный.
-- Вместе с `priority = PREMIUM` — `INVALID_ARGUMENT`.
+- `priority = PREMIUM` допустим и с окном: доплата берётся так же, а заказ идёт первым среди запланированных (см. «Kitchen Queue»).
 - Порядок: проверка состава → catalog snapshot → запись relationship (FR-102) → `ReserveScheduledSlot` с заранее сгенерированным `order_id` → транзакция `Order` + Outbox. Order хранит `delivery_window` из ответа резервации, `OrderPlaced` несёт его.
 - Ошибки резервации проходят в ответ Place Order с теми же reason (`SLOT_UNAVAILABLE` с альтернативами, `SCHEDULED_ORDERS_UNAVAILABLE`, `INVALID_ARGUMENT`); Order не сохраняется.
 - Если транзакция не состоялась, hold не освобождается явно, а истекает через `HOLD_TTL`. Повтор Place Order с тем же idempotency key возвращает сохранённый Order (FR-101) без новой резервации.
@@ -92,6 +98,16 @@ AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → P
 - Компенсации: журнал Saga получает шаг резервации. При отказе оплаты, отмене или неудаче после резервации workflow вызывает `ReleaseSlotReservation` (ключ `order_id + release_slot`). После Pickup резервация не освобождается: окно своё отработало.
 - Workflow запланированного заказа живёт до `MAX_HORIZON` и переживает выкатки worker'а. Поэтому ветка вводится под Temporal versioning (patch), а replay-тесты на histories в stage `scheduled` обязательны.
 
+## Kitchen Queue
+
+Правило очереди из `add-premium-priority` (FR-241) получает класс выше премиума:
+
+1. **запланированные** в `QUEUED`: сначала `PREMIUM`, затем `STANDARD`; внутри — по `planned_ready_at`, затем `queued_at` и id. У запланированного заказа жёсткий срок к окну, поэтому он обгоняет и премиум, и состарившиеся обычные;
+2. премиум и обычные, ждущие дольше базового времени × `KITCHEN_QUEUE__AGING_FACTOR`;
+3. остальные обычные; внутри классов 2 и 3 — FIFO по `queued_at`, затем по id.
+
+Start Next Preparation берёт голову по этому правилу без изменений в самой команде.
+
 ## Restaurant Order
 
 - `ReceiveOrderRequest` получает необязательный блок `schedule { window_start, window_end, planned_ready_at }`. Restaurant Order хранит его как данные, а не как State.
@@ -113,7 +129,7 @@ Cancellation policy (FR-462) для запланированного заказ�
   - `Order.deliveryWindow`;
   - `OrderStatus.SCHEDULED` — подтверждённый запланированный заказ, у которого ещё нет факта Preparation Started;
   - problems `SLOT_UNAVAILABLE` (с `alternativeWindows`) и `SCHEDULED_ORDERS_UNAVAILABLE`.
-- Оформление: переключатель «Как можно скорее / Ко времени». Если у ресторана нет окон, переключателя нет. Окна сгруппированы по дням в поясе Market. При `SLOT_UNAVAILABLE` UI предлагает альтернативные окна, корзина сохраняется.
+- Оформление: переключатель «Как можно скорее / Ко времени». Если у ресторана нет окон, переключателя нет. Окна сгруппированы по дням в поясе Market. Чекбокс приоритета доступен и для запланированного заказа. При `SLOT_UNAVAILABLE` UI предлагает альтернативные окна, корзина сохраняется.
 - Экран заказа: статус «Запланирован», окно в шапке; бар готовки появляется только после старта Preparation.
 - Флоу-борд: колонка «Запланированные» между входящими и очередью, карточка показывает окно и `planned_ready_at`, действий у карточки нет. Симулятор кухни принимает запланированные заказы без собственного срока.
 - Обновления только subscriptions (ADR 36), без polling.
@@ -122,5 +138,6 @@ Cancellation policy (FR-462) для запланированного заказ�
 
 - Workflow живут часами: versioning и replay становятся обязательными с этим change, а в kind перед выкаткой worker'а незавершённые workflow прерываются, как в прошлых change.
 - Оценка доставки без адресов грубая; окно её поглощает только при ширине окна больше разброса перевозки.
-- Ресторан может закрыться к окну: заказ уже принят, `QueueRestaurantOrder` поставит его в очередь закрытого ресторана. Расписание работы ресторана — отдельный change.
+- Ресторан, закрытый вручную к моменту старта, получит заказ в очередь; если его никто не возьмёт, обычный deadline Preparation отменит заказ с освобождением резервации и Authorization. Окна по расписанию это исключают для штатного закрытия.
+- Если запланированных заказов на кухне много, обычные ждут дольше: ёмкость на окно и есть рычаг ресторана против этого.
 - Резервация — первое ограничение приёма. Оно касается только запланированных заказов, а позиция «приём не ограничивается» в `docs/kitchen.md` уточняется для ASAP.

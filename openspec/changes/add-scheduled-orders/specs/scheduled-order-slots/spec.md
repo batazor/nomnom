@@ -2,10 +2,10 @@
 
 ## ADDED Requirements
 
-### Requirement: Ресторан задаёт ёмкость окон доставки
+### Requirement: Ресторан задаёт настройки запланированных заказов
 **ID:** FR-672
 
-`SetScheduledSlotCapacity` SHALL задавать `scheduledSlotCapacity` ресторана — целое больше 0 — или убирать её (`clear`) и MUST требовать `restaurant#manage`. Ресторан без ёмкости MUST NOT принимать запланированные заказы.
+`SetScheduledOrderSettings` SHALL задавать вместе ёмкость окна (целое больше 0), `openingLead` и `closingGrace` (неотрицательные длительности) или убирать их (`clear`) и MUST требовать `restaurant#manage`. Ресторан без настроек MUST NOT принимать запланированные заказы.
 
 #### Scenario: Владелец задаёт ёмкость
 **ID:** AC-894
@@ -16,7 +16,7 @@
 #### Scenario: Неположительная ёмкость
 **ID:** AC-895
 
-- **WHEN** владелец задаёт ёмкость 0
+- **WHEN** владелец задаёт ёмкость 0 при допустимых `openingLead` и `closingGrace`
 - **THEN** вызов отклоняется `INVALID_ARGUMENT`, ёмкость не меняется
 
 ### Requirement: Конфиг окон обязателен
@@ -33,7 +33,7 @@
 ### Requirement: List Scheduled Slots возвращает окна с доступностью
 **ID:** FR-673
 
-List Scheduled Slots SHALL возвращать окна ресторана шириной `SCHEDULED_SLOT__WIDTH`, выровненные по UTC кратно ширине, от первой границы не раньше `now + MIN_LEAD` до `now + MAX_HORIZON`, каждое с `start`, `end` и `available`. Окно MUST быть недоступно, если активных резерваций не меньше ёмкости; активная резервация — `confirmed` или `held` с непросроченным hold. Ресторан без ёмкости или закрытый SHALL получать пустой список. Query SHALL быть публичным, как Get Restaurant.
+List Scheduled Slots SHALL возвращать окна ресторана шириной `SCHEDULED_SLOT__WIDTH`, выровненные по UTC кратно ширине, от первой границы не раньше `now + MIN_LEAD` до `now + MAX_HORIZON`, каждое с `start`, `end` и `available`. Окно MUST быть недоступно, если активных резерваций не меньше ёмкости; активная резервация — `confirmed` или `held` с непросроченным hold. Ресторан без настроек или не принимающий заказы сейчас SHALL получать пустой список. Query SHALL быть публичным, как Get Restaurant.
 
 #### Scenario: Окно заполнено
 **ID:** AC-896
@@ -49,16 +49,35 @@ List Scheduled Slots SHALL возвращать окна ресторана ши
 - **WHEN** покупатель запрашивает окна ресторана
 - **THEN** окно возвращается с `available = true`
 
+### Requirement: Окна ограничены расписанием ресторана
+**ID:** FR-703
+
+Окно SHALL быть допустимым, только если его начало внутри интервала работы ресторана не раньше `opens_at + openingLead` и не позже `closes_at + closingGrace`. Между интервалами окон MUST NOT быть.
+
+#### Scenario: Окна у границ расписания
+**ID:** AC-956
+
+- **GIVEN** ресторан работает 10:00–22:00, `openingLead` 45 минут, `closingGrace` 10 минут, ширина 15 минут
+- **WHEN** покупатель запрашивает окна на сегодня
+- **THEN** первое окно — 10:45, последнее — 22:00, окна 22:15 нет
+
 ### Requirement: Reserve Scheduled Slot держит место окна
 **ID:** FR-674
 
-Reserve Scheduled Slot SHALL принимать `restaurant_id`, `window_start` и `order_id` от `service` identity `orders` и создавать резервацию `held` с `expiresAt = now + HOLD_TTL`, возвращая окно. Окно не на сетке, раньше `now + MIN_LEAD` или позже горизонта MUST давать `INVALID_ARGUMENT`; закрытый ресторан или ресторан без ёмкости — `FAILED_PRECONDITION` `SCHEDULED_ORDERS_UNAVAILABLE`. Повтор с тем же `order_id` MUST возвращать ту же резервацию.
+Reserve Scheduled Slot SHALL принимать `restaurant_id`, `window_start` и `order_id` от `service` identity `orders` и создавать резервацию `held` с `expiresAt = now + HOLD_TTL`, возвращая окно. Окно не на сетке, раньше `now + MIN_LEAD`, позже горизонта или вне расписания MUST давать `INVALID_ARGUMENT`; ресторан без настроек или не принимающий заказы сейчас — `FAILED_PRECONDITION` `SCHEDULED_ORDERS_UNAVAILABLE`. Повтор с тем же `order_id` MUST возвращать ту же резервацию.
 
 #### Scenario: Место есть
 **ID:** AC-898
 
 - **WHEN** `orders` резервирует свободное окно 19:00 для заказа
 - **THEN** создана резервация `held`, ответ — окно 19:00–19:15
+
+#### Scenario: Окно после закрытия
+**ID:** AC-957
+
+- **GIVEN** ресторан работает до 22:00, `closingGrace` 10 минут
+- **WHEN** `orders` резервирует окно 22:15
+- **THEN** ответ `INVALID_ARGUMENT`, резервация не создана
 
 ### Requirement: Ёмкость окна не превышается
 **ID:** FR-695

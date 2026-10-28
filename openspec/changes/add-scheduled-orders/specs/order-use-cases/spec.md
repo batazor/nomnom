@@ -5,7 +5,7 @@
 ### Requirement: Place Order принимает окно доставки
 **ID:** FR-681
 
-Place Order SHALL принимать необязательный `delivery_window_start`. Заданное окно вместе с `priority = PREMIUM` MUST давать `INVALID_ARGUMENT`. После записи relationship и до локальной транзакции Place Order SHALL резервировать окно в `restaurants` с заранее сгенерированным `order_id`, сохранять в `Order` окно из ответа резервации и передавать его в `OrderPlaced`.
+Place Order SHALL принимать необязательный `delivery_window_start`, в том числе вместе с `priority = PREMIUM`. После записи relationship и до локальной транзакции Place Order SHALL резервировать окно в `restaurants` с заранее сгенерированным `order_id`, сохранять в `Order` окно из ответа резервации и передавать его в `OrderPlaced`.
 
 #### Scenario: Заказ ко времени
 **ID:** AC-912
@@ -13,11 +13,11 @@ Place Order SHALL принимать необязательный `delivery_wind
 - **WHEN** Customer оформляет заказ с `delivery_window_start` 19:00 в ресторане со свободным окном
 - **THEN** `Order` сохранён с окном 19:00–19:15, а `OrderPlaced` несёт окно
 
-#### Scenario: Окно и приоритет
+#### Scenario: Премиум ко времени
 **ID:** AC-914
 
 - **WHEN** Customer оформляет заказ с окном и `priority = PREMIUM`
-- **THEN** оформление отклоняется `INVALID_ARGUMENT` до резервации
+- **THEN** `Order` сохранён с окном, `priority = PREMIUM` и доплатой в `total`
 
 ### Requirement: Отказ резервации и повтор Place Order
 **ID:** FR-692
