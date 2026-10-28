@@ -150,7 +150,9 @@ type Market struct {
 	// ISO 4217.
 	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
 	// Market Placement: the Cell that serves the Market.
-	CellId        string `protobuf:"bytes,4,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
+	CellId string `protobuf:"bytes,4,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
+	// IANA time zone (Europe/Berlin), immutable.
+	TimeZone      string `protobuf:"bytes,5,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -213,6 +215,13 @@ func (x *Market) GetCellId() string {
 	return ""
 }
 
+func (x *Market) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
+	}
+	return ""
+}
+
 var File_nomnom_controlplane_v1_controlplane_proto protoreflect.FileDescriptor
 
 const file_nomnom_controlplane_v1_controlplane_proto_rawDesc = "" +
@@ -225,12 +234,13 @@ const file_nomnom_controlplane_v1_controlplane_proto_rawDesc = "" +
 	"\x04port\x18\x03 \x01(\x05R\x04port\"r\n" +
 	"\x04Cell\x12\x17\n" +
 	"\acell_id\x18\x01 \x01(\tR\x06cellId\x12:\n" +
-	"\x06router\x18\x03 \x01(\v2\".nomnom.controlplane.v1.ServiceRefR\x06routerJ\x04\b\x02\x10\x03R\x0fgateway_address\"n\n" +
+	"\x06router\x18\x03 \x01(\v2\".nomnom.controlplane.v1.ServiceRefR\x06routerJ\x04\b\x02\x10\x03R\x0fgateway_address\"\x8b\x01\n" +
 	"\x06Market\x12\x1b\n" +
 	"\tmarket_id\x18\x01 \x01(\tR\bmarketId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\x17\n" +
-	"\acell_id\x18\x04 \x01(\tR\x06cellIdB\x9a\x02\n" +
+	"\acell_id\x18\x04 \x01(\tR\x06cellId\x12\x1b\n" +
+	"\ttime_zone\x18\x05 \x01(\tR\btimeZoneB\x9a\x02\n" +
 	"\x1acom.nomnom.controlplane.v1B\x11ControlplaneProtoP\x01Zogithub.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1;controlplanev1\xa2\x02\x03NCX\xaa\x02\x16Nomnom.Controlplane.V1\xca\x02\x16Nomnom\\Controlplane\\V1\xe2\x02\"Nomnom\\Controlplane\\V1\\GPBMetadata\xea\x02\x18Nomnom::Controlplane::V1b\x06proto3"
 
 var (

@@ -25,9 +25,17 @@ func (approvingNeighbours) CancelAuthorization(context.Context, ports.PaymentReq
 
 func (approvingNeighbours) Refund(context.Context, ports.PaymentRequest) error { return nil }
 
-func (approvingNeighbours) RequestOrder(context.Context, ports.RestaurantOrderRequest) error {
-	return nil
+func (approvingNeighbours) RequestOrder(_ context.Context, request ports.RestaurantOrderRequest) (string, error) {
+	return "restaurant-" + request.OrderID, nil
 }
+
+func (approvingNeighbours) QueueOrder(context.Context, ports.QueueRequest) error { return nil }
+
+func (approvingNeighbours) ConfirmSlot(context.Context, ports.SlotRequest) (ports.SlotDecision, error) {
+	return ports.SlotDecision{Confirmed: true}, nil
+}
+
+func (approvingNeighbours) ReleaseSlot(context.Context, ports.SlotRequest) error { return nil }
 
 func (approvingNeighbours) CancelOrder(context.Context, ports.RestaurantOrderRequest) error {
 	return nil

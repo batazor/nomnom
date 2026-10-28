@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	grpcadapter "nomnom/orders/infrastructure/grpc"
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
@@ -59,6 +60,7 @@ func newClientWith(t *testing.T, subjects grpcadapter.SubjectResolver, store *re
 // commandPorts are the ports of the command use cases besides store and authorizer.
 type commandPorts struct {
 	catalog  placeorder.Catalog
+	slots    placeorder.SlotReservations
 	workflow fulfillment.CancellationRequester
 	clock    *fake.Clock
 }
@@ -73,6 +75,7 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 		Authorizer: authorizer,
 		Policy:     fixedWindow(t, cancellationWindow),
 		Catalog:    ports.catalog,
+		Slots:      ports.slots,
 		Workflow:   ports.workflow,
 		Clock:      ports.clock,
 		IDs:        &fake.IDs{},
@@ -236,6 +239,81 @@ func TestGetOrderMapsExpectedTimes(t *testing.T) {
 	assert.Equal(t, expected.ReadyAt, response.GetOrder().GetExpectedReadyAt().AsTime())
 	assert.Equal(t, expected.PickupAt, response.GetOrder().GetExpectedPickupAt().AsTime())
 	assert.Nil(t, response.GetOrder().GetExpectedDeliveredAt())
+}
+
+// FR-681: GetOrder carries the Delivery Window of a Scheduled Order and the
+// cancellation window closing CANCELLATION__SCHEDULED_CUTOFF before it.
+func TestGetOrderMapsDeliveryWindow(t *testing.T) {
+	store := repositorytest.Open(t)
+	windowStart := ordertest.PlacedAt.Add(7 * time.Hour)
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1",
+		ordertest.WithDeliveryWindow(t, windowStart, windowStart.Add(15*time.Minute)))))
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-2")))
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
+	client := newClientWith(t, subjects, store, NewMockAuthorizer(t))
+
+	scheduled, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-1"})
+	require.NoError(t, err)
+	assert.Equal(t, windowStart, scheduled.GetOrder().GetDeliveryWindow().GetStart().AsTime())
+	assert.Equal(t, windowStart.Add(15*time.Minute), scheduled.GetOrder().GetDeliveryWindow().GetEnd().AsTime())
+	assert.Equal(t, windowStart.Add(-time.Hour), scheduled.GetOrder().GetCancellationWindow().GetClosesAt().AsTime())
+
+	asap, err := client.GetOrder(context.Background(), &ordersv1.GetOrderRequest{OrderId: "order-2"})
+	require.NoError(t, err)
+	assert.Nil(t, asap.GetOrder().GetDeliveryWindow())
+}
+
+// AC-912, AC-913: PlaceOrder reserves the window of delivery_window_start;
+// a full window is SLOT_UNAVAILABLE with the alternatives in a SlotUnavailable
+// detail.
+func TestPlaceOrderWithDeliveryWindow(t *testing.T) {
+	windowStart := ordertest.PlacedAt.Add(7 * time.Hour)
+	window, err := order.NewDeliveryWindow(windowStart, windowStart.Add(15*time.Minute))
+	require.NoError(t, err)
+	alternative, err := order.NewDeliveryWindow(windowStart.Add(15*time.Minute), windowStart.Add(30*time.Minute))
+	require.NoError(t, err)
+	store, catalog, slots := repositorytest.Open(t), NewMockCatalog(t), NewMockSlotReservations(t)
+	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).Return(placeorder.CatalogSnapshot{
+		MarketID:     ordertest.MarketID(t),
+		Currency:     "EUR",
+		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+		MinimumTotal: ordertest.Money(t, "0"),
+		MaximumTotal: ordertest.Money(t, "100"),
+	}, nil).Times(2)
+	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).Return(window, nil).Once()
+	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-2")).
+		Return(order.DeliveryWindow{}, placeorder.SlotUnavailable{Alternatives: []order.DeliveryWindow{alternative}}).Once()
+	subjects := NewMockSubjectResolver(t)
+	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
+	client := newClientWithPorts(t, subjects, store, NewMockAuthorizer(t), commandPorts{
+		catalog:  catalog,
+		slots:    slots,
+		workflow: NewMockCancellationRequester(t),
+		clock:    fake.NewClock(ordertest.PlacedAt),
+	})
+	request := placeRequest()
+	request.DeliveryWindowStart = timestamppb.New(windowStart)
+
+	_, err = client.PlaceOrder(context.Background(), request)
+	require.NoError(t, err)
+	snapshot, ok := store.Snapshot("order-1")
+	require.True(t, ok)
+	assert.Equal(t, window, snapshot.DeliveryWindow)
+
+	request.IdempotencyKey = "key-2"
+	_, err = client.PlaceOrder(context.Background(), request)
+	st := status.Convert(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+	require.Len(t, st.Details(), 2)
+	info, ok := st.Details()[0].(*errdetails.ErrorInfo)
+	require.True(t, ok)
+	assert.Equal(t, "SLOT_UNAVAILABLE", info.GetReason())
+	detail, ok := st.Details()[1].(*ordersv1.SlotUnavailable)
+	require.True(t, ok)
+	require.Len(t, detail.GetAlternatives(), 1)
+	assert.Equal(t, alternative.Start(), detail.GetAlternatives()[0].GetStart().AsTime())
+	assert.Equal(t, alternative.End(), detail.GetAlternatives()[0].GetEnd().AsTime())
 }
 
 // FR-650: GetOrder carries the priority and the premium fee of the Order.
@@ -607,7 +685,7 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 // fixedWindow is the production cancellation policy with the given window.
 func fixedWindow(t *testing.T, window time.Duration) cancellationpolicy.Fixed {
 	t.Helper()
-	policy, err := cancellationpolicy.NewFixed(window)
+	policy, err := cancellationpolicy.NewFixed(window, time.Hour)
 	require.NoError(t, err)
 	return policy
 }

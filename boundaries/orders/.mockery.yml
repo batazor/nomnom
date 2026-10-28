@@ -39,11 +39,15 @@ packages:
   nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1:
     config:
       include-auto-generated: true
-      dir: slices/fulfillment/infrastructure/neighbours/grpcclient
-      filename: mocks_delivery_test.go
-      pkgname: grpcclient_test
     interfaces:
-      DeliveryServiceServer: {}
+      DeliveryServiceServer:
+        configs:
+          - dir: slices/fulfillment/infrastructure/neighbours/grpcclient
+            filename: mocks_delivery_test.go
+            pkgname: grpcclient_test
+          - dir: slices/order/infrastructure/estimates
+            filename: mocks_delivery_test.go
+            pkgname: estimates_test
   nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1:
     config:
       include-auto-generated: true
@@ -56,6 +60,12 @@ packages:
           - dir: slices/order/infrastructure/catalog
             filename: mocks_test.go
             pkgname: catalog_test
+          - dir: slices/order/infrastructure/scheduledslots
+            filename: mocks_test.go
+            pkgname: scheduledslots_test
+          - dir: slices/order/infrastructure/estimates
+            filename: mocks_restaurants_test.go
+            pkgname: estimates_test
           - dir: infrastructure/grpc
             filename: mocks_test.go
             pkgname: grpcadapter_test
@@ -95,6 +105,13 @@ packages:
           dir: slices/order/applications/placeorder
           filename: mocks_test.go
           pkgname: placeorder_test
+      SlotReservations:
+        configs:
+          - dir: slices/order/applications/placeorder
+            filename: mocks_test.go
+            pkgname: placeorder_test
+          - dir: infrastructure/grpc
+            pkgname: grpcadapter_test
   nomnom/orders/slices/order/applications/fulfillment:
     config:
       filename: "mocks_{{.SrcPackageName}}_test.go"
@@ -143,6 +160,24 @@ packages:
             pkgname: startfulfillment_test
           - dir: slices/order/infrastructure/messaging
             pkgname: messaging_test
+  nomnom/orders/slices/order/applications/planschedule:
+    interfaces:
+      Preparation:
+        configs:
+          - dir: slices/order/applications/planschedule
+            filename: mocks_test.go
+            pkgname: planschedule_test
+          - dir: slices/fulfillment/infrastructure/temporal
+            filename: mocks_planschedule_test.go
+            pkgname: temporal_test
+      DeliveryDuration:
+        configs:
+          - dir: slices/order/applications/planschedule
+            filename: mocks_test.go
+            pkgname: planschedule_test
+          - dir: slices/fulfillment/infrastructure/temporal
+            filename: mocks_planschedule_test.go
+            pkgname: temporal_test
   nomnom/orders/slices/order/applications/syncorderrelationships:
     config:
       filename: mocks_test.go

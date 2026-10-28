@@ -49,8 +49,8 @@ func (_m *MockCancellationPolicy) EXPECT() *MockCancellationPolicy_Expecter {
 }
 
 // Window provides a mock function for the type MockCancellationPolicy
-func (_mock *MockCancellationPolicy) Window(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error) {
-	ret := _mock.Called(ctx, placedAt)
+func (_mock *MockCancellationPolicy) Window(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error) {
+	ret := _mock.Called(ctx, placedAt, delivery)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Window")
@@ -58,16 +58,16 @@ func (_mock *MockCancellationPolicy) Window(ctx context.Context, placedAt time.T
 
 	var r0 order.CancellationWindow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time) (order.CancellationWindow, error)); ok {
-		return returnFunc(ctx, placedAt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, order.DeliveryWindow) (order.CancellationWindow, error)); ok {
+		return returnFunc(ctx, placedAt, delivery)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time) order.CancellationWindow); ok {
-		r0 = returnFunc(ctx, placedAt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, order.DeliveryWindow) order.CancellationWindow); ok {
+		r0 = returnFunc(ctx, placedAt, delivery)
 	} else {
 		r0 = ret.Get(0).(order.CancellationWindow)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
-		r1 = returnFunc(ctx, placedAt)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, order.DeliveryWindow) error); ok {
+		r1 = returnFunc(ctx, placedAt, delivery)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -82,11 +82,12 @@ type MockCancellationPolicy_Window_Call struct {
 // Window is a helper method to define mock.On call
 //   - ctx context.Context
 //   - placedAt time.Time
-func (_e *MockCancellationPolicy_Expecter) Window(ctx any, placedAt any) *MockCancellationPolicy_Window_Call {
-	return &MockCancellationPolicy_Window_Call{Call: _e.mock.On("Window", ctx, placedAt)}
+//   - delivery order.DeliveryWindow
+func (_e *MockCancellationPolicy_Expecter) Window(ctx any, placedAt any, delivery any) *MockCancellationPolicy_Window_Call {
+	return &MockCancellationPolicy_Window_Call{Call: _e.mock.On("Window", ctx, placedAt, delivery)}
 }
 
-func (_c *MockCancellationPolicy_Window_Call) Run(run func(ctx context.Context, placedAt time.Time)) *MockCancellationPolicy_Window_Call {
+func (_c *MockCancellationPolicy_Window_Call) Run(run func(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow)) *MockCancellationPolicy_Window_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -96,9 +97,14 @@ func (_c *MockCancellationPolicy_Window_Call) Run(run func(ctx context.Context, 
 		if args[1] != nil {
 			arg1 = args[1].(time.Time)
 		}
+		var arg2 order.DeliveryWindow
+		if args[2] != nil {
+			arg2 = args[2].(order.DeliveryWindow)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -109,7 +115,7 @@ func (_c *MockCancellationPolicy_Window_Call) Return(cancellationWindow order.Ca
 	return _c
 }
 
-func (_c *MockCancellationPolicy_Window_Call) RunAndReturn(run func(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error)) *MockCancellationPolicy_Window_Call {
+func (_c *MockCancellationPolicy_Window_Call) RunAndReturn(run func(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error)) *MockCancellationPolicy_Window_Call {
 	_c.Call.Return(run)
 	return _c
 }

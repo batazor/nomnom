@@ -1,5 +1,6 @@
 import type {
   OrderPriority,
+  OrderScheduleValue,
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control.ts";
@@ -25,6 +26,8 @@ export type ActiveRestaurantOrder = Readonly<{
   expectedReadyAt: Date | undefined;
   /** Cook assigned by Start Preparation; unset before it. */
   cookId: string | undefined;
+  /** Delivery Window and Planned Ready At of a scheduled order. */
+  schedule: OrderScheduleValue | undefined;
   /** Version of the Restaurant Order the entry was read at. */
   version: number;
 }>;

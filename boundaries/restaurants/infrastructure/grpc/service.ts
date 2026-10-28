@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf";
+import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 import type { ServiceImpl } from "@connectrpc/connect";
 import type { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";
 import type { HireCookHandler } from "../../slices/cook/applications/hire-cook/hire-cook.ts";
@@ -20,19 +21,27 @@ import type { ListRestaurantsHandler } from "../../slices/restaurant/application
 import type { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import type { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import type { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import type { SetOpeningHoursHandler } from "../../slices/restaurant/applications/set-opening-hours/set-opening-hours.ts";
+import type { SetScheduledOrderSettingsHandler } from "../../slices/restaurant/applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
 import type { UpdateRestaurantHandler } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
 import type { AcceptOrderHandler } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import type { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { ListActiveRestaurantOrdersHandler } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
+import type { ListScheduledOrdersHandler } from "../../slices/restaurantorder/applications/list-scheduled-orders/list-scheduled-orders.ts";
 import type { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import type { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import type { QueueRestaurantOrderHandler } from "../../slices/restaurantorder/applications/queue-restaurant-order/queue-restaurant-order.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
 import type { RejectOrderHandler } from "../../slices/restaurantorder/applications/reject-order/reject-order.ts";
 import type { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import type { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import type { StartPreparationHandler } from "../../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { ConfirmScheduledSlotHandler } from "../../slices/scheduleslot/applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
+import type { ListScheduledSlotsHandler } from "../../slices/scheduleslot/applications/list-scheduled-slots/list-scheduled-slots.ts";
+import type { ReleaseScheduledSlotHandler } from "../../slices/scheduleslot/applications/release-scheduled-slot/release-scheduled-slot.ts";
+import type { ReserveScheduledSlotHandler } from "../../slices/scheduleslot/applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
 import type { GetSimulatorHandler } from "../../slices/simulator/applications/get-simulator/get-simulator.ts";
 import type { SetSimulatorEnabledHandler } from "../../slices/simulator/applications/set-simulator-enabled/set-simulator-enabled.ts";
 import { createCookPoolRpcs } from "./cook-pool.ts";
@@ -46,6 +55,7 @@ import {
   GetRestaurantResponseSchema,
   ListOwnedRestaurantsResponseSchema,
   ListRestaurantsResponseSchema,
+  QueueRestaurantOrderResponseSchema,
   ReceiveOrderRequestResponseSchema,
   RegisterRestaurantResponseSchema,
   type RestaurantsService,
@@ -59,10 +69,12 @@ import {
   toCatalogRestaurantMessage,
   toMenuItemMessages,
   toRestaurantMessage,
+  toRestaurantOrderMessage,
   toStaffMessage,
 } from "./messages.ts";
 import { createOpeningRpcs } from "./restaurant-commands.ts";
 import { withRequestRevision } from "./revision.ts";
+import { createScheduleSlotRpcs } from "./schedule-slots.ts";
 import { createSimulatorRpcs } from "./simulator.ts";
 import type { SubjectResolver } from "./subject.ts";
 
@@ -70,6 +82,9 @@ export {
   AUTHORIZATION_REVISION_HEADER,
   withRequestRevision,
 } from "./revision.ts";
+
+const optionalDate = (value: Timestamp | undefined): Date | undefined =>
+  value === undefined ? undefined : timestampDate(value);
 
 export type RestaurantsServiceDependencies = Readonly<{
   getRestaurant: Pick<GetRestaurantHandler, "execute">;
@@ -80,6 +95,11 @@ export type RestaurantsServiceDependencies = Readonly<{
   listOwnedRestaurants: Pick<ListOwnedRestaurantsHandler, "execute">;
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
   cancelRestaurantOrder: Pick<CancelRestaurantOrderHandler, "execute">;
+  queueRestaurantOrder: Pick<QueueRestaurantOrderHandler, "execute">;
+  listScheduledSlots: Pick<ListScheduledSlotsHandler, "execute">;
+  reserveScheduledSlot: Pick<ReserveScheduledSlotHandler, "execute">;
+  confirmScheduledSlot: Pick<ConfirmScheduledSlotHandler, "execute">;
+  releaseScheduledSlot: Pick<ReleaseScheduledSlotHandler, "execute">;
   acceptRestaurantOrder: Pick<AcceptOrderHandler, "execute">;
   rejectRestaurantOrder: Pick<RejectOrderHandler, "execute">;
   startPreparation: Pick<StartPreparationHandler, "execute">;
@@ -89,12 +109,15 @@ export type RestaurantsServiceDependencies = Readonly<{
   reportPreparationFailure: Pick<ReportPreparationFailureHandler, "execute">;
   getKitchenQueue: Pick<GetKitchenQueueHandler, "execute">;
   listIncomingOrders: Pick<ListIncomingOrdersHandler, "execute">;
+  listScheduledOrders: Pick<ListScheduledOrdersHandler, "execute">;
   listActiveRestaurantOrders: Pick<
     ListActiveRestaurantOrdersHandler,
     "execute"
   >;
   registerRestaurant: Pick<RegisterRestaurantHandler, "execute">;
   updateRestaurant: Pick<UpdateRestaurantHandler, "execute">;
+  setOpeningHours: Pick<SetOpeningHoursHandler, "execute">;
+  setScheduledOrderSettings: Pick<SetScheduledOrderSettingsHandler, "execute">;
   assignStaff: Pick<AssignStaffHandler, "execute">;
   revokeStaff: Pick<RevokeStaffHandler, "execute">;
   openRestaurant: Pick<OpenRestaurantHandler, "execute">;
@@ -230,6 +253,16 @@ export const createRestaurantsService = (
             quantity: item.quantity,
           })),
           priority: fromPriorityMessage(request.priority),
+          // A partial block is INVALID_ARGUMENT in the domain (FR-683).
+          ...(request.schedule === undefined
+            ? {}
+            : {
+                schedule: {
+                  windowStart: optionalDate(request.schedule.windowStart),
+                  windowEnd: optionalDate(request.schedule.windowEnd),
+                  plannedReadyAt: optionalDate(request.schedule.plannedReadyAt),
+                },
+              }),
         });
         return create(ReceiveOrderRequestResponseSchema, {
           restaurantOrderId: result.restaurantOrder.restaurantOrderId,
@@ -270,6 +303,28 @@ export const createRestaurantsService = (
       }
     },
 
+    // Queue Restaurant Order (FR-224): a scheduled order at its planned start,
+    // `service` identity of orders only.
+    async queueRestaurantOrder(request, context) {
+      try {
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
+        requireField("restaurant_order_id", request.restaurantOrderId);
+        const view = await dependencies.queueRestaurantOrder.execute({
+          subject,
+          restaurantOrderId: request.restaurantOrderId,
+        });
+        return create(QueueRestaurantOrderResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    ...createScheduleSlotRpcs(dependencies, subjects),
     ...createKitchenRpcs(dependencies, subjects),
     ...createKitchenBoardRpcs(dependencies, subjects),
 
@@ -282,11 +337,13 @@ export const createRestaurantsService = (
         requireField("name", request.name);
         requireField("owner_id", request.ownerId);
         requireField("market_id", request.marketId);
+        requireField("time_zone", request.timeZone);
         const result = await dependencies.registerRestaurant.execute({
           subject,
           name: request.name,
           ownerId: request.ownerId,
           marketId: request.marketId,
+          timeZone: request.timeZone,
         });
         return create(RegisterRestaurantResponseSchema, {
           restaurant: toRestaurantMessage(result),

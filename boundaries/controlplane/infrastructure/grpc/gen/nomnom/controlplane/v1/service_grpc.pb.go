@@ -33,7 +33,7 @@ const (
 // nor the Cells call it.
 type ControlPlaneServiceClient interface {
 	// Writes require platform#manage_markets. A repeat with the same values
-	// succeeds with created = false; other values for a known id are
+	// succeeds with created = false; other values (time zone included) for a known id are
 	// ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
 	// After the write, including a repeat, the routes of the public gateway are
 	// applied from the registry; when that fails the call is UNAVAILABLE
@@ -91,7 +91,7 @@ func (c *controlPlaneServiceClient) ListMarkets(ctx context.Context, in *ListMar
 // nor the Cells call it.
 type ControlPlaneServiceServer interface {
 	// Writes require platform#manage_markets. A repeat with the same values
-	// succeeds with created = false; other values for a known id are
+	// succeeds with created = false; other values (time zone included) for a known id are
 	// ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
 	// After the write, including a repeat, the routes of the public gateway are
 	// applied from the registry; when that fails the call is UNAVAILABLE

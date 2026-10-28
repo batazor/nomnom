@@ -25,24 +25,26 @@ type Market struct {
 	id       vo.MarketID
 	name     vo.Name
 	currency vo.Currency
+	timeZone vo.TimeZone
 	cellID   cellvo.CellID
 }
 
-func New(id vo.MarketID, name vo.Name, currency vo.Currency, cellID cellvo.CellID) Market {
-	return Market{id: id, name: name, currency: currency, cellID: cellID}
+func New(id vo.MarketID, name vo.Name, currency vo.Currency, timeZone vo.TimeZone, cellID cellvo.CellID) Market {
+	return Market{id: id, name: name, currency: currency, timeZone: timeZone, cellID: cellID}
 }
 
 func (m Market) ID() vo.MarketID       { return m.id }
 func (m Market) Name() vo.Name         { return m.name }
 func (m Market) Currency() vo.Currency { return m.currency }
+func (m Market) TimeZone() vo.TimeZone { return m.timeZone }
 func (m Market) CellID() cellvo.CellID { return m.cellID }
 
 // Repeat decides a creation of a Market whose id exists already: the same
 // values are the same Market (an idempotent repeat), other values — another
-// name, currency or Cell — conflict.
+// name, currency, time zone or Cell — conflict.
 func (m Market) Repeat(existing Market) error {
 	if m != existing {
-		return fmt.Errorf("%w: %s is %q in %s, placed in %s", ErrAlreadyCreated, existing.id, existing.name, existing.currency, existing.cellID)
+		return fmt.Errorf("%w: %s is %q in %s and %s, placed in %s", ErrAlreadyCreated, existing.id, existing.name, existing.currency, existing.timeZone, existing.cellID)
 	}
 	return nil
 }

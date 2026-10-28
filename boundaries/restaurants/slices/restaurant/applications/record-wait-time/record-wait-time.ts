@@ -25,11 +25,15 @@ export interface WaitTimeStatisticsStore {
   save(restaurantId: string, statistics: WaitTimeStatistics): Promise<void>;
 }
 
-/** A fact of a Restaurant Order that changes the statistics. */
+/**
+ * A fact of a Restaurant Order that changes the statistics: `queued` at the
+ * moment the order joined the Kitchen Queue, `ready` at the moment it became
+ * ready, `dropped` when it was cancelled or failed.
+ */
 export type RecordWaitTime = Readonly<{
   restaurantId: string;
   orderId: string;
-  fact: "accepted" | "ready" | "dropped";
+  fact: "queued" | "ready" | "dropped";
   occurredAt: Date;
 }>;
 
@@ -99,8 +103,8 @@ export class RecordWaitTimeHandler {
     command: RecordWaitTime,
   ): WaitTimeStatistics {
     switch (command.fact) {
-      case "accepted":
-        return this.#policy.accepted(
+      case "queued":
+        return this.#policy.queued(
           statistics,
           command.orderId,
           command.occurredAt,

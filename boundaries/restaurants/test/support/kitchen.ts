@@ -20,6 +20,7 @@ import {
 } from "../../slices/restaurantorder/applications/accept-order/accept-order.ts";
 import type {
   FulfillmentCoordinatorAccess,
+  FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
 } from "../../slices/restaurantorder/applications/access-control.ts";
@@ -29,6 +30,7 @@ import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applicat
 import type { RepeatPolicy } from "../../slices/restaurantorder/applications/kitchen-command.ts";
 import { ListActivePreparationsHandler } from "../../slices/restaurantorder/applications/list-active-preparations/list-active-preparations.ts";
 import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/list-ready-orders/list-ready-orders.ts";
+import { ListScheduledOrdersHandler } from "../../slices/restaurantorder/applications/list-scheduled-orders/list-scheduled-orders.ts";
 import { MarkAssembledHandler } from "../../slices/restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import { QueueRestaurantOrderHandler } from "../../slices/restaurantorder/applications/queue-restaurant-order/queue-restaurant-order.ts";
@@ -49,6 +51,16 @@ import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
+import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control.ts";
+import { ConfirmScheduledSlotHandler } from "../../slices/scheduleslot/applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
+import { ListScheduledSlotsHandler } from "../../slices/scheduleslot/applications/list-scheduled-slots/list-scheduled-slots.ts";
+import { ReleaseScheduledSlotHandler } from "../../slices/scheduleslot/applications/release-scheduled-slot/release-scheduled-slot.ts";
+import { ReserveScheduledSlotHandler } from "../../slices/scheduleslot/applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
+import { DeliveryWindows } from "../../slices/scheduleslot/domains/scheduleslot/scheduleslot.ts";
+import {
+  createScheduleSlotCollection,
+  DatabaseScheduleSlotRepository,
+} from "../../slices/scheduleslot/infrastructure/repository/schedule-slots.ts";
 import { noKitchenChanges } from "./database.ts";
 import { createMenuWorld } from "./menus.ts";
 import {
@@ -64,6 +76,12 @@ export const PREPARATION_MINUTES = 20;
 export const minutes = (value: number): number => value * 60_000;
 /** KITCHEN_QUEUE__AGING_FACTOR of the tests (the .env.example value). */
 export const QUEUE_AGING_FACTOR = 2;
+/** SCHEDULED_SLOT__* of the tests (the .env.example values). */
+export const SLOT_WIDTH_MINUTES = 15;
+export const SLOT_MIN_LEAD_MINUTES = 45;
+export const SLOT_MAX_HORIZON_MINUTES = 48 * 60;
+export const SLOT_HOLD_TTL_MINUTES = 10;
+export const SLOT_ALTERNATIVES = 3;
 
 export const createKitchenWorld = async (
   options: {
@@ -103,6 +121,14 @@ export const createKitchenWorld = async (
     agingFactor: QUEUE_AGING_FACTOR,
   });
   const startRequests = new SequentialIdGenerator("start-request");
+  const scheduleSlots = new DatabaseScheduleSlotRepository(
+    createScheduleSlotCollection(infrastructure.db, infrastructure.unitOfWork),
+  );
+  const deliveryWindows = new DeliveryWindows({
+    widthMs: minutes(SLOT_WIDTH_MINUTES),
+    minLeadMs: minutes(SLOT_MIN_LEAD_MINUTES),
+    maxHorizonMs: minutes(SLOT_MAX_HORIZON_MINUTES),
+  });
   const conditions = new StaticAcceptanceConditions();
   const outbox = options.outbox ?? infrastructure.outbox;
   const ids = new SequentialIdGenerator("restaurant-order");
@@ -140,6 +166,7 @@ export const createKitchenWorld = async (
     }),
     reject: new RejectOrderHandler(commandDependencies),
     queue: new QueueRestaurantOrderHandler({
+      accessControl,
       restaurantOrders,
       clock: infrastructure.clock,
     }),
@@ -198,6 +225,39 @@ export const createKitchenWorld = async (
     listReadyOrders: new ListReadyOrdersHandler({
       accessControl,
       reader: board,
+    }),
+    listScheduledOrders: new ListScheduledOrdersHandler({
+      accessControl,
+      reader: board,
+    }),
+    listScheduledSlots: new ListScheduledSlotsHandler({
+      restaurants: menuWorld.restaurants,
+      slots: scheduleSlots,
+      windows: deliveryWindows,
+      clock: infrastructure.clock,
+    }),
+    reserveScheduledSlot: new ReserveScheduledSlotHandler({
+      accessControl,
+      unitOfWork: infrastructure.unitOfWork,
+      restaurants: menuWorld.restaurants,
+      slots: scheduleSlots,
+      windows: deliveryWindows,
+      holdTtlMs: minutes(SLOT_HOLD_TTL_MINUTES),
+      alternatives: SLOT_ALTERNATIVES,
+      clock: infrastructure.clock,
+    }),
+    confirmScheduledSlot: new ConfirmScheduledSlotHandler({
+      accessControl,
+      unitOfWork: infrastructure.unitOfWork,
+      restaurants: menuWorld.restaurants,
+      slots: scheduleSlots,
+      clock: infrastructure.clock,
+    }),
+    releaseScheduledSlot: new ReleaseScheduledSlotHandler({
+      accessControl,
+      unitOfWork: infrastructure.unitOfWork,
+      slots: scheduleSlots,
+      clock: infrastructure.clock,
     }),
   };
 
@@ -260,6 +320,11 @@ export const createKitchenWorld = async (
     restaurantId: string,
     menuItemId: string,
     priority: "STANDARD" | "PREMIUM" = "STANDARD",
+    schedule?: Readonly<{
+      windowStart: Date;
+      windowEnd: Date;
+      plannedReadyAt: Date;
+    }>,
   ) => {
     orderSequence += 1;
     const { restaurantOrder } = await handlers.receive.execute({
@@ -268,6 +333,7 @@ export const createKitchenWorld = async (
       orderId: `order-${orderSequence}`,
       items: [{ menuItemId, quantity: 2 }],
       priority,
+      ...(schedule === undefined ? {} : { schedule }),
     });
     return restaurantOrder;
   };
@@ -317,6 +383,8 @@ export const createKitchenWorld = async (
     menuWorld,
     orderStore: store,
     restaurantOrders,
+    scheduleSlots,
+    deliveryWindows,
     board,
     cooks,
     kitchenAccessControl: accessControl,
@@ -380,11 +448,17 @@ export class FixedDurationReadyTimeEstimator implements ReadyTimeEstimator {
   }
 }
 
-/** Test authorization graph: restaurant staff and fulfillment services. */
+/**
+ * Test authorization graph: restaurant staff and fulfillment services. A
+ * check without a restaurant (commands naming only an order) allows a
+ * service granted fulfillment of any restaurant, like the platform check.
+ */
 export class TestKitchenAccessControl
   implements
     KitchenStaffAccess,
     FulfillmentCoordinatorAccess,
+    FulfillmentProcessAccess,
+    SlotReservationAccess,
     RestaurantOrderViewAccess,
     CookPoolAccess
 {
@@ -418,11 +492,14 @@ export class TestKitchenAccessControl
 
   async canCoordinateFulfillment(
     subject: Subject,
-    restaurantId: string,
+    restaurantId?: string,
   ): Promise<boolean> {
+    const key = `${subject.type}:${subject.id}@`;
     return (
       subject.type === "service" &&
-      this.#fulfillment.has(`${subject.type}:${subject.id}@${restaurantId}`)
+      (restaurantId === undefined
+        ? [...this.#fulfillment].some((grant) => grant.startsWith(key))
+        : this.#fulfillment.has(`${key}${restaurantId}`))
     );
   }
 

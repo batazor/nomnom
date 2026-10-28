@@ -265,6 +265,10 @@ describe("startup migration", () => {
         schemaVersion: 1,
         name: "Pho",
         ownerId: "owner",
+        // The update of 0003 runs under the current validator, which
+        // requires the time zone and schedule given by 0005.
+        timeZone: "Europe/Berlin",
+        openingHours: [],
         isOpen: true,
       } as never,
       legacy,
@@ -277,6 +281,8 @@ describe("startup migration", () => {
         name: "Fischbude",
         ownerId: "owner",
         marketId: "hamburg",
+        timeZone: "Europe/Berlin",
+        openingHours: [],
         isOpen: true,
       } as never,
       legacy,
@@ -614,6 +620,7 @@ describe("MongoDB storage", () => {
       name: "Pho House",
       ownerId: "owner",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
       registeredAt: now,
     });
     restaurant.assignStaff("cook");
@@ -636,6 +643,7 @@ describe("MongoDB storage", () => {
       name: "Copy",
       ownerId: "owner",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
       registeredAt: now,
     });
     await assert.rejects(repository.save(duplicate), ConcurrencyConflictError);

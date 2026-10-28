@@ -69,11 +69,32 @@ Activity, меняющая `orders`, вызывает handler слайса, ко
 
 ### Ожидания и таймеры
 
-Ожидание ресторана, курьера и доставки — Signal плюс Temporal timer; polling запрещён. Timer выражает продуктовый срок и ведёт к бизнес-ветке (replan, escalation, cancellation, compensation). Workflow-level timeout не задаётся. `PreparationDelayed` продлевает таймер ожидания Preparation.
+Ожидание ресторана, курьера и доставки — Signal плюс Temporal timer; polling запрещён. Timer выражает продуктовый срок и ведёт к бизнес-ветке (replan, escalation, cancellation, compensation, старт запланированного заказа). Workflow-level timeout не задаётся. `PreparationDelayed` продлевает таймер ожидания Preparation.
+
+### Запланированный заказ
+
+Order с Delivery Window (OpenSpec change `add-scheduled-orders`, FR-415, FR-416, FR-678–FR-682) идёт своим маршрутом. Ветка выбирается по окну во входе workflow (`Input.DeliveryWindow` из `OrderPlaced`); ASAP-маршрут не меняется.
+
+```text
+AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → PlanSchedule
+→ RequestRestaurantOrder(window, planned_ready_at) → ждать RestaurantOrderAccepted
+→ stage scheduled: timer replan_at → PlanSchedule (тот же planned_ready_at)
+                   timer start_at → QueueRestaurantOrder
+                   timer courier_request_at → CreateDelivery
+→ дальше обычный маршрут: Assignment, Preparation, Pickup, Capture, Delivery Completion
+```
+
+- Place Order резервирует окно в `restaurants` до своей транзакции (hold); workflow подтверждает резервацию после записи оплаты. `ConfirmSlotReservation` с ответом `slot_unavailable` (hold истёк, окно заполнилось) — бизнес-результат: Saga отменяет Authorization и завершает `Order` кодом `slot_unavailable` без запроса ресторана.
+- План считает use case Plan Schedule слайса `order` (чистая domain-политика `order.PlanSchedule` над UTC-моментами) по базовому времени ресторана и оценке доставки Market. Activity `PlanSchedule` возвращает план, workflow хранит его в Event History; `Order` план не хранит. Первый план фиксирует `planned_ready_at`, контрольная точка `replan_at` один раз пересчитывает `start_at` и `courier_request_at` с тем же `planned_ready_at`. План, сделанный уже после своей контрольной точки, не пересчитывается.
+- Таймеры — те же Temporal timers главного цикла: модель отдаёт ближайший момент плана в `NextDeadline`, наступивший момент делает шаг due (`Expire`), и цикл исполняет его как Activity. Момент в прошлом означает немедленный шаг, пересчёт плана заменяет таймеры следующим циклом. Polling не вводится.
+- Stage `scheduled` публикуется Search Attribute от `RestaurantOrderAccepted` до `QueueRestaurantOrder`.
+- Deadline Acceptance — как у ASAP. Deadline Preparation отсчитывается от `QueueRestaurantOrder`, Assignment — от `CreateDelivery`; в stage `scheduled` deadline `Policy` не действует. `PreparationDelayed` до `QueueRestaurantOrder` отклоняется (`not queued`).
+- `RequestRestaurantOrder` запланированного заказа возвращает `restaurant_order_id`; workflow передаёт его в `QueueRestaurantOrder` (idempotency key `order_id + queue`). ASAP-маршрут результат этой Activity не читает.
+- Отмену запланированного заказа покупатель видит до `window_start − CANCELLATION__SCHEDULED_CUTOFF` (cancellation policy по данным `Order`); Update `CancellationRequested` в stage `scheduled` ведёт к `CancelRestaurantOrder`, `ReleaseSlotReservation`, `CancelPaymentAuthorization`.
 
 ### Saga
 
-Компенсации — orchestration-based Saga. Workflow ведёт журнал подтверждённых шагов и вызывает только применимые compensation Activities (`CancelRestaurantOrder`, `CancelPaymentAuthorization`, `RefundPayment`), каждая со стабильным idempotency key, timeout, retry policy и telemetry.
+Компенсации — orchestration-based Saga. Workflow ведёт журнал подтверждённых шагов и вызывает только применимые compensation Activities (`CancelDelivery`, `CancelRestaurantOrder`, `ReleaseSlotReservation`, `CancelPaymentAuthorization`, `RefundPayment`), каждая со стабильным idempotency key, timeout, retry policy и telemetry. Резервация окна запланированного заказа существует с Place Order, поэтому журнал содержит её с начала: при отказе оплаты, отмене или неудаче до Pickup workflow вызывает `ReleaseSlotReservation` (ключ `order_id + release_slot`); после Pickup окно отработало и не освобождается, неподтверждённая резервация (`slot_unavailable`) — тоже.
 
 Ресторан запрашивается только после оплаты: маршрут `AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → …`. Шаг `RecordPaymentAuthorization` вызывает use case слайса `order`, который записывает в `Order` Fulfillment Fact `payment_authorized` с моментом решения (время Workflow); повтор Activity — no-op, компенсации у шага нет — факт остаётся в `Order` как история. Restaurant Order создаёт только `RequestRestaurantOrder` (RPC `ReceiveOrderRequest`); `restaurants` не создаёт его из `OrderPlaced`. Иначе кухня видела неоплаченный заказ: её факты могли опередить шаг `RequestRestaurantOrder` (workflow отклонял их и падал по таймауту приёмки), а при отказе оплаты Saga не отменяла Restaurant Order, и кухня могла его приготовить. Поэтому при отказе Authorization Restaurant Order не существует и `CancelRestaurantOrder` не нужен. Цена — кухня видит заказ позже на время Authorization.
 
@@ -103,11 +124,11 @@ API, Kafka consumer и Temporal worker — управляемые процесс
 
 | Workflow | Длительность | Стратегия |
 | --- | --- | --- |
-| Order Fulfillment (сага заказа) | минуты–часы | `PINNED`, без патчей |
+| Order Fulfillment (сага заказа, ASAP) | минуты–часы | `PINNED` |
+| Order Fulfillment запланированного заказа | часы–дни (до `SCHEDULED_SLOT__MAX_HORIZON`) | тот же workflow, `PINNED`; ветка под patch `scheduled-route` |
 | GroupCart | до недели | `PINNED` + Upgrade on Continue-as-New |
-| Scheduled order | часы–дни | `PINNED` + Continue-As-New или `AUTO_UPGRADE` + patching |
 
-GroupCart и Scheduled order пока не реализованы; таблица задаёт их стратегию. Replay tests в CI обязательны для каждого workflow с `AUTO_UPGRADE`.
+Запланированный заказ — ветка того же Order Fulfillment Workflow, а не отдельный workflow: identity `order:<order_id>` и Saga общие. Ветка введена под Temporal patch: `workflow.GetVersion("scheduled-route", DefaultVersion, 1)` вызывается только для входа с окном, поэтому ASAP-маршрут не пишет новых команд, и histories, начатые до ветки, воспроизводятся без изменений; history без маркера идёт ASAP-маршрутом. `PINNED` держит запланированный заказ на версии worker'а до окна, поэтому версия с открытыми запланированными заказами живёт до `MAX_HORIZON`; patch нужен, чтобы этот код мог безопасно выполнять и replay'ить histories предыдущей версии (откат, перевод на `AUTO_UPGRADE`). Следующее изменение кода ветки делается следующим patch, а не правкой ветки. GroupCart пока не реализован; таблица задаёт его стратегию. Replay tests в CI обязательны для каждого workflow с `AUTO_UPGRADE`; для ветки `scheduled-route` test environment проверяет, что history без маркера идёт ASAP-маршрутом.
 
 Версии разворачивает [Temporal Worker Controller](https://github.com/temporalio/temporal-worker-controller) — одинаково в kind и в production. Release `orders-worker` описывает `WorkerDeployment` и `Connection` вместо `Deployment`. Контроллер создаёт `Deployment` на каждый Build ID (хеш pod template), передаёт поду `TEMPORAL_DEPLOYMENT_NAME` и `TEMPORAL_WORKER_BUILD_ID`, регистрирует версию и делает её текущей. Без этих переменных worker не стартует. Rollout `AllAtOnce`: новые заказы сразу идут на новую версию, начатые доживают на своей. Версию без открытых `PINNED` runs (Drained) контроллер масштабирует в 0 через 1 час и удаляет через 24 часа. Возврат к версии, которая была текущей в последний час, контроллер выполняет сразу; runs, начатые на откатываемой версии, на ней и завершаются.
 

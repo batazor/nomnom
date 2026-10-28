@@ -86,7 +86,8 @@ def seed_topology(driver: Driver, seed: dict) -> None:
     for market in seed["markets"]:
         response = driver.call("nomnom.controlplane", seed["operator"], CONTROLPLANE + "CreateMarket",
                                {"marketId": market["id"], "name": market["name"],
-                                "currency": market["currency"], "cellId": market["cellId"]})
+                                "currency": market["currency"], "timeZone": market["timeZone"],
+                                "cellId": market["cellId"]})
         print(f"market {market['id']}: {'created' if response.get('created') else 'already created'}")
 
 

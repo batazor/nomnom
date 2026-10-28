@@ -33,6 +33,7 @@ var (
 	CompleteOrder              = telemetry.Command("complete_order")
 	FailOrCancelOrder          = telemetry.Command("fail_or_cancel_order")
 	RecordPaymentAuthorization = telemetry.Command("record_payment_authorization")
+	PlanSchedule               = telemetry.Query("plan_schedule")
 	GetOrder                   = telemetry.Query("get_order")
 	ListCustomerOrders         = telemetry.Query("list_customer_orders")
 )

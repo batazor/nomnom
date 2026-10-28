@@ -13,6 +13,7 @@ import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate
 import {
   type AppConfig,
   loadConfig,
+  loadScheduledSlotConfig,
   loadSimulatorConfig,
   loadSpiceDbConfig,
 } from "../pkg/config/config.ts";
@@ -30,6 +31,15 @@ const simulatorEnvironment = {
   SIMULATOR__INTERVAL: "5s",
   SIMULATOR__MIN_DELAY: "30s",
   SIMULATOR__MAX_DELAY: "2m",
+};
+
+/** SCHEDULED_SLOT__* of .env.example: required in cmd/restaurants. */
+const scheduledSlotEnvironment = {
+  SCHEDULED_SLOT__WIDTH: "15m",
+  SCHEDULED_SLOT__MIN_LEAD: "45m",
+  SCHEDULED_SLOT__MAX_HORIZON: "48h",
+  SCHEDULED_SLOT__HOLD_TTL: "10m",
+  SCHEDULED_SLOT__ALTERNATIVES: "3",
 };
 
 const environment = {
@@ -55,6 +65,7 @@ const resourcesOf = (
     kitchen: config.kitchen,
     waitTime: config.waitTime,
     simulator: loadSimulatorConfig(simulatorEnvironment),
+    scheduledSlot: loadScheduledSlotConfig(scheduledSlotEnvironment),
     database,
     valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
     valkey: offlineValkey(),
@@ -251,6 +262,7 @@ describe("composed processes against MongoDB", () => {
         name: "Pho House",
         ownerId: "owner",
         marketId: "berlin",
+        timeZone: "Europe/Berlin",
         registeredAt: new Date(Date.UTC(2026, 9, 25, 9)),
       });
       await container.cradle.restaurants.save(restaurant);

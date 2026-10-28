@@ -1,5 +1,5 @@
 // Package createmarket creates a Market placed in a registered Cell (ADR 41).
-// Only platform#manage_markets may do it. A repeat with the same values
+// Only platform#manage_markets may do it; the IANA time zone is required. A repeat with the same values
 // succeeds with Created false; other values for an existing market_id are
 // refused, and an unregistered cell_id is a failed precondition. After the
 // creation, including a repeat, the routes of the public gateway are published
@@ -23,6 +23,7 @@ type Command struct {
 	MarketID string
 	Name     string
 	Currency string
+	TimeZone string
 	CellID   string
 }
 
@@ -92,9 +93,13 @@ func parse(cmd Command) (market.Market, error) {
 	if err != nil {
 		return market.Market{}, err
 	}
+	timeZone, err := vo.NewTimeZone(cmd.TimeZone)
+	if err != nil {
+		return market.Market{}, err
+	}
 	cellID, err := cellvo.NewCellID(cmd.CellID)
 	if err != nil {
 		return market.Market{}, err
 	}
-	return market.New(id, name, currency, cellID), nil
+	return market.New(id, name, currency, timeZone, cellID), nil
 }

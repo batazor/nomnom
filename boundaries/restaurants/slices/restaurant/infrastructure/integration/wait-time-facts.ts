@@ -1,11 +1,21 @@
 // Consumer of the context's own Restaurant Order facts (ADR 11, ADR 28): Wait
-// Time Statistics of the restaurant (FR-644). Accepted opens an order, Ready
-// records its duration, Cancelled and PreparationFailed drop it. Events
-// published before they carried restaurant_id (FR-656) change nothing.
-import { type DescMessage, fromBinary } from "@bufbuild/protobuf";
+// Time Statistics of the restaurant (FR-644), measured from joining the
+// Kitchen Queue. Accepted with queued_at opens an order queued in the same
+// Unit of Work as its Acceptance; a scheduled order is accepted without
+// queued_at and its queuing publishes nothing, so Preparation Started opens it
+// with its queued_at (a repeat for an already open order changes nothing).
+// Ready records the duration, Cancelled and PreparationFailed drop the order.
+// Events published before they carried restaurant_id (FR-656) change nothing.
+import {
+  type DescMessage,
+  fromBinary,
+  type MessageShape,
+} from "@bufbuild/protobuf";
+import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 
 import {
   PreparationFailedSchema,
+  PreparationStartedSchema,
   RestaurantOrderAcceptedSchema,
   RestaurantOrderCancelledSchema,
   RestaurantOrderReadySchema,
@@ -28,17 +38,23 @@ export const WAIT_TIME_CONSUMER = "restaurants.wait-time";
 
 type OrderFact = { orderId: string; restaurantId: string };
 
+/**
+ * What a fact records: `undefined` for a fact that changes nothing (an
+ * Accepted of a scheduled order).
+ */
+type Recorded = Pick<RecordWaitTime, "fact" | "occurredAt"> | undefined;
+
 const handlerOf = <Desc extends DescMessage>(
   schema: Desc,
-  fact: RecordWaitTime["fact"],
+  record: (event: MessageShape<Desc>, envelope: Envelope) => Recorded,
   recordWaitTime: Pick<RecordWaitTimeHandler, "execute">,
 ): EventHandler => ({
   eventType: schema.typeName,
 
   async handle(envelope: Envelope, payload: Uint8Array): Promise<void> {
-    let event: OrderFact;
+    let event: MessageShape<Desc>;
     try {
-      event = fromBinary(schema, payload) as unknown as OrderFact;
+      event = fromBinary(schema, payload);
     } catch (error) {
       throw new PermanentMessageError(
         `${schema.name} payload is not a valid Protobuf message`,
@@ -46,15 +62,17 @@ const handlerOf = <Desc extends DescMessage>(
         { cause: error },
       );
     }
-    if (event.restaurantId === "") return;
-    if (event.orderId === "") {
+    const fact = event as unknown as OrderFact;
+    if (fact.restaurantId === "") return;
+    if (fact.orderId === "") {
       throw new PermanentMessageError(`${schema.name} requires order_id`);
     }
+    const recorded = record(event, envelope);
+    if (recorded === undefined) return;
     await recordWaitTime.execute({
-      restaurantId: event.restaurantId,
-      orderId: event.orderId,
-      fact,
-      occurredAt: envelope.occurredAt,
+      restaurantId: fact.restaurantId,
+      orderId: fact.orderId,
+      ...recorded,
     });
   },
 
@@ -65,19 +83,52 @@ const handlerOf = <Desc extends DescMessage>(
   },
 });
 
+const queuedAt = (
+  name: string,
+  value: Timestamp | undefined,
+): Pick<RecordWaitTime, "fact" | "occurredAt"> => {
+  if (value === undefined) {
+    throw new PermanentMessageError(`${name} requires queued_at`);
+  }
+  return { fact: "queued", occurredAt: timestampDate(value) };
+};
+
 export const createWaitTimeHandlers = (dependencies: {
   recordWaitTime: Pick<RecordWaitTimeHandler, "execute">;
 }): readonly EventHandler[] => [
+  // A scheduled order is accepted without queued_at: not open yet.
   handlerOf(
     RestaurantOrderAcceptedSchema,
-    "accepted",
+    (event) =>
+      event.queuedAt === undefined
+        ? undefined
+        : { fact: "queued", occurredAt: timestampDate(event.queuedAt) },
     dependencies.recordWaitTime,
   ),
-  handlerOf(RestaurantOrderReadySchema, "ready", dependencies.recordWaitTime),
+  handlerOf(
+    PreparationStartedSchema,
+    (event) => queuedAt(PreparationStartedSchema.name, event.queuedAt),
+    dependencies.recordWaitTime,
+  ),
+  handlerOf(
+    RestaurantOrderReadySchema,
+    (_event, envelope) => ({ fact: "ready", occurredAt: envelope.occurredAt }),
+    dependencies.recordWaitTime,
+  ),
   handlerOf(
     RestaurantOrderCancelledSchema,
-    "dropped",
+    (_event, envelope) => ({
+      fact: "dropped",
+      occurredAt: envelope.occurredAt,
+    }),
     dependencies.recordWaitTime,
   ),
-  handlerOf(PreparationFailedSchema, "dropped", dependencies.recordWaitTime),
+  handlerOf(
+    PreparationFailedSchema,
+    (_event, envelope) => ({
+      fact: "dropped",
+      occurredAt: envelope.occurredAt,
+    }),
+    dependencies.recordWaitTime,
+  ),
 ];

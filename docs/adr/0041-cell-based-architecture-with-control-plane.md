@@ -38,7 +38,8 @@ Router ячеек — публичный gateway; всё, что обслужи�
 
 - **Market** — город, в котором работает доставка: рестораны, курьеры и заказы одного Market
   обслуживаются вместе. Идентификатор `market_id` — slug `^[a-z][a-z0-9-]{1,31}$` (`berlin`),
-  неизменяемый. У Market есть название и валюта ISO 4217.
+  неизменяемый. У Market есть название, валюта ISO 4217 и часовой пояс IANA (`Europe/Berlin`):
+  клиент и ресторан всегда в одном Market, поэтому окна и сроки заказа показываются в поясе Market.
 - **Cell** — полный изолированный экземпляр data plane: Cosmo Router с plugin BFF, `orders`,
   `restaurants`, `delivery`, `payments`, их хранилища, Kafka, Debezium, Valkey, Temporal и internal
   gateway ячейки. Идентификатор `cell_id` — slug (`cell-1`).
@@ -131,9 +132,9 @@ Placement, и Previous Placement (`@{cell_id}`) одинаково для зап
   BFF без заголовка или с заголовком неверного формата отвечает `INVALID_ARGUMENT`.
 - Списочные операции BFF передают `market_id` из заголовка в запрос владельцу; вызовы BFF идут в
   internal gateway своей Cell (`BFF__INTERNAL_GATEWAY_ADDR`).
-- UI получает список Market из `GET /markets`: `market_id`, название, валюта и Previous Placement
-  каждого Market. По Previous Placement UI строит пути `@{cell_id}` к заказам, созданным до переноса,
-  и собирает историю заказов из всех размещений Market.
+- UI получает список Market из `GET /markets`: `market_id`, название, валюта, часовой пояс и
+  Previous Placement каждого Market. По Previous Placement UI строит пути `@{cell_id}` к заказам,
+  созданным до переноса, и собирает историю заказов из всех размещений Market.
 
 ### Развёртывание
 

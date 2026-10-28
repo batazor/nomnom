@@ -233,6 +233,7 @@ test("staff is part of the snapshot; legacy snapshots restore without staff", ()
     name: "Pho",
     ownerId: owner.id,
     marketId: "berlin",
+    timeZone: "Europe/Berlin",
     registeredAt: startOfDay,
   });
   assert.equal(restaurant.assignStaff("b"), true);
@@ -256,6 +257,8 @@ test("staff is part of the snapshot; legacy snapshots restore without staff", ()
       name: "Old",
       ownerId: owner.id,
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: false,
     },
     3,

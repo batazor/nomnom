@@ -22,7 +22,8 @@ import {
 
 /**
  * `expectedReadyAt` is the ready time named by the kitchen; without it the
- * {@link ReadyTimeEstimator} computes it (FR-609).
+ * {@link ReadyTimeEstimator} computes it (FR-609). A scheduled order takes
+ * none: it is ready at its Planned Ready At (FR-222).
  */
 export type AcceptOrder = KitchenCommand & Readonly<{ expectedReadyAt?: Date }>;
 
@@ -75,11 +76,13 @@ export interface ReadyTimeEstimator {
 }
 
 /**
- * Accepts a `RECEIVED` order of an open restaurant whose items are available,
- * with the kitchen's or the estimated `expectedReadyAt` (later than now,
- * otherwise `invalid_restaurant_order`), then queues it in the same Unit of
- * Work (MVP). Only
- * `RestaurantOrderAccepted` is published; `RestaurantOrderQueued` stays local.
+ * Accepts a `RECEIVED` order of an open restaurant whose items are available.
+ * An order without a Delivery Window gets the kitchen's or the estimated
+ * `expectedReadyAt` (later than now, otherwise `invalid_restaurant_order`)
+ * and is queued in the same Unit of Work. A scheduled order is accepted at
+ * its Planned Ready At and stays `ACCEPTED` until `orders` queues it at its
+ * planned start (FR-222, FR-224). Only `RestaurantOrderAccepted` is
+ * published; `RestaurantOrderQueued` stays local.
  */
 export class AcceptOrderHandler {
   readonly #accessControl: KitchenStaffAccess;
@@ -153,17 +156,20 @@ export class AcceptOrderHandler {
         })),
         conditions,
       });
-      // The kitchen names the time or the Ready Time Estimator computes it.
+      // The kitchen names the time or the Ready Time Estimator computes it;
+      // a scheduled order is ready at its Planned Ready At.
       const expectedReadyAt =
-        command.expectedReadyAt === undefined
-          ? await this.#readyTimeEstimator.estimate({
+        order.schedule !== undefined || command.expectedReadyAt !== undefined
+          ? command.expectedReadyAt
+          : await this.#readyTimeEstimator.estimate({
               restaurantId: order.restaurantId,
               items: order.items,
               acceptedAt: now,
-            })
-          : command.expectedReadyAt;
+            });
       order.accept({ acceptedAt: now, expectedReadyAt, eligibility });
-      order.queue({ queuedAt: now });
+      if (order.schedule === undefined) {
+        order.queue({ queuedAt: now });
+      }
       const version = await saveAndPublish(
         this.#restaurantOrders,
         this.#outbox,

@@ -36,6 +36,11 @@ export type PendingKitchenOrder = Readonly<{
   marketId: string;
   state: SimulatedState;
   expectedReadyAt?: Date;
+  /**
+   * A scheduled order (FR-683): accepted without a time of the Simulator,
+   * it stays ACCEPTED until `orders` queues it at its planned start.
+   */
+  scheduled: boolean;
 }>;
 
 /** Read model over all restaurants: orders in `SIMULATED_STATES`. */
@@ -86,7 +91,9 @@ type KitchenOrderCommand = Readonly<{
  * Preparation upfront (a random delay per step) and passes the planned
  * `READY` moment as `expectedReadyAt`; later steps run at their planned
  * moments. A delay moves `expectedReadyAt` and shifts the remaining plan to
- * it. An accepted order without a plan (restart, or accepted by a person) is
+ * it. A scheduled order is accepted without a time of its own: it is ready
+ * at its Planned Ready At and leaves the Simulator until `orders` queues it.
+ * An accepted order without a plan (restart, or accepted by a person) is
  * planned from now, and a planned `READY` later than its `expectedReadyAt` is
  * reported as a delay. Start Preparation waits for a free cook of the Cook
  * Pool: without one the step stays due for the next pass, and the remaining
@@ -227,6 +234,10 @@ export class KitchenSimulator {
     switch (action) {
       case "accept": {
         this.#schedule.delete(order.restaurantOrderId);
+        if (order.scheduled) {
+          await this.#commands.accept.execute(command);
+          return;
+        }
         const plan = planPreparation(
           RestaurantOrderState.Queued,
           this.#clock.now().getTime(),
@@ -311,6 +322,7 @@ export class KitchenSimulator {
       restaurantId: due.restaurantId,
       marketId: due.marketId,
       state: RestaurantOrderState.Queued,
+      scheduled: started.schedule !== undefined,
       ...(started.timeline.expectedReadyAt === undefined
         ? {}
         : { expectedReadyAt: started.timeline.expectedReadyAt }),

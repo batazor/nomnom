@@ -2,8 +2,9 @@ package fulfillment
 
 // Compensation is the Saga over the journal of confirmed steps in reverse
 // order, followed by recording the negative outcome of the Order. A step
-// closed by its owner (rejection, PreparationFailed, DeliveryFailed) is not
-// compensated, and the Restaurant Order is not cancelled after Pickup.
+// closed by its owner (rejection, PreparationFailed, DeliveryFailed, a slot
+// not confirmed) is not compensated, and neither the Restaurant Order nor the
+// slot reservation of a Scheduled Order is released after Pickup.
 func (p *Process) Compensation() []Step {
 	var plan []Step
 	if p.deliveryCreated && !p.deliveryClosed {
@@ -11,6 +12,10 @@ func (p *Process) Compensation() []Step {
 	}
 	if p.restaurantRequested && !p.restaurantClosed && !p.pickedUp {
 		plan = append(plan, routeStep(StepCancelRestaurantOrder))
+	}
+	// After Pickup the Delivery Window has served its Order and stays taken.
+	if p.schedule != nil && !p.schedule.slotClosed && !p.pickedUp {
+		plan = append(plan, routeStep(StepReleaseSlotReservation))
 	}
 	switch {
 	case p.captured:

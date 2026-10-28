@@ -14,6 +14,9 @@ const (
 	ExpiryEscalation
 	// ExpiryFailure: the deadline chose a negative outcome.
 	ExpiryFailure
+	// ExpiryScheduledStep: a moment of the plan of a Scheduled Order passed,
+	// its step is due (FR-678).
+	ExpiryScheduledStep
 )
 
 // NextDeadline is the nearest active deadline; zero means the process waits
@@ -31,12 +34,22 @@ func (p *Process) NextDeadline() time.Time {
 	consider(p.accepted && !p.ready, p.preparationDeadline)
 	consider(p.ready && p.assigned && !p.pickedUp, p.pickupDeadline)
 	consider(p.pickedUp && !p.done, p.deliveryDeadline)
+	if s := p.schedule; s != nil && p.accepted {
+		// Timers of the stage scheduled: the replan checkpoint, the start of
+		// the kitchen and the courier request.
+		consider(!s.replanned && !s.replanDue, s.plan.ReplanAt)
+		consider(!s.queued && !s.startDue, s.plan.StartAt)
+		consider(!p.deliveryCreated && !s.courierDue, s.plan.CourierRequestAt)
+	}
 	return next
 }
 
 // Expire turns the deadlines passed at now into business branches.
 func (p *Process) Expire(now time.Time) Expiry {
 	passed := func(deadline time.Time) bool { return !deadline.IsZero() && !deadline.After(now) }
+	if p.dueScheduledSteps(passed) {
+		return ExpiryScheduledStep
+	}
 	switch {
 	case p.restaurantRequested && !p.accepted && passed(p.acceptanceDeadline):
 		p.fail(OutcomeFailure, ReasonRestaurantAcceptanceTimeout)

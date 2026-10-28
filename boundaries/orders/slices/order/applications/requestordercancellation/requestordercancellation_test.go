@@ -226,7 +226,53 @@ func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) 
 // fixedWindow is the production cancellation policy with the given window.
 func fixedWindow(t *testing.T, window time.Duration) cancellationpolicy.Fixed {
 	t.Helper()
-	policy, err := cancellationpolicy.NewFixed(window)
+	policy, err := cancellationpolicy.NewFixed(window, 60*time.Minute)
 	require.NoError(t, err)
 	return policy
+}
+
+// AC-916: window 19:00, CANCELLATION__SCHEDULED_CUTOFF 60 minutes: a request
+// at 17:30 reaches the workflow, one at 18:10 is refused as an expired window.
+func TestRequestCancellationOfScheduledOrderClosesBeforeItsWindow(t *testing.T) {
+	windowStart := time.Date(2026, time.October, 25, 19, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		requestedAt time.Time
+		expired     bool
+	}{
+		"17:30": {requestedAt: time.Date(2026, time.October, 25, 17, 30, 0, 0, time.UTC)},
+		"18:10": {requestedAt: time.Date(2026, time.October, 25, 18, 10, 0, 0, time.UTC), expired: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := repositorytest.Open(t)
+			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1",
+				ordertest.WithDeliveryWindow(t, windowStart, windowStart.Add(15*time.Minute)))))
+			workflow := NewMockCancellationRequester(t)
+			handler := requestordercancellation.NewHandler(requestordercancellation.Dependencies{
+				Authorizer: NewMockAuthorizer(t),
+				Orders:     store,
+				Policy:     fixedWindow(t, 5*time.Minute),
+				Clock:      fake.NewClock(tc.requestedAt),
+				Workflow:   workflow,
+			})
+			if !tc.expired {
+				workflow.EXPECT().
+					RequestCancellation(mock.Anything, fulfillment.CancellationRequest{
+						OrderID: "order-1", RequestID: "cancel-1", RequestedBy: customer, RequestedAt: tc.requestedAt, Reason: "changed_mind",
+					}).
+					Return(nil).
+					Once()
+			}
+
+			result, err := handler.Handle(context.Background(), input(customer))
+
+			if tc.expired {
+				assert.Equal(t, order.CancellationNotAllowed{
+					Reasons: []order.PolicyReason{{Code: order.CancellationWindowExpired}},
+				}, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, requestordercancellation.OutcomeRequested, result.Outcome)
+		})
+	}
 }

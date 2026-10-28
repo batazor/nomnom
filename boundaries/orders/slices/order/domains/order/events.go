@@ -20,6 +20,9 @@ type OrderPlaced struct {
 	// Items is the composition at placement; restaurants creates its Restaurant
 	// Order from it.
 	Items []Item
+	// DeliveryWindow is set for a Scheduled Order: the workflow takes the
+	// scheduled route.
+	DeliveryWindow DeliveryWindow
 }
 
 func (OrderPlaced) isOrderDomainEvent() {}

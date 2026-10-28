@@ -26,6 +26,7 @@ var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-
 type env struct {
 	store   *repositorytest.Store
 	catalog *MockCatalog
+	slots   *MockSlotReservations
 	handler placeorder.Handler
 }
 
@@ -34,6 +35,7 @@ func newEnv(t *testing.T) env {
 	e := env{
 		store:   repositorytest.Open(t),
 		catalog: NewMockCatalog(t),
+		slots:   NewMockSlotReservations(t),
 	}
 	e.handler = placeorder.NewHandler(placeorder.Dependencies{
 		UnitOfWork:      e.store,
@@ -41,6 +43,7 @@ func newEnv(t *testing.T) env {
 		Outbox:          e.store,
 		IdempotencyKeys: e.store,
 		Catalog:         e.catalog,
+		Slots:           e.slots,
 		Relationships:   e.store,
 		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
@@ -309,6 +312,7 @@ func (e env) handlerWithKeys(keys placeorder.IdempotencyKeys) placeorder.Handler
 		Outbox:          e.store,
 		IdempotencyKeys: keys,
 		Catalog:         e.catalog,
+		Slots:           e.slots,
 		Relationships:   e.store,
 		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),

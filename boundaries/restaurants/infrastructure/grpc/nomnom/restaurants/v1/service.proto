@@ -33,6 +33,24 @@ service RestaurantsService {
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc ReceiveOrderRequest(ReceiveOrderRequestRequest) returns (ReceiveOrderRequestResponse);
   rpc CancelRestaurantOrder(CancelRestaurantOrderRequest) returns (CancelRestaurantOrderResponse);
+  // Moves an ACCEPTED scheduled order to the Kitchen Queue at its planned
+  // start (FR-224); service identity of orders only. A repeat for a QUEUED
+  // order succeeds without changes.
+  rpc QueueRestaurantOrder(QueueRestaurantOrderRequest) returns (QueueRestaurantOrderResponse);
+
+  // Delivery windows of scheduled orders (FR-673..FR-675, FR-695, FR-703).
+  // ListScheduledSlots is public, like GetRestaurant. Reserve, Confirm and
+  // Release are called by the service identity of orders.
+  rpc ListScheduledSlots(ListScheduledSlotsRequest) returns (ListScheduledSlotsResponse);
+  // A full window is a business result (slot_unavailable with alternatives);
+  // a window off the grid, before now + MIN_LEAD, beyond the horizon or
+  // outside the schedule is INVALID_ARGUMENT; a restaurant without settings
+  // or not accepting orders now is FAILED_PRECONDITION
+  // SCHEDULED_ORDERS_UNAVAILABLE. A repeat with the same order_id returns the
+  // same reservation.
+  rpc ReserveScheduledSlot(ReserveScheduledSlotRequest) returns (ReserveScheduledSlotResponse);
+  rpc ConfirmScheduledSlot(ConfirmScheduledSlotRequest) returns (ConfirmScheduledSlotResponse);
+  rpc ReleaseScheduledSlot(ReleaseScheduledSlotRequest) returns (ReleaseScheduledSlotResponse);
 
   // Kitchen commands of restaurant staff over one Restaurant Order addressed by
   // restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
@@ -65,6 +83,9 @@ service RestaurantsService {
   // awaiting Accept or Reject, by ascending received_at, then by id. Requires
   // restaurant#operate_kitchen. An accepted order leaves this list.
   rpc ListIncomingOrders(ListIncomingOrdersRequest) returns (ListIncomingOrdersResponse);
+  // Accepted scheduled orders waiting for their start, by planned_ready_at
+  // (FR-684); requires restaurant#operate_kitchen.
+  rpc ListScheduledOrders(ListScheduledOrdersRequest) returns (ListScheduledOrdersResponse);
   // Active orders of a restaurant's kitchen board: Restaurant Orders in
   // RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
   // ascending received_at, then by id. Requires restaurant#operate_kitchen.
@@ -78,6 +99,13 @@ service RestaurantsService {
   // Name and premium fee of a restaurant (FR-202, FR-649); requires
   // restaurant#manage. Publishes no business fact.
   rpc UpdateRestaurant(UpdateRestaurantRequest) returns (UpdateRestaurantResponse);
+  // Replaces the weekly opening hours (FR-696, FR-697); requires
+  // restaurant#manage. Overlapping or empty intervals are INVALID_ARGUMENT.
+  // Publishes no business fact.
+  rpc SetOpeningHours(SetOpeningHoursRequest) returns (SetOpeningHoursResponse);
+  // Settings of scheduled orders (FR-672); requires restaurant#manage.
+  // Publishes no business fact.
+  rpc SetScheduledOrderSettings(SetScheduledOrderSettingsRequest) returns (SetScheduledOrderSettingsResponse);
   rpc AssignStaff(AssignStaffRequest) returns (AssignStaffResponse);
   rpc RevokeStaff(RevokeStaffRequest) returns (RevokeStaffResponse);
 
@@ -206,6 +234,96 @@ message ReceiveOrderRequestRequest {
   repeated OrderRequestItem items = 3;
   // Required: the priority chosen at Place Order (FR-651).
   OrderPriority priority = 4;
+  // Set for a scheduled order (FR-683): the order is accepted into ACCEPTED
+  // and queued by QueueRestaurantOrder at its planned start.
+  OrderSchedule schedule = 5;
+}
+
+// Delivery window and planned readiness of a scheduled order (FR-683).
+message OrderSchedule {
+  google.protobuf.Timestamp window_start = 1;
+  google.protobuf.Timestamp window_end = 2;
+  // Before window_start; the expected_ready_at of the accepted order.
+  google.protobuf.Timestamp planned_ready_at = 3;
+}
+
+message QueueRestaurantOrderRequest {
+  string restaurant_order_id = 1;
+}
+
+message QueueRestaurantOrderResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message ListScheduledSlotsRequest {
+  string restaurant_id = 1;
+}
+
+message ListScheduledSlotsResponse {
+  // By start; empty for a restaurant without settings or not accepting now.
+  repeated ScheduledSlot slots = 1;
+}
+
+message ScheduledSlot {
+  DeliveryWindow window = 1;
+  // False when the active reservations reach the capacity.
+  bool available = 2;
+}
+
+message ReserveScheduledSlotRequest {
+  string restaurant_id = 1;
+  google.protobuf.Timestamp window_start = 2;
+  // Pre-generated id of the Order; the idempotency key of the reservation.
+  string order_id = 3;
+}
+
+message ReserveScheduledSlotResponse {
+  oneof result {
+    // Held until confirmed or expired (SCHEDULED_SLOT__HOLD_TTL).
+    DeliveryWindow reserved = 1;
+    SlotUnavailable slot_unavailable = 2;
+  }
+}
+
+// The window is full; the nearest available windows, at most
+// SCHEDULED_SLOT__ALTERNATIVES.
+message SlotUnavailable {
+  repeated DeliveryWindow alternatives = 1;
+}
+
+message ConfirmScheduledSlotRequest {
+  string order_id = 1;
+}
+
+message ConfirmScheduledSlotResponse {
+  oneof result {
+    DeliveryWindow confirmed = 1;
+    // The hold expired and the window filled up in the meantime.
+    SlotUnavailable slot_unavailable = 2;
+  }
+}
+
+message ReleaseScheduledSlotRequest {
+  string order_id = 1;
+}
+
+message ReleaseScheduledSlotResponse {}
+
+message ListScheduledOrdersRequest {
+  string restaurant_id = 1;
+}
+
+message ListScheduledOrdersResponse {
+  repeated ScheduledRestaurantOrder orders = 1;
+}
+
+message ScheduledRestaurantOrder {
+  string restaurant_order_id = 1;
+  string order_id = 2;
+  repeated OrderRequestItem items = 3;
+  OrderSchedule schedule = 4;
+  OrderPriority priority = 5;
+  int64 version = 6;
 }
 
 message ReceiveOrderRequestResponse {
@@ -263,6 +381,8 @@ message RestaurantOrder {
   // order is closed.
   string cook_id = 7;
   OrderPriority priority = 8;
+  // Set for a scheduled order (FR-683).
+  OrderSchedule schedule = 9;
 }
 
 message AcceptRestaurantOrderRequest {
@@ -410,6 +530,8 @@ message RegisterRestaurantRequest {
   reserved "address";
   // Required (ADR 41): Market of the new Restaurant.
   string market_id = 4;
+  // Required (FR-201): IANA time zone of the new Restaurant, immutable.
+  string time_zone = 5;
 }
 
 message RegisterRestaurantResponse {
@@ -431,6 +553,33 @@ message UpdateRestaurantResponse {
   Restaurant restaurant = 1;
   int64 version = 2;
   // False when the restaurant already had this data.
+  bool changed = 3;
+}
+
+message SetOpeningHoursRequest {
+  string restaurant_id = 1;
+  // The whole weekly schedule; empty removes every interval.
+  repeated OpeningInterval opening_hours = 2;
+}
+
+message SetOpeningHoursResponse {
+  Restaurant restaurant = 1;
+  int64 version = 2;
+  // False when the restaurant already had this schedule.
+  bool changed = 3;
+}
+
+message SetScheduledOrderSettingsRequest {
+  string restaurant_id = 1;
+  // Settings to set; at most one of settings and clear.
+  ScheduledOrderSettings settings = 2;
+  // The restaurant stops taking scheduled orders.
+  bool clear = 3;
+}
+
+message SetScheduledOrderSettingsResponse {
+  Restaurant restaurant = 1;
+  int64 version = 2;
   bool changed = 3;
 }
 

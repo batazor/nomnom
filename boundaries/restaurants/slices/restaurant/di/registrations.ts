@@ -36,6 +36,8 @@ import { ListRestaurantsHandler } from "../applications/list-restaurants/list-re
 import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
+import { SetOpeningHoursHandler } from "../applications/set-opening-hours/set-opening-hours.ts";
+import { SetScheduledOrderSettingsHandler } from "../applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
 import { UpdateRestaurantHandler } from "../applications/update-restaurant/update-restaurant.ts";
 import { WaitTimePolicy } from "../domains/restaurant/wait-time.ts";
 import { CachedRestaurantCatalog } from "../infrastructure/cache/restaurants.ts";
@@ -104,6 +106,8 @@ export interface RestaurantCradle {
   readonly listOwnedRestaurants: ListOwnedRestaurantsHandler;
   readonly registerRestaurant: RegisterRestaurantHandler;
   readonly updateRestaurant: UpdateRestaurantHandler;
+  readonly setOpeningHours: SetOpeningHoursHandler;
+  readonly setScheduledOrderSettings: SetScheduledOrderSettingsHandler;
   readonly assignStaff: AssignStaffHandler;
   readonly revokeStaff: RevokeStaffHandler;
   readonly openRestaurant: OpenRestaurantHandler;
@@ -156,16 +160,19 @@ export const registerRestaurant = (
         }),
     ).singleton(),
     getRestaurant: asFunction(
-      ({ cachedRestaurantCatalog }: Cradle) =>
-        new GetRestaurantHandler({ reader: cachedRestaurantCatalog }),
+      ({ cachedRestaurantCatalog, clock }: Cradle) =>
+        new GetRestaurantHandler({ reader: cachedRestaurantCatalog, clock }),
     ).singleton(),
     batchGetRestaurants: asFunction(
-      ({ cachedRestaurantCatalog }: Cradle) =>
-        new BatchGetRestaurantsHandler({ reader: cachedRestaurantCatalog }),
+      ({ cachedRestaurantCatalog, clock }: Cradle) =>
+        new BatchGetRestaurantsHandler({
+          reader: cachedRestaurantCatalog,
+          clock,
+        }),
     ).singleton(),
     listRestaurants: asFunction(
-      ({ cachedRestaurantCatalog }: Cradle) =>
-        new ListRestaurantsHandler({ reader: cachedRestaurantCatalog }),
+      ({ cachedRestaurantCatalog, clock }: Cradle) =>
+        new ListRestaurantsHandler({ reader: cachedRestaurantCatalog, clock }),
     ).singleton(),
     listOwnedRestaurants: asFunction(
       ({ restaurantCatalog }: Cradle) =>
@@ -193,6 +200,20 @@ export const registerRestaurant = (
           accessControl: restaurantAccessControl,
           restaurants,
           clock,
+        }),
+    ).singleton(),
+    setOpeningHours: asFunction(
+      ({ restaurantAccessControl, restaurants }: Cradle) =>
+        new SetOpeningHoursHandler({
+          accessControl: restaurantAccessControl,
+          restaurants,
+        }),
+    ).singleton(),
+    setScheduledOrderSettings: asFunction(
+      ({ restaurantAccessControl, restaurants }: Cradle) =>
+        new SetScheduledOrderSettingsHandler({
+          accessControl: restaurantAccessControl,
+          restaurants,
         }),
     ).singleton(),
     assignStaff: asFunction(

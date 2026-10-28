@@ -102,13 +102,20 @@ export const createWorld = async (
 ) => {
   const world = await createKitchenWorld();
   const service = createService({
-    getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getRestaurant: new GetRestaurantHandler({
+      reader: world.catalog,
+      clock: world.clock,
+    }),
     getMenu: world.getMenu,
     batchGetRestaurants: new BatchGetRestaurantsHandler({
       reader: world.catalog,
+      clock: world.clock,
     }),
     batchGetMenus: world.batchGetMenus,
-    listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
+    listRestaurants: new ListRestaurantsHandler({
+      reader: world.catalog,
+      clock: world.clock,
+    }),
     listOwnedRestaurants: new ListOwnedRestaurantsHandler({
       reader: world.catalog,
     }),
@@ -136,6 +143,14 @@ export const createWorld = async (
     updateMenuItem: world.updateMenuItem,
     setMenuItemAvailability: world.setAvailability,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setOpeningHours: world.setOpeningHours,
+    setScheduledOrderSettings: world.setScheduledOrderSettings,
+    queueRestaurantOrder: world.queue,
+    listScheduledSlots: world.listScheduledSlots,
+    reserveScheduledSlot: world.reserveScheduledSlot,
+    confirmScheduledSlot: world.confirmScheduledSlot,
+    releaseScheduledSlot: world.releaseScheduledSlot,
+    listScheduledOrders: world.listScheduledOrders,
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     hireCook: { execute: () => Promise.reject(new Error("unused")) },
     putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },

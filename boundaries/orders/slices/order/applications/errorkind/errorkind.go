@@ -28,6 +28,7 @@ func Classify(err error) application.ErrorKind {
 		guard             order.GuardFailed
 		notOrderable      order.NotOrderable
 		notCancellable    order.CancellationNotAllowed
+		slotUnavailable   placeorder.SlotUnavailable
 	)
 	switch {
 	case errors.Is(err, application.ErrDependencyUnavailable), errors.Is(err, fulfillment.ErrWorkflowNotFound):
@@ -39,6 +40,8 @@ func Classify(err error) application.ErrorKind {
 		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem),
 		errors.Is(err, order.ErrInvalidCancellationReason),
 		errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders), errors.Is(err, placeorder.ErrPremiumUnavailable),
+		errors.As(err, &slotUnavailable), errors.Is(err, placeorder.ErrScheduledOrdersUnavailable),
+		errors.Is(err, order.ErrNotScheduled),
 		errors.Is(err, fulfillment.ErrCancellationRefused):
 		return application.KindDomainRule
 	case errors.Is(err, application.ErrPermissionDenied):

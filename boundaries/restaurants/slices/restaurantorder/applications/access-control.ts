@@ -17,6 +17,15 @@ export interface FulfillmentCoordinatorAccess {
   ): Promise<boolean>;
 }
 
+/**
+ * `service` identity of the `orders` fulfillment process for commands that
+ * address only a Restaurant Order: the platform capability is checked before
+ * the order is read.
+ */
+export interface FulfillmentProcessAccess {
+  canCoordinateFulfillment(subject: Subject): Promise<boolean>;
+}
+
 /** Staff or an authorized internal actor reading Restaurant Orders. */
 export interface RestaurantOrderViewAccess {
   canViewRestaurantOrders(

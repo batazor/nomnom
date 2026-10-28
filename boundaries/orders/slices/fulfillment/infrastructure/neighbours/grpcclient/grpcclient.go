@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"nomnom/orders/pkg/application"
 	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
@@ -135,22 +136,68 @@ func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
 
 var _ neighbours.Restaurants = (*Restaurants)(nil)
 
-func (r *Restaurants) RequestOrder(ctx context.Context, request neighbours.RestaurantOrderRequest) error {
+func (r *Restaurants) RequestOrder(ctx context.Context, request neighbours.RestaurantOrderRequest) (string, error) {
 	items := make([]*restaurantsv1.OrderRequestItem, 0, len(request.Items))
 	for _, item := range request.Items {
 		items = append(items, &restaurantsv1.OrderRequestItem{MenuItemId: item.MenuItemID, Quantity: int32(item.Quantity)}) //nolint:gosec // quantities are small positive values validated by the Order.
 	}
 	priority, known := restaurantPriority[request.Priority]
 	if !known {
-		return fmt.Errorf("%w: order %s has priority %q", application.ErrInvalidInput, request.OrderID, request.Priority)
+		return "", fmt.Errorf("%w: order %s has priority %q", application.ErrInvalidInput, request.OrderID, request.Priority)
 	}
-	_, err := r.client.ReceiveOrderRequest(ctx, &restaurantsv1.ReceiveOrderRequestRequest{
+	var schedule *restaurantsv1.OrderSchedule
+	if request.Schedule != nil {
+		schedule = &restaurantsv1.OrderSchedule{
+			WindowStart:    timestamppb.New(request.Schedule.WindowStart),
+			WindowEnd:      timestamppb.New(request.Schedule.WindowEnd),
+			PlannedReadyAt: timestamppb.New(request.Schedule.PlannedReadyAt),
+		}
+	}
+	resp, err := r.client.ReceiveOrderRequest(ctx, &restaurantsv1.ReceiveOrderRequestRequest{
 		RestaurantId: request.RestaurantID,
 		OrderId:      request.OrderID,
 		Items:        items,
 		Priority:     priority,
+		Schedule:     schedule,
 	})
-	return mapError("restaurants.ReceiveOrderRequest", err)
+	if err != nil {
+		return "", mapError("restaurants.ReceiveOrderRequest", err)
+	}
+	if resp.GetRestaurantOrderId() == "" {
+		return "", fmt.Errorf("restaurants.ReceiveOrderRequest: order %s: no restaurant_order_id", request.OrderID)
+	}
+	return resp.GetRestaurantOrderId(), nil
+}
+
+// QueueOrder moves an accepted Scheduled Order to the Kitchen Queue; a repeat
+// for a QUEUED order succeeds without changes.
+func (r *Restaurants) QueueOrder(ctx context.Context, request neighbours.QueueRequest) error {
+	_, err := r.client.QueueRestaurantOrder(ctx, &restaurantsv1.QueueRestaurantOrderRequest{RestaurantOrderId: request.RestaurantOrderID})
+	return mapError("restaurants.QueueRestaurantOrder", err)
+}
+
+// ConfirmSlot confirms the held reservation; a window that filled up after the
+// hold expired is the decision not confirmed.
+func (r *Restaurants) ConfirmSlot(ctx context.Context, request neighbours.SlotRequest) (neighbours.SlotDecision, error) {
+	resp, err := r.client.ConfirmScheduledSlot(ctx, &restaurantsv1.ConfirmScheduledSlotRequest{OrderId: request.OrderID})
+	if err != nil {
+		return neighbours.SlotDecision{}, mapError("restaurants.ConfirmScheduledSlot", err)
+	}
+	switch resp.GetResult().(type) {
+	case *restaurantsv1.ConfirmScheduledSlotResponse_Confirmed:
+		return neighbours.SlotDecision{Confirmed: true}, nil
+	case *restaurantsv1.ConfirmScheduledSlotResponse_SlotUnavailable:
+		return neighbours.SlotDecision{}, nil
+	default:
+		return neighbours.SlotDecision{}, fmt.Errorf("restaurants.ConfirmScheduledSlot: order %s: no result", request.OrderID)
+	}
+}
+
+// ReleaseSlot removes the reservation of the Order; a missing one is a no-op
+// of restaurants.
+func (r *Restaurants) ReleaseSlot(ctx context.Context, request neighbours.SlotRequest) error {
+	_, err := r.client.ReleaseScheduledSlot(ctx, &restaurantsv1.ReleaseScheduledSlotRequest{OrderId: request.OrderID})
+	return mapError("restaurants.ReleaseScheduledSlot", err)
 }
 
 // restaurantPriority is the restaurants form of the priority of an Order.

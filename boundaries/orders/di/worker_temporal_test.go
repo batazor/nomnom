@@ -61,7 +61,8 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 			DeliveryTimeout:         time.Minute,
 			PublishStage:            true,
 		},
-		Shutdown: config.ShutdownConfig{DrainTimeout: 5 * time.Second},
+		Shutdown:       config.ShutdownConfig{DrainTimeout: 5 * time.Second},
+		ScheduledOrder: config.ScheduledOrderConfig{PreparationBuffer: 5 * time.Minute, ReplanLead: 30 * time.Minute},
 	}
 
 	orderID := order.ID("order-" + time.Now().UTC().Format("20060102T150405") + "-" + strconv.FormatInt(time.Now().UnixNano(), 36))
@@ -76,7 +77,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewProcessStore(store, nil), testNeighbours(), observability.UseCases()))
+	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewProcessStore(store, nil), testNeighbours(), observability.UseCases(), cfg.ScheduledOrder))
 	require.NoError(t, worker.Start(ctx))
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()

@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package nomnom.restaurants.v1;
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
 message Restaurant {
   string restaurant_id = 1;
   string name = 2;
@@ -16,6 +19,50 @@ message Restaurant {
   // Fee of Premium Priority in the currency of the restaurant (FR-202); unset
   // when the restaurant offers no premium.
   Money premium_fee = 7;
+  // IANA time zone of the restaurant (FR-201); immutable.
+  string time_zone = 8;
+  // Weekly opening hours on the wall clock of the restaurant (FR-696); empty
+  // when no schedule is set: the restaurant then accepts no orders.
+  repeated OpeningInterval opening_hours = 9;
+  // Opened by OpenRestaurant and inside the schedule at the time of the read
+  // (FR-699). Set by GetRestaurant, BatchGetRestaurants and ListRestaurants.
+  bool accepting_orders = 10;
+  // Start of the next schedule period; set only when the restaurant is opened
+  // by the flag and outside its schedule (FR-204).
+  google.protobuf.Timestamp next_opening_at = 11;
+  // Scheduled orders of the restaurant (FR-672); unset when it takes none.
+  ScheduledOrderSettings scheduled_orders = 12;
+  // Baseline preparation time of the Wait Time Statistics (median, or the
+  // configured preparation time until the sample is full). Set by
+  // GetRestaurant, BatchGetRestaurants and ListRestaurants.
+  google.protobuf.Duration baseline_preparation = 13;
+}
+
+// Settings of scheduled orders, set together (FR-672, FR-703).
+message ScheduledOrderSettings {
+  // Scheduled orders per delivery window, > 0.
+  int32 slot_capacity = 1;
+  // The first window of a period starts no earlier than opens_at + opening_lead.
+  google.protobuf.Duration opening_lead = 2;
+  // The last window of a period starts no later than closes_at + closing_grace.
+  google.protobuf.Duration closing_grace = 3;
+}
+
+// Delivery window [start, end) of a scheduled order.
+message DeliveryWindow {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}
+
+// One interval of the weekly schedule (FR-696). closes <= opens closes on the
+// next day.
+message OpeningInterval {
+  // ISO day of week: 1 Monday … 7 Sunday.
+  int32 day_of_week = 1;
+  // Local time "HH:MM".
+  string opens = 2;
+  // Local time "HH:MM".
+  string closes = 3;
 }
 
 // Wait for a new order of the restaurant (Wait Time Statistics, FR-645).

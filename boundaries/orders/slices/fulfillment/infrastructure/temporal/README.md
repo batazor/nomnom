@@ -38,6 +38,10 @@ AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → [
 
 Update `CancellationRequested` принимается до Pickup; позже или во время завершения validator отвечает `CancellationRefused`, client-адаптер — `fulfillment.ErrCancellationRefused`.
 
+## Запланированный заказ
+
+Вход с `DeliveryWindow` (из `OrderPlaced`) под patch `scheduled-route` (`workflow.GetVersion` только для такого входа) создаёт `fulfillment.NewScheduled`: `ConfirmSlotReservation` и `PlanSchedule` перед `RequestRestaurantOrder`, stage `scheduled` после Acceptance, моменты плана (`replan_at`, `start_at`, `courier_request_at`) — таймеры главного цикла через `NextDeadline`/`Expire`, шаги `PlanSchedule` (replan, тот же `planned_ready_at`), `QueueRestaurantOrder` (`restaurant_order_id` из результата `RequestRestaurantOrder`), `CreateDelivery`. Компенсация резервации — `ReleaseSlotReservation`; `slot_unavailable` при подтверждении завершает `Order` кодом `slot_unavailable`. Решение — [ADR 5](../../../../docs/adr/0005-order-fulfillment-orchestration.md#запланированный-заказ).
+
 ## Activities
 
 Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`, прочитанного Activity на каждой попытке: так `market_id` Order ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) попадает в `payments.CreatePayment` и `delivery.CreateDelivery`. Данные `Order` не добавляются во вход (`Input`, `StepInput`) и состояние workflow: в Event History уже начатых workflow таких полей нет, а сохранённый `Order` их имеет, поэтому replay детерминирован без versioning. Отказ платежа — `PaymentDecision`, а не ошибка. `RecordPaymentAuthorization` вызывает use case [Record Payment Authorization](../../../order/applications/recordpaymentauthorization/README.md) с `StepInput.DecidedAt` (время Workflow, как у `CompleteOrder`); повтор после commit — no-op. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
@@ -46,6 +50,6 @@ Update `CancellationRequested` принимается до Pickup; позже и
 
 Процесс `cmd/orders-worker` (composition root `di.InitializeWorker`, provider set `slices/fulfillment/di.WorkerSet`) регистрирует workflow и Activities через `Register`, а при `PublishStage` вызывает `EnsureStageSearchAttribute`: Keyword-атрибут `OrderFulfillmentStage` должен существовать в namespace, иначе worker создаёт его (`TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true`) или не стартует. Client-порты соседей ([`applications/neighbours`](../../applications/neighbours/neighbours.go)) реализуют [`slices/fulfillment/infrastructure/neighbours`](../neighbours) — без зависимости от Temporal-адаптера: `Unavailable` (retryable ошибка), `Simulated` (только локально) и `grpcclient` — командные RPC соседей через internal gateway.
 
-## Не реализовано
+## Replay
 
-- replay-тесты на записанных histories; изменение кода workflow несовместимо с replay ранее начатых workflow — перед выкаткой в kind их нужно дождаться или прервать.
+`replay_test.go` воспроизводит записанные histories из `testdata/`: ASAP-заказ, завершённый кодом до ветки `scheduled-route`, и запланированный заказ в stage `scheduled`. Изменение кода workflow, ломающее любую из них, вводится новым patch. Прочие изменения по-прежнему несовместимы с replay ранее начатых workflow — перед выкаткой в kind их нужно дождаться или прервать.

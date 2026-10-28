@@ -40,6 +40,7 @@ test("AC-251 queue restaurant order queues an ACCEPTED order without publishing"
   world.clock.advance(minutes(1));
 
   const result = await world.queue.execute({
+    subject: ordersService,
     restaurantOrderId: received.restaurantOrderId,
   });
 
@@ -55,13 +56,17 @@ test("AC-252 queueing a queued order is a no-op", async () => {
   const before = await world.restaurantOrders.get(order.restaurantOrderId);
 
   const result = await world.queue.execute({
+    subject: ordersService,
     restaurantOrderId: order.restaurantOrderId,
   });
 
   assert.equal(result.state, "QUEUED");
   assert.equal(result.version, before?.version);
   await assert.rejects(
-    world.queue.execute({ restaurantOrderId: "missing" }),
+    world.queue.execute({
+      subject: ordersService,
+      restaurantOrderId: "missing",
+    }),
     NotFoundError,
   );
 });

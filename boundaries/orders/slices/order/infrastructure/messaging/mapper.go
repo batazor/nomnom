@@ -134,6 +134,13 @@ func toSyncOrderRelationships(_ messaging.Envelope, event *ordersv1.OrderRelatio
 	return syncorderrelationships.Input{OrderID: order.ID(event.GetOrderId())}
 }
 
+// toStartFulfillment carries the Delivery Window of a Scheduled Order: the
+// workflow chooses its route by it (FR-415).
 func toStartFulfillment(e messaging.Envelope, event *ordersv1.OrderPlaced) startfulfillment.Input {
-	return startfulfillment.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
+	in := startfulfillment.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
+	if window := event.GetDeliveryWindow(); window != nil {
+		in.DeliveryWindowStart = window.GetStart().AsTime()
+		in.DeliveryWindowEnd = window.GetEnd().AsTime()
+	}
+	return in
 }

@@ -22,6 +22,7 @@ type Snapshot struct {
 	CancellationReason CancellationReason
 	CancelledAt        time.Time
 	Expected           ExpectedTimes
+	DeliveryWindow     DeliveryWindow
 }
 
 func (o *Order) Snapshot() Snapshot {
@@ -39,6 +40,7 @@ func (o *Order) Snapshot() Snapshot {
 		CancellationReason: o.cancellation,
 		CancelledAt:        o.cancelledAt,
 		Expected:           o.expected,
+		DeliveryWindow:     o.deliveryWindow,
 	}
 }
 
@@ -65,6 +67,7 @@ func Restore(snapshot Snapshot) (*Order, error) {
 	order.cancellation = snapshot.CancellationReason
 	order.cancelledAt = snapshot.CancelledAt
 	order.expected = snapshot.Expected
+	order.deliveryWindow = snapshot.DeliveryWindow
 	return order, nil
 }
 

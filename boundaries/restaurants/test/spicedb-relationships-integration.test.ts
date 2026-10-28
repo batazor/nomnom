@@ -157,6 +157,7 @@ describe("SpiceDB restaurant relationships", () => {
       name: "Pho",
       ownerId: owner.id,
       marketId: market,
+      timeZone: "Europe/Berlin",
     });
     const writer = new SpiceDbRelationshipWriter({
       client: spicedb(),

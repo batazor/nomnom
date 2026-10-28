@@ -4,15 +4,21 @@
 
 export type WaitLevel = "NORMAL" | "ELEVATED";
 
-/** A Restaurant Order that became ready: its time from Acceptance to Ready. */
+/**
+ * A Restaurant Order that became ready: its time from joining the Kitchen
+ * Queue to Ready (FR-644).
+ */
 export type CompletedPreparation = Readonly<{
   orderId: string;
   readyAt: Date;
   durationMs: number;
 }>;
 
-/** An accepted Restaurant Order that is neither ready nor dropped yet. */
-export type OpenPreparation = Readonly<{ orderId: string; acceptedAt: Date }>;
+/**
+ * A queued Restaurant Order that is neither ready nor dropped yet. An
+ * accepted scheduled order waiting for its start is not open (FR-644).
+ */
+export type OpenPreparation = Readonly<{ orderId: string; queuedAt: Date }>;
 
 export type WaitTimeStatistics = Readonly<{
   /** Latest completed preparations, oldest first, at most the sample size. */
@@ -23,7 +29,7 @@ export type WaitTimeStatistics = Readonly<{
   revision: number;
 }>;
 
-/** Statistics of a restaurant that has had no accepted order yet. */
+/** Statistics of a restaurant that has had no queued order yet. */
 export const NO_WAIT_TIME_STATISTICS: WaitTimeStatistics = Object.freeze({
   completed: Object.freeze([]),
   open: Object.freeze([]),
@@ -132,7 +138,7 @@ export class WaitTimePolicy {
     const oldestAgeMs = Math.max(
       0,
       ...statistics.open.map(
-        (entry) => now.getTime() - entry.acceptedAt.getTime(),
+        (entry) => now.getTime() - entry.queuedAt.getTime(),
       ),
     );
     return { baselineMs, currentMs: Math.max(recentMs, oldestAgeMs) };
@@ -146,11 +152,15 @@ export class WaitTimePolicy {
     return statistics.level;
   }
 
-  /** Records an accepted order; a repeated fact changes nothing. */
-  accepted(
+  /**
+   * Records an order that joined the Kitchen Queue at `queuedAt`; an order
+   * already open or completed changes nothing (a repeated fact, or the
+   * Preparation Started of an order its Acceptance already opened).
+   */
+  queued(
     statistics: WaitTimeStatistics,
     orderId: string,
-    acceptedAt: Date,
+    queuedAt: Date,
   ): WaitTimeStatistics {
     if (
       statistics.open.some((entry) => entry.orderId === orderId) ||
@@ -160,7 +170,7 @@ export class WaitTimePolicy {
     }
     return {
       ...statistics,
-      open: [...statistics.open, { orderId, acceptedAt }],
+      open: [...statistics.open, { orderId, queuedAt }],
     };
   }
 
@@ -177,7 +187,7 @@ export class WaitTimePolicy {
       {
         orderId,
         readyAt,
-        durationMs: Math.max(0, readyAt.getTime() - entry.acceptedAt.getTime()),
+        durationMs: Math.max(0, readyAt.getTime() - entry.queuedAt.getTime()),
       },
     ].slice(-this.sampleSize);
     return {

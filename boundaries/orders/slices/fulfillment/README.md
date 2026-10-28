@@ -17,7 +17,8 @@ slices/fulfillment/
 
 | Файл | Операции |
 | --- | --- |
-| `fulfillment.go` | `Process` (журнал подтверждённых шагов, факты соседей, replan, эскалация, сроки), `New`, `Outcome`, коды причин |
+| `fulfillment.go` | `Process` (журнал подтверждённых шагов, факты соседей, replan, эскалация, сроки), `New`, `NewScheduled`, `Outcome`, коды причин |
+| `schedule.go` | Маршрут запланированного заказа: `Plan`, `ConfirmPlan`, подтверждение и освобождение резервации окна, моменты плана как due-шаги, deadline Preparation от `QueueRestaurantOrder` |
 | `facts.go` | `Apply(Fact, at) Effect` — факт соседа с дедупликацией по `EventID`; `Decide(OperatorDecision) Effect` |
 | `cancellation.go` | `AdmitCancellation` (validator Update, без изменений), `AcceptCancellation`, `RequestCancellation` |
 | `route.go` | `Next() (Step, bool)` — следующая операция маршрута (`RequestRestaurantOrder` — только после `AuthorizePayment` и `RecordPaymentAuthorization`); `Confirm(Step, approved, at)` — результат выполненного шага |
@@ -30,6 +31,6 @@ slices/fulfillment/
 
 ## Зависимости
 
-`infrastructure` → `domains/fulfillment`, `applications/neighbours` (порты соседей: Activities их вызывают, `infrastructure/neighbours` и `grpcclient` реализуют, не завися от `temporal`), порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{recordpaymentauthorization,completeorder,failorcancelorder}` (их вызывают Activities). `di` объявляет роль хранилища Activities (`Store`: Unit of Work, repository, Outbox) и использует телеметрию слайса `order`; composition root связывает роль с `ProcessStore` слайса `order`. Слайс `order` не импортирует `fulfillment`.
+`infrastructure` → `domains/fulfillment`, `applications/neighbours` (порты соседей: Activities их вызывают, `infrastructure/neighbours` и `grpcclient` реализуют, не завися от `temporal`), порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{recordpaymentauthorization,completeorder,failorcancelorder,planschedule}` (их вызывают Activities). `di` объявляет роль хранилища Activities (`Store`: Unit of Work, repository, Outbox) и использует телеметрию слайса `order`; composition root связывает роль с `ProcessStore` слайса `order`. Слайс `order` не импортирует `fulfillment`.
 
 Temporal-адаптер и его внешние имена описаны в [`infrastructure/temporal`](infrastructure/temporal/README.md).

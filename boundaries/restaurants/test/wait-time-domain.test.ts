@@ -63,8 +63,8 @@ test("AC-841 the age of the oldest open order makes the kitchen elevated", () =>
   const policy = policyOf();
   const statistics = sampled([20, 20, 20, 20], {
     open: [
-      { orderId: "late", acceptedAt: minutesAgo(35) },
-      { orderId: "fresh", acceptedAt: minutesAgo(2) },
+      { orderId: "late", queuedAt: minutesAgo(35) },
+      { orderId: "fresh", queuedAt: minutesAgo(2) },
     ],
   });
   assert.equal(policy.estimate(statistics, now).currentMs, 35 * MINUTE);
@@ -76,7 +76,7 @@ test("AC-842 the level keeps between the thresholds", () => {
   const waiting = (minutes: number, level: "NORMAL" | "ELEVATED") =>
     sampled([20, 20, 20, 20], {
       level,
-      open: [{ orderId: "o", acceptedAt: minutesAgo(minutes) }],
+      open: [{ orderId: "o", queuedAt: minutesAgo(minutes) }],
     });
   assert.equal(policy.level(waiting(26, "ELEVATED"), now), "ELEVATED");
   assert.equal(policy.level(waiting(26, "NORMAL"), now), "NORMAL");
@@ -85,15 +85,11 @@ test("AC-842 the level keeps between the thresholds", () => {
 
 test("AC-837 a ready order moves its duration to the sample, the oldest leaves", () => {
   const policy = policyOf(2);
-  let statistics = policy.accepted(
-    NO_WAIT_TIME_STATISTICS,
-    "a",
-    minutesAgo(30),
-  );
+  let statistics = policy.queued(NO_WAIT_TIME_STATISTICS, "a", minutesAgo(30));
   statistics = policy.ready(statistics, "a", minutesAgo(12));
-  statistics = policy.accepted(statistics, "b", minutesAgo(10));
+  statistics = policy.queued(statistics, "b", minutesAgo(10));
   statistics = policy.ready(statistics, "b", minutesAgo(5));
-  statistics = policy.accepted(statistics, "c", minutesAgo(4));
+  statistics = policy.queued(statistics, "c", minutesAgo(4));
   statistics = policy.ready(statistics, "c", minutesAgo(1));
   assert.deepEqual(
     statistics.completed.map((entry) => [entry.orderId, entry.durationMs]),
@@ -107,18 +103,18 @@ test("AC-837 a ready order moves its duration to the sample, the oldest leaves",
 
 test("AC-838 repeated and unknown facts change nothing", () => {
   const policy = policyOf();
-  const accepted = policy.accepted(NO_WAIT_TIME_STATISTICS, "a", minutesAgo(9));
-  assert.equal(policy.accepted(accepted, "a", minutesAgo(9)), accepted);
-  const ready = policy.ready(accepted, "a", minutesAgo(1));
+  const queued = policy.queued(NO_WAIT_TIME_STATISTICS, "a", minutesAgo(9));
+  assert.equal(policy.queued(queued, "a", minutesAgo(9)), queued);
+  const ready = policy.ready(queued, "a", minutesAgo(1));
   assert.equal(policy.ready(ready, "a", minutesAgo(1)), ready);
-  assert.equal(policy.accepted(ready, "a", minutesAgo(9)), ready);
+  assert.equal(policy.queued(ready, "a", minutesAgo(9)), ready);
   assert.equal(policy.dropped(ready, "unknown"), ready);
 });
 
 test("AC-839 a dropped order leaves the open orders without a duration", () => {
   const policy = policyOf();
-  const accepted = policy.accepted(NO_WAIT_TIME_STATISTICS, "a", minutesAgo(9));
-  const dropped = policy.dropped(accepted, "a");
+  const queued = policy.queued(NO_WAIT_TIME_STATISTICS, "a", minutesAgo(9));
+  const dropped = policy.dropped(queued, "a");
   assert.deepEqual(dropped.open, []);
   assert.deepEqual(dropped.completed, []);
 });

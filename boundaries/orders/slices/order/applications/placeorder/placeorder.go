@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
@@ -25,6 +26,31 @@ var ErrRestaurantNotAcceptingOrders = errors.New("restaurant is not accepting or
 // premium fee (FR-650): nothing is stored.
 var ErrPremiumUnavailable = errors.New("restaurant offers no premium priority")
 
+// ErrScheduledOrdersUnavailable refuses a Scheduled Order at a restaurant
+// without scheduled order settings or not accepting orders now (FR-692):
+// nothing is stored.
+var ErrScheduledOrdersUnavailable = errors.New("restaurant takes no scheduled orders now")
+
+// SlotUnavailable refuses a Scheduled Order in a full Delivery Window (FR-692,
+// AC-913): nothing is stored; Alternatives are the nearest available windows.
+type SlotUnavailable struct {
+	Alternatives []order.DeliveryWindow
+}
+
+func (e SlotUnavailable) Error() string {
+	return fmt.Sprintf("delivery window is full, %d alternatives", len(e.Alternatives))
+}
+
+// SlotReservations reserves the Delivery Window of a Scheduled Order in
+// restaurants with the pre-generated order id before the transaction. A
+// repeat with the same order id returns the same reservation. Refusals are
+// SlotUnavailable, ErrScheduledOrdersUnavailable and invalid input for a
+// window off the grid, the horizon or the schedule. A hold of an Order that
+// is not committed expires in restaurants (SCHEDULED_SLOT__HOLD_TTL).
+type SlotReservations interface {
+	Reserve(ctx context.Context, restaurantID order.RestaurantID, windowStart time.Time, orderID order.ID) (order.DeliveryWindow, error)
+}
+
 type ItemInput struct {
 	MenuItemID order.MenuItemID
 	Quantity   int
@@ -40,6 +66,9 @@ type Input struct {
 	// Priority is STANDARD or PREMIUM (FR-650); empty means STANDARD, any
 	// other value is invalid input.
 	Priority string
+	// DeliveryWindowStart is the start of the chosen Delivery Window; set makes
+	// a Scheduled Order (FR-681), zero an ASAP Order.
+	DeliveryWindowStart time.Time
 }
 
 type Result struct {
@@ -102,6 +131,8 @@ type Dependencies struct {
 	Outbox          Outbox
 	IdempotencyKeys IdempotencyKeys
 	Catalog         Catalog
+	// Slots reserves the Delivery Window of a Scheduled Order (FR-681).
+	Slots SlotReservations
 	// Relationships records RelationshipsChanged of the new Order in the
 	// placement transaction: orders-consumer writes order#customer and
 	// order#restaurant afterwards (ADR 18). The Customer reads and cancels the
@@ -155,7 +186,11 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("generate order id: %w", err)
 	}
-	placed, err := order.Place(orderID, customerID, in.RestaurantID, snapshot.MarketID, items, service, h.deps.Clock.Now(), orderability)
+	window, err := h.reserve(ctx, in, orderID)
+	if err != nil {
+		return Result{}, err
+	}
+	placed, err := order.Place(orderID, customerID, in.RestaurantID, snapshot.MarketID, items, service, window, h.deps.Clock.Now(), orderability)
 	if err != nil {
 		return Result{}, err
 	}
@@ -192,6 +227,20 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, err
 	}
 	return result, nil
+}
+
+// reserve holds the Delivery Window of a Scheduled Order in restaurants under
+// the pre-generated order id; the Order stores the window the reservation
+// returned. An ASAP Order reserves nothing.
+func (h Handler) reserve(ctx context.Context, in Input, orderID order.ID) (order.DeliveryWindow, error) {
+	if in.DeliveryWindowStart.IsZero() {
+		return order.DeliveryWindow{}, nil
+	}
+	window, err := h.deps.Slots.Reserve(ctx, in.RestaurantID, in.DeliveryWindowStart, orderID)
+	if err != nil {
+		return order.DeliveryWindow{}, fmt.Errorf("reserve delivery window: %w", err)
+	}
+	return window, nil
 }
 
 // replayConcurrent reads the Order a concurrent request committed under key.

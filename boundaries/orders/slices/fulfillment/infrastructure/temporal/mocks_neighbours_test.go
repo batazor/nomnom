@@ -386,21 +386,210 @@ func (_c *MockRestaurants_CancelOrder_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ConfirmSlot provides a mock function for the type MockRestaurants
+func (_mock *MockRestaurants) ConfirmSlot(ctx context.Context, request neighbours.SlotRequest) (neighbours.SlotDecision, error) {
+	ret := _mock.Called(ctx, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ConfirmSlot")
+	}
+
+	var r0 neighbours.SlotDecision
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.SlotRequest) (neighbours.SlotDecision, error)); ok {
+		return returnFunc(ctx, request)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.SlotRequest) neighbours.SlotDecision); ok {
+		r0 = returnFunc(ctx, request)
+	} else {
+		r0 = ret.Get(0).(neighbours.SlotDecision)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, neighbours.SlotRequest) error); ok {
+		r1 = returnFunc(ctx, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRestaurants_ConfirmSlot_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ConfirmSlot'
+type MockRestaurants_ConfirmSlot_Call struct {
+	*mock.Call
+}
+
+// ConfirmSlot is a helper method to define mock.On call
+//   - ctx context.Context
+//   - request neighbours.SlotRequest
+func (_e *MockRestaurants_Expecter) ConfirmSlot(ctx any, request any) *MockRestaurants_ConfirmSlot_Call {
+	return &MockRestaurants_ConfirmSlot_Call{Call: _e.mock.On("ConfirmSlot", ctx, request)}
+}
+
+func (_c *MockRestaurants_ConfirmSlot_Call) Run(run func(ctx context.Context, request neighbours.SlotRequest)) *MockRestaurants_ConfirmSlot_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 neighbours.SlotRequest
+		if args[1] != nil {
+			arg1 = args[1].(neighbours.SlotRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurants_ConfirmSlot_Call) Return(slotDecision neighbours.SlotDecision, err error) *MockRestaurants_ConfirmSlot_Call {
+	_c.Call.Return(slotDecision, err)
+	return _c
+}
+
+func (_c *MockRestaurants_ConfirmSlot_Call) RunAndReturn(run func(ctx context.Context, request neighbours.SlotRequest) (neighbours.SlotDecision, error)) *MockRestaurants_ConfirmSlot_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// QueueOrder provides a mock function for the type MockRestaurants
+func (_mock *MockRestaurants) QueueOrder(ctx context.Context, request neighbours.QueueRequest) error {
+	ret := _mock.Called(ctx, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for QueueOrder")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.QueueRequest) error); ok {
+		r0 = returnFunc(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRestaurants_QueueOrder_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'QueueOrder'
+type MockRestaurants_QueueOrder_Call struct {
+	*mock.Call
+}
+
+// QueueOrder is a helper method to define mock.On call
+//   - ctx context.Context
+//   - request neighbours.QueueRequest
+func (_e *MockRestaurants_Expecter) QueueOrder(ctx any, request any) *MockRestaurants_QueueOrder_Call {
+	return &MockRestaurants_QueueOrder_Call{Call: _e.mock.On("QueueOrder", ctx, request)}
+}
+
+func (_c *MockRestaurants_QueueOrder_Call) Run(run func(ctx context.Context, request neighbours.QueueRequest)) *MockRestaurants_QueueOrder_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 neighbours.QueueRequest
+		if args[1] != nil {
+			arg1 = args[1].(neighbours.QueueRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurants_QueueOrder_Call) Return(err error) *MockRestaurants_QueueOrder_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRestaurants_QueueOrder_Call) RunAndReturn(run func(ctx context.Context, request neighbours.QueueRequest) error) *MockRestaurants_QueueOrder_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ReleaseSlot provides a mock function for the type MockRestaurants
+func (_mock *MockRestaurants) ReleaseSlot(ctx context.Context, request neighbours.SlotRequest) error {
+	ret := _mock.Called(ctx, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReleaseSlot")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.SlotRequest) error); ok {
+		r0 = returnFunc(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRestaurants_ReleaseSlot_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReleaseSlot'
+type MockRestaurants_ReleaseSlot_Call struct {
+	*mock.Call
+}
+
+// ReleaseSlot is a helper method to define mock.On call
+//   - ctx context.Context
+//   - request neighbours.SlotRequest
+func (_e *MockRestaurants_Expecter) ReleaseSlot(ctx any, request any) *MockRestaurants_ReleaseSlot_Call {
+	return &MockRestaurants_ReleaseSlot_Call{Call: _e.mock.On("ReleaseSlot", ctx, request)}
+}
+
+func (_c *MockRestaurants_ReleaseSlot_Call) Run(run func(ctx context.Context, request neighbours.SlotRequest)) *MockRestaurants_ReleaseSlot_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 neighbours.SlotRequest
+		if args[1] != nil {
+			arg1 = args[1].(neighbours.SlotRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurants_ReleaseSlot_Call) Return(err error) *MockRestaurants_ReleaseSlot_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRestaurants_ReleaseSlot_Call) RunAndReturn(run func(ctx context.Context, request neighbours.SlotRequest) error) *MockRestaurants_ReleaseSlot_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RequestOrder provides a mock function for the type MockRestaurants
-func (_mock *MockRestaurants) RequestOrder(ctx context.Context, request neighbours.RestaurantOrderRequest) error {
+func (_mock *MockRestaurants) RequestOrder(ctx context.Context, request neighbours.RestaurantOrderRequest) (string, error) {
 	ret := _mock.Called(ctx, request)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RequestOrder")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.RestaurantOrderRequest) error); ok {
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.RestaurantOrderRequest) (string, error)); ok {
+		return returnFunc(ctx, request)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.RestaurantOrderRequest) string); ok {
 		r0 = returnFunc(ctx, request)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(string)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, neighbours.RestaurantOrderRequest) error); ok {
+		r1 = returnFunc(ctx, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockRestaurants_RequestOrder_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequestOrder'
@@ -433,12 +622,12 @@ func (_c *MockRestaurants_RequestOrder_Call) Run(run func(ctx context.Context, r
 	return _c
 }
 
-func (_c *MockRestaurants_RequestOrder_Call) Return(err error) *MockRestaurants_RequestOrder_Call {
-	_c.Call.Return(err)
+func (_c *MockRestaurants_RequestOrder_Call) Return(s string, err error) *MockRestaurants_RequestOrder_Call {
+	_c.Call.Return(s, err)
 	return _c
 }
 
-func (_c *MockRestaurants_RequestOrder_Call) RunAndReturn(run func(ctx context.Context, request neighbours.RestaurantOrderRequest) error) *MockRestaurants_RequestOrder_Call {
+func (_c *MockRestaurants_RequestOrder_Call) RunAndReturn(run func(ctx context.Context, request neighbours.RestaurantOrderRequest) (string, error)) *MockRestaurants_RequestOrder_Call {
 	_c.Call.Return(run)
 	return _c
 }

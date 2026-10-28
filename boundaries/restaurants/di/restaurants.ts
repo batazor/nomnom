@@ -31,6 +31,7 @@ import type { Outbox } from "../pkg/application/outbox.ts";
 import type {
   KitchenConfig,
   ReconcilerConfig,
+  ScheduledSlotConfig,
   ServerConfig,
   SimulatorConfig,
   SpiceDbConfig,
@@ -90,6 +91,11 @@ import {
   ObservedOutbox,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
+import type { SlotReservationAccess } from "../slices/scheduleslot/applications/access-control.ts";
+import {
+  registerScheduleSlot,
+  type ScheduleSlotCradle,
+} from "../slices/scheduleslot/di/registrations.ts";
 import type { SimulatorAccess } from "../slices/simulator/applications/access-control.ts";
 import {
   registerSimulator,
@@ -108,6 +114,8 @@ export type RestaurantsResources = Readonly<{
   kitchen: KitchenConfig;
   waitTime: WaitTimeConfig;
   simulator: SimulatorConfig;
+  /** Delivery Windows of scheduled orders (FR-694). */
+  scheduledSlot: ScheduledSlotConfig;
   database: DatabaseConnection;
   valkeyConfig: ValkeyConfig;
   /** Opened by cmd/restaurants; reads bypass the cache while it is down. */
@@ -124,6 +132,7 @@ export interface InfrastructureCradle {
   readonly kitchenConfig: KitchenConfig;
   readonly waitTimeConfig: WaitTimeConfig;
   readonly simulatorConfig: SimulatorConfig;
+  readonly scheduledSlotConfig: ScheduledSlotConfig;
   readonly databaseClient: MongoClient;
   readonly db: Db;
   readonly valkeyConfig: ValkeyConfig;
@@ -153,6 +162,7 @@ export interface InfrastructureCradle {
   readonly menuAccessControl: MenuAccessControl;
   readonly simulatorAccessControl: SimulatorAccess;
   readonly cookAccessControl: CookPoolAccess;
+  readonly slotReservationAccessControl: SlotReservationAccess;
   readonly relationshipWriter: SpiceDbRelationshipWriter;
   readonly ownerRelationships: OwnerRelationshipWriter;
   readonly staffRelationships: StaffRelationshipWriter;
@@ -174,6 +184,7 @@ export type RestaurantsCradle = InfrastructureCradle &
   MenuCradle &
   RestaurantOrderCradle &
   CookCradle &
+  ScheduleSlotCradle &
   SimulatorCradle &
   ProcessCradle;
 
@@ -186,6 +197,7 @@ export const createRestaurantsContainer = (
   registerMenu(container);
   registerRestaurantOrder(container);
   registerCook(container);
+  registerScheduleSlot(container);
   registerSimulator(container);
   instrumentUseCases(container, RESTAURANTS_USE_CASES);
   container.register(processRegistrations(resources));
@@ -201,6 +213,7 @@ const infrastructureRegistrations = (
   kitchenConfig: asValue(resources.kitchen),
   waitTimeConfig: asValue(resources.waitTime),
   simulatorConfig: asValue(resources.simulator),
+  scheduledSlotConfig: asValue(resources.scheduledSlot),
   databaseClient: asValue(resources.database.client),
   db: asValue(resources.database.db),
   valkeyConfig: asValue(resources.valkeyConfig),
@@ -274,6 +287,7 @@ const infrastructureRegistrations = (
   menuAccessControl: aliasTo("spicedbAccessControl"),
   simulatorAccessControl: aliasTo("spicedbAccessControl"),
   cookAccessControl: aliasTo("spicedbAccessControl"),
+  slotReservationAccessControl: aliasTo("spicedbAccessControl"),
   // Owner/staff relationships are written before the restaurant is saved
   // (dual-write, repaired by the reconciler).
   relationshipWriter: asFunction(
@@ -302,6 +316,11 @@ const processRegistrations = (
       listOwnedRestaurants: cradle.listOwnedRestaurants,
       receiveOrderRequest: cradle.receiveOrderRequest,
       cancelRestaurantOrder: cradle.cancelRestaurantOrder,
+      queueRestaurantOrder: cradle.queueRestaurantOrder,
+      listScheduledSlots: cradle.listScheduledSlots,
+      reserveScheduledSlot: cradle.reserveScheduledSlot,
+      confirmScheduledSlot: cradle.confirmScheduledSlot,
+      releaseScheduledSlot: cradle.releaseScheduledSlot,
       acceptRestaurantOrder: cradle.acceptRestaurantOrder,
       rejectRestaurantOrder: cradle.rejectRestaurantOrder,
       startPreparation: cradle.startPreparation,
@@ -311,9 +330,12 @@ const processRegistrations = (
       reportPreparationFailure: cradle.reportPreparationFailure,
       getKitchenQueue: cradle.getKitchenQueue,
       listIncomingOrders: cradle.listIncomingOrders,
+      listScheduledOrders: cradle.listScheduledOrders,
       listActiveRestaurantOrders: cradle.listActiveRestaurantOrders,
       registerRestaurant: cradle.registerRestaurant,
       updateRestaurant: cradle.updateRestaurant,
+      setOpeningHours: cradle.setOpeningHours,
+      setScheduledOrderSettings: cradle.setScheduledOrderSettings,
       assignStaff: cradle.assignStaff,
       revokeStaff: cradle.revokeStaff,
       openRestaurant: cradle.openRestaurant,

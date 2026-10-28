@@ -26,6 +26,7 @@ import {
   type PreparationItemInput,
   toPreparationItems,
 } from "./items.ts";
+import { OrderSchedule, type OrderScheduleValue } from "./vo/order-schedule.ts";
 import { Quantity } from "./vo/quantity.ts";
 
 export {
@@ -52,6 +53,19 @@ export {
   RestaurantOrderState,
 } from "./fsm.ts";
 export type { PreparationItem, PreparationItemInput } from "./items.ts";
+export {
+  InvalidOrderScheduleError,
+  InvalidOrderScheduleReason,
+  OrderSchedule,
+  type OrderScheduleValue,
+} from "./vo/order-schedule.ts";
+
+/** Schedule block of a Receive Order Request; every field is required. */
+export type OrderScheduleInput = Readonly<{
+  windowStart?: Date;
+  windowEnd?: Date;
+  plannedReadyAt?: Date;
+}>;
 
 /** Premium Priority chosen at Place Order (FR-651); never changes. */
 export const OrderPriority = {
@@ -96,6 +110,11 @@ export type RestaurantOrderSnapshot = Readonly<{
   state: RestaurantOrderState;
   timeline: RestaurantOrderTimeline;
   priority: OrderPriority;
+  /**
+   * Delivery Window and Planned Ready At of a scheduled order (FR-683);
+   * absent for an order without a window.
+   */
+  schedule?: OrderScheduleValue;
   /** Cook assigned by Start Preparation; kept after the order is closed. */
   cookId?: string;
   /** `request_id` of the Start Next Preparation that started the order. */
@@ -119,6 +138,7 @@ export class RestaurantOrder {
   readonly #items: readonly PreparationItem[];
   readonly #version: number;
   readonly #priority: OrderPriority;
+  readonly #schedule: OrderSchedule | undefined;
   #state: RestaurantOrderState;
   #timeline: RestaurantOrderTimeline;
   #cookId: string | undefined;
@@ -141,6 +161,10 @@ export class RestaurantOrder {
     this.#state = snapshot.state;
     this.#timeline = { ...snapshot.timeline };
     this.#priority = orderPriority(snapshot.priority);
+    this.#schedule =
+      snapshot.schedule === undefined
+        ? undefined
+        : OrderSchedule.of(snapshot.schedule);
     this.#cookId = snapshot.cookId;
     this.#startRequestId = snapshot.startRequestId;
     this.#rejectionReason = snapshot.rejectionReason;
@@ -179,6 +203,11 @@ export class RestaurantOrder {
 
   get priority(): OrderPriority {
     return this.#priority;
+  }
+
+  /** Schedule of a scheduled order; `undefined` for an order without a window. */
+  get schedule(): OrderSchedule | undefined {
+    return this.#schedule;
   }
 
   /** Cook assigned by Start Preparation, if it happened. */
@@ -222,6 +251,9 @@ export class RestaurantOrder {
       state: this.#state,
       timeline: { ...this.#timeline },
       priority: this.#priority,
+      ...(this.#schedule === undefined
+        ? {}
+        : { schedule: this.#schedule.toValue() }),
       ...(this.#cookId === undefined ? {} : { cookId: this.#cookId }),
       ...(this.#startRequestId === undefined
         ? {}
@@ -291,7 +323,8 @@ export class RestaurantOrder {
 
   /**
    * Creates the order in `RECEIVED` from the composition sent by `orders`, in
-   * the Market of the restaurant that received it (ADR 41).
+   * the Market of the restaurant that received it (ADR 41). A scheduled order
+   * carries its complete schedule (FR-683).
    */
   static receive(input: {
     id: string;
@@ -300,6 +333,7 @@ export class RestaurantOrder {
     marketId: string;
     items: readonly PreparationItemInput[];
     priority: string;
+    schedule?: OrderScheduleInput;
     receivedAt: Date;
   }): RestaurantOrder {
     const order = new RestaurantOrder(
@@ -309,6 +343,9 @@ export class RestaurantOrder {
         restaurantId: input.restaurantId,
         marketId: input.marketId,
         priority: orderPriority(input.priority),
+        ...(input.schedule === undefined
+          ? {}
+          : { schedule: OrderSchedule.of(input.schedule).toValue() }),
         state: RestaurantOrderState.Received,
         timeline: { receivedAt: input.receivedAt },
       },
@@ -339,12 +376,25 @@ export class RestaurantOrder {
     restaurantId: string;
     items: readonly PreparationItemInput[];
     priority: string;
+    schedule?: OrderScheduleInput;
   }): boolean {
     if (
       input.restaurantId !== this.restaurantId ||
       input.priority !== this.#priority
     ) {
       return false;
+    }
+    if ((input.schedule === undefined) !== (this.#schedule === undefined)) {
+      return false;
+    }
+    if (input.schedule !== undefined && this.#schedule !== undefined) {
+      let schedule: OrderSchedule;
+      try {
+        schedule = OrderSchedule.of(input.schedule);
+      } catch {
+        return false;
+      }
+      if (!schedule.equals(this.#schedule)) return false;
     }
     let items: PreparationItem[];
     try {
@@ -357,31 +407,49 @@ export class RestaurantOrder {
 
   /**
    * Accepts with the expected ready time named by the kitchen or estimated;
-   * it MUST be later than the acceptance moment (FR-609).
+   * it MUST be later than the acceptance moment (FR-609). A scheduled order
+   * is ready at its Planned Ready At: a time named by the kitchen is invalid
+   * (FR-222), and it stays `ACCEPTED` until Queue Restaurant Order.
    */
   accept(input: {
     acceptedAt: Date;
-    expectedReadyAt: Date;
+    /** Required without a Delivery Window, forbidden with one. */
+    expectedReadyAt: Date | undefined;
     eligibility: AcceptanceEligibility;
   }): void {
-    if (input.expectedReadyAt.getTime() <= input.acceptedAt.getTime()) {
+    const expectedReadyAt = this.#acceptedReadyAt(input.expectedReadyAt);
+    if (expectedReadyAt.getTime() <= input.acceptedAt.getTime()) {
       throw new InvalidRestaurantOrderError(
         InvalidRestaurantOrderReason.ExpectedReadyAtNotLater,
       );
     }
     this.apply({ trigger: "Accept", eligibility: input.eligibility });
-    this.extendTimeline({
-      acceptedAt: input.acceptedAt,
-      expectedReadyAt: input.expectedReadyAt,
-    });
+    this.extendTimeline({ acceptedAt: input.acceptedAt, expectedReadyAt });
     this.record(
       {
         type: "RestaurantOrderAccepted",
         acceptedAt: input.acceptedAt,
-        expectedReadyAt: input.expectedReadyAt,
+        expectedReadyAt,
       },
       input.acceptedAt,
     );
+  }
+
+  #acceptedReadyAt(named: Date | undefined): Date {
+    if (this.#schedule !== undefined) {
+      if (named !== undefined) {
+        throw new InvalidRestaurantOrderError(
+          InvalidRestaurantOrderReason.ExpectedReadyAtOfScheduledOrder,
+        );
+      }
+      return this.#schedule.plannedReadyAt;
+    }
+    if (named === undefined) {
+      throw new InvalidRestaurantOrderError(
+        InvalidRestaurantOrderReason.MissingExpectedReadyAt,
+      );
+    }
+    return named;
   }
 
   reject(input: { rejectedAt: Date; reason?: string }): void {
@@ -398,9 +466,20 @@ export class RestaurantOrder {
     );
   }
 
+  /**
+   * Moves an `ACCEPTED` order to the Kitchen Queue; `expected_ready_at` does
+   * not change (FR-224). Queued in the Unit of Work of its Acceptance, the
+   * order's RestaurantOrderAccepted carries the queuing moment: queuing
+   * itself publishes no fact.
+   */
   queue(input: { queuedAt: Date }): void {
     this.apply({ trigger: "Queue" });
     this.extendTimeline({ queuedAt: input.queuedAt });
+    this.#events = this.#events.map((event) =>
+      event.type === "RestaurantOrderAccepted"
+        ? { ...event, queuedAt: input.queuedAt }
+        : event,
+    );
     this.record(
       { type: "RestaurantOrderQueued", queuedAt: input.queuedAt },
       input.queuedAt,
@@ -451,6 +530,7 @@ export class RestaurantOrder {
         type: "PreparationStarted",
         preparationStartedAt: input.startedAt,
         expectedReadyAt: this.timeline.expectedReadyAt,
+        queuedAt: this.timeline.queuedAt,
       },
       input.startedAt,
     );

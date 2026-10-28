@@ -18,6 +18,8 @@ export type RegisterRestaurant = Readonly<{
   ownerId: string;
   /** Required (ADR 41): Market of the new restaurant, immutable. */
   marketId: string;
+  /** Required (FR-201): IANA time zone of the new restaurant, immutable. */
+  timeZone: string;
 }>;
 
 export type RegisterRestaurantResult = RestaurantView &
@@ -56,6 +58,7 @@ export class RegisterRestaurantHandler {
       name: command.name,
       ownerId: command.ownerId,
       marketId: command.marketId,
+      timeZone: command.timeZone,
       registeredAt: this.#clock.now(),
     });
     const revision = await this.#ownerRelationships.touchOwner({

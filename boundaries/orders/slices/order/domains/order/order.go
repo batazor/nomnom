@@ -58,15 +58,17 @@ type Order struct {
 	marketID     vo.MarketID
 	items        []Item
 	service      Service
-	total        vo.Money
-	placedAt     time.Time
-	state        State
-	version      uint64
-	facts        []RecordedFact
-	cancellation CancellationReason
-	cancelledAt  time.Time
-	expected     ExpectedTimes
-	events       []DomainEvent
+	// deliveryWindow is set for a Scheduled Order (FR-681), fixed at Place Order.
+	deliveryWindow DeliveryWindow
+	total          vo.Money
+	placedAt       time.Time
+	state          State
+	version        uint64
+	facts          []RecordedFact
+	cancellation   CancellationReason
+	cancelledAt    time.Time
+	expected       ExpectedTimes
+	events         []DomainEvent
 }
 
 // New builds an Order without recording a domain event; use Place for a new
@@ -110,6 +112,8 @@ func New(
 
 // Place creates a placed Order from a verified catalog snapshot and records
 // OrderPlaced; marketID is the Market of the Restaurant in that snapshot.
+// window is the Delivery Window reserved in restaurants for a Scheduled Order
+// and zero for an ASAP Order.
 func Place(
 	id ID,
 	customerID CustomerID,
@@ -117,6 +121,7 @@ func Place(
 	marketID vo.MarketID,
 	items []Item,
 	service Service,
+	window DeliveryWindow,
 	placedAt time.Time,
 	orderability OrderabilityContext,
 ) (*Order, error) {
@@ -131,14 +136,16 @@ func Place(
 		return nil, NotOrderable(result)
 	}
 	order.placedAt = placedAt
+	order.deliveryWindow = window
 	order.events = append(order.events, OrderPlaced{
-		OrderID:      id,
-		CustomerID:   customerID,
-		RestaurantID: restaurantID,
-		MarketID:     marketID,
-		Total:        order.total,
-		PlacedAt:     placedAt,
-		Items:        order.Items(),
+		OrderID:        id,
+		CustomerID:     customerID,
+		RestaurantID:   restaurantID,
+		MarketID:       marketID,
+		Total:          order.total,
+		PlacedAt:       placedAt,
+		Items:          order.Items(),
+		DeliveryWindow: window,
 	})
 	return order, nil
 }

@@ -1,6 +1,7 @@
 import type { Clock } from "../../../../pkg/application/clock.ts";
 import type {
   OrderPriority,
+  OrderScheduleValue,
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control.ts";
@@ -21,6 +22,8 @@ export type KitchenQueueEntry = Readonly<{
   acceptedAt: Date | undefined;
   queuedAt: Date | undefined;
   expectedReadyAt: Date | undefined;
+  /** Delivery Window and Planned Ready At of a scheduled order (FR-241). */
+  schedule: OrderScheduleValue | undefined;
   /** Version of the Restaurant Order the entry was read at. */
   version: number;
 }>;

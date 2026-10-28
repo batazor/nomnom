@@ -8,6 +8,10 @@ export const InvalidRestaurantOrderReason = {
   EmptyCookId: "empty_cook_id",
   EmptyStartRequestId: "empty_start_request_id",
   UnknownPriority: "unknown_priority",
+  /** The kitchen named a ready time for a scheduled order (FR-222). */
+  ExpectedReadyAtOfScheduledOrder: "expected_ready_at_of_scheduled_order",
+  /** An order without a Delivery Window needs its expected ready time. */
+  MissingExpectedReadyAt: "missing_expected_ready_at",
 } as const;
 
 export type InvalidRestaurantOrderReason =

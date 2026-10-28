@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { durationFromMs, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type {
   MenuItemView,
@@ -7,14 +7,18 @@ import type {
 } from "../../slices/menu/applications/menu-support.ts";
 import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
 import type {
-  CatalogRestaurantView,
+  AcceptingCatalogRestaurantView,
   RestaurantView,
 } from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { KitchenQueueEntry } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { ActiveRestaurantOrder } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type { IncomingOrder } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
+import type { ScheduledOrder } from "../../slices/restaurantorder/applications/list-scheduled-orders/list-scheduled-orders.ts";
 import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
+import type { OrderScheduleValue } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
+import type { DeliveryWindow } from "../../slices/scheduleslot/domains/scheduleslot/scheduleslot.ts";
 import {
+  DeliveryWindowSchema,
   MenuItemSchema,
   RestaurantSchema,
 } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
@@ -23,35 +27,65 @@ import {
   IncomingOrderSchema,
   KitchenQueueEntrySchema,
   OrderPriority as OrderPriorityMessage,
+  OrderScheduleSchema,
   RestaurantOrderSchema,
   RestaurantOrderState,
+  ScheduledRestaurantOrderSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 
-export const toRestaurantMessage = (view: RestaurantView) =>
-  create(RestaurantSchema, {
-    restaurantId: view.restaurantId,
-    name: view.name,
-    isOpen: view.isOpen,
-    marketId: view.marketId,
-    ...(view.premiumFee === undefined
-      ? {}
-      : { premiumFee: { ...view.premiumFee } }),
-  });
+const restaurantFields = (view: RestaurantView) => ({
+  restaurantId: view.restaurantId,
+  name: view.name,
+  isOpen: view.isOpen,
+  marketId: view.marketId,
+  timeZone: view.timeZone,
+  openingHours: view.openingHours.map((interval) => ({
+    dayOfWeek: interval.day,
+    opens: interval.opens,
+    closes: interval.closes,
+  })),
+  ...(view.premiumFee === undefined
+    ? {}
+    : { premiumFee: { ...view.premiumFee } }),
+  ...(view.scheduledOrders === undefined
+    ? {}
+    : {
+        scheduledOrders: {
+          slotCapacity: view.scheduledOrders.slotCapacity,
+          openingLead: durationFromMs(view.scheduledOrders.openingLeadMs),
+          closingGrace: durationFromMs(view.scheduledOrders.closingGraceMs),
+        },
+      }),
+});
 
-/** Get Restaurant and List Restaurants also carry the wait (FR-204). */
-export const toCatalogRestaurantMessage = (view: CatalogRestaurantView) =>
+export const toRestaurantMessage = (view: RestaurantView) =>
+  create(RestaurantSchema, restaurantFields(view));
+
+/**
+ * Get Restaurant, Batch Get Restaurants and List Restaurants also carry the
+ * wait and the acceptance of orders at the time of the read (FR-204).
+ */
+export const toCatalogRestaurantMessage = (
+  view: AcceptingCatalogRestaurantView,
+) =>
   create(RestaurantSchema, {
-    restaurantId: view.restaurantId,
-    name: view.name,
-    isOpen: view.isOpen,
-    marketId: view.marketId,
-    ...(view.premiumFee === undefined
+    ...restaurantFields(view),
+    acceptingOrders: view.acceptingOrders,
+    ...(view.nextOpeningAt === undefined
       ? {}
-      : { premiumFee: { ...view.premiumFee } }),
+      : { nextOpeningAt: timestampFromDate(view.nextOpeningAt) }),
     waitTime: {
       elevated: view.waitTime.elevated,
       expectedWaitMinutes: view.waitTime.expectedWaitMinutes,
     },
+    baselinePreparation: durationFromMs(view.waitTime.baselinePreparationMs),
+  });
+
+/** Delivery Window `[start, end)` of a scheduled order. */
+export const toDeliveryWindowMessage = (window: DeliveryWindow) =>
+  create(DeliveryWindowSchema, {
+    start: timestampFromDate(window.start),
+    end: timestampFromDate(window.end),
   });
 
 export const toMenuItemMessage = (item: MenuItemView) =>
@@ -68,6 +102,16 @@ export const toMenuItemMessages = (view: MenuView) =>
 
 const optionalTimestamp = (value: Date | undefined) =>
   value === undefined ? undefined : timestampFromDate(value);
+
+const toScheduleMessage = (schedule: OrderScheduleValue) =>
+  create(OrderScheduleSchema, {
+    windowStart: timestampFromDate(schedule.windowStart),
+    windowEnd: timestampFromDate(schedule.windowEnd),
+    plannedReadyAt: timestampFromDate(schedule.plannedReadyAt),
+  });
+
+const optionalSchedule = (schedule: OrderScheduleValue | undefined) =>
+  schedule === undefined ? undefined : toScheduleMessage(schedule);
 
 const STATE_MESSAGES: Readonly<
   Record<RestaurantOrderView["state"], RestaurantOrderState>
@@ -118,6 +162,7 @@ export const toRestaurantOrderMessage = (view: RestaurantOrderView) =>
     version: BigInt(view.version),
     cookId: view.cookId ?? "",
     priority: PRIORITY_MESSAGES[view.priority],
+    schedule: optionalSchedule(view.schedule),
   });
 
 export const toKitchenQueueEntryMessage = (
@@ -133,6 +178,7 @@ export const toKitchenQueueEntryMessage = (
       priority: PRIORITY_MESSAGES[entry.priority],
       expectedReadyAt: optionalTimestamp(entry.expectedReadyAt),
       version: BigInt(entry.version),
+      schedule: optionalSchedule(entry.schedule),
     },
     acceptedAt: optionalTimestamp(entry.acceptedAt),
     queuedAt: optionalTimestamp(entry.queuedAt),
@@ -172,6 +218,7 @@ export const toActiveRestaurantOrderMessage = (
       version: BigInt(order.version),
       cookId: order.cookId ?? "",
       priority: PRIORITY_MESSAGES[order.priority],
+      schedule: optionalSchedule(order.schedule),
     },
     items: order.items.map((item) => ({
       menuItemId: item.menuItemId,
@@ -180,6 +227,20 @@ export const toActiveRestaurantOrderMessage = (
     })),
     receivedAt: optionalTimestamp(order.receivedAt),
     acceptedAt: optionalTimestamp(order.acceptedAt),
+  });
+
+export const toScheduledOrderMessage = (order: ScheduledOrder) =>
+  create(ScheduledRestaurantOrderSchema, {
+    restaurantOrderId: order.restaurantOrderId,
+    orderId: order.orderId,
+    items: order.items.map((item) => ({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      options: [...item.options],
+    })),
+    schedule: toScheduleMessage(order.schedule),
+    priority: PRIORITY_MESSAGES[order.priority],
+    version: BigInt(order.version),
   });
 
 export const toStaffMessage = (result: StaffChangeResult) => ({

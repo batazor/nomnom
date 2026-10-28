@@ -107,6 +107,7 @@ describe("Restaurant and Menu Integration Events are written to the Outbox", () 
         name: "Pho House",
         ownerId: owner.id,
         marketId: "berlin",
+        timeZone: "Europe/Berlin",
         registeredAt: now,
       }),
     );

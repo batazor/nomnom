@@ -13,7 +13,7 @@ server-side apply применяет в неймспейс публичного 
 - `HTTPRoute market-<market_id>` — `/m/<market_id>` в Service Router Cell, префикс снимается,
   `X-Nomnom-Market` ставится из маршрута; метка `nomnom.dev/route: market`;
 - `ConfigMap`, `HTTPRouteFilter` (`directResponse`) и `HTTPRoute markets` — Envoy сам отвечает на
-  `GET /markets` списком `{"markets":[{"id","name","currency"}]}` по названию.
+  `GET /markets` списком `{"markets":[{"id","name","currency","timeZone"}]}` по названию.
 
 Чтение реестра и применение — под advisory lock PostgreSQL в одной read-only транзакции, так что
 параллельные записи не применят более старый снимок. Не применилось при записи — `UNAVAILABLE`
@@ -25,7 +25,7 @@ server-side apply применяет в неймспейс публичного 
 | RPC | Кто вызывает | Правило |
 | --- | --- | --- |
 | `RegisterCell` | оператор (user assertion через делегата, ADR 32) | `platform#manage_markets` (SpiceDB, ADR 18); Cell — `cell_id` и `router` (Service Cosmo Router: DNS-1123 namespace и name, порт 1..65535); повтор с теми же значениями — `created = false`, с другими — `ALREADY_EXISTS`; затем публикация маршрутов |
-| `CreateMarket` | оператор | то же; незарегистрированная Cell — `FAILED_PRECONDITION` (`CELL_NOT_FOUND`); затем публикация маршрутов |
+| `CreateMarket` | оператор | то же; `time_zone` — обязательный IANA-пояс (`Europe/Berlin`), пустой или неизвестный — `INVALID_ARGUMENT`, другой пояс для известного `market_id` — `ALREADY_EXISTS`; незарегистрированная Cell — `FAILED_PRECONDITION` (`CELL_NOT_FOUND`); затем публикация маршрутов |
 | `ListMarkets` | оператор | `platform#manage_markets`; по name, затем market_id |
 
 Ошибки — `google.rpc.ErrorInfo` домена `nomnom.controlplane.v1`:
@@ -33,7 +33,7 @@ server-side apply применяет в неймспейс публичного 
 | Код | Reason |
 | --- | --- |
 | `UNAUTHENTICATED` | `AUTHENTICATION_REQUIRED` — нет/неверный projected token, assertion не от делегата |
-| `INVALID_ARGUMENT` | `INVALID_ARGUMENT` — slug, Router Cell, название, валюта |
+| `INVALID_ARGUMENT` | `INVALID_ARGUMENT` — slug, Router Cell, название, валюта, часовой пояс |
 | `PERMISSION_DENIED` | `OPERATION_NOT_ALLOWED` |
 | `ALREADY_EXISTS` | `CELL_ALREADY_REGISTERED`, `MARKET_ALREADY_EXISTS` |
 | `FAILED_PRECONDITION` | `CELL_NOT_FOUND` |
@@ -50,6 +50,11 @@ server-side apply применяет в неймспейс публичного 
   (pgx + squirrel, ADR 39), проверка SpiceDB и адаптер маршрутов `infrastructure/gatewayroutes`
   (client-go, dynamic client, in-cluster ServiceAccount).
 - Миграции встроены в бинарь и применяются при старте под advisory lock (ADR 42), набор `topology`.
+  `00003_market_time_zone` задаёт пояс существующим Market явно: `berlin` — `Europe/Berlin`; любой
+  другой Market без известного пояса останавливает миграцию с его `market_id`, и оператор решает
+  за него до старта.
+- База IANA встроена в бинарь (`time/tzdata`): допустимость пояса зависит от релиза control plane,
+  а не от образа.
 - DI — Google Wire (ADR 5): `di/wire.go`, `make generate`.
 - Моки портов для тестов — mockery (шаблон testify), список в `.mockery.yml`, генерирует `make generate`.
 - Runtime contract (ADR 17): бизнес-порт 8086, технический порт `metrics` 9086 с `/health/*`;

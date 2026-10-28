@@ -13,7 +13,10 @@ import { CloseRestaurantHandler } from "../../slices/restaurant/applications/clo
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import { SetOpeningHoursHandler } from "../../slices/restaurant/applications/set-opening-hours/set-opening-hours.ts";
+import { SetScheduledOrderSettingsHandler } from "../../slices/restaurant/applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
 import { UpdateRestaurantHandler } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
+import type { OpeningInterval } from "../../slices/restaurant/domains/restaurant/restaurant.ts";
 import { WaitTimePolicy } from "../../slices/restaurant/domains/restaurant/wait-time.ts";
 import {
   createRestaurantCollection,
@@ -48,6 +51,20 @@ export const owner: Subject = { type: "user", id: "owner" };
 export const stranger: Subject = { type: "user", id: "stranger" };
 
 export const startOfDay = new Date(Date.UTC(2026, 9, 25, 9));
+
+/** Time zone of the restaurants of the tests: the launch Market `berlin`. */
+export const BERLIN = "Europe/Berlin";
+
+/**
+ * Opening hours around the clock: two touching intervals a day, since one
+ * interval never spans a full day (`opens = closes` is invalid).
+ */
+export const ALWAYS_OPEN: readonly OpeningInterval[] = [
+  1, 2, 3, 4, 5, 6, 7,
+].flatMap((day) => [
+  { day, opens: "00:00", closes: "12:00" },
+  { day, opens: "12:00", closes: "00:00" },
+]);
 
 /** Launch Market of the tests (ADR 41) and a second one that must not mix. */
 export const market = "berlin";
@@ -106,6 +123,14 @@ export const createRestaurantWorld = async (
     clock: infrastructure.clock,
   });
   const open = new OpenRestaurantHandler(changeOpening);
+  const setOpeningHours = new SetOpeningHoursHandler({
+    accessControl: authorization,
+    restaurants,
+  });
+  const setScheduledOrderSettings = new SetScheduledOrderSettingsHandler({
+    accessControl: authorization,
+    restaurants,
+  });
   const close = new CloseRestaurantHandler(changeOpening);
   const changeStaff = {
     accessControl: authorization,
@@ -117,20 +142,32 @@ export const createRestaurantWorld = async (
 
   /**
    * Registers a restaurant owned by {@link owner} in {@link market} unless
-   * another Market is named, optionally opened.
+   * another Market is named, in {@link BERLIN}. An open restaurant is opened
+   * by the flag and accepts orders around the clock unless other opening
+   * hours are named.
    */
   const givenRestaurant = async (
     name: string,
-    state: { open: boolean; marketId?: string } = { open: true },
+    state: {
+      open: boolean;
+      marketId?: string;
+      openingHours?: readonly OpeningInterval[];
+    } = { open: true },
   ): Promise<string> => {
     const { restaurantId } = await register.execute({
       subject: operator,
       name,
       ownerId: owner.id,
       marketId: state.marketId ?? market,
+      timeZone: BERLIN,
     });
     if (state.open) {
       await open.execute({ subject: owner, restaurantId });
+      await setOpeningHours.execute({
+        subject: owner,
+        restaurantId,
+        openingHours: state.openingHours ?? ALWAYS_OPEN,
+      });
     }
     return restaurantId;
   };
@@ -147,6 +184,8 @@ export const createRestaurantWorld = async (
     update,
     open,
     close,
+    setOpeningHours,
+    setScheduledOrderSettings,
     assignStaff,
     revokeStaff,
     givenRestaurant,

@@ -78,7 +78,7 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 		Items:          []ports.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
 		Priority:       order.PriorityStandard,
 		IdempotencyKey: step.IdempotencyKey,
-	}).Return(nil).Once()
+	}).Return("ro-1", nil).Once()
 	delivery.EXPECT().Create(mock.Anything, ports.DeliveryRequest{
 		OrderID:        orderID,
 		MarketID:       ordertest.Market,
@@ -86,7 +86,9 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 	}).Return(nil).Once()
 	ctx := context.Background()
 
-	require.NoError(t, a.RequestRestaurantOrder(ctx, step))
+	requested, err := a.RequestRestaurantOrder(ctx, step)
+	require.NoError(t, err)
+	assert.Equal(t, temporal.RestaurantOrderRequested{RestaurantOrderID: "ro-1"}, requested)
 	require.NoError(t, a.CreateDelivery(ctx, step))
 }
 

@@ -90,14 +90,21 @@ resources:
   limits: {}
 
 # Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# Пример:
-# OpenTelemetry — секция telemetry ниже, не env.
-# env:
-#   CANCELLATION__WINDOW: 5m  # окно отмены; без значения действует placeholder 5m
+# OpenTelemetry — секция telemetry ниже, не env. CANCELLATION__WINDOW без значения —
+# placeholder 5m.
 # Release API (cmd/orders) требует SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY,
 # SIMULATOR__MAX_DELAY, SIMULATOR__CUSTOMER_ID и SIMULATOR__MARKET_IDS (FR-606, ADR 41):
 # без них pod не стартует.
-env: {}
+# Запланированные заказы (add-scheduled-orders): значения обязательны для всех процессов
+# (API, worker, consumer читают одну конфигурацию), пустое или неположительное — pod не
+# стартует. Releases worker и consumer наследуют их из этого файла.
+env:
+  # Окно отмены запланированного заказа закрывается в window_start − cutoff (FR-462).
+  CANCELLATION__SCHEDULED_CUTOFF: 60m
+  # start_at = planned_ready_at − baseline preparation − buffer (FR-677).
+  SCHEDULED_ORDER__PREPARATION_BUFFER: 5m
+  # Контрольная точка пересчёта плана за replan_lead до start_at (FR-679).
+  SCHEDULED_ORDER__REPLAN_LEAD: 30m
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
 # envFrom:

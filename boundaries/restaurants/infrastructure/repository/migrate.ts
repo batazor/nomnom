@@ -51,6 +51,13 @@ export const RESTAURANTS_MIGRATION_SETS: readonly MigrationSet[] = [
     ),
   },
   {
+    id: "schedule_slots",
+    dir: new URL(
+      "../../slices/scheduleslot/infrastructure/repository/migrations/",
+      import.meta.url,
+    ),
+  },
+  {
     id: "simulator",
     dir: new URL(
       "../../slices/simulator/infrastructure/repository/migrations/",

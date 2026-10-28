@@ -28,8 +28,8 @@ func routes(t *testing.T) []publishroutes.MarketRoute {
 	router, err := vo.NewRouter("nomnom-bff", "bff", 3010)
 	require.NoError(t, err)
 	return []publishroutes.MarketRoute{
-		{Market: market.New("berlin", "Berlin 100%", "EUR", "cell-1"), Router: router},
-		{Market: market.New("hamburg", "Hamburg", "EUR", "cell-1"), Router: router},
+		{Market: market.New("berlin", "Berlin 100%", "EUR", "Europe/Berlin", "cell-1"), Router: router},
+		{Market: market.New("hamburg", "Hamburg", "EUR", "Europe/Berlin", "cell-1"), Router: router},
 	}
 }
 
@@ -79,8 +79,8 @@ func TestTheMarketsListIsServedByTheGateway(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(strings.ReplaceAll(body, "%%", "%")), &list))
 	assert.Equal(t, []map[string]string{
-		{"id": "berlin", "name": "Berlin 100%", "currency": "EUR"},
-		{"id": "hamburg", "name": "Hamburg", "currency": "EUR"},
+		{"id": "berlin", "name": "Berlin 100%", "currency": "EUR", "timeZone": "Europe/Berlin"},
+		{"id": "hamburg", "name": "Hamburg", "currency": "EUR", "timeZone": "Europe/Berlin"},
 	}, list.Markets, "in the order of the snapshot")
 
 	filter := byName(t, resources, "HTTPRouteFilter", "markets")
@@ -97,6 +97,19 @@ func TestTheMarketsListIsServedByTheGateway(t *testing.T) {
 		map[string]any{"name": "Access-Control-Allow-Methods", "value": "GET"},
 		map[string]any{"name": "Access-Control-Allow-Headers", "value": "traceparent, tracestate"},
 	}, cors, "a direct response gets no CORS policy of Envoy, so the headers are on the response")
+}
+
+func TestTheMarketsListCarriesTheTimeZone(t *testing.T) {
+	router, err := vo.NewRouter("nomnom-bff", "bff", 3010)
+	require.NoError(t, err)
+	resources, err := gatewayroutes.Build(cfg, []publishroutes.MarketRoute{
+		{Market: market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"), Router: router},
+		{Market: market.New("hamburg", "Hamburg", "EUR", "Europe/Berlin", "cell-1"), Router: router},
+	})
+	require.NoError(t, err)
+
+	body, _, _ := unstructured.NestedString(byName(t, resources, "ConfigMap", "markets").Object, "data", "response.body")
+	assert.JSONEq(t, `{"markets":[{"id":"berlin","name":"Berlin","currency":"EUR","timeZone":"Europe/Berlin"},{"id":"hamburg","name":"Hamburg","currency":"EUR","timeZone":"Europe/Berlin"}]}`, body)
 }
 
 func TestAnEmptyRegistryPublishesAnEmptyList(t *testing.T) {

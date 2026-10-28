@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/messaging"
@@ -42,6 +43,33 @@ func TestMapperPublishesOrderCompletedAtCompletionMoment(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(first.Payload, &payload))
 	assert.Equal(t, "order-1", payload.GetOrderId())
 	assert.Equal(t, ordertest.Market, payload.GetMarketId())
+}
+
+// FR-681: OrderPlaced of a Scheduled Order carries its Delivery Window; an
+// ASAP Order leaves it unset.
+func TestMapperPublishesDeliveryWindowOfOrderPlaced(t *testing.T) {
+	start := ordertest.PlacedAt.Add(7 * time.Hour)
+	window, err := order.NewDeliveryWindow(start, start.Add(15*time.Minute))
+	require.NoError(t, err)
+	for name, tc := range map[string]struct {
+		window order.DeliveryWindow
+		want   *ordersv1.DeliveryWindow
+	}{
+		"scheduled": {window: window, want: &ordersv1.DeliveryWindow{Start: timestamppb.New(start), End: timestamppb.New(start.Add(15 * time.Minute))}},
+		"asap":      {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			msg, err := outbound.IntegrationMapper{}.Map("order-1", 1, 0, order.OrderPlaced{
+				OrderID: "order-1", CustomerID: "customer-1", RestaurantID: "restaurant-1", MarketID: ordertest.MarketID(t),
+				Total: ordertest.Money(t, "20"), PlacedAt: ordertest.PlacedAt, DeliveryWindow: tc.window,
+			})
+			require.NoError(t, err)
+
+			var payload ordersv1.OrderPlaced
+			require.NoError(t, proto.Unmarshal(msg.Payload, &payload))
+			assert.True(t, proto.Equal(tc.want, payload.GetDeliveryWindow()), "%v", payload.GetDeliveryWindow())
+		})
+	}
 }
 
 func TestMapperEventIDDependsOnChangeAndIndex(t *testing.T) {

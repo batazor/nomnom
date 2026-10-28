@@ -89,14 +89,23 @@ func orderPlaced(e order.OrderPlaced) (proto.Message, time.Time) {
 		})
 	}
 	return &ordersv1.OrderPlaced{
-		OrderId:      string(e.OrderID),
-		CustomerId:   string(e.CustomerID),
-		RestaurantId: string(e.RestaurantID),
-		MarketId:     e.MarketID.String(),
-		Total:        &ordersv1.Money{Amount: e.Total.Amount().String(), Currency: e.Total.Currency()},
-		PlacedAt:     timestamppb.New(e.PlacedAt),
-		Items:        items,
+		OrderId:        string(e.OrderID),
+		CustomerId:     string(e.CustomerID),
+		RestaurantId:   string(e.RestaurantID),
+		MarketId:       e.MarketID.String(),
+		Total:          &ordersv1.Money{Amount: e.Total.Amount().String(), Currency: e.Total.Currency()},
+		PlacedAt:       timestamppb.New(e.PlacedAt),
+		Items:          items,
+		DeliveryWindow: deliveryWindow(e.DeliveryWindow),
 	}, e.PlacedAt
+}
+
+// deliveryWindow is unset for an ASAP Order.
+func deliveryWindow(window order.DeliveryWindow) *ordersv1.DeliveryWindow {
+	if window.IsZero() {
+		return nil
+	}
+	return &ordersv1.DeliveryWindow{Start: timestamppb.New(window.Start()), End: timestamppb.New(window.End())}
 }
 
 // orderCompleted publishes the completion moment of the domain as the event

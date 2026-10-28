@@ -4,6 +4,7 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
+import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file nomnom/restaurants/v1/restaurants.proto.
@@ -50,6 +51,53 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
    * @generated from field: nomnom.restaurants.v1.Money premium_fee = 7;
    */
   premiumFee?: Money | undefined;
+
+  /**
+   * IANA time zone of the restaurant (FR-201); immutable.
+   *
+   * @generated from field: string time_zone = 8;
+   */
+  timeZone: string;
+
+  /**
+   * Weekly opening hours on the wall clock of the restaurant (FR-696); empty
+   * when no schedule is set: the restaurant then accepts no orders.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.OpeningInterval opening_hours = 9;
+   */
+  openingHours: OpeningInterval[];
+
+  /**
+   * Opened by OpenRestaurant and inside the schedule at the time of the read
+   * (FR-699). Set by GetRestaurant, BatchGetRestaurants and ListRestaurants.
+   *
+   * @generated from field: bool accepting_orders = 10;
+   */
+  acceptingOrders: boolean;
+
+  /**
+   * Start of the next schedule period; set only when the restaurant is opened
+   * by the flag and outside its schedule (FR-204).
+   *
+   * @generated from field: google.protobuf.Timestamp next_opening_at = 11;
+   */
+  nextOpeningAt?: Timestamp | undefined;
+
+  /**
+   * Scheduled orders of the restaurant (FR-672); unset when it takes none.
+   *
+   * @generated from field: nomnom.restaurants.v1.ScheduledOrderSettings scheduled_orders = 12;
+   */
+  scheduledOrders?: ScheduledOrderSettings | undefined;
+
+  /**
+   * Baseline preparation time of the Wait Time Statistics (median, or the
+   * configured preparation time until the sample is full). Set by
+   * GetRestaurant, BatchGetRestaurants and ListRestaurants.
+   *
+   * @generated from field: google.protobuf.Duration baseline_preparation = 13;
+   */
+  baselinePreparation?: Duration | undefined;
 };
 
 /**
@@ -57,6 +105,98 @@ export declare type Restaurant = Message<"nomnom.restaurants.v1.Restaurant"> & {
  * Use `create(RestaurantSchema)` to create a new message.
  */
 export declare const RestaurantSchema: GenMessage<Restaurant>;
+
+/**
+ * Settings of scheduled orders, set together (FR-672, FR-703).
+ *
+ * @generated from message nomnom.restaurants.v1.ScheduledOrderSettings
+ */
+export declare type ScheduledOrderSettings = Message<"nomnom.restaurants.v1.ScheduledOrderSettings"> & {
+  /**
+   * Scheduled orders per delivery window, > 0.
+   *
+   * @generated from field: int32 slot_capacity = 1;
+   */
+  slotCapacity: number;
+
+  /**
+   * The first window of a period starts no earlier than opens_at + opening_lead.
+   *
+   * @generated from field: google.protobuf.Duration opening_lead = 2;
+   */
+  openingLead?: Duration | undefined;
+
+  /**
+   * The last window of a period starts no later than closes_at + closing_grace.
+   *
+   * @generated from field: google.protobuf.Duration closing_grace = 3;
+   */
+  closingGrace?: Duration | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ScheduledOrderSettings.
+ * Use `create(ScheduledOrderSettingsSchema)` to create a new message.
+ */
+export declare const ScheduledOrderSettingsSchema: GenMessage<ScheduledOrderSettings>;
+
+/**
+ * Delivery window [start, end) of a scheduled order.
+ *
+ * @generated from message nomnom.restaurants.v1.DeliveryWindow
+ */
+export declare type DeliveryWindow = Message<"nomnom.restaurants.v1.DeliveryWindow"> & {
+  /**
+   * @generated from field: google.protobuf.Timestamp start = 1;
+   */
+  start?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp end = 2;
+   */
+  end?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.DeliveryWindow.
+ * Use `create(DeliveryWindowSchema)` to create a new message.
+ */
+export declare const DeliveryWindowSchema: GenMessage<DeliveryWindow>;
+
+/**
+ * One interval of the weekly schedule (FR-696). closes <= opens closes on the
+ * next day.
+ *
+ * @generated from message nomnom.restaurants.v1.OpeningInterval
+ */
+export declare type OpeningInterval = Message<"nomnom.restaurants.v1.OpeningInterval"> & {
+  /**
+   * ISO day of week: 1 Monday … 7 Sunday.
+   *
+   * @generated from field: int32 day_of_week = 1;
+   */
+  dayOfWeek: number;
+
+  /**
+   * Local time "HH:MM".
+   *
+   * @generated from field: string opens = 2;
+   */
+  opens: string;
+
+  /**
+   * Local time "HH:MM".
+   *
+   * @generated from field: string closes = 3;
+   */
+  closes: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.OpeningInterval.
+ * Use `create(OpeningIntervalSchema)` to create a new message.
+ */
+export declare const OpeningIntervalSchema: GenMessage<OpeningInterval>;
 
 /**
  * Wait for a new order of the restaurant (Wait Time Statistics, FR-645).

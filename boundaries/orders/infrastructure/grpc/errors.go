@@ -7,6 +7,10 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/protoadapt"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/applications/errorkind"
@@ -51,8 +55,10 @@ func transportError(err error) error {
 		answer = transportByKind[application.KindInternal]
 	}
 	var metadata map[string]string
+	var details []protoadapt.MessageV1
 	var notOrderable order.NotOrderable
 	var notCancellable order.CancellationNotAllowed
+	var slotUnavailable placeorder.SlotUnavailable
 	switch {
 	case errors.Is(err, placeorder.ErrUnknownRestaurant):
 		answer.reason = "RESTAURANT_NOT_FOUND"
@@ -60,6 +66,11 @@ func transportError(err error) error {
 		answer.reason = "RESTAURANT_NOT_ACCEPTING_ORDERS"
 	case errors.Is(err, placeorder.ErrPremiumUnavailable):
 		answer.reason = "PREMIUM_UNAVAILABLE"
+	case errors.As(err, &slotUnavailable):
+		answer.reason = "SLOT_UNAVAILABLE"
+		details = append(details, slotUnavailableDetail(slotUnavailable))
+	case errors.Is(err, placeorder.ErrScheduledOrdersUnavailable):
+		answer.reason = "SCHEDULED_ORDERS_UNAVAILABLE"
 	case errors.Is(err, application.ErrInvalidInput):
 	case errors.As(err, &notOrderable):
 		answer.reason = "ORDER_NOT_ORDERABLE"
@@ -73,19 +84,35 @@ func transportError(err error) error {
 	if message == "" {
 		message = err.Error()
 	}
-	return withInfo(answer.code, answer.reason, message, metadata)
+	return withInfo(answer.code, answer.reason, message, metadata, details...)
 }
 
-func withInfo(code codes.Code, reason, message string, metadata map[string]string) error {
-	withDetails, err := status.New(code, message).WithDetails(&errdetails.ErrorInfo{
+// withInfo answers with ErrorInfo first and the API details of the reason
+// after it, such as SlotUnavailable of SLOT_UNAVAILABLE.
+func withInfo(code codes.Code, reason, message string, metadata map[string]string, details ...protoadapt.MessageV1) error {
+	info := &errdetails.ErrorInfo{
 		Reason:   reason,
 		Domain:   errorDomain,
 		Metadata: metadata,
-	})
+	}
+	withDetails, err := status.New(code, message).WithDetails(append([]protoadapt.MessageV1{info}, details...)...)
 	if err != nil {
 		return status.Error(code, message)
 	}
 	return withDetails.Err()
+}
+
+// slotUnavailableDetail carries the nearest available windows of a full
+// Delivery Window (FR-692).
+func slotUnavailableDetail(err placeorder.SlotUnavailable) *ordersv1.SlotUnavailable {
+	detail := &ordersv1.SlotUnavailable{Alternatives: make([]*ordersv1.DeliveryWindow, 0, len(err.Alternatives))}
+	for _, window := range err.Alternatives {
+		detail.Alternatives = append(detail.Alternatives, &ordersv1.DeliveryWindow{
+			Start: timestamppb.New(window.Start()),
+			End:   timestamppb.New(window.End()),
+		})
+	}
+	return detail
 }
 
 // notOrderableMetadata names the reasons of an unsatisfied OrderItemsOrderable

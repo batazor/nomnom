@@ -3,12 +3,13 @@
 /* eslint-disable */
 
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file nomnom/restaurants/v1/restaurants.proto.
  */
 export const file_nomnom_restaurants_v1_restaurants = /*@__PURE__*/
-  fileDesc("Cidub21ub20vcmVzdGF1cmFudHMvdjEvcmVzdGF1cmFudHMucHJvdG8SFW5vbW5vbS5yZXN0YXVyYW50cy52MSLVAQoKUmVzdGF1cmFudBIVCg1yZXN0YXVyYW50X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHaXNfb3BlbhgDIAEoCBIRCgltYXJrZXRfaWQYBSABKAkSPAoJd2FpdF90aW1lGAYgASgLMikubm9tbm9tLnJlc3RhdXJhbnRzLnYxLlJlc3RhdXJhbnRXYWl0VGltZRIxCgtwcmVtaXVtX2ZlZRgHIAEoCzIcLm5vbW5vbS5yZXN0YXVyYW50cy52MS5Nb25leUoECAQQBVIHYWRkcmVzcyJFChJSZXN0YXVyYW50V2FpdFRpbWUSEAoIZWxldmF0ZWQYASABKAgSHQoVZXhwZWN0ZWRfd2FpdF9taW51dGVzGAIgASgFIikKBU1vbmV5Eg4KBmFtb3VudBgBIAEoCRIQCghjdXJyZW5jeRgCIAEoCSKDAQoITWVudUl0ZW0SFAoMbWVudV9pdGVtX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSKwoFcHJpY2UYBCABKAsyHC5ub21ub20ucmVzdGF1cmFudHMudjEuTW9uZXkSEQoJYXZhaWxhYmxlGAUgASgIQqMBChljb20ubm9tbm9tLnJlc3RhdXJhbnRzLnYxQhBSZXN0YXVyYW50c1Byb3RvUAGiAgNOUliqAhVOb21ub20uUmVzdGF1cmFudHMuVjHKAhVOb21ub21cUmVzdGF1cmFudHNcVjHiAiFOb21ub21cUmVzdGF1cmFudHNcVjFcR1BCTWV0YWRhdGHqAhdOb21ub206OlJlc3RhdXJhbnRzOjpWMWIGcHJvdG8z");
+  fileDesc("Cidub21ub20vcmVzdGF1cmFudHMvdjEvcmVzdGF1cmFudHMucHJvdG8SFW5vbW5vbS5yZXN0YXVyYW50cy52MSL4AwoKUmVzdGF1cmFudBIVCg1yZXN0YXVyYW50X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHaXNfb3BlbhgDIAEoCBIRCgltYXJrZXRfaWQYBSABKAkSPAoJd2FpdF90aW1lGAYgASgLMikubm9tbm9tLnJlc3RhdXJhbnRzLnYxLlJlc3RhdXJhbnRXYWl0VGltZRIxCgtwcmVtaXVtX2ZlZRgHIAEoCzIcLm5vbW5vbS5yZXN0YXVyYW50cy52MS5Nb25leRIRCgl0aW1lX3pvbmUYCCABKAkSPQoNb3BlbmluZ19ob3VycxgJIAMoCzImLm5vbW5vbS5yZXN0YXVyYW50cy52MS5PcGVuaW5nSW50ZXJ2YWwSGAoQYWNjZXB0aW5nX29yZGVycxgKIAEoCBIzCg9uZXh0X29wZW5pbmdfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkcKEHNjaGVkdWxlZF9vcmRlcnMYDCABKAsyLS5ub21ub20ucmVzdGF1cmFudHMudjEuU2NoZWR1bGVkT3JkZXJTZXR0aW5ncxI3ChRiYXNlbGluZV9wcmVwYXJhdGlvbhgNIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbkoECAQQBVIHYWRkcmVzcyKSAQoWU2NoZWR1bGVkT3JkZXJTZXR0aW5ncxIVCg1zbG90X2NhcGFjaXR5GAEgASgFEi8KDG9wZW5pbmdfbGVhZBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIwCg1jbG9zaW5nX2dyYWNlGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uImQKDkRlbGl2ZXJ5V2luZG93EikKBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBInCgNlbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkUKD09wZW5pbmdJbnRlcnZhbBITCgtkYXlfb2Zfd2VlaxgBIAEoBRINCgVvcGVucxgCIAEoCRIOCgZjbG9zZXMYAyABKAkiRQoSUmVzdGF1cmFudFdhaXRUaW1lEhAKCGVsZXZhdGVkGAEgASgIEh0KFWV4cGVjdGVkX3dhaXRfbWludXRlcxgCIAEoBSIpCgVNb25leRIOCgZhbW91bnQYASABKAkSEAoIY3VycmVuY3kYAiABKAkigwEKCE1lbnVJdGVtEhQKDG1lbnVfaXRlbV9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEisKBXByaWNlGAQgASgLMhwubm9tbm9tLnJlc3RhdXJhbnRzLnYxLk1vbmV5EhEKCWF2YWlsYWJsZRgFIAEoCEKjAQoZY29tLm5vbW5vbS5yZXN0YXVyYW50cy52MUIQUmVzdGF1cmFudHNQcm90b1ABogIDTlJYqgIVTm9tbm9tLlJlc3RhdXJhbnRzLlYxygIVTm9tbm9tXFJlc3RhdXJhbnRzXFYx4gIhTm9tbm9tXFJlc3RhdXJhbnRzXFYxXEdQQk1ldGFkYXRh6gIXTm9tbm9tOjpSZXN0YXVyYW50czo6VjFiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * Describes the message nomnom.restaurants.v1.Restaurant.
@@ -18,23 +19,44 @@ export const RestaurantSchema = /*@__PURE__*/
   messageDesc(file_nomnom_restaurants_v1_restaurants, 0);
 
 /**
+ * Describes the message nomnom.restaurants.v1.ScheduledOrderSettings.
+ * Use `create(ScheduledOrderSettingsSchema)` to create a new message.
+ */
+export const ScheduledOrderSettingsSchema = /*@__PURE__*/
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 1);
+
+/**
+ * Describes the message nomnom.restaurants.v1.DeliveryWindow.
+ * Use `create(DeliveryWindowSchema)` to create a new message.
+ */
+export const DeliveryWindowSchema = /*@__PURE__*/
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 2);
+
+/**
+ * Describes the message nomnom.restaurants.v1.OpeningInterval.
+ * Use `create(OpeningIntervalSchema)` to create a new message.
+ */
+export const OpeningIntervalSchema = /*@__PURE__*/
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 3);
+
+/**
  * Describes the message nomnom.restaurants.v1.RestaurantWaitTime.
  * Use `create(RestaurantWaitTimeSchema)` to create a new message.
  */
 export const RestaurantWaitTimeSchema = /*@__PURE__*/
-  messageDesc(file_nomnom_restaurants_v1_restaurants, 1);
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 4);
 
 /**
  * Describes the message nomnom.restaurants.v1.Money.
  * Use `create(MoneySchema)` to create a new message.
  */
 export const MoneySchema = /*@__PURE__*/
-  messageDesc(file_nomnom_restaurants_v1_restaurants, 2);
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 5);
 
 /**
  * Describes the message nomnom.restaurants.v1.MenuItem.
  * Use `create(MenuItemSchema)` to create a new message.
  */
 export const MenuItemSchema = /*@__PURE__*/
-  messageDesc(file_nomnom_restaurants_v1_restaurants, 3);
+  messageDesc(file_nomnom_restaurants_v1_restaurants, 6);
 

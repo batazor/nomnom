@@ -41,6 +41,16 @@ export declare type RestaurantOrderAccepted = Message<"nomnom.restaurants.v1.Res
    * @generated from field: string restaurant_id = 4;
    */
   restaurantId: string;
+
+  /**
+   * Set when the order joined the Kitchen Queue in the same Unit of Work as
+   * its Acceptance (an order without a delivery window): the start of its
+   * Wait Time Statistics duration (FR-644). Unset for a scheduled order,
+   * which stays ACCEPTED until QueueRestaurantOrder.
+   *
+   * @generated from field: google.protobuf.Timestamp queued_at = 5;
+   */
+  queuedAt?: Timestamp | undefined;
 };
 
 /**
@@ -96,6 +106,21 @@ export declare type PreparationStarted = Message<"nomnom.restaurants.v1.Preparat
    * @generated from field: string market_id = 2;
    */
   marketId: string;
+
+  /**
+   * Restaurant of the order: Wait Time Statistics of the restaurant (FR-644).
+   *
+   * @generated from field: string restaurant_id = 3;
+   */
+  restaurantId: string;
+
+  /**
+   * When the order joined the Kitchen Queue: a scheduled order enters the
+   * Wait Time Statistics with it, since its queuing publishes no fact.
+   *
+   * @generated from field: google.protobuf.Timestamp queued_at = 4;
+   */
+  queuedAt?: Timestamp | undefined;
 };
 
 /**

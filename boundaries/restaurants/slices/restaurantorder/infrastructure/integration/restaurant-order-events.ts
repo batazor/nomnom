@@ -35,6 +35,10 @@ const MAPPERS: EventAllowlist<RestaurantOrderEvent> = {
       expectedReadyAt: timestampFromDate(event.expectedReadyAt),
       marketId: event.marketId,
       restaurantId: event.restaurantId,
+      // Only an order queued in the Unit of Work of its Acceptance (FR-644).
+      ...(event.queuedAt === undefined
+        ? {}
+        : { queuedAt: timestampFromDate(event.queuedAt) }),
     }),
   RestaurantOrderRejected: (event) =>
     integration(RestaurantOrderRejectedSchema, {
@@ -46,6 +50,10 @@ const MAPPERS: EventAllowlist<RestaurantOrderEvent> = {
     integration(PreparationStartedSchema, {
       orderId: event.orderId,
       marketId: event.marketId,
+      restaurantId: event.restaurantId,
+      ...(event.queuedAt === undefined
+        ? {}
+        : { queuedAt: timestampFromDate(event.queuedAt) }),
     }),
   PreparationDelayed: (event) =>
     integration(PreparationDelayedSchema, {

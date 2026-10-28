@@ -17,9 +17,18 @@ temporal:
   # Создание Search Attribute требует прав оператора namespace; включать локально.
   register_search_attributes: false
 # Окно отмены от момента Place Order (env CANCELLATION__WINDOW). Placeholder до
-# продуктового решения; значение должно быть положительным.
+# продуктового решения; значение должно быть положительным. У запланированного заказа окно
+# закрывается в window_start − scheduled_cutoff (env CANCELLATION__SCHEDULED_CUTOFF,
+# обязателен, без значения по умолчанию).
 cancellation:
   window: 5m
+  scheduled_cutoff: 60m
+# План запланированного заказа (env SCHEDULED_ORDER__*), обязателен, без значений по
+# умолчанию: start_at = planned_ready_at − baseline preparation − preparation_buffer,
+# контрольная точка пересчёта — за replan_lead до start_at.
+scheduled_order:
+  preparation_buffer: 5m
+  replan_lead: 30m
 # Catalog Place Order (env CATALOG__*): лимиты суммы заказа в валюте меню — placeholders,
 # пока restaurants их не публикует; timeout — общий deadline GetRestaurant и GetMenu.
 catalog:

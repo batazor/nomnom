@@ -17,6 +17,7 @@ const register = () =>
     name: "  Pho Bar ",
     ownerId: "u-owner",
     marketId: "berlin",
+    timeZone: "Europe/Berlin",
     registeredAt: at,
   });
 
@@ -41,6 +42,7 @@ test("restaurant name and owner must not be blank", () => {
         name: "   ",
         ownerId: "u-owner",
         marketId: "berlin",
+        timeZone: "Europe/Berlin",
         registeredAt: at,
       }),
     (error: unknown) =>
@@ -54,6 +56,7 @@ test("restaurant name and owner must not be blank", () => {
         name: "Pho",
         ownerId: " ",
         marketId: "berlin",
+        timeZone: "Europe/Berlin",
         registeredAt: at,
       }),
     (error: unknown) =>
@@ -109,6 +112,7 @@ test("ADR 41 Market id is a slug", () => {
         name: "Pho",
         ownerId: "u-owner",
         marketId: "",
+        timeZone: "Europe/Berlin",
         registeredAt: at,
       }),
     InvalidMarketIdError,
@@ -151,6 +155,8 @@ test("FR-447 authorization revision is technical snapshot state; old snapshots l
       name: "Pho",
       ownerId: "u-owner",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: false,
     },
     3,

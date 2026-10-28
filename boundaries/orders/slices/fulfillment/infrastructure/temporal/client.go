@@ -51,7 +51,7 @@ func NewClient(temporal client.Client, policy Policy) *Client {
 func (c *Client) Start(ctx context.Context, request fulfillment.StartRequest) error {
 	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(string(request.OrderID)), SignalOrderPlaced,
 		Fact{EventID: request.EventID, OccurredAt: request.OccurredAt},
-		c.startOptions(request.OrderID), WorkflowName, c.input(request.OrderID))
+		c.startOptions(request.OrderID), WorkflowName, c.input(request))
 	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 		return fmt.Errorf("signal-with-start order fulfillment workflow: %w", err)
 	}
@@ -100,8 +100,14 @@ func (c *Client) startOptions(orderID order.ID) client.StartWorkflowOptions {
 	}
 }
 
-func (c *Client) input(orderID order.ID) Input {
-	return Input{OrderID: string(orderID), Policy: c.policy}
+// input carries the Delivery Window of OrderPlaced: it chooses the scheduled
+// route of a Scheduled Order.
+func (c *Client) input(request fulfillment.StartRequest) Input {
+	in := Input{OrderID: string(request.OrderID), Policy: c.policy}
+	if !request.DeliveryWindow.IsZero() {
+		in.DeliveryWindow = &DeliveryWindow{Start: request.DeliveryWindow.Start(), End: request.DeliveryWindow.End()}
+	}
+	return in
 }
 
 func mapError(err error, operation string) error {

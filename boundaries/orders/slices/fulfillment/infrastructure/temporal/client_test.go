@@ -16,6 +16,7 @@ import (
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/fulfillment"
+	"nomnom/orders/slices/order/domains/order"
 )
 
 func newClient(t *testing.T) (*temporal.Client, *mocks.Client) {
@@ -46,6 +47,27 @@ func TestClientSignalsWithStartOnOrderPlaced(t *testing.T) {
 		Return(mocks.NewWorkflowRun(t), nil)
 
 	require.NoError(t, c.Start(context.Background(), startRequest()))
+}
+
+// FR-415: the Delivery Window of OrderPlaced is the input that chooses the
+// scheduled route.
+func TestClientStartsScheduledOrderWithItsWindow(t *testing.T) {
+	c, temporalClient := newClient(t)
+	start := placedAt.Add(7 * time.Hour)
+	window, err := order.NewDeliveryWindow(start, start.Add(15*time.Minute))
+	require.NoError(t, err)
+	temporalClient.On("SignalWithStartWorkflow", mock.Anything, "order:order-1", temporal.SignalOrderPlaced,
+		temporal.Fact{EventID: "event-1", OccurredAt: placedAt},
+		wantStartOptions, temporal.WorkflowName, temporal.Input{
+			OrderID:        orderID,
+			Policy:         policy(),
+			DeliveryWindow: &temporal.DeliveryWindow{Start: start, End: start.Add(15 * time.Minute)},
+		}).
+		Return(mocks.NewWorkflowRun(t), nil)
+	request := startRequest()
+	request.DeliveryWindow = window
+
+	require.NoError(t, c.Start(context.Background(), request))
 }
 
 // AC-445: a closed workflow is not started again and Start succeeds.

@@ -334,13 +334,20 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
   const resolver = await createResolver();
   const resolved: Subject[] = [];
   const service = createRestaurantsService({
-    getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getRestaurant: new GetRestaurantHandler({
+      reader: world.catalog,
+      clock: world.clock,
+    }),
     getMenu: world.getMenu,
     batchGetRestaurants: new BatchGetRestaurantsHandler({
       reader: world.catalog,
+      clock: world.clock,
     }),
     batchGetMenus: world.batchGetMenus,
-    listRestaurants: new ListRestaurantsHandler({ reader: world.catalog }),
+    listRestaurants: new ListRestaurantsHandler({
+      reader: world.catalog,
+      clock: world.clock,
+    }),
     listOwnedRestaurants: new ListOwnedRestaurantsHandler({
       reader: world.catalog,
     }),
@@ -369,6 +376,24 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     updateMenuItem: world.updateMenuItem,
     setMenuItemAvailability: world.setAvailability,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setOpeningHours: { execute: () => Promise.reject(new Error("unused")) },
+    setScheduledOrderSettings: {
+      execute: () => Promise.reject(new Error("unused")),
+    },
+    queueRestaurantOrder: {
+      execute: () => Promise.reject(new Error("unused")),
+    },
+    listScheduledSlots: { execute: () => Promise.reject(new Error("unused")) },
+    reserveScheduledSlot: {
+      execute: () => Promise.reject(new Error("unused")),
+    },
+    confirmScheduledSlot: {
+      execute: () => Promise.reject(new Error("unused")),
+    },
+    releaseScheduledSlot: {
+      execute: () => Promise.reject(new Error("unused")),
+    },
+    listScheduledOrders: { execute: () => Promise.reject(new Error("unused")) },
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     hireCook: { execute: () => Promise.reject(new Error("unused")) },
     putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },

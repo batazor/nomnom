@@ -177,6 +177,24 @@ func TestOrderPlacedStartsWorkflow(t *testing.T) {
 	c.noPoison(t)
 }
 
+// FR-415: OrderPlaced of a Scheduled Order starts the workflow with its window.
+func TestScheduledOrderPlacedStartsWorkflowWithWindow(t *testing.T) {
+	start := ordertest.PlacedAt.Add(7 * time.Hour)
+	window, err := order.NewDeliveryWindow(start, start.Add(15*time.Minute))
+	require.NoError(t, err)
+	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithDeliveryWindow(t, start, start.Add(15*time.Minute))))
+	c.starter.EXPECT().Start(mock.Anything, fulfillment.StartRequest{
+		OrderID: "order-1", EventID: "event-placed", OccurredAt: occurredAt, DeliveryWindow: window,
+	}).Return(nil).Once()
+
+	c.publish(t, outbound.OrderEventsTopic, "event-placed", &ordersv1.OrderPlaced{
+		OrderId:        "order-1",
+		DeliveryWindow: &ordersv1.DeliveryWindow{Start: timestamppb.New(start), End: timestamppb.New(start.Add(15 * time.Minute))},
+	})
+
+	c.noPoison(t)
+}
+
 // AC-822: own OrderCompleted and OrderCancelled are acknowledged without a dead letter.
 func TestOwnFinalEventsAreAcknowledged(t *testing.T) {
 	// The workflow is not started: c.starter expects no call.

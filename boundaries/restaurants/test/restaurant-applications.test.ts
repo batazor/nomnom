@@ -23,6 +23,8 @@ import {
   InvalidRestaurantError,
 } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import {
+  ALWAYS_OPEN,
+  BERLIN,
   createInfrastructure,
   createRestaurantWorld,
   market,
@@ -58,12 +60,15 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
     name: "Pho Bar",
     ownerId: owner.id,
     marketId: market,
+    timeZone: "Europe/Berlin",
   });
 
   assert.deepEqual(result, {
     restaurantId: "restaurant-1",
     name: "Pho Bar",
     marketId: market,
+    timeZone: BERLIN,
+    openingHours: [],
     isOpen: false,
     version: 1,
   });
@@ -88,6 +93,7 @@ test("register restaurant requires the registration permission", async () => {
       name: "Pho",
       ownerId: owner.id,
       marketId: market,
+      timeZone: "Europe/Berlin",
     }),
     PermissionDeniedError,
   );
@@ -104,6 +110,7 @@ test("AC-203 register restaurant rejects a blank name", async () => {
       name: "  ",
       ownerId: owner.id,
       marketId: market,
+      timeZone: "Europe/Berlin",
     }),
     InvalidRestaurantError,
   );
@@ -120,6 +127,7 @@ test("register restaurant requires a valid Market (ADR 41)", async () => {
         name: "Pho",
         ownerId: owner.id,
         marketId,
+        timeZone: "Europe/Berlin",
       }),
       InvalidMarketIdError,
     );
@@ -148,6 +156,7 @@ test("AC-204 restaurant is not stored when the owner relationship write fails", 
       name: "Pho",
       ownerId: owner.id,
       marketId: market,
+      timeZone: "Europe/Berlin",
     }),
     /spicedb unavailable/,
   );
@@ -177,23 +186,29 @@ test("AC-205 update restaurant renames without touching the opening", async () =
     premiumFee: { kind: "keep" },
   });
 
+  // Register, Open and Set Opening Hours of the given restaurant come first.
   assert.deepEqual(result, {
     restaurantId,
     name: "Ramen Bar",
     marketId: market,
+    timeZone: BERLIN,
+    openingHours: ALWAYS_OPEN,
     isOpen: true,
-    version: 3,
+    version: 4,
     changed: true,
   });
   assert.equal(unchanged.changed, false);
-  assert.equal(unchanged.version, 3);
+  assert.equal(unchanged.version, 4);
   assert.equal((await world.outbox.records()).length, outboxBefore);
 });
 
 test("AC-849 AC-850 update restaurant sets and clears the premium fee", async () => {
   const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
-  const get = new GetRestaurantHandler({ reader: world.catalog });
+  const get = new GetRestaurantHandler({
+    reader: world.catalog,
+    clock: world.clock,
+  });
   const updateFee = (premiumFee: PremiumFeeChange) =>
     world.update.execute({
       subject: owner,
@@ -360,7 +375,7 @@ test("AC-209 opening an open restaurant is a no-op without a business fact", asy
   const result = await world.open.execute({ subject: owner, restaurantId });
 
   assert.equal(result.changed, false);
-  assert.equal(result.version, 2);
+  assert.equal(result.version, 3);
   assert.deepEqual(await world.outbox.eventTypes(), ["RestaurantOpened"]);
 });
 
@@ -401,21 +416,34 @@ test("AC-210 opening is not committed when the outbox write fails", async () => 
 test("AC-211 get restaurant returns the public representation", async () => {
   const world = await createRestaurantWorld();
   const restaurantId = await world.givenRestaurant("Pho Bar");
-  const get = new GetRestaurantHandler({ reader: world.catalog });
+  const get = new GetRestaurantHandler({
+    reader: world.catalog,
+    clock: world.clock,
+  });
 
   assert.deepEqual(await get.execute({ restaurantId }), {
     restaurantId,
     name: "Pho Bar",
     marketId: market,
+    timeZone: BERLIN,
+    openingHours: ALWAYS_OPEN,
     isOpen: true,
     // FR-204: no history yet, the wait is the preparation time.
-    waitTime: { elevated: false, expectedWaitMinutes: 20 },
+    waitTime: {
+      elevated: false,
+      expectedWaitMinutes: 20,
+      baselinePreparationMs: 20 * 60_000,
+    },
+    acceptingOrders: true,
   });
 });
 
 test("AC-212 get unknown restaurant is not found", async () => {
   const world = await createRestaurantWorld();
-  const get = new GetRestaurantHandler({ reader: world.catalog });
+  const get = new GetRestaurantHandler({
+    reader: world.catalog,
+    clock: world.clock,
+  });
 
   await assert.rejects(get.execute({ restaurantId: "missing" }), NotFoundError);
 });
@@ -424,7 +452,10 @@ test("AC-213 list restaurants returns only open restaurants by default", async (
   const world = await createRestaurantWorld();
   const open = await world.givenRestaurant("Open");
   const closed = await world.givenRestaurant("Closed", { open: false });
-  const list = new ListRestaurantsHandler({ reader: world.catalog });
+  const list = new ListRestaurantsHandler({
+    reader: world.catalog,
+    clock: world.clock,
+  });
 
   const defaultPage = await list.execute({ marketId: market });
   const allPage = await list.execute({ marketId: market, includeClosed: true });
@@ -446,7 +477,10 @@ test("AC-214 list restaurants pages with a cursor without repeats", async () => 
     await world.givenRestaurant("B"),
     await world.givenRestaurant("C"),
   ];
-  const list = new ListRestaurantsHandler({ reader: world.catalog });
+  const list = new ListRestaurantsHandler({
+    reader: world.catalog,
+    clock: world.clock,
+  });
 
   const first = await list.execute({ marketId: market, limit: 2 });
   const second = await list.execute({
@@ -488,6 +522,7 @@ test("list owned restaurants returns open and closed restaurants of the owner on
     name: "Foreign",
     ownerId: stranger.id,
     marketId: market,
+    timeZone: "Europe/Berlin",
   });
   const list = new ListOwnedRestaurantsHandler({ reader: world.catalog });
 

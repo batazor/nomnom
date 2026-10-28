@@ -6,17 +6,17 @@
 
 ## 2. restaurants: окна и резервации
 
-- [ ] 2.1 Настройки запланированных заказов (ёмкость, `openingLead`, `closingGrace`), gRPC `SetScheduledOrderSettings` с `restaurant#manage`; конфиг `SCHEDULED_SLOT__*` с валидацией на старте; тесты (`FR-672`, `FR-694`, `AC-894`, `AC-895`, `AC-937`).
-- [ ] 2.2 Слайс резервации: aggregate `ScheduleSlot`, допустимость окна по расписанию, коллекция MongoDB и индексы, List Scheduled Slots, Reserve/Confirm/Release Scheduled Slot, gRPC; MongoDB testcontainers, включая конкурентную резервацию (`FR-673`–`FR-675`, `FR-695`, `FR-703`, `AC-896`–`AC-903`, `AC-956`, `AC-957`).
-- [ ] 2.3 `baseline_preparation` в представлении ресторана и `restaurants.proto`.
+- [x] 2.1 Настройки запланированных заказов (ёмкость, `openingLead`, `closingGrace`), gRPC `SetScheduledOrderSettings` с `restaurant#manage`; конфиг `SCHEDULED_SLOT__*` с валидацией на старте; тесты (`FR-672`, `FR-694`, `AC-894`, `AC-895`, `AC-937`).
+- [x] 2.2 Слайс резервации: aggregate `ScheduleSlot`, допустимость окна по расписанию, коллекция MongoDB и индексы, List Scheduled Slots, Reserve/Confirm/Release Scheduled Slot, gRPC; MongoDB testcontainers, включая конкурентную резервацию (`FR-673`–`FR-675`, `FR-695`, `FR-703`, `AC-896`–`AC-903`, `AC-956`, `AC-957`).
+- [x] 2.3 `baseline_preparation` в представлении ресторана и `restaurants.proto`.
 
 ## 3. restaurants: Restaurant Order
 
-- [ ] 3.1 Блок `schedule` в Receive Order Request и Restaurant Order (`FR-683`, `AC-921`).
-- [ ] 3.2 Accept для запланированного заказа и gRPC `QueueRestaurantOrder` для `service` identity `orders` (`FR-222`, `AC-922`, `AC-923`, `FR-224`, `AC-924`).
-- [ ] 3.3 List Scheduled Orders по gRPC; класс запланированных в правиле очереди (`FR-684`, `AC-925`, `FR-241`, `AC-281`, `AC-862`, `AC-953`, `AC-954`).
-- [ ] 3.4 Wait Time Statistics от `queued_at` (`FR-644`, `AC-837`, `AC-926`).
-- [ ] 3.5 Симулятор кухни: приём запланированных заказов без срока.
+- [x] 3.1 Блок `schedule` в Receive Order Request и Restaurant Order (`FR-683`, `AC-921`).
+- [x] 3.2 Accept для запланированного заказа и gRPC `QueueRestaurantOrder` для `service` identity `orders` (`FR-222`, `AC-922`, `AC-923`, `FR-224`, `AC-924`).
+- [x] 3.3 List Scheduled Orders по gRPC; класс запланированных в правиле очереди (`FR-684`, `AC-925`, `FR-241`, `AC-281`, `AC-862`, `AC-953`, `AC-954`).
+- [x] 3.4 Wait Time Statistics от `queued_at` (`FR-644`, `AC-837`, `AC-926`).
+- [x] 3.5 Симулятор кухни: приём запланированных заказов без срока.
 
 ## 4. delivery
 
@@ -24,11 +24,11 @@
 
 ## 5. orders
 
-- [ ] 5.1 Order: окно доставки, `OrderPlaced` с окном, migration PostgreSQL, `orders.proto`.
-- [ ] 5.2 Place Order с резервацией окна и отказами резервации (`FR-681`, `FR-692`, `AC-912`–`AC-915`).
-- [ ] 5.3 Cancellation policy с `CANCELLATION__SCHEDULED_CUTOFF` (`FR-462`, `AC-916`).
-- [ ] 5.4 Use case Plan Schedule: domain-политика, клиенты оценок, конфиг `SCHEDULED_ORDER__*` (`FR-677`, `FR-693`, `AC-906`, `AC-936`).
-- [ ] 5.5 Workflow: ветка запланированного заказа под versioning, stage `scheduled`, таймеры, контрольная точка, Activities `ConfirmSlotReservation`, `PlanSchedule`, `QueueRestaurantOrder`, компенсация `ReleaseSlotReservation`, отсчёт deadlines; workflow-тесты с time skipping и replay (`FR-415`, `FR-416`, `FR-678`–`FR-680`, `FR-682`, `AC-907`–`AC-911`, `AC-917`–`AC-920`).
+- [x] 5.1 Order: окно доставки, `OrderPlaced` с окном, migration PostgreSQL, `orders.proto`.
+- [x] 5.2 Place Order с резервацией окна и отказами резервации (`FR-681`, `FR-692`, `AC-912`–`AC-915`).
+- [x] 5.3 Cancellation policy с `CANCELLATION__SCHEDULED_CUTOFF` (`FR-462`, `AC-916`).
+- [x] 5.4 Use case Plan Schedule: domain-политика, клиенты оценок, конфиг `SCHEDULED_ORDER__*` (`FR-677`, `FR-693`, `AC-906`, `AC-936`).
+- [x] 5.5 Workflow: ветка запланированного заказа под versioning, stage `scheduled`, таймеры, контрольная точка, Activities `ConfirmSlotReservation`, `PlanSchedule`, `QueueRestaurantOrder`, компенсация `ReleaseSlotReservation`, отсчёт deadlines; workflow-тесты с time skipping и replay (`FR-415`, `FR-416`, `FR-678`–`FR-680`, `FR-682`, `AC-907`–`AC-911`, `AC-917`–`AC-920`).
 
 ## 6. BFF и UI
 

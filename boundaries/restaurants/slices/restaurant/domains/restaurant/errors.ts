@@ -18,3 +18,13 @@ export class InvalidRestaurantError extends Error {
     this.reason = reason;
   }
 }
+
+export {
+  InvalidOpeningHoursError,
+  InvalidOpeningHoursReason,
+} from "./vo/opening-hours.ts";
+export {
+  InvalidScheduledOrderSettingsError,
+  InvalidScheduledOrderSettingsReason,
+} from "./vo/scheduled-order-settings.ts";
+export { InvalidTimeZoneError } from "./vo/time-zone.ts";

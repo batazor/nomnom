@@ -34,6 +34,7 @@ test("AC-242 receive order request creates a RECEIVED restaurant order", async (
     items: [{ menuItemId: phoId, quantity: 2, options: ["spicy"] }],
     timeline: { receivedAt },
     priority: "STANDARD",
+    schedule: undefined,
     cookId: undefined,
     rejectionReason: undefined,
     failureReason: undefined,

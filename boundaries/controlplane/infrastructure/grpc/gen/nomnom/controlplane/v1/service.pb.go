@@ -129,9 +129,12 @@ type CreateMarketRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	MarketId string                 `protobuf:"bytes,1,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	// 1..64 characters after trim.
-	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Currency      string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
-	CellId        string `protobuf:"bytes,4,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
+	Name     string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
+	CellId   string `protobuf:"bytes,4,opt,name=cell_id,json=cellId,proto3" json:"cell_id,omitempty"`
+	// Required IANA time zone (Europe/Berlin); empty or unknown is
+	// INVALID_ARGUMENT.
+	TimeZone      string `protobuf:"bytes,5,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -190,6 +193,13 @@ func (x *CreateMarketRequest) GetCurrency() string {
 func (x *CreateMarketRequest) GetCellId() string {
 	if x != nil {
 		return x.CellId
+	}
+	return ""
+}
+
+func (x *CreateMarketRequest) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
 	}
 	return ""
 }
@@ -337,12 +347,13 @@ const file_nomnom_controlplane_v1_service_proto_rawDesc = "" +
 	"\x06router\x18\x03 \x01(\v2\".nomnom.controlplane.v1.ServiceRefR\x06routerJ\x04\b\x02\x10\x03R\x0fgateway_address\"b\n" +
 	"\x14RegisterCellResponse\x120\n" +
 	"\x04cell\x18\x01 \x01(\v2\x1c.nomnom.controlplane.v1.CellR\x04cell\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"{\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\x98\x01\n" +
 	"\x13CreateMarketRequest\x12\x1b\n" +
 	"\tmarket_id\x18\x01 \x01(\tR\bmarketId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12\x17\n" +
-	"\acell_id\x18\x04 \x01(\tR\x06cellId\"h\n" +
+	"\acell_id\x18\x04 \x01(\tR\x06cellId\x12\x1b\n" +
+	"\ttime_zone\x18\x05 \x01(\tR\btimeZone\"h\n" +
 	"\x14CreateMarketResponse\x126\n" +
 	"\x06market\x18\x01 \x01(\v2\x1e.nomnom.controlplane.v1.MarketR\x06market\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"\x14\n" +

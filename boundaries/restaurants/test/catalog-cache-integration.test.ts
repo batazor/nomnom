@@ -85,7 +85,11 @@ const eventMessage = (eventType: string, payload: Uint8Array) => ({
 });
 
 /** Restaurants stored "in MongoDB": the test changes them like a command. */
-const NORMAL_WAIT = { elevated: false, expectedWaitMinutes: 20 };
+const NORMAL_WAIT = {
+  elevated: false,
+  expectedWaitMinutes: 20,
+  baselinePreparationMs: 20 * 60_000,
+};
 
 const restaurantSource = () => {
   const stored = new Map<string, RestaurantView>();
@@ -257,6 +261,8 @@ describe("Batch Get Restaurants through the cache (ADR 7, ADR 43)", () => {
         restaurantId: id,
         name: id,
         marketId: "berlin",
+        timeZone: "Europe/Berlin",
+        openingHours: [],
         isOpen: true,
       });
     }
@@ -299,6 +305,8 @@ describe("refresh by Integration Events (ADR 43)", () => {
       restaurantId: id,
       name: "Pho",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: true,
     });
     const catalog = new CachedRestaurantCatalog(world.source, options());
@@ -321,6 +329,8 @@ describe("refresh by Integration Events (ADR 43)", () => {
       restaurantId: id,
       name: "Pho",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: false,
     });
     const handler = new CacheRefreshHandler({
@@ -361,6 +371,8 @@ describe("refresh by Integration Events (ADR 43)", () => {
       restaurantId: id,
       name: "Pho",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: true,
     });
     const catalog = new CachedRestaurantCatalog(world.source, options());
@@ -375,7 +387,11 @@ describe("refresh by Integration Events (ADR 43)", () => {
     await catalog.list(page);
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    world.waits.set(id, { elevated: true, expectedWaitMinutes: 42 });
+    world.waits.set(id, {
+      elevated: true,
+      expectedWaitMinutes: 42,
+      baselinePreparationMs: 20 * 60_000,
+    });
     const handler = new CacheRefreshHandler({
       refreshes: restaurantCacheRefreshes(catalog),
       retry: { initialIntervalMs: 10, maxIntervalMs: 50 },
@@ -401,6 +417,7 @@ describe("refresh by Integration Events (ADR 43)", () => {
     assert.deepEqual((await catalog.get(id))?.waitTime, {
       elevated: true,
       expectedWaitMinutes: 42,
+      baselinePreparationMs: 20 * 60_000,
     });
     assert.equal(world.reads(), reads, "refreshed, served from the cache");
     assert.equal(
@@ -422,12 +439,16 @@ describe("refresh by Integration Events (ADR 43)", () => {
       restaurantId: berlinId,
       name: "Berlin Pho",
       marketId: berlin,
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: true,
     });
     world.stored.set(hamburgId, {
       restaurantId: hamburgId,
       name: "Hamburg Pho",
       marketId: hamburg,
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: true,
     });
     const catalog = new CachedRestaurantCatalog(world.source, options());
@@ -451,6 +472,8 @@ describe("refresh by Integration Events (ADR 43)", () => {
       restaurantId: berlinId,
       name: "Berlin Pho",
       marketId: berlin,
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: false,
     });
     await catalog.refresh(berlinId);
@@ -469,6 +492,8 @@ describe("refresh by Integration Events (ADR 43)", () => {
       restaurantId: id,
       name: "Pho",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
+      openingHours: [],
       isOpen: true,
     });
     let staleReadDone = false;
@@ -485,6 +510,8 @@ describe("refresh by Integration Events (ADR 43)", () => {
               restaurantId: id,
               name: "Pho",
               marketId: "berlin",
+              timeZone: "Europe/Berlin",
+              openingHours: [],
               isOpen: false,
             });
             await catalog.refresh(id);

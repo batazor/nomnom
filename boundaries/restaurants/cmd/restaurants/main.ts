@@ -10,6 +10,7 @@ import {
   loadConfig,
   loadIdentityConfig,
   loadLocalEnv,
+  loadScheduledSlotConfig,
   loadSimulatorConfig,
   loadSpiceDbConfig,
   loadValkeyConfig,
@@ -32,6 +33,10 @@ const config = loadConfig();
 // Demo Simulator (FR-606): required in this process; an empty or invalid
 // value or MIN_DELAY > MAX_DELAY stops startup.
 const simulator = loadSimulatorConfig(process.env);
+// Delivery Windows of scheduled orders (FR-694): required; an empty or
+// invalid value, a width not dividing 30 minutes or MIN_LEAD >= MAX_HORIZON
+// stops startup.
+const scheduledSlot = loadScheduledSlotConfig(process.env);
 // Required infrastructure: an empty or invalid value stops startup.
 // MongoDB (ADR 8, local ADR 1): the process migrates its collections,
 // validators and indexes itself before serving (local ADR 2).
@@ -65,6 +70,7 @@ const container = createRestaurantsContainer({
   kitchen: config.kitchen,
   waitTime: config.waitTime,
   simulator,
+  scheduledSlot,
   database,
   valkeyConfig,
   valkey: valkey.client,

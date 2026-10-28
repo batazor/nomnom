@@ -7,6 +7,7 @@ package neighbours
 
 import (
 	"context"
+	"time"
 
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -58,13 +59,50 @@ type RestaurantOrderRequest struct {
 	// (FR-650).
 	Priority       order.Priority
 	IdempotencyKey string
+	// Schedule is set for a Scheduled Order (FR-683): the kitchen accepts it
+	// into ACCEPTED and the workflow queues it at its planned start.
+	Schedule *RestaurantOrderSchedule
+}
+
+// RestaurantOrderSchedule is the Delivery Window of the Order and the
+// planned_ready_at of the first plan.
+type RestaurantOrderSchedule struct {
+	WindowStart    time.Time
+	WindowEnd      time.Time
+	PlannedReadyAt time.Time
+}
+
+// SlotRequest addresses the slot reservation of the Order: restaurants keys it
+// by order_id.
+type SlotRequest struct {
+	OrderID        string
+	IdempotencyKey string
+}
+
+// SlotDecision is the business result of ConfirmScheduledSlot: a window that
+// filled up after its hold expired is not confirmed — a result, not an error.
+type SlotDecision struct {
+	Confirmed bool
+}
+
+// QueueRequest moves the accepted Restaurant Order of a Scheduled Order to the
+// Kitchen Queue (FR-224).
+type QueueRequest struct {
+	OrderID           string
+	RestaurantOrderID string
+	IdempotencyKey    string
 }
 
 // Restaurants is the client port of restaurants. Acceptance arrives later as
 // RestaurantOrderAccepted or RestaurantOrderRejected.
 type Restaurants interface {
-	RequestOrder(ctx context.Context, request RestaurantOrderRequest) error
+	// RequestOrder returns the restaurant_order_id; a repeat returns the same.
+	RequestOrder(ctx context.Context, request RestaurantOrderRequest) (string, error)
 	CancelOrder(ctx context.Context, request RestaurantOrderRequest) error
+	QueueOrder(ctx context.Context, request QueueRequest) error
+	ConfirmSlot(ctx context.Context, request SlotRequest) (SlotDecision, error)
+	// ReleaseSlot succeeds for a missing reservation.
+	ReleaseSlot(ctx context.Context, request SlotRequest) error
 }
 
 type DeliveryRequest struct {
@@ -106,6 +144,11 @@ func NewRestaurantOrderRequest(current *order.Order, idempotencyKey string) Rest
 		Priority:       current.Service().Priority(),
 		IdempotencyKey: idempotencyKey,
 	}
+}
+
+// NewSlotRequest addresses the slot reservation of the Order under the step key.
+func NewSlotRequest(current *order.Order, idempotencyKey string) SlotRequest {
+	return SlotRequest{OrderID: string(current.ID()), IdempotencyKey: idempotencyKey}
 }
 
 // NewDeliveryRequest addresses the delivery of the Order under the step key.

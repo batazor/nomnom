@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
-import type { Cancellation, Money, OrderItem } from "./orders_pb.js";
+import type { Cancellation, DeliveryWindow, Money, OrderItem } from "./orders_pb.js";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -56,6 +56,14 @@ export declare type OrderPlaced = Message<"nomnom.orders.v1.OrderPlaced"> & {
    * @generated from field: string market_id = 7;
    */
   marketId: string;
+
+  /**
+   * Delivery window of a scheduled Order (FR-681); the workflow takes the
+   * scheduled route when set.
+   *
+   * @generated from field: nomnom.orders.v1.DeliveryWindow delivery_window = 8;
+   */
+  deliveryWindow?: DeliveryWindow | undefined;
 };
 
 /**

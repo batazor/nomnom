@@ -19,7 +19,7 @@ var _ market.Repository = Markets{}
 
 func NewMarkets(store *Store) Markets { return Markets{store: store} }
 
-var marketColumns = []string{"market_id", "name", "currency", "cell_id"}
+var marketColumns = []string{"market_id", "name", "currency", "time_zone", "cell_id"}
 
 // Add relies on the foreign key to cells: a Market of an unregistered Cell is
 // refused by the database, so a concurrent registration cannot slip between a
@@ -27,7 +27,7 @@ var marketColumns = []string{"market_id", "name", "currency", "cell_id"}
 func (m Markets) Add(ctx context.Context, candidate market.Market) (bool, error) {
 	added, err := m.store.insertOnce(ctx, psql.Insert("markets").
 		Columns(append(marketColumns, "created_at")...).
-		Values(string(candidate.ID()), string(candidate.Name()), string(candidate.Currency()), string(candidate.CellID()), m.store.now().UTC()))
+		Values(string(candidate.ID()), string(candidate.Name()), string(candidate.Currency()), string(candidate.TimeZone()), string(candidate.CellID()), m.store.now().UTC()))
 	switch {
 	case isForeignKeyViolation(err):
 		return false, fmt.Errorf("%w: %s", market.ErrUnknownCell, candidate.CellID())
@@ -73,9 +73,9 @@ func (m Markets) List(ctx context.Context) ([]market.Market, error) {
 	return markets, nil
 }
 
-type marketRow struct{ id, name, currency, cellID string }
+type marketRow struct{ id, name, currency, timeZone, cellID string }
 
-func (r *marketRow) dest() []any { return []any{&r.id, &r.name, &r.currency, &r.cellID} }
+func (r *marketRow) dest() []any { return []any{&r.id, &r.name, &r.currency, &r.timeZone, &r.cellID} }
 
 // restore rebuilds a stored Market through its value objects.
 func (r marketRow) restore() (market.Market, error) {
@@ -85,9 +85,10 @@ func (r marketRow) restore() (market.Market, error) {
 	}
 	name, errName := vo.NewName(r.name)
 	currency, errCurrency := vo.NewCurrency(r.currency)
+	timeZone, errTimeZone := vo.NewTimeZone(r.timeZone)
 	cellID, errCell := cellvo.NewCellID(r.cellID)
-	if err := errors.Join(errName, errCurrency, errCell); err != nil {
+	if err := errors.Join(errName, errCurrency, errTimeZone, errCell); err != nil {
 		return market.Market{}, fmt.Errorf("stored market %s: %w", id, err)
 	}
-	return market.New(id, name, currency, cellID), nil
+	return market.New(id, name, currency, timeZone, cellID), nil
 }

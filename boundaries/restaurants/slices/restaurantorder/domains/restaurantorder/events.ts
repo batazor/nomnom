@@ -17,6 +17,11 @@ export type RestaurantOrderAccepted = EventBase &
     type: "RestaurantOrderAccepted";
     acceptedAt: Date;
     expectedReadyAt: Date;
+    /**
+     * Set when the order joined the Kitchen Queue in the same Unit of Work
+     * (an order without a Delivery Window); a scheduled order stays ACCEPTED.
+     */
+    queuedAt?: Date;
   }>;
 export type RestaurantOrderRejected = EventBase &
   Readonly<{
@@ -31,6 +36,8 @@ export type PreparationStarted = EventBase &
     type: "PreparationStarted";
     preparationStartedAt: Date;
     expectedReadyAt: Date | undefined;
+    /** When the order joined the Kitchen Queue. */
+    queuedAt: Date | undefined;
   }>;
 export type RestaurantOrderAssembled = EventBase &
   Readonly<{ type: "RestaurantOrderAssembled" }>;

@@ -3,10 +3,12 @@ package repository_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
@@ -14,11 +16,13 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/controlplane/di/schema"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config/database"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/migration"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/testfixture"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
+	mvo "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market/vo"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/repository"
 )
 
@@ -39,6 +43,19 @@ func TestMain(m *testing.M) {
 func open(t *testing.T) *repository.Store {
 	t.Helper()
 	ctx := context.Background()
+	cfg := freshDatabase(t)
+	require.NoError(t, schema.Migrate(ctx, cfg))
+	require.NoError(t, schema.Migrate(ctx, cfg), "a second start applies nothing")
+	store, err := repository.Open(ctx, cfg)
+	require.NoError(t, err)
+	t.Cleanup(store.Close)
+	return store
+}
+
+// freshDatabase creates an empty database of the test.
+func freshDatabase(t *testing.T) database.Config {
+	t.Helper()
+	ctx := context.Background()
 	name := fmt.Sprintf("topology_%d", databases.Add(1))
 	createMu.Lock()
 	admin, err := pgx.Connect(ctx, pg.DSN)
@@ -50,13 +67,54 @@ func open(t *testing.T) *repository.Store {
 	dsn, err := url.Parse(pg.DSN)
 	require.NoError(t, err)
 	dsn.Path = "/" + name
-	cfg := database.Config{DSN: dsn.String(), MaxConns: 4}
+	return database.Config{DSN: dsn.String(), MaxConns: 4}
+}
+
+// beforeTimeZones migrates a fresh database to the registry before Market
+// time zones (00002) and stores the Markets in cell-1.
+func beforeTimeZones(t *testing.T, marketIDs ...string) database.Config {
+	t.Helper()
+	ctx := context.Background()
+	files := fstest.MapFS{}
+	for _, name := range []string{"migrations/00001_topology.up.sql", "migrations/00002_cell_router.up.sql"} {
+		content, err := fs.ReadFile(repository.Migrations.Files, name)
+		require.NoError(t, err)
+		files[name] = &fstest.MapFile{Data: content}
+	}
+	cfg := freshDatabase(t)
+	require.NoError(t, migration.Apply(ctx, cfg, migration.Set{ID: repository.Migrations.ID, Files: files}))
+	conn, err := pgx.Connect(ctx, cfg.DSN)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+	_, err = conn.Exec(ctx, `INSERT INTO cells (cell_id, registered_at, router_namespace, router_name, router_port)
+		VALUES ('cell-1', now(), 'nomnom-bff', 'bff', 3010)`)
+	require.NoError(t, err)
+	for _, id := range marketIDs {
+		_, err = conn.Exec(ctx, `INSERT INTO markets (market_id, name, currency, cell_id, created_at)
+			VALUES ($1, $1, 'EUR', 'cell-1', now())`, id)
+		require.NoError(t, err)
+	}
+	return cfg
+}
+
+func TestMigrationSetsTheTimeZoneOfBerlin(t *testing.T) {
+	ctx := context.Background()
+	cfg := beforeTimeZones(t, "berlin")
+
 	require.NoError(t, schema.Migrate(ctx, cfg))
-	require.NoError(t, schema.Migrate(ctx, cfg), "a second start applies nothing")
 	store, err := repository.Open(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
-	return store
+	stored, err := repository.NewMarkets(store).Get(ctx, "berlin")
+	require.NoError(t, err)
+	assert.Equal(t, mvo.TimeZone("Europe/Berlin"), stored.TimeZone())
+}
+
+func TestMigrationRefusesAMarketWithoutAKnownTimeZone(t *testing.T) {
+	cfg := beforeTimeZones(t, "berlin", "hamburg")
+
+	err := schema.Migrate(context.Background(), cfg)
+	assert.ErrorContains(t, err, "markets without a known time zone: hamburg")
 }
 
 func router(t *testing.T, name string) vo.Router {
@@ -90,16 +148,16 @@ func TestMarketNeedsARegisteredCell(t *testing.T) {
 	store := open(t)
 	markets := repository.NewMarkets(store)
 
-	_, err := markets.Add(ctx, market.New("berlin", "Berlin", "EUR", "cell-1"))
+	_, err := markets.Add(ctx, market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"))
 	assert.ErrorIs(t, err, market.ErrUnknownCell)
 
 	_, err = repository.NewCells(store).Add(ctx, cell.New("cell-1", router(t, "bff")))
 	require.NoError(t, err)
-	berlin := market.New("berlin", "Berlin", "EUR", "cell-1")
+	berlin := market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1")
 	added, err := markets.Add(ctx, berlin)
 	require.NoError(t, err)
 	assert.True(t, added)
-	added, err = markets.Add(ctx, market.New("berlin", "Berlin", "USD", "cell-1"))
+	added, err = markets.Add(ctx, market.New("berlin", "Berlin", "EUR", "Europe/Paris", "cell-1"))
 	require.NoError(t, err)
 	assert.False(t, added)
 
@@ -119,9 +177,9 @@ func TestMarketsAndRoutesAreOrdered(t *testing.T) {
 		require.NoError(t, err)
 	}
 	for _, m := range []market.Market{
-		market.New("munich", "Munich", "EUR", "cell-2"),
-		market.New("berlin-east", "Berlin", "EUR", "cell-1"),
-		market.New("berlin", "Berlin", "EUR", "cell-1"),
+		market.New("munich", "Munich", "EUR", "Europe/Berlin", "cell-2"),
+		market.New("berlin-east", "Berlin", "EUR", "Europe/Berlin", "cell-1"),
+		market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"),
 	} {
 		_, err := markets.Add(ctx, m)
 		require.NoError(t, err)
@@ -137,9 +195,9 @@ func TestMarketsAndRoutesAreOrdered(t *testing.T) {
 
 	routes := snapshot(t, store)
 	assert.Equal(t, []publishroutes.MarketRoute{
-		{Market: market.New("berlin", "Berlin", "EUR", "cell-1"), Router: router(t, "bff-1")},
-		{Market: market.New("berlin-east", "Berlin", "EUR", "cell-1"), Router: router(t, "bff-1")},
-		{Market: market.New("munich", "Munich", "EUR", "cell-2"), Router: router(t, "bff-2")},
+		{Market: market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"), Router: router(t, "bff-1")},
+		{Market: market.New("berlin-east", "Berlin", "EUR", "Europe/Berlin", "cell-1"), Router: router(t, "bff-1")},
+		{Market: market.New("munich", "Munich", "EUR", "Europe/Berlin", "cell-2"), Router: router(t, "bff-2")},
 	}, routes)
 }
 

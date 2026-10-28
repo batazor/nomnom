@@ -12,6 +12,7 @@ import type { Subject } from "../pkg/application/subject.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { createService, rejectingSubjects } from "./support/grpc.ts";
 import {
+  BERLIN,
   createRestaurantWorld,
   operator,
   owner,
@@ -33,7 +34,10 @@ const createWorld = async () => {
   const world = await createRestaurantWorld();
   let caller: Subject = operator;
   const service = createService({
-    getRestaurant: new GetRestaurantHandler({ reader: world.catalog }),
+    getRestaurant: new GetRestaurantHandler({
+      reader: world.catalog,
+      clock: world.clock,
+    }),
     getMenu: unused,
     batchGetRestaurants: unused,
     batchGetMenus: unused,
@@ -62,6 +66,14 @@ const createWorld = async () => {
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setOpeningHours: unused,
+    setScheduledOrderSettings: unused,
+    queueRestaurantOrder: unused,
+    listScheduledSlots: unused,
+    reserveScheduledSlot: unused,
+    confirmScheduledSlot: unused,
+    releaseScheduledSlot: unused,
+    listScheduledOrders: unused,
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     hireCook: { execute: () => Promise.reject(new Error("unused")) },
     putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
@@ -80,6 +92,7 @@ const createWorld = async () => {
         name: "Pho",
         ownerId: owner.id,
         marketId: "berlin",
+        timeZone: "Europe/Berlin",
       }),
       context,
     );
@@ -101,6 +114,7 @@ test("FR-446 RegisterRestaurant returns the restaurant and version", async () =>
       name: "Pho",
       ownerId: owner.id,
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
     }),
     context,
   );
@@ -109,6 +123,8 @@ test("FR-446 RegisterRestaurant returns the restaurant and version", async () =>
   assert.equal(response.restaurant?.name, "Pho");
   assert.equal(response.restaurant?.isOpen, false);
   assert.equal(response.restaurant?.marketId, "berlin");
+  assert.equal(response.restaurant?.timeZone, BERLIN);
+  assert.deepEqual(response.restaurant?.openingHours, []);
   assert.equal(response.version, 1n);
   assert.deepEqual(world.authorization.owners, [
     { restaurantId: response.restaurant?.restaurantId, ownerId: owner.id },
@@ -119,11 +135,19 @@ test("RegisterRestaurant with missing fields is INVALID_ARGUMENT", async () => {
   const { world, as } = await createWorld();
 
   for (const request of [
-    { name: " ", ownerId: owner.id, marketId: "berlin" },
-    { name: "Pho", ownerId: "", marketId: "berlin" },
+    { name: " ", ownerId: owner.id, marketId: "berlin", timeZone: BERLIN },
+    { name: "Pho", ownerId: "", marketId: "berlin", timeZone: BERLIN },
     // ADR 41: the Market is required and a slug.
-    { name: "Pho", ownerId: owner.id, marketId: "" },
-    { name: "Pho", ownerId: owner.id, marketId: "Berlin" },
+    { name: "Pho", ownerId: owner.id, marketId: "", timeZone: BERLIN },
+    { name: "Pho", ownerId: owner.id, marketId: "Berlin", timeZone: BERLIN },
+    // FR-201, AC-938: the time zone is required and a known IANA zone.
+    { name: "Pho", ownerId: owner.id, marketId: "berlin", timeZone: "" },
+    {
+      name: "Pho",
+      ownerId: owner.id,
+      marketId: "berlin",
+      timeZone: "Mars/Olympus",
+    },
   ]) {
     await assert.rejects(
       async () =>
@@ -239,6 +263,14 @@ test("staff RPCs map missing input to INVALID_ARGUMENT and unknown restaurants t
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setOpeningHours: unused,
+    setScheduledOrderSettings: unused,
+    queueRestaurantOrder: unused,
+    listScheduledSlots: unused,
+    reserveScheduledSlot: unused,
+    confirmScheduledSlot: unused,
+    releaseScheduledSlot: unused,
+    listScheduledOrders: unused,
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     hireCook: { execute: () => Promise.reject(new Error("unused")) },
     putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
@@ -293,6 +325,14 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
     updateMenuItem: failing,
     setMenuItemAvailability: failing,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setOpeningHours: unused,
+    setScheduledOrderSettings: unused,
+    queueRestaurantOrder: unused,
+    listScheduledSlots: unused,
+    reserveScheduledSlot: unused,
+    confirmScheduledSlot: unused,
+    releaseScheduledSlot: unused,
+    listScheduledOrders: unused,
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     hireCook: { execute: () => Promise.reject(new Error("unused")) },
     putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
@@ -309,6 +349,7 @@ test("admin RPCs map unavailable authorization to UNAVAILABLE", async () => {
           name: "Pho",
           ownerId: owner.id,
           marketId: "berlin",
+          timeZone: "Europe/Berlin",
         }),
         context,
       ),
@@ -357,6 +398,14 @@ test("admin RPCs are UNAUTHENTICATED for an unverified caller", async () => {
     updateMenuItem: unused,
     setMenuItemAvailability: unused,
     getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+    setOpeningHours: unused,
+    setScheduledOrderSettings: unused,
+    queueRestaurantOrder: unused,
+    listScheduledSlots: unused,
+    reserveScheduledSlot: unused,
+    confirmScheduledSlot: unused,
+    releaseScheduledSlot: unused,
+    listScheduledOrders: unused,
     setSimulatorEnabled: { execute: () => Promise.reject(new Error("unused")) },
     hireCook: { execute: () => Promise.reject(new Error("unused")) },
     putCookOnLine: { execute: () => Promise.reject(new Error("unused")) },
@@ -372,6 +421,7 @@ test("admin RPCs are UNAUTHENTICATED for an unverified caller", async () => {
           name: "Pho",
           ownerId: owner.id,
           marketId: "berlin",
+          timeZone: "Europe/Berlin",
         }),
         context,
       ),

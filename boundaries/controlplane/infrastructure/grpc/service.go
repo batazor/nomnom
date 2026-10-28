@@ -54,7 +54,7 @@ func (s *Service) CreateMarket(ctx context.Context, req *controlplanev1.CreateMa
 		return nil, transportError(err)
 	}
 	result, err := s.handlers.CreateMarket.Handle(ctx, createmarket.Command{
-		Subject: subject, MarketID: req.GetMarketId(), Name: req.GetName(), Currency: req.GetCurrency(), CellID: req.GetCellId(),
+		Subject: subject, MarketID: req.GetMarketId(), Name: req.GetName(), Currency: req.GetCurrency(), TimeZone: req.GetTimeZone(), CellID: req.GetCellId(),
 	})
 	if err != nil {
 		return nil, transportError(err)
@@ -86,5 +86,5 @@ func toCell(c cell.Cell) *controlplanev1.Cell {
 }
 
 func toMarket(m market.Market) *controlplanev1.Market {
-	return &controlplanev1.Market{MarketId: string(m.ID()), Name: string(m.Name()), Currency: string(m.Currency()), CellId: string(m.CellID())}
+	return &controlplanev1.Market{MarketId: string(m.ID()), Name: string(m.Name()), Currency: string(m.Currency()), TimeZone: string(m.TimeZone()), CellId: string(m.CellID())}
 }

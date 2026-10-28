@@ -23,7 +23,7 @@ import (
 // OrderDetailsProjectionVersion is the shape of order_details.details. A change
 // of the document increments it: catch-up at process start projects every row
 // of an older version again.
-const OrderDetailsProjectionVersion = 2
+const OrderDetailsProjectionVersion = 3
 
 // projectionBatch bounds the Orders projected again in one pass of catch-up
 // and rebuild; each Order is projected in its own transaction.
@@ -44,6 +44,13 @@ type detailsDocument struct {
 	Facts        []factDocument        `json:"facts"`
 	Expected     expectedDocument      `json:"expected"`
 	Cancellation *cancellationDocument `json:"cancellation"`
+	// DeliveryWindow is null for an ASAP Order (projection version 3).
+	DeliveryWindow *windowDocument `json:"delivery_window"`
+}
+
+type windowDocument struct {
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
 }
 
 type itemDocument struct {
@@ -105,6 +112,9 @@ func newDetailsDocument(snap order.Snapshot, total vo.Money) detailsDocument {
 	for _, fact := range snap.Facts {
 		doc.Facts = append(doc.Facts, factDocument{Fact: string(fact.Fact), OccurredAt: fact.OccurredAt, Reason: fact.Reason})
 	}
+	if !snap.DeliveryWindow.IsZero() {
+		doc.DeliveryWindow = &windowDocument{Start: snap.DeliveryWindow.Start(), End: snap.DeliveryWindow.End()}
+	}
 	if !snap.CancellationReason.IsZero() {
 		doc.Cancellation = &cancellationDocument{
 			Outcome:     string(snap.CancellationReason.Outcome()),
@@ -152,6 +162,13 @@ func (d detailsDocument) details(id order.ID, customerID order.CustomerID, marke
 			PickupAt:    utcTime(d.Expected.PickupAt),
 			DeliveredAt: utcTime(d.Expected.DeliveredAt),
 		},
+	}
+	if d.DeliveryWindow != nil {
+		window, err := order.NewDeliveryWindow(d.DeliveryWindow.Start, d.DeliveryWindow.End)
+		if err != nil {
+			return orderdetails.Details{}, fmt.Errorf("order %s delivery window: %w", id, err)
+		}
+		result.DeliveryWindow = window
 	}
 	for _, item := range d.Items {
 		price, err := vo.ParseMoney(item.UnitPrice.Amount, item.UnitPrice.Currency)

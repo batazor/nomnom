@@ -9,6 +9,7 @@ package ordersv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -338,11 +339,17 @@ type PlaceOrderRequest struct {
 	IdempotencyKey string            `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	RestaurantId   string            `protobuf:"bytes,2,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	Items          []*PlaceOrderItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	// Required. PREMIUM needs a restaurant with a premium fee, otherwise
+	// Unset means STANDARD. PREMIUM needs a restaurant with a premium fee, otherwise
 	// FAILED_PRECONDITION with reason PREMIUM_UNAVAILABLE (FR-650).
-	Priority      OrderPriority `protobuf:"varint,5,opt,name=priority,proto3,enum=nomnom.orders.v1.OrderPriority" json:"priority,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Priority OrderPriority `protobuf:"varint,5,opt,name=priority,proto3,enum=nomnom.orders.v1.OrderPriority" json:"priority,omitempty"`
+	// Start of the chosen delivery window; set makes a scheduled Order (FR-681).
+	// A full window is FAILED_PRECONDITION SLOT_UNAVAILABLE with a
+	// SlotUnavailable detail; a restaurant without scheduled orders or not
+	// accepting now is FAILED_PRECONDITION SCHEDULED_ORDERS_UNAVAILABLE; a
+	// window off the grid, the horizon or the schedule is INVALID_ARGUMENT.
+	DeliveryWindowStart *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=delivery_window_start,json=deliveryWindowStart,proto3" json:"delivery_window_start,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PlaceOrderRequest) Reset() {
@@ -401,6 +408,13 @@ func (x *PlaceOrderRequest) GetPriority() OrderPriority {
 		return x.Priority
 	}
 	return OrderPriority_ORDER_PRIORITY_UNSPECIFIED
+}
+
+func (x *PlaceOrderRequest) GetDeliveryWindowStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeliveryWindowStart
+	}
+	return nil
 }
 
 type PlaceOrderResponse struct {
@@ -733,7 +747,7 @@ var File_nomnom_orders_v1_service_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1enomnom/orders/v1/service.proto\x12\x10nomnom.orders.v1\x1a\x1dnomnom/orders/v1/orders.proto\",\n" +
+	"\x1enomnom/orders/v1/service.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\",\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\"A\n" +
 	"\x10GetOrderResponse\x12-\n" +
@@ -751,12 +765,13 @@ const file_nomnom_orders_v1_service_proto_rawDesc = "" +
 	"\x0ePlaceOrderItem\x12 \n" +
 	"\fmenu_item_id\x18\x01 \x01(\tR\n" +
 	"menuItemId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\"\xee\x01\n" +
+	"\bquantity\x18\x02 \x01(\x05R\bquantity\"\xbe\x02\n" +
 	"\x11PlaceOrderRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x126\n" +
 	"\x05items\x18\x03 \x03(\v2 .nomnom.orders.v1.PlaceOrderItemR\x05items\x12;\n" +
-	"\bpriority\x18\x05 \x01(\x0e2\x1f.nomnom.orders.v1.OrderPriorityR\bpriorityJ\x04\b\x04\x10\x05R\x10delivery_address\"f\n" +
+	"\bpriority\x18\x05 \x01(\x0e2\x1f.nomnom.orders.v1.OrderPriorityR\bpriority\x12N\n" +
+	"\x15delivery_window_start\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x13deliveryWindowStartJ\x04\b\x04\x10\x05R\x10delivery_address\"f\n" +
 	"\x12PlaceOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1a\n" +
 	"\breplayed\x18\x02 \x01(\bR\breplayedJ\x04\b\x03\x10\x04R\x13fulfillment_started\"s\n" +
@@ -820,30 +835,32 @@ var file_nomnom_orders_v1_service_proto_goTypes = []any{
 	(*Order)(nil),                            // 14: nomnom.orders.v1.Order
 	(*OrderSummary)(nil),                     // 15: nomnom.orders.v1.OrderSummary
 	(OrderPriority)(0),                       // 16: nomnom.orders.v1.OrderPriority
+	(*timestamppb.Timestamp)(nil),            // 17: google.protobuf.Timestamp
 }
 var file_nomnom_orders_v1_service_proto_depIdxs = []int32{
 	14, // 0: nomnom.orders.v1.GetOrderResponse.order:type_name -> nomnom.orders.v1.Order
 	15, // 1: nomnom.orders.v1.ListCustomerOrdersResponse.orders:type_name -> nomnom.orders.v1.OrderSummary
 	5,  // 2: nomnom.orders.v1.PlaceOrderRequest.items:type_name -> nomnom.orders.v1.PlaceOrderItem
 	16, // 3: nomnom.orders.v1.PlaceOrderRequest.priority:type_name -> nomnom.orders.v1.OrderPriority
-	0,  // 4: nomnom.orders.v1.RequestOrderCancellationResponse.outcome:type_name -> nomnom.orders.v1.CancellationRequestOutcome
-	1,  // 5: nomnom.orders.v1.OrdersService.GetOrder:input_type -> nomnom.orders.v1.GetOrderRequest
-	3,  // 6: nomnom.orders.v1.OrdersService.ListCustomerOrders:input_type -> nomnom.orders.v1.ListCustomerOrdersRequest
-	6,  // 7: nomnom.orders.v1.OrdersService.PlaceOrder:input_type -> nomnom.orders.v1.PlaceOrderRequest
-	8,  // 8: nomnom.orders.v1.OrdersService.RequestOrderCancellation:input_type -> nomnom.orders.v1.RequestOrderCancellationRequest
-	10, // 9: nomnom.orders.v1.OrdersService.GetSimulator:input_type -> nomnom.orders.v1.GetSimulatorRequest
-	12, // 10: nomnom.orders.v1.OrdersService.SetSimulatorEnabled:input_type -> nomnom.orders.v1.SetSimulatorEnabledRequest
-	2,  // 11: nomnom.orders.v1.OrdersService.GetOrder:output_type -> nomnom.orders.v1.GetOrderResponse
-	4,  // 12: nomnom.orders.v1.OrdersService.ListCustomerOrders:output_type -> nomnom.orders.v1.ListCustomerOrdersResponse
-	7,  // 13: nomnom.orders.v1.OrdersService.PlaceOrder:output_type -> nomnom.orders.v1.PlaceOrderResponse
-	9,  // 14: nomnom.orders.v1.OrdersService.RequestOrderCancellation:output_type -> nomnom.orders.v1.RequestOrderCancellationResponse
-	11, // 15: nomnom.orders.v1.OrdersService.GetSimulator:output_type -> nomnom.orders.v1.GetSimulatorResponse
-	13, // 16: nomnom.orders.v1.OrdersService.SetSimulatorEnabled:output_type -> nomnom.orders.v1.SetSimulatorEnabledResponse
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	17, // 4: nomnom.orders.v1.PlaceOrderRequest.delivery_window_start:type_name -> google.protobuf.Timestamp
+	0,  // 5: nomnom.orders.v1.RequestOrderCancellationResponse.outcome:type_name -> nomnom.orders.v1.CancellationRequestOutcome
+	1,  // 6: nomnom.orders.v1.OrdersService.GetOrder:input_type -> nomnom.orders.v1.GetOrderRequest
+	3,  // 7: nomnom.orders.v1.OrdersService.ListCustomerOrders:input_type -> nomnom.orders.v1.ListCustomerOrdersRequest
+	6,  // 8: nomnom.orders.v1.OrdersService.PlaceOrder:input_type -> nomnom.orders.v1.PlaceOrderRequest
+	8,  // 9: nomnom.orders.v1.OrdersService.RequestOrderCancellation:input_type -> nomnom.orders.v1.RequestOrderCancellationRequest
+	10, // 10: nomnom.orders.v1.OrdersService.GetSimulator:input_type -> nomnom.orders.v1.GetSimulatorRequest
+	12, // 11: nomnom.orders.v1.OrdersService.SetSimulatorEnabled:input_type -> nomnom.orders.v1.SetSimulatorEnabledRequest
+	2,  // 12: nomnom.orders.v1.OrdersService.GetOrder:output_type -> nomnom.orders.v1.GetOrderResponse
+	4,  // 13: nomnom.orders.v1.OrdersService.ListCustomerOrders:output_type -> nomnom.orders.v1.ListCustomerOrdersResponse
+	7,  // 14: nomnom.orders.v1.OrdersService.PlaceOrder:output_type -> nomnom.orders.v1.PlaceOrderResponse
+	9,  // 15: nomnom.orders.v1.OrdersService.RequestOrderCancellation:output_type -> nomnom.orders.v1.RequestOrderCancellationResponse
+	11, // 16: nomnom.orders.v1.OrdersService.GetSimulator:output_type -> nomnom.orders.v1.GetSimulatorResponse
+	13, // 17: nomnom.orders.v1.OrdersService.SetSimulatorEnabled:output_type -> nomnom.orders.v1.SetSimulatorEnabledResponse
+	12, // [12:18] is the sub-list for method output_type
+	6,  // [6:12] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_service_proto_init() }

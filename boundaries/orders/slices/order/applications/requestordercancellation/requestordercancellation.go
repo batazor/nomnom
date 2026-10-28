@@ -49,7 +49,7 @@ type Orders interface {
 // CancellationPolicy supplies the cancellation window of an Order. The product
 // rule is not agreed yet, so it stays behind this port.
 type CancellationPolicy interface {
-	Window(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error)
+	Window(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error)
 }
 
 type Dependencies struct {
@@ -100,7 +100,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 			return Result{}, readErr
 		}
 	}
-	window, err := h.deps.Policy.Window(ctx, current.PlacedAt())
+	window, err := h.deps.Policy.Window(ctx, current.PlacedAt(), current.DeliveryWindow())
 	if err != nil {
 		return Result{}, fmt.Errorf("read cancellation window: %w", err)
 	}

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { create, toBinary } from "@bufbuild/protobuf";
+import { type Timestamp, timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import {
+  PreparationStartedSchema,
   RestaurantOrderAcceptedSchema,
   RestaurantOrderCancelledSchema,
   RestaurantOrderReadySchema,
@@ -51,9 +53,10 @@ const worldOf = async () => {
   const deliver = async (
     schema:
       | typeof RestaurantOrderAcceptedSchema
+      | typeof PreparationStartedSchema
       | typeof RestaurantOrderReadySchema
       | typeof RestaurantOrderCancelledSchema,
-    payload: { orderId: string; restaurantId: string },
+    payload: { orderId: string; restaurantId: string; queuedAt?: Timestamp },
     occurredAt: Date,
   ) => {
     const handler = handlers.get(schema.typeName) as EventHandler;
@@ -70,7 +73,7 @@ const worldOf = async () => {
         envelope,
         toBinary(
           schema,
-          create(schema as typeof RestaurantOrderReadySchema, payload),
+          create(schema as typeof RestaurantOrderAcceptedSchema, payload),
         ),
       ),
     );
@@ -90,7 +93,11 @@ test("AC-837 AC-838 a ready order records its duration once", async () => {
   const start = world.clock.now();
   const fact = { orderId: "order-1", restaurantId };
 
-  await world.deliver(RestaurantOrderAcceptedSchema, fact, start);
+  await world.deliver(
+    RestaurantOrderAcceptedSchema,
+    { ...fact, queuedAt: timestampFromDate(start) },
+    start,
+  );
   assert.deepEqual(
     (await world.waitTimeOf(restaurantId))?.open.map((open) => open.orderId),
     ["order-1"],
@@ -111,7 +118,11 @@ test("AC-839 a cancelled order leaves without a duration", async () => {
   const world = await worldOf();
   const restaurantId = await world.givenRestaurant("Pho");
   const fact = { orderId: "order-1", restaurantId };
-  await world.deliver(RestaurantOrderAcceptedSchema, fact, world.clock.now());
+  await world.deliver(
+    RestaurantOrderAcceptedSchema,
+    { ...fact, queuedAt: timestampFromDate(world.clock.now()) },
+    world.clock.now(),
+  );
   await world.deliver(RestaurantOrderCancelledSchema, fact, world.clock.now());
 
   const waitTime = await world.waitTimeOf(restaurantId);
@@ -124,7 +135,11 @@ test("FR-656 a fact without restaurant_id changes nothing", async () => {
   const restaurantId = await world.givenRestaurant("Pho");
   await world.deliver(
     RestaurantOrderAcceptedSchema,
-    { orderId: "order-1", restaurantId: "" },
+    {
+      orderId: "order-1",
+      restaurantId: "",
+      queuedAt: timestampFromDate(world.clock.now()),
+    },
     world.clock.now(),
   );
   assert.equal(await world.waitTimeOf(restaurantId), undefined);
@@ -136,7 +151,11 @@ test("AC-840 restaurant saves keep the statistics and conflict with nothing", as
   const before = await world.restaurants.get(restaurantId);
   await world.deliver(
     RestaurantOrderAcceptedSchema,
-    { orderId: "order-1", restaurantId },
+    {
+      orderId: "order-1",
+      restaurantId,
+      queuedAt: timestampFromDate(world.clock.now()),
+    },
     world.clock.now(),
   );
 
@@ -158,7 +177,11 @@ test("AC-844 AC-845 a level change is published once, other facts publish nothin
     );
   await world.deliver(
     RestaurantOrderAcceptedSchema,
-    { orderId: "order-1", restaurantId },
+    {
+      orderId: "order-1",
+      restaurantId,
+      queuedAt: timestampFromDate(world.clock.now()),
+    },
     world.clock.now(),
   );
   assert.deepEqual(await recorded(), [], "no change of the level");
@@ -167,12 +190,20 @@ test("AC-844 AC-845 a level change is published once, other facts publish nothin
   world.clock.advance(35 * MINUTE);
   await world.deliver(
     RestaurantOrderAcceptedSchema,
-    { orderId: "order-2", restaurantId },
+    {
+      orderId: "order-2",
+      restaurantId,
+      queuedAt: timestampFromDate(world.clock.now()),
+    },
     world.clock.now(),
   );
   await world.deliver(
     RestaurantOrderAcceptedSchema,
-    { orderId: "order-3", restaurantId },
+    {
+      orderId: "order-3",
+      restaurantId,
+      queuedAt: timestampFromDate(world.clock.now()),
+    },
     world.clock.now(),
   );
 
@@ -193,6 +224,7 @@ test("AC-844 AC-845 a level change is published once, other facts publish nothin
   assert.deepEqual(view?.waitTime, {
     elevated: true,
     expectedWaitMinutes: 35,
+    baselinePreparationMs: 20 * MINUTE,
   });
 });
 
@@ -209,16 +241,16 @@ test("FR-646 RestaurantWaitLevelChanged keeps distinct Outbox records per change
     outbox,
     clock: world.clock,
   });
-  const fact = (orderId: string, kind: "accepted" | "ready") =>
+  const fact = (orderId: string, kind: "queued" | "ready") =>
     recordWaitTime.execute({
       restaurantId,
       orderId,
       fact: kind,
       occurredAt: world.clock.now(),
     });
-  await fact("late", "accepted");
+  await fact("late", "queued");
   world.clock.advance(35 * MINUTE);
-  await fact("other", "accepted");
+  await fact("other", "queued");
   await fact("late", "ready");
   await fact("other", "ready");
 
@@ -240,7 +272,11 @@ test("AC-846 the ready time of an accepted order is the current wait ahead", asy
   const restaurantId = await world.givenRestaurant("Pho");
   await world.deliver(
     RestaurantOrderAcceptedSchema,
-    { orderId: "order-1", restaurantId },
+    {
+      orderId: "order-1",
+      restaurantId,
+      queuedAt: timestampFromDate(world.clock.now()),
+    },
     world.clock.now(),
   );
   world.clock.advance(35 * MINUTE);
@@ -255,4 +291,76 @@ test("AC-846 the ready time of an accepted order is the current wait ahead", asy
   );
 
   assert.equal(expectedReadyAt.getTime() - acceptedAt.getTime(), 35 * MINUTE);
+});
+
+test("AC-926 a scheduled order counts from its queuing, not from its Acceptance", async () => {
+  const world = await worldOf();
+  const restaurantId = await world.givenRestaurant("Pho");
+  const fact = { orderId: "order-scheduled", restaurantId };
+  const at = (hh: number, mm: number) =>
+    new Date(Date.UTC(2026, 9, 28, hh - 1, mm));
+
+  // Accepted at 15:00 without queued_at: it waits for its start in ACCEPTED.
+  await world.deliver(RestaurantOrderAcceptedSchema, fact, at(15, 0));
+  assert.equal(await world.waitTimeOf(restaurantId), undefined);
+  const policy = testWaitTimePolicy();
+  const before = await world.store.load(restaurantId);
+  assert.equal(
+    before === undefined
+      ? undefined
+      : policy.estimate(before.statistics, at(18, 5)).currentMs,
+    20 * MINUTE,
+    "before 18:10 the order does not change the current wait",
+  );
+
+  // Queued at 18:10 publishes nothing; Preparation Started carries it.
+  await world.deliver(
+    PreparationStartedSchema,
+    { ...fact, queuedAt: timestampFromDate(at(18, 10)) },
+    at(18, 11),
+  );
+  await world.deliver(
+    PreparationStartedSchema,
+    { ...fact, queuedAt: timestampFromDate(at(18, 10)) },
+    at(18, 11),
+  );
+  assert.deepEqual((await world.waitTimeOf(restaurantId))?.open, [
+    { orderId: "order-scheduled", queuedAt: at(18, 10) },
+  ]);
+  await world.deliver(RestaurantOrderReadySchema, fact, at(18, 35));
+
+  const waitTime = await world.waitTimeOf(restaurantId);
+  assert.deepEqual(waitTime?.open, []);
+  assert.deepEqual(
+    waitTime?.completed.map((entry) => entry.durationMs),
+    [25 * MINUTE],
+  );
+});
+
+test("FR-644 Preparation Started of an order opened at its Acceptance changes nothing", async () => {
+  const world = await worldOf();
+  const restaurantId = await world.givenRestaurant("Pho");
+  const start = world.clock.now();
+  const fact = { orderId: "order-1", restaurantId };
+  await world.deliver(
+    RestaurantOrderAcceptedSchema,
+    { ...fact, queuedAt: timestampFromDate(start) },
+    start,
+  );
+  await world.deliver(
+    PreparationStartedSchema,
+    { ...fact, queuedAt: timestampFromDate(start) },
+    new Date(start.getTime() + 5 * MINUTE),
+  );
+  assert.deepEqual((await world.waitTimeOf(restaurantId))?.open, [
+    { orderId: "order-1", queuedAt: start },
+  ]);
+  await assert.rejects(
+    world.deliver(
+      PreparationStartedSchema,
+      { orderId: "order-2", restaurantId },
+      start,
+    ),
+    /PreparationStarted requires queued_at/,
+  );
 });

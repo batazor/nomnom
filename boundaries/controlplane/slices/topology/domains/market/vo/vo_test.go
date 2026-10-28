@@ -40,3 +40,13 @@ func TestCurrencyIsAnISO4217Code(t *testing.T) {
 		assert.ErrorIs(t, err, vo.ErrInvalidValue, invalid)
 	}
 }
+
+func TestTimeZoneIsAnIANAName(t *testing.T) {
+	timeZone, err := vo.NewTimeZone("Europe/Berlin")
+	require.NoError(t, err)
+	assert.Equal(t, vo.TimeZone("Europe/Berlin"), timeZone)
+	for _, invalid := range []string{"", "Local", "Mars/Olympus", "Europe/Berlin "} {
+		_, err := vo.NewTimeZone(invalid)
+		assert.ErrorIs(t, err, vo.ErrInvalidValue, invalid)
+	}
+}

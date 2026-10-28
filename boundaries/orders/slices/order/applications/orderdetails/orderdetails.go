@@ -28,6 +28,8 @@ type Details struct {
 	Facts    []Fact
 	// Expected are the latest named Fulfillment deadlines; a zero time is not named.
 	Expected order.ExpectedTimes
+	// DeliveryWindow is set for a Scheduled Order (FR-681).
+	DeliveryWindow order.DeliveryWindow
 	// Cancellation is nil unless the Order is cancelled.
 	Cancellation *Cancellation
 }
@@ -65,7 +67,7 @@ type View struct {
 // CancellationPolicy is the policy Request Order Cancellation checks against;
 // the view publishes the same window.
 type CancellationPolicy interface {
-	Window(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error)
+	Window(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error)
 }
 
 // Present adds the Cancellation Window to the row. The window is advisory: the
@@ -77,7 +79,7 @@ func Present(ctx context.Context, policy CancellationPolicy, details Details) Vi
 	if !details.State.AcceptsCancellation() {
 		return view
 	}
-	window, err := policy.Window(ctx, details.PlacedAt)
+	window, err := policy.Window(ctx, details.PlacedAt, details.DeliveryWindow)
 	if err != nil {
 		return view
 	}

@@ -30,7 +30,7 @@ func (granted) Check(_ context.Context, check application.AccessCheck) error {
 }
 
 func TestOnlyTheOperatorListsMarkets(t *testing.T) {
-	stored := lister{market.New("berlin", "Berlin", "EUR", "cell-1")}
+	stored := lister{market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1")}
 	handler := listmarkets.New(granted{}, stored)
 
 	got, err := handler.Handle(context.Background(), listmarkets.Query{Subject: operator})

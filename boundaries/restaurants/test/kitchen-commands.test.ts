@@ -57,6 +57,8 @@ test("AC-246 accept queues the order and publishes only RestaurantOrderAccepted"
         type: "RestaurantOrderAccepted",
         acceptedAt: now,
         expectedReadyAt,
+        // FR-644: queued in the same Unit of Work as its Acceptance.
+        queuedAt: now,
         restaurantOrderId: received.restaurantOrderId,
         orderId: received.orderId,
         restaurantId,

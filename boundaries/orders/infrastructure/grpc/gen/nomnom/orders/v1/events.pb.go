@@ -33,9 +33,12 @@ type OrderPlaced struct {
 	// Состав заказа по ценам catalog snapshot; restaurants создаёт по нему Restaurant Order.
 	Items []*OrderItem `protobuf:"bytes,6,rep,name=items,proto3" json:"items,omitempty"`
 	// Market of the aggregate (ADR 41).
-	MarketId      string `protobuf:"bytes,7,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MarketId string `protobuf:"bytes,7,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	// Delivery window of a scheduled Order (FR-681); the workflow takes the
+	// scheduled route when set.
+	DeliveryWindow *DeliveryWindow `protobuf:"bytes,8,opt,name=delivery_window,json=deliveryWindow,proto3" json:"delivery_window,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OrderPlaced) Reset() {
@@ -115,6 +118,13 @@ func (x *OrderPlaced) GetMarketId() string {
 		return x.MarketId
 	}
 	return ""
+}
+
+func (x *OrderPlaced) GetDeliveryWindow() *DeliveryWindow {
+	if x != nil {
+		return x.DeliveryWindow
+	}
+	return nil
 }
 
 // Заказ успешно завершён.
@@ -237,7 +247,7 @@ var File_nomnom_orders_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\xa6\x02\n" +
+	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\xf1\x02\n" +
 	"\vOrderPlaced\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -246,7 +256,8 @@ const file_nomnom_orders_v1_events_proto_rawDesc = "" +
 	"\x05total\x18\x04 \x01(\v2\x17.nomnom.orders.v1.MoneyR\x05total\x127\n" +
 	"\tplaced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bplacedAt\x121\n" +
 	"\x05items\x18\x06 \x03(\v2\x1b.nomnom.orders.v1.OrderItemR\x05items\x12\x1b\n" +
-	"\tmarket_id\x18\a \x01(\tR\bmarketId\"H\n" +
+	"\tmarket_id\x18\a \x01(\tR\bmarketId\x12I\n" +
+	"\x0fdelivery_window\x18\b \x01(\v2 .nomnom.orders.v1.DeliveryWindowR\x0edeliveryWindow\"H\n" +
 	"\x0eOrderCompleted\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
 	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\"\x8c\x01\n" +
@@ -276,18 +287,20 @@ var file_nomnom_orders_v1_events_proto_goTypes = []any{
 	(*Money)(nil),                 // 3: nomnom.orders.v1.Money
 	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 	(*OrderItem)(nil),             // 5: nomnom.orders.v1.OrderItem
-	(*Cancellation)(nil),          // 6: nomnom.orders.v1.Cancellation
+	(*DeliveryWindow)(nil),        // 6: nomnom.orders.v1.DeliveryWindow
+	(*Cancellation)(nil),          // 7: nomnom.orders.v1.Cancellation
 }
 var file_nomnom_orders_v1_events_proto_depIdxs = []int32{
 	3, // 0: nomnom.orders.v1.OrderPlaced.total:type_name -> nomnom.orders.v1.Money
 	4, // 1: nomnom.orders.v1.OrderPlaced.placed_at:type_name -> google.protobuf.Timestamp
 	5, // 2: nomnom.orders.v1.OrderPlaced.items:type_name -> nomnom.orders.v1.OrderItem
-	6, // 3: nomnom.orders.v1.OrderCancelled.cancellation:type_name -> nomnom.orders.v1.Cancellation
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 3: nomnom.orders.v1.OrderPlaced.delivery_window:type_name -> nomnom.orders.v1.DeliveryWindow
+	7, // 4: nomnom.orders.v1.OrderCancelled.cancellation:type_name -> nomnom.orders.v1.Cancellation
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_events_proto_init() }

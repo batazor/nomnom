@@ -25,6 +25,11 @@ message RestaurantOrderAccepted {
   string market_id = 3;
   // Restaurant of the order: Wait Time Statistics of the restaurant (FR-656).
   string restaurant_id = 4;
+  // Set when the order joined the Kitchen Queue in the same Unit of Work as
+  // its Acceptance (an order without a delivery window): the start of its
+  // Wait Time Statistics duration (FR-644). Unset for a scheduled order,
+  // which stays ACCEPTED until QueueRestaurantOrder.
+  google.protobuf.Timestamp queued_at = 5;
 }
 
 // Ресторан отказался принять Kitchen Order.
@@ -40,6 +45,11 @@ message PreparationStarted {
   string order_id = 1;
   // Market of the aggregate (ADR 41).
   string market_id = 2;
+  // Restaurant of the order: Wait Time Statistics of the restaurant (FR-644).
+  string restaurant_id = 3;
+  // When the order joined the Kitchen Queue: a scheduled order enters the
+  // Wait Time Statistics with it, since its queuing publishes no fact.
+  google.protobuf.Timestamp queued_at = 4;
 }
 
 // Preparation задерживается; expected_ready_at — новая ожидаемая готовность.

@@ -172,7 +172,7 @@ func TestGetOrderOmitsCancellationWindowForFinalOrders(t *testing.T) {
 func TestGetOrderHidesCancellationWindowWhenPolicyFails(t *testing.T) {
 	policy := NewMockCancellationPolicy(t)
 	policy.EXPECT().
-		Window(mock.Anything, ordertest.PlacedAt).
+		Window(mock.Anything, ordertest.PlacedAt, order.DeliveryWindow{}).
 		Return(order.CancellationWindow{}, errors.New("policy unavailable")).
 		Once()
 	handler, _ := setupWithPolicy(t, policy, ordertest.New(t, "order-1"))
@@ -187,7 +187,7 @@ func TestGetOrderHidesCancellationWindowWhenPolicyFails(t *testing.T) {
 // fixedWindow is the production cancellation policy with the given window.
 func fixedWindow(t *testing.T, window time.Duration) cancellationpolicy.Fixed {
 	t.Helper()
-	policy, err := cancellationpolicy.NewFixed(window)
+	policy, err := cancellationpolicy.NewFixed(window, time.Hour)
 	require.NoError(t, err)
 	return policy
 }

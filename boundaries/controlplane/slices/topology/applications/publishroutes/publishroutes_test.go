@@ -45,7 +45,7 @@ func route(t *testing.T) publishroutes.MarketRoute {
 	t.Helper()
 	router, err := vo.NewRouter("nomnom-bff", "bff", 3010)
 	require.NoError(t, err)
-	return publishroutes.MarketRoute{Market: market.New("berlin", "Berlin", "EUR", "cell-1"), Router: router}
+	return publishroutes.MarketRoute{Market: market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"), Router: router}
 }
 
 func TestAppliesTheSnapshotUnderTheLock(t *testing.T) {

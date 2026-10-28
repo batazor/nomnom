@@ -7,9 +7,11 @@ import type { MenuAccessControl } from "../../slices/menu/applications/access-co
 import type { RestaurantAccessControl } from "../../slices/restaurant/applications/access-control.ts";
 import type {
   FulfillmentCoordinatorAccess,
+  FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
 } from "../../slices/restaurantorder/applications/access-control.ts";
+import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control.ts";
 import type { SimulatorAccess } from "../../slices/simulator/applications/access-control.ts";
 import {
   checkConsistency,
@@ -56,6 +58,8 @@ export class SpiceDbAccessControl
     MenuAccessControl,
     KitchenStaffAccess,
     FulfillmentCoordinatorAccess,
+    FulfillmentProcessAccess,
+    SlotReservationAccess,
     RestaurantOrderViewAccess,
     SimulatorAccess,
     CookPoolAccess
@@ -92,11 +96,13 @@ export class SpiceDbAccessControl
   /**
    * Platform capability: the fulfillment service addresses Restaurant Orders
    * before any restaurant-level relationship exists, so the restaurant id is
-   * not part of the check.
+   * not part of the check. Commands that name only an order or a Restaurant
+   * Order (Queue Restaurant Order, Confirm and Release Scheduled Slot) make
+   * the same check without one.
    */
   canCoordinateFulfillment(
     subject: Subject,
-    _restaurantId: string,
+    _restaurantId?: string,
   ): Promise<boolean> {
     return this.#check(
       "platform",

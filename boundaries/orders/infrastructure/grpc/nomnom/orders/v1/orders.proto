@@ -77,6 +77,20 @@ message Order {
   // Fee of Premium Priority fixed at Place Order and included in total; unset
   // for a standard Order.
   Money premium_fee = 17;
+  // Delivery window of a scheduled Order (FR-681); unset for an ASAP Order.
+  DeliveryWindow delivery_window = 18;
+}
+
+// Delivery window [start, end) of a scheduled Order.
+message DeliveryWindow {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}
+
+// Error detail of PlaceOrder FAILED_PRECONDITION with reason SLOT_UNAVAILABLE
+// (FR-692): the nearest available windows of the restaurant.
+message SlotUnavailable {
+  repeated DeliveryWindow alternatives = 1;
 }
 
 message OrderSummary {

@@ -40,7 +40,7 @@ func setup(t *testing.T) (listcustomerorders.Handler, *MockAuthorizer) {
 	require.NoError(t, store.Add(ctx, ordertest.New(t, "order-h", ordertest.WithMarket("hamburg"),
 		ordertest.WithPlacedAt(ordertest.PlacedAt.Add(time.Hour+30*time.Minute)))))
 	authorizer := NewMockAuthorizer(t)
-	policy, err := cancellationpolicy.NewFixed(window)
+	policy, err := cancellationpolicy.NewFixed(window, time.Hour)
 	require.NoError(t, err)
 	return listcustomerorders.NewHandler(authorizer, store, policy), authorizer
 }

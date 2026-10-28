@@ -246,6 +246,7 @@ const ACTIVE: readonly ActiveRestaurantOrder[] = [
     cookId: "cook-1",
     acceptedAt: new Date(RECEIVED_AT.getTime() + minutes(1)),
     expectedReadyAt: new Date(RECEIVED_AT.getTime() + minutes(20)),
+    schedule: undefined,
     version: 4,
   },
 ];

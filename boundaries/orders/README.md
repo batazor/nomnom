@@ -34,7 +34,7 @@ Workflow относится к прикладному процессу. Доме
 
 | Use Case | Actor | Intent | Result | Ключевые зависимости и взаимодействия |
 | --- | --- | --- | --- | --- |
-| **Place Order** | Клиент | Оформить заказ из выбранных позиций одного ресторана | Создан `Order`, зафиксированы состав, цены и необходимые snapshot-данные, назначен `order_id`, `OrderPlaced` записан в Outbox; заказ ещё не считается принятым рестораном или оплаченным | Читает необходимые сведения ресторана и меню через согласованный API; Temporal не вызывает — workflow стартует Start Fulfillment |
+| **Place Order** | Клиент | Оформить заказ из выбранных позиций одного ресторана, сразу или к Delivery Window | Создан `Order`, зафиксированы состав, цены, необходимые snapshot-данные и окно доставки запланированного заказа, назначен `order_id`, `OrderPlaced` записан в Outbox; заказ ещё не считается принятым рестораном или оплаченным | Читает необходимые сведения ресторана и меню через согласованный API; с `delivery_window_start` резервирует окно в `restaurants` (`ReserveScheduledSlot`) до транзакции; Temporal не вызывает — workflow стартует Start Fulfillment |
 | **Start Fulfillment** | Kafka consumer `orders` | Запустить fulfillment process по собственному `OrderPlaced` | У незавершённого `Order` есть workflow `order:<order_id>`; финальный `Order` не запускается заново | Integration event `OrderPlaced` из `orders.v1.order-events`, Transactional Inbox, `SignalWithStart` после commit (и на дубликате Inbox); ошибка Temporal — повторная доставка, не DLQ |
 | **Request Order Cancellation** | Клиент или другой авторизованный actor | Запросить прекращение незавершённого заказа | Проверены права и правила допустимости, запрос передан существующему fulfillment workflow; компенсации не выполняются самим use case | Authoritative authorization в `orders`; сигнал Temporal workflow |
 | **Confirm Order** | Kafka consumer `orders` | Отразить Order Acceptance ресторана | `Order` подтверждён один раз, fulfillment workflow может продолжиться | Integration event от `restaurants`, Transactional Inbox, сигнал Temporal workflow |
@@ -48,6 +48,7 @@ Workflow относится к прикладному процессу. Доме
 | **Record Delivery Completion** | Kafka consumer `orders` | Отразить Delivery Completion | Завершение доставки отражено один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Delivery Failure** | Kafka consumer `orders` | Отразить неудачу Delivery | Бизнес-неудача доставки и причина отражены один раз | Integration event от `delivery`, Transactional Inbox, сигнал Temporal workflow |
 | **Record Payment Authorization** | Temporal fulfillment workflow | Зафиксировать одобренную Authorization до запроса ресторана | В `Order` записан Fulfillment Fact `payment_authorized` (только в `placed`), клиент видит статус `PAID`; повтор — no-op | Вызывается Activity `RecordPaymentAuthorization` между `AuthorizePayment` и `RequestRestaurantOrder`; `order_details` и Change Notification, без Integration Event |
+| **Plan Schedule** | Temporal fulfillment workflow | Рассчитать план запланированного заказа | `planned_ready_at`, `start_at`, `courier_request_at`, `replan_at` по свежим оценкам; `Order` не меняется, план хранит Event History | Activity `PlanSchedule`: базовое время ресторана (`restaurants.GetRestaurant.baseline_preparation`) и оценка доставки Market (`delivery.EstimateDeliveryDuration`) через internal gateway; domain-политика `order.PlanSchedule`, `SCHEDULED_ORDER__*` (FR-677) |
 | **Complete Order** | Temporal fulfillment workflow | Зафиксировать успешный итог после выполнения всех необходимых условий | `Order` переведён в окончательное успешное состояние | Вызывается orchestration после подтверждённых результатов участвующих контекстов |
 | **Fail or Cancel Order** | Temporal fulfillment workflow | Зафиксировать окончательный негативный итог после orchestration и необходимых компенсаций | `Order` переведён в соответствующее окончательное состояние с сохранением причины | Workflow координирует компенсации через Activities; use case не присваивает правила `restaurants`, `delivery` или `payments` |
 
@@ -93,8 +94,10 @@ Temporal Activities и телеметрия переводят вид своим
 | --- | --- | --- |
 | `Order` не найден | `NOT_FOUND` | `ORDER_NOT_FOUND` |
 | Ресторан или его меню не найдены (Place Order) | `NOT_FOUND` | `RESTAURANT_NOT_FOUND` |
-| Ресторан закрыт (`is_open = false`, Place Order) | `FAILED_PRECONDITION` | `RESTAURANT_NOT_ACCEPTING_ORDERS` |
+| Ресторан не принимает заказы (`accepting_orders = false`: выключен или вне расписания, Place Order) | `FAILED_PRECONDITION` | `RESTAURANT_NOT_ACCEPTING_ORDERS` |
 | `priority = PREMIUM` у ресторана без `premium_fee` (Place Order, FR-650) | `FAILED_PRECONDITION` | `PREMIUM_UNAVAILABLE` |
+| Окно доставки занято (Place Order, FR-692) | `FAILED_PRECONDITION` | `SLOT_UNAVAILABLE` + деталь `SlotUnavailable{alternatives}` после `ErrorInfo` |
+| Ресторан без запланированных заказов или не принимает заказы сейчас (Place Order с окном) | `FAILED_PRECONDITION` | `SCHEDULED_ORDERS_UNAVAILABLE` |
 | Позиции нельзя заказать (политика `OrderItemsOrderable`, Place Order) | `FAILED_PRECONDITION` | `ORDER_NOT_ORDERABLE` + metadata `codes`, `menu_item_ids` |
 | Некорректный состав | `INVALID_ARGUMENT` | `INVALID_ORDER` |
 | Текущее состояние запрещает переход | `FAILED_PRECONDITION` | `ORDER_STATE_CONFLICT` |
@@ -136,14 +139,19 @@ subject из user assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-
 BFF передаёт свой service token и `x-nomnom-user-assertion`; service subject без assertion
 (в том числе сам BFF) получает `PERMISSION_DENIED`. Catalog snapshot
 до транзакции читает адаптер [`slices/order/infrastructure/catalog`](slices/order/infrastructure/catalog)
-(FR-497): `restaurants.GetRestaurant` (`is_open`) и `GetMenu` через internal gateway
+(FR-497): `restaurants.GetRestaurant` (`accepting_orders` — флаг ресторана и его расписание в момент чтения, FR-699) и `GetMenu` через internal gateway
 (`INTERNAL_GATEWAY_ADDR`; без адреса процесс не стартует) с projected token `nomnom.restaurants` API orders (`IDENTITY__TOKEN_DIR`, если задан) и общим
 deadline `CATALOG__TIMEOUT`. В snapshot попадают только запрошенные позиции; отсутствующие в меню
 недоступны. Закрытый ресторан — `RESTAURANT_NOT_ACCEPTING_ORDERS`, `NOT_FOUND` ресторана или меню и
 пустое меню — `RESTAURANT_NOT_FOUND`, цены в разных валютах — `INVALID_ORDER`, любая другая ошибка
 `restaurants` (transport, deadline, identity, отсутствующий route) — `UNAVAILABLE`. Валюта snapshot —
 валюта меню; минимум и максимум суммы — `CATALOG__MINIMUM_TOTAL`/`CATALOG__MAXIMUM_TOTAL` в этой
-валюте (placeholders, пока `restaurants` их не публикует). `order_id` — UUIDv7. `PlaceOrder` Temporal не вызывает:
+валюте (placeholders, пока `restaurants` их не публикует). `order_id` — UUIDv7. `PlaceOrderRequest.delivery_window_start` делает заказ запланированным (FR-681, `PREMIUM` допустим):
+после catalog snapshot и генерации `order_id` адаптер [`scheduledslots`](slices/order/infrastructure/scheduledslots)
+вызывает `restaurants.ReserveScheduledSlot` от service identity orders (deadline `CATALOG__TIMEOUT`), `Order` хранит окно из ответа,
+`OrderPlaced` несёт его. `slot_unavailable` — `SLOT_UNAVAILABLE` с альтернативами, `FAILED_PRECONDITION` c `ErrorInfo.reason`
+`SCHEDULED_ORDERS_UNAVAILABLE` — `SCHEDULED_ORDERS_UNAVAILABLE`, `INVALID_ARGUMENT` окна — `INVALID_ARGUMENT`; `Order` не сохраняется,
+hold истекает в `restaurants`. Повтор с тем же idempotency key возвращает сохранённый `Order` без новой резервации. `PlaceOrder` Temporal не вызывает:
 workflow запускает consumer собственного `OrderPlaced` (Start Fulfillment); поле
 `PlaceOrderResponse.fulfillment_started` удалено (`reserved 3`). Temporal client API lazy: процесс
 стартует без Temporal, а `RequestOrderCancellation` до старта workflow или без Temporal отвечает `UNAVAILABLE`.
@@ -155,7 +163,9 @@ workflow запускает consumer собственного `OrderPlaced` (Sta
 Окно задаёт та же cancellation policy, что использует Request Order Cancellation: оно
 открывается в момент Place Order и длится `cancellation.window` (`CANCELLATION__WINDOW`,
 по умолчанию `5m` — placeholder до продуктового решения; `0s` или неразбираемое значение
-останавливают процесс на старте). Открыто ли окно сейчас, решает потребитель по своему
+останавливают процесс на старте). У запланированного заказа окно закрывается в
+`window_start − CANCELLATION__SCHEDULED_CUTOFF` (FR-462, обязателен, неположительный — ошибка старта).
+`Order.delivery_window { start, end }` отдаётся у запланированного заказа. Открыто ли окно сейчас, решает потребитель по своему
 clock, а сам запрос отмены проверяется заново. Если политика вернёт ошибку, `GetOrder`
 отдаёт заказ без окна, а декоратор `cancellationpolicy.Observed` пишет ошибку в log и span. Composition root по
 умолчанию устанавливает deny-by-default `SubjectResolver`: пока не подключён adapter
@@ -173,6 +183,8 @@ gateway не доверяет. Политика контрактов, генер
 | `OrderItem` — entity внутри `Order` | `menuItemId`, `quantity`, `unitPrice` | Фиксирует заказанную позицию, количество и цену на момент оформления |
 
 Минимальные состояния `Order`: `placed`, `confirmed`, `cancelled`, `completed`; они сгруппированы в compound states `open` (`placed`, `confirmed`) и `closed` (`cancelled`, `completed`), см. [FSM](../../docs/fsm.md#order). На первом этапе агрегат поддерживает оформление, подтверждение, отмену и завершение заказа.
+
+Запланированный заказ хранит Delivery Window — value object `DeliveryWindow` (`[start, end)`, UTC), зафиксированный резервацией при Place Order; нулевое окно — ASAP-заказ. План запланированного заказа считает чистая политика `order.PlanSchedule` (`planned_ready_at = window_start − transit`, `start_at = planned_ready_at − preparation − buffer`, `courier_request_at = planned_ready_at − courier_lead`, `replan_at = start_at − replan_lead`).
 
 Кроме state, `Order` хранит время оформления, отражённые факты fulfillment (`payment_authorized`, `restaurant_accepted`, `restaurant_rejected`, `preparation_started`, `ready_for_pickup`, `courier_assigned`, `picked_up`, `delivery_completed`, `delivery_failed`) и причину отрицательного итога. Факты — данные `Order`, а не новые states: допустимость их записи по state задаёт targetless строка FSM `record_fact` на compound state `open` (Open Order: `placed`/`confirmed`), повтор факта — ошибка `FactAlreadyRecorded`. `payment_authorized` записывает Record Payment Authorization и только в `placed`. `restaurant_accepted` записывает Confirm Order вместе с переходом `placed → confirmed` и моментом события Order Acceptance; заказы, подтверждённые раньше, его не имеют. Cancellation и Failure пока завершаются одним state `cancelled` с сохранённым видом итога (`cancellation`/`failure`) и кодом причины; отдельный `failed` state не согласован. Domain Events: `OrderPlaced`, `OrderCancelled`, `OrderCompleted` (с моментом завершения `CompletedAt`, который передаёт `Complete`). Назначение курьера — value object `CourierAssignment` с правилами `Supersedes` (событие старше сохранённого устарело), `Displaced` (что вытесняет переназначение) и `Release` (снятие сохраняет своё время); контракт хранения `CourierAssignments` объявлен в домене. Сроки Fulfillment (FR-611) — value object `ExpectedTimes{ReadyAt, PickupAt, DeliveredAt}`, последние названные владельцами: готовность — из `RestaurantOrderAccepted` и каждого `PreparationDelayed`, Pickup — из последнего по Delivery version `CourierAssignedToDelivery` (новое назначение заменяет срок, в том числе на пустой), вручение — из `DeliveryPickedUp`; нулевое время — срок не назван, финальный `Order` сроки не принимает (строка FSM `record_fact`). Сроки хранятся в nullable-колонках `orders.expected_*`, отдаются в `GetOrder` (`Order.expected_ready_at`/`expected_pickup_at`/`expected_delivered_at`), а их изменение сохраняет `Order` и тем самым кладёт Order Change Notification для `orderChanged` (ADR 36).
 
@@ -311,6 +323,10 @@ Order placed → Authorize payment → Record payment in Order → Request Accep
 → wait Delivery Completion → Complete Order
 ```
 
+### Запланированный заказ
+
+Order с Delivery Window идёт веткой `AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → PlanSchedule → RequestRestaurantOrder(window, planned_ready_at)`; после `RestaurantOrderAccepted` workflow ждёт в stage `scheduled` таймеров `replan_at` (`PlanSchedule` с тем же `planned_ready_at`), `start_at` (`QueueRestaurantOrder`) и `courier_request_at` (`CreateDelivery`), затем идёт обычным маршрутом. Deadline Preparation считается от `QueueRestaurantOrder`, Assignment — от `CreateDelivery`. Ветка введена под patch `scheduled-route`; подробности — [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md#запланированный-заказ).
+
 ### Входящие события
 
 ```text
@@ -361,7 +377,7 @@ Business cancellation — Update `CancellationRequested`: домен `Order` р�
 
 ### Saga
 
-Workflow ведёт журнал подтверждённых шагов и при отказе вызывает только применимые компенсации — `CancelRestaurantOrder`, `CancelPaymentAuthorization` или `RefundPayment` — каждая отдельной идемпотентной Activity со своим ключом, timeout, retry и telemetry. `RestaurantOrderCancelled`, `PaymentAuthorizationCancelled` и `PaymentRefunded` подтверждают уже полученный результат и Saga повторно не запускают. Ресторан запрашивается только после одобренной Authorization и шага `RecordPaymentAuthorization` (у него компенсации нет — факт остаётся историей), поэтому при отказе оплаты Restaurant Order не существует и `CancelRestaurantOrder` не вызывается.
+Workflow ведёт журнал подтверждённых шагов и при отказе вызывает только применимые компенсации — `CancelDelivery`, `CancelRestaurantOrder`, `ReleaseSlotReservation` (запланированный заказ до Pickup), `CancelPaymentAuthorization` или `RefundPayment` — каждая отдельной идемпотентной Activity со своим ключом, timeout, retry и telemetry. `RestaurantOrderCancelled`, `PaymentAuthorizationCancelled` и `PaymentRefunded` подтверждают уже полученный результат и Saga повторно не запускают. Ресторан запрашивается только после одобренной Authorization и шага `RecordPaymentAuthorization` (у него компенсации нет — факт остаётся историей), поэтому при отказе оплаты Restaurant Order не существует и `CancelRestaurantOrder` не вызывается.
 
 ### Runtime
 
@@ -439,6 +455,9 @@ Premium Priority (FR-650) — колонки `orders.priority` (`STANDARD`/`PREM
 миграция `00009_premium_priority` проставила существующим заказам `STANDARD`) и
 `premium_fee_amount`/`premium_fee_currency` (CHECK: у премиума положительная доплата, у стандартного нет);
 документ `order_details` несёт `priority` и `premium_fee` (projection version 2, catch-up переписывает старые строки).
+Delivery Window запланированного заказа (FR-681) — nullable `orders.delivery_window_start`/`delivery_window_end`
+(миграция `00010_delivery_window`, CHECK: обе NULL — ASAP-заказ, иначе `start < end`; значения существующим строкам не подставляются)
+и `delivery_window` документа `order_details` (projection version 3).
 Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, после
 миграций процесс догоняет устаревшие строки (catch-up), полное перестроение —
 `orders-admin projections rebuild order-details`, догон после выкатки — `orders-admin projections catch-up order-details` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
@@ -506,6 +525,8 @@ Temporal worker `cmd/orders-worker` и consumer `cmd/orders-consumer` локал
 | `TEMPORAL_DEPLOYMENT_NAME`, `TEMPORAL_WORKER_BUILD_ID` | — | Worker Deployment Version worker'а; задаёт Temporal Worker Controller, без них worker не стартует |
 | `FULFILLMENT__<KEY>` | см. `config.example.yaml` | `Policy` workflow (placeholders), `PUBLISH_STAGE`, `NEIGHBOURS` (также выбирает catalog Place Order) |
 | `CATALOG__MINIMUM_TOTAL`, `CATALOG__MAXIMUM_TOTAL`, `CATALOG__TIMEOUT` | `0`, `100000`, `2s` | Лимиты суммы Place Order в валюте меню (placeholders) и deadline чтения `GetRestaurant` + `GetMenu` |
+| `CANCELLATION__SCHEDULED_CUTOFF` | — (обязателен) | Окно отмены запланированного заказа закрывается в `window_start − cutoff` (FR-462) |
+| `SCHEDULED_ORDER__PREPARATION_BUFFER`, `SCHEDULED_ORDER__REPLAN_LEAD` | — (обязательны) | Буфер `start_at` и опережение контрольной точки плана запланированного заказа (FR-677, FR-693); пустое или неположительное — ошибка старта всех процессов |
 | `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |
 | `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
 | `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker; API — catalog `restaurants`, его чтения identity не требуют); пусто — без credentials |

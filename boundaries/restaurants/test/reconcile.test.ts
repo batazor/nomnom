@@ -32,6 +32,8 @@ const seed = (
     name: "Pho",
     ownerId: "owner",
     marketId: "berlin",
+    timeZone: "Europe/Berlin",
+    openingHours: [],
     isOpen: false,
     ...restaurant,
     staff: restaurant.staff === undefined ? undefined : [...restaurant.staff],

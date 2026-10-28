@@ -24,6 +24,7 @@ import {
 } from "../applications/accept-order/accept-order.ts";
 import type {
   FulfillmentCoordinatorAccess,
+  FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
 } from "../applications/access-control.ts";
@@ -35,8 +36,10 @@ import {
 import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
 import { ListActiveRestaurantOrdersHandler } from "../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import { ListIncomingOrdersHandler } from "../applications/list-incoming-orders/list-incoming-orders.ts";
+import { ListScheduledOrdersHandler } from "../applications/list-scheduled-orders/list-scheduled-orders.ts";
 import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import { QueueRestaurantOrderHandler } from "../applications/queue-restaurant-order/queue-restaurant-order.ts";
 import { ReceiveOrderRequestHandler } from "../applications/receive-order-request/receive-order-request.ts";
 import { RejectOrderHandler } from "../applications/reject-order/reject-order.ts";
 import { ReportPreparationDelayHandler } from "../applications/report-preparation-delay/report-preparation-delay.ts";
@@ -46,7 +49,7 @@ import {
   StartPreparationHandler,
 } from "../applications/start-preparation/start-preparation.ts";
 import type { RestaurantOrderRepository } from "../domains/restaurantorder/restaurantorder.ts";
-import { UnconstrainedAcceptanceConditions } from "../infrastructure/acceptance/mvp.ts";
+import { OpeningHoursAcceptanceConditions } from "../infrastructure/acceptance/opening-hours.ts";
 import { WaitTimeReadyTimeEstimator } from "../infrastructure/acceptance/wait-time.ts";
 import type { KitchenChangeNotifier } from "../infrastructure/integration/kitchen-changes.ts";
 import { restaurantOrderEventMapper } from "../infrastructure/integration/restaurant-order-events.ts";
@@ -72,6 +75,7 @@ import {
 /** Access ports of the slice, implemented together by the process adapter. */
 export type KitchenAccess = KitchenStaffAccess &
   FulfillmentCoordinatorAccess &
+  FulfillmentProcessAccess &
   RestaurantOrderViewAccess;
 
 /** Application-scope dependencies the slice takes from the process. */
@@ -117,6 +121,8 @@ export interface RestaurantOrderCradle {
   readonly kitchenQueueOrdering: KitchenQueueOrdering;
   readonly receiveOrderRequest: ReceiveOrderRequestPort;
   readonly cancelRestaurantOrder: CancelRestaurantOrderHandler;
+  /** Queue Restaurant Order of `orders` at the planned start (FR-224). */
+  readonly queueRestaurantOrder: QueueRestaurantOrderHandler;
   readonly acceptRestaurantOrder: AcceptOrderHandler;
   readonly rejectRestaurantOrder: RejectOrderHandler;
   readonly startPreparation: StartPreparationHandler;
@@ -128,6 +134,7 @@ export interface RestaurantOrderCradle {
   readonly kitchenBoard: DatabaseKitchenBoard;
   readonly getKitchenQueue: GetKitchenQueueHandler;
   readonly listIncomingOrders: ListIncomingOrdersHandler;
+  readonly listScheduledOrders: ListScheduledOrdersHandler;
   readonly listActiveRestaurantOrders: ListActiveRestaurantOrdersHandler;
 }
 
@@ -173,7 +180,8 @@ export const registerRestaurantOrder = (
         new RepositoryAcceptanceFactsReader({ restaurants, menus }),
     ).singleton(),
     acceptanceConditions: asFunction(
-      () => new UnconstrainedAcceptanceConditions(),
+      ({ restaurants }: Cradle) =>
+        new OpeningHoursAcceptanceConditions(restaurants),
     ).singleton(),
     readyTimeEstimator: asFunction(
       ({ restaurantWaitTimes, waitTimePolicy }: Cradle) =>
@@ -212,6 +220,16 @@ export const registerRestaurantOrder = (
         }),
         cradle.domainMetrics,
         cancellationRejection,
+      ),
+    ).singleton(),
+    queueRestaurantOrder: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
+        new QueueRestaurantOrderHandler({
+          accessControl: cradle.kitchenAccessControl,
+          restaurantOrders: cradle.restaurantOrders,
+          clock: cradle.clock,
+        }),
+        cradle.domainMetrics,
       ),
     ).singleton(),
     acceptRestaurantOrder: asFunction((cradle: Cradle) =>
@@ -314,6 +332,13 @@ export const registerRestaurantOrder = (
     listIncomingOrders: asFunction(
       ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
         new ListIncomingOrdersHandler({
+          accessControl: kitchenAccessControl,
+          reader: kitchenBoard,
+        }),
+    ).singleton(),
+    listScheduledOrders: asFunction(
+      ({ kitchenBoard, kitchenAccessControl }: Cradle) =>
+        new ListScheduledOrdersHandler({
           accessControl: kitchenAccessControl,
           reader: kitchenBoard,
         }),

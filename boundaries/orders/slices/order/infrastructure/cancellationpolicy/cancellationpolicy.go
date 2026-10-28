@@ -1,6 +1,8 @@
-// Package cancellationpolicy is the production CancellationPolicy of orders:
-// the window opens when the Order is placed and lasts a configured duration.
-// The duration is a placeholder until the product rule is agreed.
+// Package cancellationpolicy is the production CancellationPolicy of orders
+// (FR-462): the window opens when the Order is placed; an ASAP Order keeps it
+// open for a configured duration (a placeholder until the product rule is
+// agreed), a Scheduled Order until its Delivery Window starts minus the
+// configured cutoff.
 package cancellationpolicy
 
 import (
@@ -15,23 +17,34 @@ import (
 )
 
 type Fixed struct {
-	window time.Duration
+	window          time.Duration
+	scheduledCutoff time.Duration
 }
 
-func NewFixed(window time.Duration) (Fixed, error) {
+// NewFixed takes CANCELLATION__WINDOW and CANCELLATION__SCHEDULED_CUTOFF; both
+// are positive.
+func NewFixed(window, scheduledCutoff time.Duration) (Fixed, error) {
 	if window <= 0 {
 		return Fixed{}, fmt.Errorf("cancellation window must be positive, got %s", window)
 	}
-	return Fixed{window: window}, nil
+	if scheduledCutoff <= 0 {
+		return Fixed{}, fmt.Errorf("cancellation scheduled cutoff must be positive, got %s", scheduledCutoff)
+	}
+	return Fixed{window: window, scheduledCutoff: scheduledCutoff}, nil
 }
 
-func (p Fixed) Window(_ context.Context, placedAt time.Time) (order.CancellationWindow, error) {
+// Window is computed from the Order data only, so Get Order shows it without
+// Temporal: a Scheduled Order closes it at window_start − scheduled cutoff.
+func (p Fixed) Window(_ context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error) {
+	if !delivery.IsZero() {
+		return order.CancellationWindow{OpensAt: placedAt, ClosesAt: delivery.Start().Add(-p.scheduledCutoff)}, nil
+	}
 	return order.CancellationWindow{OpensAt: placedAt, ClosesAt: placedAt.Add(p.window)}, nil
 }
 
 // Policy is the port the decorator wraps.
 type Policy interface {
-	Window(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error)
+	Window(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error)
 }
 
 // Observed reports a failing policy on the log and on the current span. Get
@@ -46,8 +59,8 @@ func Observe(next Policy, logger *slog.Logger) Observed {
 	return Observed{next: next, logger: logger}
 }
 
-func (o Observed) Window(ctx context.Context, placedAt time.Time) (order.CancellationWindow, error) {
-	window, err := o.next.Window(ctx, placedAt)
+func (o Observed) Window(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error) {
+	window, err := o.next.Window(ctx, placedAt, delivery)
 	if err != nil {
 		trace.SpanFromContext(ctx).RecordError(err)
 		o.logger.WarnContext(ctx, "cancellation window is unavailable", slog.Any("error", err))

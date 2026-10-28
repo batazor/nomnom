@@ -141,9 +141,18 @@ func (p *Process) onAccepted(at time.Time) string {
 		return "already accepted"
 	}
 	p.accepted = true
+	if p.schedule != nil {
+		// The kitchen accepted a Scheduled Order hours ahead: Preparation
+		// counts from QueueRestaurantOrder (FR-416).
+		return ""
+	}
+	p.armPreparation(at)
+	return ""
+}
+
+func (p *Process) armPreparation(at time.Time) {
 	p.preparationDeadline = at.Add(p.policy.PreparationTimeout)
 	p.preparationLimit = p.preparationDeadline.Add(p.policy.MaxPreparationExtension)
-	return ""
 }
 
 func (p *Process) onRejected() string {
@@ -166,6 +175,8 @@ func (p *Process) onPreparationDelayed(expectedReadyAt time.Time) string {
 	switch {
 	case !p.accepted || p.ready:
 		return "not preparing"
+	case p.schedule != nil && !p.schedule.queued:
+		return "not queued"
 	case !expectedReadyAt.After(p.preparationDeadline):
 		return "no extension"
 	}

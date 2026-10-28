@@ -41,7 +41,7 @@ import { RejectOrderHandler } from "../slices/restaurantorder/applications/rejec
 import { ReportPreparationDelayHandler } from "../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
 import { StartPreparationHandler } from "../slices/restaurantorder/applications/start-preparation/start-preparation.ts";
-import { UnconstrainedAcceptanceConditions } from "../slices/restaurantorder/infrastructure/acceptance/mvp.ts";
+import { OpeningHoursAcceptanceConditions } from "../slices/restaurantorder/infrastructure/acceptance/opening-hours.ts";
 import { WaitTimeReadyTimeEstimator } from "../slices/restaurantorder/infrastructure/acceptance/wait-time.ts";
 import { restaurantOrderEventMapper } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import { PriorityKitchenQueueOrdering } from "../slices/restaurantorder/infrastructure/kitchen-queue/priority.ts";
@@ -60,7 +60,7 @@ import {
   type RestaurantsServiceUnderTest,
 } from "./support/grpc.ts";
 import { TestKitchenAccessControl } from "./support/kitchen.ts";
-import { testWaitTimePolicy } from "./support/restaurants.ts";
+import { ALWAYS_OPEN, testWaitTimePolicy } from "./support/restaurants.ts";
 
 // Kitchen command RPCs composed as in cmd/restaurants/main.ts (MongoDB Unit of
 // Work, DatabaseOutbox with the Integration Event mapper) against a replica set:
@@ -112,9 +112,11 @@ describe("kitchen command RPCs over MongoDB", () => {
       name: "Pho House",
       ownerId: "owner",
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
       registeredAt: clock.now(),
     });
     restaurant.open(clock.now());
+    restaurant.setOpeningHours(ALWAYS_OPEN);
     await restaurants.save(restaurant);
     const menu = Menu.create({
       id: `m-${randomUUID()}`,
@@ -187,6 +189,14 @@ describe("kitchen command RPCs over MongoDB", () => {
       updateMenuItem: unused,
       setMenuItemAvailability: unused,
       getSimulator: { execute: () => Promise.reject(new Error("unused")) },
+      setOpeningHours: unused,
+      setScheduledOrderSettings: unused,
+      queueRestaurantOrder: unused,
+      listScheduledSlots: unused,
+      reserveScheduledSlot: unused,
+      confirmScheduledSlot: unused,
+      releaseScheduledSlot: unused,
+      listScheduledOrders: unused,
       setSimulatorEnabled: {
         execute: () => Promise.reject(new Error("unused")),
       },
@@ -208,7 +218,7 @@ describe("kitchen command RPCs over MongoDB", () => {
       acceptRestaurantOrder: new AcceptOrderHandler({
         ...commands,
         facts: new RepositoryAcceptanceFactsReader({ restaurants, menus }),
-        conditions: new UnconstrainedAcceptanceConditions(),
+        conditions: new OpeningHoursAcceptanceConditions(restaurants),
         readyTimeEstimator: new WaitTimeReadyTimeEstimator({
           store: new DatabaseRestaurantWaitTimes(
             createRestaurantCollection(database.db, unitOfWork),

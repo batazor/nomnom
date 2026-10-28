@@ -21,6 +21,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/observability"
+	"nomnom/orders/slices/order/infrastructure/scheduledslots"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 	"nomnom/orders/slices/order/infrastructure/system"
 )
@@ -46,7 +47,7 @@ var (
 	TelemetrySet = wire.NewSet(observability.UseCases)
 	// APISet — command и query use cases cmd/orders и их порты, кроме Workflow:
 	// Temporal client выбирает composition root.
-	APISet = wire.NewSet(NewAuthorizer, NewCancellationPolicy, NewCatalog, NewClock, NewOrderIDs,
+	APISet = wire.NewSet(NewAuthorizer, NewCancellationPolicy, NewCatalog, NewSlotReservations, NewClock, NewOrderIDs,
 		wire.Struct(new(Dependencies), "*"), NewModule)
 	// ConsumerSet — handlers orders-consumer без Notifier workflow: его Temporal
 	// client открывает KafkaConsumer.Start.
@@ -66,7 +67,7 @@ type CancellationPolicy = orderdetails.CancellationPolicy
 // NewCancellationPolicy строит production-политику из конфигурации; тестовые
 // тестовая fake.AlwaysOpen сюда не попадает (FR-462).
 func NewCancellationPolicy(cfg config.CancellationConfig) (CancellationPolicy, error) {
-	policy, err := cancellationpolicy.NewFixed(cfg.Window)
+	policy, err := cancellationpolicy.NewFixed(cfg.Window, cfg.ScheduledCutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +98,18 @@ func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityCo
 	}
 	adapter := catalog.New(conn, catalog.Limits{MinimumTotal: minimum, MaximumTotal: maximum}, limits.Timeout)
 	return adapter, func() { _ = conn.Close() }, nil
+}
+
+// NewSlotReservations — резервация окна запланированного заказа Place Order:
+// ReserveScheduledSlot restaurants через internal gateway от service identity
+// orders (projected token nomnom.restaurants из IDENTITY__TOKEN_DIR); deadline —
+// CATALOG__TIMEOUT, как у чтений каталога до транзакции.
+func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.IdentityConfig, catalog config.CatalogConfig) (placeorder.SlotReservations, func(), error) {
+	conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return scheduledslots.New(conn, catalog.Timeout), func() { _ = conn.Close() }, nil
 }
 
 // NewClock — системные часы use cases.

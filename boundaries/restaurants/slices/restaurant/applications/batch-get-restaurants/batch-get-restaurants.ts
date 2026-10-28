@@ -1,5 +1,10 @@
 import { batchIds } from "../../../../pkg/application/batch.ts";
-import type { CatalogRestaurantView } from "../restaurant-view.ts";
+import type { Clock } from "../../../../pkg/application/clock.ts";
+import {
+  type AcceptingCatalogRestaurantView,
+  acceptanceAt,
+  type CatalogRestaurantView,
+} from "../restaurant-view.ts";
 
 export type BatchGetRestaurants = Readonly<{
   restaurantIds: readonly string[];
@@ -20,14 +25,23 @@ export interface RestaurantBatchReader {
  */
 export class BatchGetRestaurantsHandler {
   readonly #reader: RestaurantBatchReader;
+  readonly #clock: Clock;
 
-  constructor(dependencies: { reader: RestaurantBatchReader }) {
+  constructor(dependencies: { reader: RestaurantBatchReader; clock: Clock }) {
     this.#reader = dependencies.reader;
+    this.#clock = dependencies.clock;
   }
 
   async execute(
     query: BatchGetRestaurants,
-  ): Promise<readonly CatalogRestaurantView[]> {
-    return this.#reader.getMany(batchIds(query.restaurantIds));
+  ): Promise<readonly AcceptingCatalogRestaurantView[]> {
+    const now = this.#clock.now();
+    const restaurants = await this.#reader.getMany(
+      batchIds(query.restaurantIds),
+    );
+    return restaurants.map((restaurant) => ({
+      ...restaurant,
+      ...acceptanceAt(restaurant, now),
+    }));
   }
 }

@@ -22,7 +22,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-// activityNames are the 12 Activities the fulfillment worker registers.
+// activityNames are the 16 Activities the fulfillment worker registers.
 var activityNames = []string{
 	fulfillmenttemporal.ActivityAuthorizePayment,
 	fulfillmenttemporal.ActivityCapturePayment,
@@ -36,6 +36,10 @@ var activityNames = []string{
 	fulfillmenttemporal.ActivityCancelDelivery,
 	fulfillmenttemporal.ActivityCompleteOrder,
 	fulfillmenttemporal.ActivityFailOrCancelOrder,
+	fulfillmenttemporal.ActivityConfirmSlotReservation,
+	fulfillmenttemporal.ActivityPlanSchedule,
+	fulfillmenttemporal.ActivityQueueRestaurantOrder,
+	fulfillmenttemporal.ActivityReleaseSlotReservation,
 }
 
 func testConfig() config.Config {
@@ -55,7 +59,7 @@ func testConfig() config.Config {
 func newTestWorker(t *testing.T, cfg config.Config, poller *mockRunner) (*TemporalWorker, *mocks.Client, *worker.Options) {
 	t.Helper()
 	temporalClient := mocks.NewClient(t)
-	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(repositorytest.Open(t), testNeighbours(), observability.UseCases()))
+	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(repositorytest.Open(t), testNeighbours(), observability.UseCases(), cfg.ScheduledOrder))
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")

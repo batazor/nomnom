@@ -29,6 +29,9 @@ const (
 	ReasonDeliveryTimeout             = "delivery_timeout"
 	ReasonCustomerRequested           = "customer_requested"
 	ReasonOperatorDecision            = "operator_decision"
+	// ReasonSlotUnavailable: the hold of the Delivery Window expired and the
+	// window filled up before ConfirmSlotReservation (FR-682).
+	ReasonSlotUnavailable = "slot_unavailable"
 )
 
 // ReasonCodes lists every reason code the process can record on an Order.
@@ -40,6 +43,7 @@ func ReasonCodes() []string {
 		ReasonCourierAssignmentExhausted, ReasonPickupTimeout,
 		ReasonDeliveryFailed, ReasonDeliveryTimeout,
 		ReasonCustomerRequested, ReasonOperatorDecision,
+		ReasonSlotUnavailable,
 	}
 }
 
@@ -84,15 +88,28 @@ type Process struct {
 	deliveryDeadline    time.Time
 
 	failure *negative
+
+	// schedule is the scheduled route of a Scheduled Order; nil on the ASAP
+	// route.
+	schedule *schedule
 }
 
-// New starts the process with the deadlines fixed for its whole life.
+// New starts the process of an ASAP Order with the deadlines fixed for its
+// whole life.
 func New(policy Policy) *Process {
 	return &Process{
 		policy:        policy,
 		processed:     map[string]bool{},
 		cancellations: map[string]bool{},
 	}
+}
+
+// NewScheduled starts the process of a Scheduled Order: its Delivery Window is
+// held in restaurants since Place Order, so the Saga releases it (FR-682).
+func NewScheduled(policy Policy) *Process {
+	p := New(policy)
+	p.schedule = &schedule{}
+	return p
 }
 
 // Failed reports that a negative outcome is chosen and the Saga must run.

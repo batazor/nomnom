@@ -36,7 +36,7 @@ import type {
 } from "../reconcile/reconcile.ts";
 
 export const RESTAURANTS_COLLECTION = "restaurants";
-export const RESTAURANT_SCHEMA_VERSION = 3;
+export const RESTAURANT_SCHEMA_VERSION = 5;
 
 /**
  * One document per Restaurant aggregate: profile, Market (ADR 41; required
@@ -46,24 +46,35 @@ export const RESTAURANT_SCHEMA_VERSION = 3;
  * Restaurant Orders are separate collections referencing `restaurantId`.
  * `staff` may be absent in documents written before it existed (see
  * {@link StoredRestaurantSnapshot}). `waitTime` is the Wait Time Statistics
- * read model (FR-644): absent until the first accepted order, written without
+ * read model (FR-644): absent until the first queued order, written without
  * the aggregate version and kept by its saves.
  */
 export type RestaurantDocument = VersionedDocument & {
   name: string;
   ownerId: string;
   marketId: string;
+  /** Since schemaVersion 4: IANA time zone (FR-201). */
+  timeZone: string;
+  /** Since schemaVersion 4: weekly opening hours (FR-696), empty — none. */
+  openingHours: { day: number; opens: string; closes: string }[];
   isOpen: boolean;
   staff?: string[];
   authorizationRevision?: string;
   /** Since schemaVersion 3: fee of Premium Priority, absent without premium. */
   premiumFee?: { amount: string; currency: string };
+  /** Since schemaVersion 5: settings of scheduled orders (FR-672), absent — none. */
+  scheduledOrders?: {
+    slotCapacity: number;
+    openingLeadMs: number;
+    closingGraceMs: number;
+  };
   waitTime?: WaitTimeDocument;
 };
 
 export type WaitTimeDocument = {
   completed: { orderId: string; readyAt: Date; durationMs: number }[];
-  open: { orderId: string; acceptedAt: Date }[];
+  /** Since schemaVersion 5 the moment the order joined the Kitchen Queue. */
+  open: { orderId: string; queuedAt: Date }[];
   level: "NORMAL" | "ELEVATED";
   revision: number;
 };
@@ -96,10 +107,13 @@ const toSnapshot = (
   name: document.name,
   ownerId: document.ownerId,
   marketId: document.marketId,
+  timeZone: document.timeZone,
+  openingHours: document.openingHours,
   isOpen: document.isOpen,
   staff: document.staff,
   authorizationRevision: document.authorizationRevision,
   premiumFee: document.premiumFee,
+  scheduledOrders: document.scheduledOrders,
 });
 
 const toData = (restaurant: Restaurant) => {
@@ -109,6 +123,8 @@ const toData = (restaurant: Restaurant) => {
     name: snapshot.name,
     ownerId: snapshot.ownerId,
     marketId: snapshot.marketId,
+    timeZone: snapshot.timeZone,
+    openingHours: snapshot.openingHours.map((interval) => ({ ...interval })),
     isOpen: snapshot.isOpen,
     staff: [...snapshot.staff],
     authorizationRevision: snapshot.authorizationRevision,
@@ -116,6 +132,10 @@ const toData = (restaurant: Restaurant) => {
       snapshot.premiumFee === undefined
         ? undefined
         : { ...snapshot.premiumFee },
+    scheduledOrders:
+      snapshot.scheduledOrders === undefined
+        ? undefined
+        : { ...snapshot.scheduledOrders },
   };
 };
 
@@ -297,15 +317,20 @@ const toView = (document: RestaurantDocument): RestaurantView => ({
   restaurantId: document._id,
   name: document.name,
   marketId: document.marketId,
+  timeZone: document.timeZone,
+  openingHours: document.openingHours.map((interval) => ({ ...interval })),
   isOpen: document.isOpen,
   ...(document.premiumFee === undefined
     ? {}
     : { premiumFee: { ...document.premiumFee } }),
+  ...(document.scheduledOrders === undefined
+    ? {}
+    : { scheduledOrders: { ...document.scheduledOrders } }),
 });
 
 const MINUTE_MS = 60_000;
 
-/** Wait estimated at the time of the read (FR-204, FR-645). */
+/** Wait and baseline estimated at the time of the read (FR-204, FR-645). */
 export type CatalogWaitTime = Readonly<{
   policy: WaitTimePolicy;
   now: () => Date;
@@ -316,12 +341,16 @@ const toCatalogView = (
   waitTime: CatalogWaitTime,
 ): CatalogRestaurantView => {
   const statistics = toStatistics(document.waitTime);
-  const { currentMs } = waitTime.policy.estimate(statistics, waitTime.now());
+  const { baselineMs, currentMs } = waitTime.policy.estimate(
+    statistics,
+    waitTime.now(),
+  );
   return {
     ...toView(document),
     waitTime: {
       elevated: statistics.level === "ELEVATED",
       expectedWaitMinutes: Math.ceil(currentMs / MINUTE_MS),
+      baselinePreparationMs: baselineMs,
     },
   };
 };

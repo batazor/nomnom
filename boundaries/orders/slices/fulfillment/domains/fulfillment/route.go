@@ -21,6 +21,13 @@ const (
 	StepCancelDelivery             StepKind = "cancel_delivery"
 	StepCompleteOrder              StepKind = "complete_order"
 	StepFailOrCancelOrder          StepKind = "fail_or_cancel_order"
+
+	// Steps of the scheduled route (FR-682, FR-678, FR-679).
+	StepConfirmSlotReservation StepKind = "confirm_slot"
+	StepPlanSchedule           StepKind = "plan_schedule"
+	StepReplanSchedule         StepKind = "replan_schedule"
+	StepQueueRestaurantOrder   StepKind = "queue"
+	StepReleaseSlotReservation StepKind = "release_slot"
 )
 
 // Step is the next operation the process decided on.
@@ -47,9 +54,17 @@ func (p *Process) Next() (step Step, ok bool) {
 		// it: no kitchen fact can precede its step, and a declined payment
 		// leaves no Restaurant Order behind.
 		return routeStep(StepRecordPaymentAuthorization), true
+	case p.schedule != nil && !p.schedule.slotConfirmed:
+		return routeStep(StepConfirmSlotReservation), true
+	case p.schedule != nil && !p.schedule.planned:
+		return routeStep(StepPlanSchedule), true
 	case !p.restaurantRequested:
 		return routeStep(StepRequestRestaurantOrder), true
-	case p.accepted && !p.deliveryCreated:
+	case p.schedule != nil && p.accepted && p.schedule.replanDue:
+		return routeStep(StepReplanSchedule), true
+	case p.schedule != nil && p.accepted && !p.schedule.queued && p.schedule.startDue:
+		return routeStep(StepQueueRestaurantOrder), true
+	case p.accepted && !p.deliveryCreated && (p.schedule == nil || p.schedule.courierDue):
 		return routeStep(StepCreateDelivery), true
 	case p.replanDue && !p.assigned:
 		return Step{Kind: StepReplanDelivery, Key: string(StepReplanDelivery) + "_" + strconv.Itoa(p.replans+1)}, true
@@ -65,10 +80,17 @@ func (p *Process) Next() (step Step, ok bool) {
 func routeStep(kind StepKind) Step { return Step{Kind: kind, Key: string(kind)} }
 
 // Confirm records an executed step at the time it finished. Approved is the
-// business decision of a payment step; a decline is a negative outcome, other
-// steps are always approved.
+// business decision of a payment step and of ConfirmSlotReservation; a decline
+// is a negative outcome, other steps are always approved. The plan of a
+// Scheduled Order is confirmed by ConfirmPlan.
 func (p *Process) Confirm(step Step, approved bool, at time.Time) {
 	switch step.Kind {
+	case StepConfirmSlotReservation:
+		p.confirmSlot(approved)
+	case StepQueueRestaurantOrder:
+		p.queue(at)
+	case StepReleaseSlotReservation:
+		p.schedule.slotClosed = true
 	case StepAuthorizePayment:
 		if !approved {
 			p.fail(OutcomeFailure, ReasonPaymentDeclined)

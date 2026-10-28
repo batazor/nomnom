@@ -89,7 +89,17 @@ resources:
 # секцией telemetry, а не здесь. Пример:
 # env:
 #   KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
-env: {}
+env:
+  # Окна доставки запланированных заказов (FR-694): обязательны для API restaurants, без default
+  # в коде — пустое или невалидное значение останавливает старт. Ширина MUST делить 30 минут;
+  # MIN_LEAD < MAX_HORIZON. MAX_HORIZON MUST быть меньше срока жизни Authorization hold у
+  # payment provider (7 дней у карточных provider'ов), иначе запланированный заказ потребует
+  # повторной Authorization.
+  SCHEDULED_SLOT__WIDTH: 15m
+  SCHEDULED_SLOT__MIN_LEAD: 45m
+  SCHEDULED_SLOT__MAX_HORIZON: 48h
+  SCHEDULED_SLOT__HOLD_TTL: 10m
+  SCHEDULED_SLOT__ALTERNATIVES: "3"
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
 # envFrom:

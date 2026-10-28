@@ -4,7 +4,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
-import type { MenuItem, Money, Restaurant } from "./restaurants_pb.js";
+import type { DeliveryWindow, MenuItem, Money, OpeningInterval, Restaurant, ScheduledOrderSettings } from "./restaurants_pb.js";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -332,6 +332,14 @@ export declare type ReceiveOrderRequestRequest = Message<"nomnom.restaurants.v1.
    * @generated from field: nomnom.restaurants.v1.OrderPriority priority = 4;
    */
   priority: OrderPriority;
+
+  /**
+   * Set for a scheduled order (FR-683): the order is accepted into ACCEPTED
+   * and queued by QueueRestaurantOrder at its planned start.
+   *
+   * @generated from field: nomnom.restaurants.v1.OrderSchedule schedule = 5;
+   */
+  schedule?: OrderSchedule | undefined;
 };
 
 /**
@@ -339,6 +347,349 @@ export declare type ReceiveOrderRequestRequest = Message<"nomnom.restaurants.v1.
  * Use `create(ReceiveOrderRequestRequestSchema)` to create a new message.
  */
 export declare const ReceiveOrderRequestRequestSchema: GenMessage<ReceiveOrderRequestRequest>;
+
+/**
+ * Delivery window and planned readiness of a scheduled order (FR-683).
+ *
+ * @generated from message nomnom.restaurants.v1.OrderSchedule
+ */
+export declare type OrderSchedule = Message<"nomnom.restaurants.v1.OrderSchedule"> & {
+  /**
+   * @generated from field: google.protobuf.Timestamp window_start = 1;
+   */
+  windowStart?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp window_end = 2;
+   */
+  windowEnd?: Timestamp | undefined;
+
+  /**
+   * Before window_start; the expected_ready_at of the accepted order.
+   *
+   * @generated from field: google.protobuf.Timestamp planned_ready_at = 3;
+   */
+  plannedReadyAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.OrderSchedule.
+ * Use `create(OrderScheduleSchema)` to create a new message.
+ */
+export declare const OrderScheduleSchema: GenMessage<OrderSchedule>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.QueueRestaurantOrderRequest
+ */
+export declare type QueueRestaurantOrderRequest = Message<"nomnom.restaurants.v1.QueueRestaurantOrderRequest"> & {
+  /**
+   * @generated from field: string restaurant_order_id = 1;
+   */
+  restaurantOrderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.QueueRestaurantOrderRequest.
+ * Use `create(QueueRestaurantOrderRequestSchema)` to create a new message.
+ */
+export declare const QueueRestaurantOrderRequestSchema: GenMessage<QueueRestaurantOrderRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.QueueRestaurantOrderResponse
+ */
+export declare type QueueRestaurantOrderResponse = Message<"nomnom.restaurants.v1.QueueRestaurantOrderResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.QueueRestaurantOrderResponse.
+ * Use `create(QueueRestaurantOrderResponseSchema)` to create a new message.
+ */
+export declare const QueueRestaurantOrderResponseSchema: GenMessage<QueueRestaurantOrderResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListScheduledSlotsRequest
+ */
+export declare type ListScheduledSlotsRequest = Message<"nomnom.restaurants.v1.ListScheduledSlotsRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListScheduledSlotsRequest.
+ * Use `create(ListScheduledSlotsRequestSchema)` to create a new message.
+ */
+export declare const ListScheduledSlotsRequestSchema: GenMessage<ListScheduledSlotsRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListScheduledSlotsResponse
+ */
+export declare type ListScheduledSlotsResponse = Message<"nomnom.restaurants.v1.ListScheduledSlotsResponse"> & {
+  /**
+   * By start; empty for a restaurant without settings or not accepting now.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.ScheduledSlot slots = 1;
+   */
+  slots: ScheduledSlot[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListScheduledSlotsResponse.
+ * Use `create(ListScheduledSlotsResponseSchema)` to create a new message.
+ */
+export declare const ListScheduledSlotsResponseSchema: GenMessage<ListScheduledSlotsResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ScheduledSlot
+ */
+export declare type ScheduledSlot = Message<"nomnom.restaurants.v1.ScheduledSlot"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.DeliveryWindow window = 1;
+   */
+  window?: DeliveryWindow | undefined;
+
+  /**
+   * False when the active reservations reach the capacity.
+   *
+   * @generated from field: bool available = 2;
+   */
+  available: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ScheduledSlot.
+ * Use `create(ScheduledSlotSchema)` to create a new message.
+ */
+export declare const ScheduledSlotSchema: GenMessage<ScheduledSlot>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReserveScheduledSlotRequest
+ */
+export declare type ReserveScheduledSlotRequest = Message<"nomnom.restaurants.v1.ReserveScheduledSlotRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp window_start = 2;
+   */
+  windowStart?: Timestamp | undefined;
+
+  /**
+   * Pre-generated id of the Order; the idempotency key of the reservation.
+   *
+   * @generated from field: string order_id = 3;
+   */
+  orderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReserveScheduledSlotRequest.
+ * Use `create(ReserveScheduledSlotRequestSchema)` to create a new message.
+ */
+export declare const ReserveScheduledSlotRequestSchema: GenMessage<ReserveScheduledSlotRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReserveScheduledSlotResponse
+ */
+export declare type ReserveScheduledSlotResponse = Message<"nomnom.restaurants.v1.ReserveScheduledSlotResponse"> & {
+  /**
+   * @generated from oneof nomnom.restaurants.v1.ReserveScheduledSlotResponse.result
+   */
+  result: {
+    /**
+     * Held until confirmed or expired (SCHEDULED_SLOT__HOLD_TTL).
+     *
+     * @generated from field: nomnom.restaurants.v1.DeliveryWindow reserved = 1;
+     */
+    value: DeliveryWindow;
+    case: "reserved";
+  } | {
+    /**
+     * @generated from field: nomnom.restaurants.v1.SlotUnavailable slot_unavailable = 2;
+     */
+    value: SlotUnavailable;
+    case: "slotUnavailable";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReserveScheduledSlotResponse.
+ * Use `create(ReserveScheduledSlotResponseSchema)` to create a new message.
+ */
+export declare const ReserveScheduledSlotResponseSchema: GenMessage<ReserveScheduledSlotResponse>;
+
+/**
+ * The window is full; the nearest available windows, at most
+ * SCHEDULED_SLOT__ALTERNATIVES.
+ *
+ * @generated from message nomnom.restaurants.v1.SlotUnavailable
+ */
+export declare type SlotUnavailable = Message<"nomnom.restaurants.v1.SlotUnavailable"> & {
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.DeliveryWindow alternatives = 1;
+   */
+  alternatives: DeliveryWindow[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SlotUnavailable.
+ * Use `create(SlotUnavailableSchema)` to create a new message.
+ */
+export declare const SlotUnavailableSchema: GenMessage<SlotUnavailable>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ConfirmScheduledSlotRequest
+ */
+export declare type ConfirmScheduledSlotRequest = Message<"nomnom.restaurants.v1.ConfirmScheduledSlotRequest"> & {
+  /**
+   * @generated from field: string order_id = 1;
+   */
+  orderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ConfirmScheduledSlotRequest.
+ * Use `create(ConfirmScheduledSlotRequestSchema)` to create a new message.
+ */
+export declare const ConfirmScheduledSlotRequestSchema: GenMessage<ConfirmScheduledSlotRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ConfirmScheduledSlotResponse
+ */
+export declare type ConfirmScheduledSlotResponse = Message<"nomnom.restaurants.v1.ConfirmScheduledSlotResponse"> & {
+  /**
+   * @generated from oneof nomnom.restaurants.v1.ConfirmScheduledSlotResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: nomnom.restaurants.v1.DeliveryWindow confirmed = 1;
+     */
+    value: DeliveryWindow;
+    case: "confirmed";
+  } | {
+    /**
+     * The hold expired and the window filled up in the meantime.
+     *
+     * @generated from field: nomnom.restaurants.v1.SlotUnavailable slot_unavailable = 2;
+     */
+    value: SlotUnavailable;
+    case: "slotUnavailable";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ConfirmScheduledSlotResponse.
+ * Use `create(ConfirmScheduledSlotResponseSchema)` to create a new message.
+ */
+export declare const ConfirmScheduledSlotResponseSchema: GenMessage<ConfirmScheduledSlotResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReleaseScheduledSlotRequest
+ */
+export declare type ReleaseScheduledSlotRequest = Message<"nomnom.restaurants.v1.ReleaseScheduledSlotRequest"> & {
+  /**
+   * @generated from field: string order_id = 1;
+   */
+  orderId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReleaseScheduledSlotRequest.
+ * Use `create(ReleaseScheduledSlotRequestSchema)` to create a new message.
+ */
+export declare const ReleaseScheduledSlotRequestSchema: GenMessage<ReleaseScheduledSlotRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ReleaseScheduledSlotResponse
+ */
+export declare type ReleaseScheduledSlotResponse = Message<"nomnom.restaurants.v1.ReleaseScheduledSlotResponse"> & {
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ReleaseScheduledSlotResponse.
+ * Use `create(ReleaseScheduledSlotResponseSchema)` to create a new message.
+ */
+export declare const ReleaseScheduledSlotResponseSchema: GenMessage<ReleaseScheduledSlotResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListScheduledOrdersRequest
+ */
+export declare type ListScheduledOrdersRequest = Message<"nomnom.restaurants.v1.ListScheduledOrdersRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListScheduledOrdersRequest.
+ * Use `create(ListScheduledOrdersRequestSchema)` to create a new message.
+ */
+export declare const ListScheduledOrdersRequestSchema: GenMessage<ListScheduledOrdersRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ListScheduledOrdersResponse
+ */
+export declare type ListScheduledOrdersResponse = Message<"nomnom.restaurants.v1.ListScheduledOrdersResponse"> & {
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.ScheduledRestaurantOrder orders = 1;
+   */
+  orders: ScheduledRestaurantOrder[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ListScheduledOrdersResponse.
+ * Use `create(ListScheduledOrdersResponseSchema)` to create a new message.
+ */
+export declare const ListScheduledOrdersResponseSchema: GenMessage<ListScheduledOrdersResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.ScheduledRestaurantOrder
+ */
+export declare type ScheduledRestaurantOrder = Message<"nomnom.restaurants.v1.ScheduledRestaurantOrder"> & {
+  /**
+   * @generated from field: string restaurant_order_id = 1;
+   */
+  restaurantOrderId: string;
+
+  /**
+   * @generated from field: string order_id = 2;
+   */
+  orderId: string;
+
+  /**
+   * @generated from field: repeated nomnom.restaurants.v1.OrderRequestItem items = 3;
+   */
+  items: OrderRequestItem[];
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.OrderSchedule schedule = 4;
+   */
+  schedule?: OrderSchedule | undefined;
+
+  /**
+   * @generated from field: nomnom.restaurants.v1.OrderPriority priority = 5;
+   */
+  priority: OrderPriority;
+
+  /**
+   * @generated from field: int64 version = 6;
+   */
+  version: bigint;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.ScheduledRestaurantOrder.
+ * Use `create(ScheduledRestaurantOrderSchema)` to create a new message.
+ */
+export declare const ScheduledRestaurantOrderSchema: GenMessage<ScheduledRestaurantOrder>;
 
 /**
  * @generated from message nomnom.restaurants.v1.ReceiveOrderRequestResponse
@@ -469,6 +820,13 @@ export declare type RestaurantOrder = Message<"nomnom.restaurants.v1.RestaurantO
    * @generated from field: nomnom.restaurants.v1.OrderPriority priority = 8;
    */
   priority: OrderPriority;
+
+  /**
+   * Set for a scheduled order (FR-683).
+   *
+   * @generated from field: nomnom.restaurants.v1.OrderSchedule schedule = 9;
+   */
+  schedule?: OrderSchedule | undefined;
 };
 
 /**
@@ -1023,6 +1381,13 @@ export declare type RegisterRestaurantRequest = Message<"nomnom.restaurants.v1.R
    * @generated from field: string market_id = 4;
    */
   marketId: string;
+
+  /**
+   * Required (FR-201): IANA time zone of the new Restaurant, immutable.
+   *
+   * @generated from field: string time_zone = 5;
+   */
+  timeZone: string;
 };
 
 /**
@@ -1115,6 +1480,113 @@ export declare type UpdateRestaurantResponse = Message<"nomnom.restaurants.v1.Up
  * Use `create(UpdateRestaurantResponseSchema)` to create a new message.
  */
 export declare const UpdateRestaurantResponseSchema: GenMessage<UpdateRestaurantResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetOpeningHoursRequest
+ */
+export declare type SetOpeningHoursRequest = Message<"nomnom.restaurants.v1.SetOpeningHoursRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * The whole weekly schedule; empty removes every interval.
+   *
+   * @generated from field: repeated nomnom.restaurants.v1.OpeningInterval opening_hours = 2;
+   */
+  openingHours: OpeningInterval[];
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetOpeningHoursRequest.
+ * Use `create(SetOpeningHoursRequestSchema)` to create a new message.
+ */
+export declare const SetOpeningHoursRequestSchema: GenMessage<SetOpeningHoursRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetOpeningHoursResponse
+ */
+export declare type SetOpeningHoursResponse = Message<"nomnom.restaurants.v1.SetOpeningHoursResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Restaurant restaurant = 1;
+   */
+  restaurant?: Restaurant | undefined;
+
+  /**
+   * @generated from field: int64 version = 2;
+   */
+  version: bigint;
+
+  /**
+   * False when the restaurant already had this schedule.
+   *
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetOpeningHoursResponse.
+ * Use `create(SetOpeningHoursResponseSchema)` to create a new message.
+ */
+export declare const SetOpeningHoursResponseSchema: GenMessage<SetOpeningHoursResponse>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetScheduledOrderSettingsRequest
+ */
+export declare type SetScheduledOrderSettingsRequest = Message<"nomnom.restaurants.v1.SetScheduledOrderSettingsRequest"> & {
+  /**
+   * @generated from field: string restaurant_id = 1;
+   */
+  restaurantId: string;
+
+  /**
+   * Settings to set; at most one of settings and clear.
+   *
+   * @generated from field: nomnom.restaurants.v1.ScheduledOrderSettings settings = 2;
+   */
+  settings?: ScheduledOrderSettings | undefined;
+
+  /**
+   * The restaurant stops taking scheduled orders.
+   *
+   * @generated from field: bool clear = 3;
+   */
+  clear: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetScheduledOrderSettingsRequest.
+ * Use `create(SetScheduledOrderSettingsRequestSchema)` to create a new message.
+ */
+export declare const SetScheduledOrderSettingsRequestSchema: GenMessage<SetScheduledOrderSettingsRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.SetScheduledOrderSettingsResponse
+ */
+export declare type SetScheduledOrderSettingsResponse = Message<"nomnom.restaurants.v1.SetScheduledOrderSettingsResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.Restaurant restaurant = 1;
+   */
+  restaurant?: Restaurant | undefined;
+
+  /**
+   * @generated from field: int64 version = 2;
+   */
+  version: bigint;
+
+  /**
+   * @generated from field: bool changed = 3;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.SetScheduledOrderSettingsResponse.
+ * Use `create(SetScheduledOrderSettingsResponseSchema)` to create a new message.
+ */
+export declare const SetScheduledOrderSettingsResponseSchema: GenMessage<SetScheduledOrderSettingsResponse>;
 
 /**
  * @generated from message nomnom.restaurants.v1.AssignStaffRequest
@@ -2060,6 +2532,61 @@ export declare const RestaurantsService: GenService<{
     output: typeof CancelRestaurantOrderResponseSchema;
   },
   /**
+   * Moves an ACCEPTED scheduled order to the Kitchen Queue at its planned
+   * start (FR-224); service identity of orders only. A repeat for a QUEUED
+   * order succeeds without changes.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.QueueRestaurantOrder
+   */
+  queueRestaurantOrder: {
+    methodKind: "unary";
+    input: typeof QueueRestaurantOrderRequestSchema;
+    output: typeof QueueRestaurantOrderResponseSchema;
+  },
+  /**
+   * Delivery windows of scheduled orders (FR-673..FR-675, FR-695, FR-703).
+   * ListScheduledSlots is public, like GetRestaurant. Reserve, Confirm and
+   * Release are called by the service identity of orders.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ListScheduledSlots
+   */
+  listScheduledSlots: {
+    methodKind: "unary";
+    input: typeof ListScheduledSlotsRequestSchema;
+    output: typeof ListScheduledSlotsResponseSchema;
+  },
+  /**
+   * A full window is a business result (slot_unavailable with alternatives);
+   * a window off the grid, before now + MIN_LEAD, beyond the horizon or
+   * outside the schedule is INVALID_ARGUMENT; a restaurant without settings
+   * or not accepting orders now is FAILED_PRECONDITION
+   * SCHEDULED_ORDERS_UNAVAILABLE. A repeat with the same order_id returns the
+   * same reservation.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ReserveScheduledSlot
+   */
+  reserveScheduledSlot: {
+    methodKind: "unary";
+    input: typeof ReserveScheduledSlotRequestSchema;
+    output: typeof ReserveScheduledSlotResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ConfirmScheduledSlot
+   */
+  confirmScheduledSlot: {
+    methodKind: "unary";
+    input: typeof ConfirmScheduledSlotRequestSchema;
+    output: typeof ConfirmScheduledSlotResponseSchema;
+  },
+  /**
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ReleaseScheduledSlot
+   */
+  releaseScheduledSlot: {
+    methodKind: "unary";
+    input: typeof ReleaseScheduledSlotRequestSchema;
+    output: typeof ReleaseScheduledSlotResponseSchema;
+  },
+  /**
    * Kitchen commands of restaurant staff over one Restaurant Order addressed by
    * restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
    * an order of another restaurant is NOT_FOUND, a forbidden transition is
@@ -2157,6 +2684,17 @@ export declare const RestaurantsService: GenService<{
     output: typeof ListIncomingOrdersResponseSchema;
   },
   /**
+   * Accepted scheduled orders waiting for their start, by planned_ready_at
+   * (FR-684); requires restaurant#operate_kitchen.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.ListScheduledOrders
+   */
+  listScheduledOrders: {
+    methodKind: "unary";
+    input: typeof ListScheduledOrdersRequestSchema;
+    output: typeof ListScheduledOrdersResponseSchema;
+  },
+  /**
    * Active orders of a restaurant's kitchen board: Restaurant Orders in
    * RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
    * ascending received_at, then by id. Requires restaurant#operate_kitchen.
@@ -2191,6 +2729,29 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof UpdateRestaurantRequestSchema;
     output: typeof UpdateRestaurantResponseSchema;
+  },
+  /**
+   * Replaces the weekly opening hours (FR-696, FR-697); requires
+   * restaurant#manage. Overlapping or empty intervals are INVALID_ARGUMENT.
+   * Publishes no business fact.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.SetOpeningHours
+   */
+  setOpeningHours: {
+    methodKind: "unary";
+    input: typeof SetOpeningHoursRequestSchema;
+    output: typeof SetOpeningHoursResponseSchema;
+  },
+  /**
+   * Settings of scheduled orders (FR-672); requires restaurant#manage.
+   * Publishes no business fact.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.SetScheduledOrderSettings
+   */
+  setScheduledOrderSettings: {
+    methodKind: "unary";
+    input: typeof SetScheduledOrderSettingsRequestSchema;
+    output: typeof SetScheduledOrderSettingsResponseSchema;
   },
   /**
    * @generated from rpc nomnom.restaurants.v1.RestaurantsService.AssignStaff

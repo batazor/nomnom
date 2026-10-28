@@ -122,12 +122,20 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 	for _, item := range request.GetItems() {
 		items = append(items, placeorder.ItemInput{MenuItemID: order.MenuItemID(item.GetMenuItemId()), Quantity: int(item.GetQuantity())})
 	}
+	var windowStart time.Time
+	if request.GetDeliveryWindowStart() != nil {
+		if err := request.GetDeliveryWindowStart().CheckValid(); err != nil {
+			return nil, transportError(application.InvalidInput("delivery_window_start", "is not a valid timestamp"))
+		}
+		windowStart = request.GetDeliveryWindowStart().AsTime()
+	}
 	result, err := s.module.PlaceOrder.Handle(ctx, placeorder.Input{
-		Subject:        subject,
-		IdempotencyKey: request.GetIdempotencyKey(),
-		RestaurantID:   order.RestaurantID(request.GetRestaurantId()),
-		Items:          items,
-		Priority:       placementPriority(request.GetPriority()),
+		Subject:             subject,
+		IdempotencyKey:      request.GetIdempotencyKey(),
+		RestaurantID:        order.RestaurantID(request.GetRestaurantId()),
+		Items:               items,
+		Priority:            placementPriority(request.GetPriority()),
+		DeliveryWindowStart: windowStart,
 	})
 	if err != nil {
 		return nil, transportError(err)
@@ -231,6 +239,12 @@ func orderView(view orderdetails.View) *ordersv1.Order {
 	result.ExpectedReadyAt = expectedTime(view.Expected.ReadyAt)
 	result.ExpectedPickupAt = expectedTime(view.Expected.PickupAt)
 	result.ExpectedDeliveredAt = expectedTime(view.Expected.DeliveredAt)
+	if !view.DeliveryWindow.IsZero() {
+		result.DeliveryWindow = &ordersv1.DeliveryWindow{
+			Start: timestamppb.New(view.DeliveryWindow.Start()),
+			End:   timestamppb.New(view.DeliveryWindow.End()),
+		}
+	}
 	if view.CancellationWindow != nil {
 		result.CancellationWindow = &ordersv1.CancellationWindow{
 			OpensAt:  timestamppb.New(view.CancellationWindow.OpensAt),

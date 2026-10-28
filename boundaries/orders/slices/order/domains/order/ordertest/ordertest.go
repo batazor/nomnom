@@ -44,6 +44,14 @@ func WithPremium(t testing.TB, fee string) Option {
 	return func(snapshot *order.Snapshot) { snapshot.Service = service }
 }
 
+// WithDeliveryWindow makes the fixture a Scheduled Order (FR-681).
+func WithDeliveryWindow(t testing.TB, start, end time.Time) Option {
+	t.Helper()
+	window, err := order.NewDeliveryWindow(start, end)
+	require.NoError(t, err)
+	return func(snapshot *order.Snapshot) { snapshot.DeliveryWindow = window }
+}
+
 func WithExpectedTimes(expected order.ExpectedTimes) Option {
 	return func(snapshot *order.Snapshot) { snapshot.Expected = expected }
 }

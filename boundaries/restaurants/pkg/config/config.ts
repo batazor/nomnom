@@ -27,6 +27,7 @@ export * as database from "./database.ts";
 export * from "./env.ts";
 export * from "./identity.ts";
 export * from "./kitchen.ts";
+export * from "./scheduled-slot.ts";
 export * from "./simulator.ts";
 export * from "./wait-time.ts";
 export * from "./workers.ts";

@@ -180,7 +180,7 @@ func registerCell(id string, port int32) *controlplanev1.RegisterCellRequest {
 func TestTopologyThroughTheAPI(t *testing.T) {
 	c := newCaller(t)
 
-	_, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", CellId: "cell-1"})
+	_, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", TimeZone: "Europe/Berlin", CellId: "cell-1"})
 	requireStatus(t, err, codes.FailedPrecondition, "CELL_NOT_FOUND")
 
 	registered, err := c.client.RegisterCell(c.operator(), registerCell("cell-1", 3010))
@@ -201,24 +201,31 @@ func TestTopologyThroughTheAPI(t *testing.T) {
 	// The routes are applied after the write; a failed apply keeps the Market
 	// and a repeat applies them.
 	c.gateway.down = true
-	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: " Berlin ", Currency: "EUR", CellId: "cell-1"})
+	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: " Berlin ", Currency: "EUR", TimeZone: "Europe/Berlin", CellId: "cell-1"})
 	requireStatus(t, err, codes.Unavailable, "ROUTES_UNAVAILABLE")
 	assert.Empty(t, c.gateway.applied)
 	c.gateway.down = false
-	again, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", CellId: "cell-1"})
+	again, err := c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", TimeZone: "Europe/Berlin", CellId: "cell-1"})
 	require.NoError(t, err)
 	assert.False(t, again.GetCreated(), "the Market stayed in the registry")
 	assert.Equal(t, "Berlin", again.GetMarket().GetName())
 	require.Len(t, c.gateway.applied, 1)
 	assert.Equal(t, "berlin", string(c.gateway.applied[0].Market.ID()))
 	assert.Equal(t, "nomnom-bff/bff:3010", c.gateway.applied[0].Router.String())
-	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "USD", CellId: "cell-1"})
+	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "USD", TimeZone: "Europe/Berlin", CellId: "cell-1"})
 	requireStatus(t, err, codes.AlreadyExists, "MARKET_ALREADY_EXISTS")
+	_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "berlin", Name: "Berlin", Currency: "EUR", TimeZone: "Europe/Paris", CellId: "cell-1"})
+	requireStatus(t, err, codes.AlreadyExists, "MARKET_ALREADY_EXISTS")
+	for _, timeZone := range []string{"Mars/Olympus", ""} {
+		_, err = c.client.CreateMarket(c.operator(), &controlplanev1.CreateMarketRequest{MarketId: "hamburg", Name: "Hamburg", Currency: "EUR", TimeZone: timeZone, CellId: "cell-1"})
+		requireStatus(t, err, codes.InvalidArgument, "INVALID_ARGUMENT")
+	}
 
 	markets, err := c.client.ListMarkets(c.operator(), &controlplanev1.ListMarketsRequest{})
 	require.NoError(t, err)
 	require.Len(t, markets.GetMarkets(), 1)
 	assert.Equal(t, "EUR", markets.GetMarkets()[0].GetCurrency())
+	assert.Equal(t, "Europe/Berlin", markets.GetMarkets()[0].GetTimeZone())
 
 	// BFF without an operator may neither read nor write; an unauthenticated
 	// caller gets nothing.

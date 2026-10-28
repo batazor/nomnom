@@ -17,6 +17,8 @@ type Config struct {
 	Kafka       KafkaConfig       `mapstructure:"kafka"`
 	Temporal    TemporalConfig    `mapstructure:"temporal"`
 	Fulfillment FulfillmentConfig `mapstructure:"fulfillment"`
+	// ScheduledOrder is the plan of a Scheduled Order (FR-677, FR-693).
+	ScheduledOrder ScheduledOrderConfig `mapstructure:"scheduled_order"`
 
 	Cancellation CancellationConfig `mapstructure:"cancellation"`
 	Catalog      CatalogConfig      `mapstructure:"catalog"`
@@ -49,6 +51,9 @@ func Load() (Config, error) {
 	}
 	if err := configureFulfillment(loader); err != nil {
 		return Config{}, fmt.Errorf("configure fulfillment: %w", err)
+	}
+	if err := configureScheduledOrder(loader); err != nil {
+		return Config{}, fmt.Errorf("configure scheduled order: %w", err)
 	}
 	if err := configureCancellation(loader); err != nil {
 		return Config{}, fmt.Errorf("configure cancellation: %w", err)
@@ -103,6 +108,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.Fulfillment.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.ScheduledOrder.Validate(); err != nil {
 		return Config{}, err
 	}
 	if err := cfg.Cancellation.Validate(); err != nil {

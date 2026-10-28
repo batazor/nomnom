@@ -1,5 +1,5 @@
-// Package vo holds the value objects of a Market (ADR 41): id, name and
-// currency.
+// Package vo holds the value objects of a Market (ADR 41): id, name, currency
+// and time zone.
 package vo
 
 import (
@@ -7,6 +7,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
+
+	// The IANA database is part of the binary: a time zone is valid by the
+	// release of the control plane, not by the files of the image it runs in.
+	_ "time/tzdata"
 	"unicode/utf8"
 )
 
@@ -51,4 +56,19 @@ func NewCurrency(raw string) (Currency, error) {
 		return "", fmt.Errorf("%w: currency %q must be an ISO 4217 code of three upper-case letters", ErrInvalidValue, raw)
 	}
 	return Currency(raw), nil
+}
+
+// TimeZone is the IANA time zone of a Market (Europe/Berlin): windows and
+// deadlines of its orders are shown in it. Empty, "Local" and unknown names are
+// invalid.
+type TimeZone string
+
+func NewTimeZone(raw string) (TimeZone, error) {
+	if raw == "" || raw == "Local" {
+		return "", fmt.Errorf("%w: time_zone %q must be an IANA time zone", ErrInvalidValue, raw)
+	}
+	if _, err := time.LoadLocation(raw); err != nil {
+		return "", fmt.Errorf("%w: time_zone %q must be an IANA time zone: %w", ErrInvalidValue, raw, err)
+	}
+	return TimeZone(raw), nil
 }

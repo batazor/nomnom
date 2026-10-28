@@ -103,6 +103,7 @@ func clearConfigEnvironment(t *testing.T) {
 		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr, EnvCancellationWindow,
 		EnvCatalogMinimumTotal, EnvCatalogMaximumTotal, EnvCatalogTimeout,
 		EnvSimulatorInterval, EnvSimulatorMinDelay, EnvSimulatorMaxDelay, EnvSimulatorCustomerID, EnvSimulatorMarketIDs,
+		EnvCancellationScheduledCutoff, EnvScheduledOrderPreparationBuffer, EnvScheduledOrderReplanLead,
 	} {
 		value, exists := os.LookupEnv(name)
 		require.NoError(t, os.Unsetenv(name))
@@ -114,8 +115,12 @@ func clearConfigEnvironment(t *testing.T) {
 			}
 		})
 	}
-	// The neighbours and the catalog require a gateway address.
+	// The neighbours and the catalog require a gateway address; the plan and
+	// the cancellation of a Scheduled Order have no defaults.
 	t.Setenv(EnvInternalGatewayAddr, "internal-gateway:8080")
+	t.Setenv(EnvCancellationScheduledCutoff, "60m")
+	t.Setenv(EnvScheduledOrderPreparationBuffer, "5m")
+	t.Setenv(EnvScheduledOrderReplanLead, "30m")
 }
 
 func TestLoadUsesTemporalAndFulfillmentDefaults(t *testing.T) {
@@ -242,5 +247,34 @@ func TestLoadRejectsUnusableCatalog(t *testing.T) {
 			_, err := Load()
 			require.ErrorContains(t, err, "catalog")
 		})
+	}
+}
+
+func TestLoadReadsScheduledOrderFromEnvironment(t *testing.T) {
+	clearConfigEnvironment(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, ScheduledOrderConfig{PreparationBuffer: 5 * time.Minute, ReplanLead: 30 * time.Minute}, cfg.ScheduledOrder)
+	assert.Equal(t, 60*time.Minute, cfg.Cancellation.ScheduledCutoff)
+}
+
+// AC-936: the plan parameters and the scheduled cancellation cutoff are
+// required: empty, unparsable or non-positive values stop the process.
+func TestLoadRejectsUnusableScheduledOrder(t *testing.T) {
+	for _, env := range []string{EnvScheduledOrderPreparationBuffer, EnvScheduledOrderReplanLead, EnvCancellationScheduledCutoff} {
+		for _, value := range []string{"", "0s", "-5m", "soon"} {
+			t.Run(env+"="+value, func(t *testing.T) {
+				clearConfigEnvironment(t)
+				if value == "" {
+					require.NoError(t, os.Unsetenv(env))
+				} else {
+					t.Setenv(env, value)
+				}
+
+				_, err := Load()
+				require.Error(t, err)
+			})
+		}
 	}
 }

@@ -50,6 +50,6 @@ func (g *IDs) NewOrderID(context.Context) (order.ID, error) {
 // not a product decision.
 type AlwaysOpen struct{}
 
-func (AlwaysOpen) Window(context.Context, time.Time) (order.CancellationWindow, error) {
+func (AlwaysOpen) Window(context.Context, time.Time, order.DeliveryWindow) (order.CancellationWindow, error) {
 	return order.CancellationWindow{ClosesAt: time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC)}, nil
 }

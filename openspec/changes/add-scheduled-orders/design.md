@@ -33,7 +33,7 @@
 - Интервалы работы и пояс ресторана — из change `add-restaurant-opening-hours`. Окно допустимо, если существует интервал, для которого `opens_at + openingLead ≤ window_start ≤ closes_at + closingGrace`. Между интервалами (обед, ночь) окон нет.
 - Обязательный конфиг `restaurants`: `SCHEDULED_SLOT__WIDTH`, `SCHEDULED_SLOT__MIN_LEAD`, `SCHEDULED_SLOT__MAX_HORIZON`, `SCHEDULED_SLOT__HOLD_TTL`, `SCHEDULED_SLOT__ALTERNATIVES`. Пустое или невалидное значение, ширина, не делящая 30 минут, и `MIN_LEAD ≥ MAX_HORIZON` — падение на старте. `MAX_HORIZON` MUST быть меньше срока жизни Authorization hold у provider; это ограничение записывается рядом со значением в values.
 - **List Scheduled Slots**(`restaurant_id`) — окна от первой границы сетки не раньше `now + MIN_LEAD` до `now + MAX_HORIZON`, только допустимые по расписанию, каждое с `available`. Окно недоступно, если активных резерваций не меньше ёмкости. Ресторан без настроек или не принимающий заказы сейчас — пустой список: кухня принимает запланированный заказ сразу, поэтому оформить его можно, только пока ресторан работает. Query публичный, как Get Restaurant.
-- Aggregate `ScheduleSlot` (`restaurantId`, `windowStart`) — документ на окно с резервациями и `version`. Активная резервация — `confirmed` или `held` с `expiresAt > now`. Просроченные `held` вычищаются при следующей записи этого окна; TTL-индекс только убирает пустые документы. Фоновых заданий нет.
+- Aggregate `ScheduleSlot` (`restaurantId`, `windowStart`) — документ на окно с резервациями и `version`. Активная резервация — `confirmed` или `held` с `expiresAt > now`. Просроченные `held` вычищаются при следующей записи этого окна: заказ переносится в список `lapsed` окна, чтобы Confirm нашёл своё окно и заново проверил ёмкость. TTL-индекс по `windowEnd` убирает документы прошедших окон. Фоновых заданий нет.
 - **Reserve Scheduled Slot**(`restaurant_id`, `window_start`, `order_id`) — от `service` identity `orders`:
   - окно не на сетке, раньше `now + MIN_LEAD`, позже горизонта или вне расписания — `INVALID_ARGUMENT`;
   - ресторан не принимает заказы сейчас или без настроек — `FAILED_PRECONDITION` `SCHEDULED_ORDERS_UNAVAILABLE`;
@@ -116,6 +116,11 @@ Start Next Preparation берёт голову по этому правилу б
 - **List Scheduled Orders**(`restaurant_id`) — заказы в `ACCEPTED` с окном, по `planned_ready_at`; `restaurant#operate_kitchen`.
 - Cancel Restaurant Order уже допускает `ACCEPTED` (FR-230).
 - Wait Time Statistics: длительность — `queued_at` → готов, незавершённые — заказы с `queued_at`. Для ASAP-заказов `accepted_at = queued_at` (одна UoW), поэтому их статистика не меняется. Expected Ready At ASAP по-прежнему — момент Acceptance плюс текущее ожидание.
+- Consumer статистики читает только Integration Events, а Queue Restaurant Order факта не публикует. Поэтому момент постановки в очередь несут уже опубликованные факты, поля добавляются в `events.proto` только аддитивно:
+  - `RestaurantOrderAccepted.queued_at` задан, только если заказ встал в очередь в той же UoW (заказ без окна). Такой факт открывает заказ в статистике с этим моментом; факт без `queued_at` — принятый запланированный заказ — статистику не меняет.
+  - `PreparationStarted` получает `restaurant_id` и `queued_at`. Он открывает запланированный заказ с его `queued_at`; для уже открытого заказа это no-op. Запланированный заказ идёт первым в очереди, поэтому между постановкой и стартом он почти не ждёт, и текущее ожидание он не занижает.
+  - `RestaurantOrderReady` записывает длительность от `queued_at` открытого заказа, отмена и сбой убирают его без длительности. Поле `queued_at` в Ready не нужно: момент уже в незавершённых.
+  - Хранимые незавершённые заказы migration переименовывает `acceptedAt` → `queuedAt`: до этого change все заказы вставали в очередь в UoW Acceptance. ASAP-факт, опубликованный до выкатки без `queued_at`, откроет `PreparationStarted` нового формата.
 
 ## Отмена
 

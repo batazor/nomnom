@@ -50,9 +50,17 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	temporalConfig := cfg.Temporal
-	client, cleanup4, err := NewTemporalClient(temporalConfig)
+	slotReservations, cleanup4, err := di.NewSlotReservations(internalGatewayConfig, identityConfig, catalogConfig)
 	if err != nil {
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	temporalConfig := cfg.Temporal
+	client, cleanup5, err := NewTemporalClient(temporalConfig)
+	if err != nil {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -69,6 +77,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		Authorizer: authorizer,
 		Policy:     v,
 		Catalog:    catalog,
+		Slots:      slotReservations,
 		Workflow:   workflow,
 		Clock:      clock,
 		IDs:        idGenerator,
@@ -77,8 +86,9 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	}
 	module := di.NewModule(dependencies)
 	simulatorConfig := cfg.Simulator
-	diModule, cleanup5, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, store, authorizer, module)
+	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, store, authorizer, module)
 	if err != nil {
+		cleanup5()
 		cleanup4()
 		cleanup3()
 		cleanup2()
@@ -87,6 +97,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	}
 	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
 	if err != nil {
+		cleanup6()
 		cleanup5()
 		cleanup4()
 		cleanup3()
@@ -98,6 +109,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	simulatorRunner := NewSimulatorRunner(diModule)
 	app := NewApp(serverConfig, server, module, simulatorRunner)
 	return app, func() {
+		cleanup6()
 		cleanup5()
 		cleanup4()
 		cleanup3()
@@ -123,7 +135,8 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 		return nil, nil, err
 	}
 	useCases := observability.UseCases()
-	activities := di3.NewActivities(processStore, neighbours, useCases)
+	scheduledOrderConfig := cfg.ScheduledOrder
+	activities := di3.NewActivities(processStore, neighbours, useCases, scheduledOrderConfig)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup2()
@@ -173,7 +186,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Database", "Cancellation", "Catalog", "Temporal", "Fulfillment", "InternalGateway", "Simulator"))
+		"Server", "Identity", "SpiceDB", "Database", "Cancellation", "Catalog", "Temporal", "Fulfillment", "ScheduledOrder", "InternalGateway", "Simulator"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.

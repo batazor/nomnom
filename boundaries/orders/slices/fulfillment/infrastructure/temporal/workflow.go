@@ -27,6 +27,11 @@ var activityByStep = map[fulfillment.StepKind]string{
 	fulfillment.StepCancelDelivery:             ActivityCancelDelivery,
 	fulfillment.StepCompleteOrder:              ActivityCompleteOrder,
 	fulfillment.StepFailOrCancelOrder:          ActivityFailOrCancelOrder,
+	fulfillment.StepConfirmSlotReservation:     ActivityConfirmSlotReservation,
+	fulfillment.StepPlanSchedule:               ActivityPlanSchedule,
+	fulfillment.StepReplanSchedule:             ActivityPlanSchedule,
+	fulfillment.StepQueueRestaurantOrder:       ActivityQueueRestaurantOrder,
+	fulfillment.StepReleaseSlotReservation:     ActivityReleaseSlotReservation,
 }
 
 // Workflow is the Order Fulfillment Workflow. Signal and Update handlers only
@@ -39,7 +44,7 @@ func Workflow(ctx workflow.Context, in Input) (Result, error) {
 	r := &run{
 		in:      in,
 		log:     workflow.GetLogger(ctx),
-		process: fulfillment.New(in.Policy.Policy),
+		process: newProcess(ctx, in),
 	}
 	if err := r.listen(ctx); err != nil {
 		return Result{}, err
@@ -47,10 +52,26 @@ func Workflow(ctx workflow.Context, in Input) (Result, error) {
 	return r.drive(ctx)
 }
 
+// newProcess chooses the route by the Delivery Window of the input. The
+// scheduled route exists only in histories that record ScheduledRouteChangeID;
+// an ASAP input records nothing new, so histories started before the change
+// replay unchanged.
+func newProcess(ctx workflow.Context, in Input) *fulfillment.Process {
+	if in.DeliveryWindow != nil &&
+		workflow.GetVersion(ctx, ScheduledRouteChangeID, workflow.DefaultVersion, ScheduledRouteVersion) == ScheduledRouteVersion {
+		return fulfillment.NewScheduled(in.Policy.Policy)
+	}
+	return fulfillment.New(in.Policy.Policy)
+}
+
 type run struct {
 	in      Input
 	log     log.Logger
 	process *fulfillment.Process
+
+	// restaurantOrderID is returned by RequestRestaurantOrder of a Scheduled
+	// Order and addresses QueueRestaurantOrder.
+	restaurantOrderID string
 
 	changed   bool
 	published Stage
@@ -99,24 +120,70 @@ func (r *run) drive(ctx workflow.Context) (Result, error) {
 }
 
 // perform executes a route step as its Activity and confirms it in the model
-// at the time it finished; a payment Activity returns the business decision.
+// at the time it finished; a payment Activity and ConfirmSlotReservation
+// return the business decision, PlanSchedule the plan.
 func (r *run) perform(ctx workflow.Context, step fulfillment.Step) error {
 	if step.Stage != "" {
 		if err := r.publish(ctx, step.Stage); err != nil {
 			return err
 		}
 	}
-	decision := PaymentDecision{Approved: true}
-	var result any
-	if step.Kind == fulfillment.StepAuthorizePayment || step.Kind == fulfillment.StepCapturePayment {
-		decision = PaymentDecision{}
-		result = &decision
+	input := r.stepInput(ctx, step)
+	activity := activityByStep[step.Kind]
+	switch step.Kind {
+	case fulfillment.StepAuthorizePayment, fulfillment.StepCapturePayment:
+		var decision PaymentDecision
+		if err := r.executeStep(ctx, activity, input, &decision); err != nil {
+			return err
+		}
+		r.process.Confirm(step, decision.Approved, workflow.Now(ctx))
+	case fulfillment.StepConfirmSlotReservation:
+		var decision SlotDecision
+		if err := r.executeStep(ctx, activity, input, &decision); err != nil {
+			return err
+		}
+		r.process.Confirm(step, decision.Confirmed, workflow.Now(ctx))
+	case fulfillment.StepPlanSchedule, fulfillment.StepReplanSchedule:
+		var plan Plan
+		if err := r.executeStep(ctx, activity, input, &plan); err != nil {
+			return err
+		}
+		r.process.ConfirmPlan(step, plan, workflow.Now(ctx))
+	case fulfillment.StepRequestRestaurantOrder:
+		// Only the scheduled route needs the restaurant_order_id: the ASAP
+		// route reads no result, as before the scheduled route existed.
+		var requested RestaurantOrderRequested
+		var result any
+		if r.process.Scheduled() {
+			result = &requested
+		}
+		if err := r.executeStep(ctx, activity, input, result); err != nil {
+			return err
+		}
+		r.restaurantOrderID = requested.RestaurantOrderID
+		r.process.Confirm(step, true, workflow.Now(ctx))
+	default:
+		if err := r.executeStep(ctx, activity, input, nil); err != nil {
+			return err
+		}
+		r.process.Confirm(step, true, workflow.Now(ctx))
 	}
-	if err := r.execute(ctx, activityByStep[step.Kind], step.Key, result); err != nil {
-		return err
-	}
-	r.process.Confirm(step, decision.Approved, workflow.Now(ctx))
 	return nil
+}
+
+// stepInput addresses the step by its idempotency key order:<order_id>:<key>
+// and carries the workflow data the Activity needs.
+func (r *run) stepInput(ctx workflow.Context, step fulfillment.Step) StepInput {
+	input := StepInput{OrderID: r.in.OrderID, IdempotencyKey: WorkflowID(r.in.OrderID) + ":" + step.Key}
+	switch step.Kind {
+	case fulfillment.StepCompleteOrder, fulfillment.StepRecordPaymentAuthorization:
+		input.DecidedAt = workflow.Now(ctx)
+	case fulfillment.StepRequestRestaurantOrder, fulfillment.StepReplanSchedule:
+		input.PlannedReadyAt = r.process.Plan().PlannedReadyAt
+	case fulfillment.StepQueueRestaurantOrder:
+		input.RestaurantOrderID = r.restaurantOrderID
+	}
+	return input
 }
 
 func (r *run) publish(ctx workflow.Context, stage Stage) error {
@@ -140,7 +207,7 @@ func (r *run) compensate(ctx workflow.Context) (Result, error) {
 	outcome, code := r.process.Outcome()
 	for _, step := range plan {
 		if step.Kind != fulfillment.StepFailOrCancelOrder {
-			if err := r.execute(ctx, activityByStep[step.Kind], step.Key, nil); err != nil {
+			if err := r.executeStep(ctx, activityByStep[step.Kind], r.stepInput(ctx, step), nil); err != nil {
 				return Result{}, err
 			}
 			r.process.Confirm(step, true, workflow.Now(ctx))
@@ -163,11 +230,7 @@ func (r *run) compensate(ctx workflow.Context) (Result, error) {
 	return Result{Outcome: outcome, ReasonCode: code}, nil
 }
 
-func (r *run) execute(ctx workflow.Context, activity, step string, result any) error {
-	input := StepInput{OrderID: r.in.OrderID, IdempotencyKey: WorkflowID(r.in.OrderID) + ":" + step}
-	if activity == ActivityCompleteOrder || activity == ActivityRecordPaymentAuthorization {
-		input.DecidedAt = workflow.Now(ctx)
-	}
+func (r *run) executeStep(ctx workflow.Context, activity string, input StepInput, result any) error {
 	return workflow.ExecuteActivity(r.activityContext(ctx), activity, input).Get(ctx, result)
 }
 

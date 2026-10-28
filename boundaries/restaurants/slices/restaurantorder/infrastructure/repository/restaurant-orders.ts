@@ -33,6 +33,10 @@ import type {
   ReadyOrder,
   ReadyOrdersReader,
 } from "../../applications/list-ready-orders/list-ready-orders.ts";
+import type {
+  ScheduledOrder,
+  ScheduledOrdersReader,
+} from "../../applications/list-scheduled-orders/list-scheduled-orders.ts";
 import {
   type RestaurantOrderView,
   snapshotToView,
@@ -51,7 +55,7 @@ import {
 import type { KitchenChangeNotifier } from "../integration/kitchen-changes.ts";
 
 export const RESTAURANT_ORDERS_COLLECTION = "restaurant_orders";
-export const RESTAURANT_ORDER_SCHEMA_VERSION = 5;
+export const RESTAURANT_ORDER_SCHEMA_VERSION = 6;
 
 /**
  * One document per Restaurant Order with its Preparation Items and timeline
@@ -78,6 +82,8 @@ export type RestaurantOrderDocument = VersionedDocument & {
   };
   /** Since schemaVersion 5 (FR-651); orders received before are `STANDARD`. */
   priority: OrderPriority;
+  /** Since schemaVersion 6: schedule of a scheduled order (FR-683). */
+  schedule?: { windowStart: Date; windowEnd: Date; plannedReadyAt: Date };
   /** Since schemaVersion 2; required in `PREPARING` and `ASSEMBLED`. */
   cookId?: string;
   /** Since schemaVersion 5: request_id of the Start Next Preparation. */
@@ -102,6 +108,8 @@ const toSnapshot = (
   state: document.state,
   timeline: { ...document.timeline },
   priority: document.priority,
+  schedule:
+    document.schedule === undefined ? undefined : { ...document.schedule },
   cookId: document.cookId,
   startRequestId: document.startRequestId,
   rejectionReason: document.rejectionReason,
@@ -174,6 +182,10 @@ export class DatabaseRestaurantOrderRepository
           state: snapshot.state,
           timeline: { ...snapshot.timeline },
           priority: snapshot.priority,
+          schedule:
+            snapshot.schedule === undefined
+              ? undefined
+              : { ...snapshot.schedule },
           cookId: snapshot.cookId,
           startRequestId: snapshot.startRequestId,
           rejectionReason: snapshot.rejectionReason,
@@ -202,6 +214,9 @@ const boardItems = (document: RestaurantOrderDocument) =>
     options: [...item.options],
   }));
 
+const scheduleOf = (document: RestaurantOrderDocument) =>
+  document.schedule === undefined ? undefined : { ...document.schedule };
+
 /**
  * Kitchen board read models queried from the restaurant order documents via
  * the `(restaurantId, state, …)` indexes.
@@ -214,6 +229,7 @@ export class DatabaseKitchenBoard
     ActivePreparationsReader,
     ReadyOrdersReader,
     ActiveRestaurantOrdersReader,
+    ScheduledOrdersReader,
     PendingKitchenOrdersReader,
     CookWorkload,
     StartedOrders
@@ -293,8 +309,40 @@ export class DatabaseKitchenBoard
       acceptedAt: document.timeline.acceptedAt,
       expectedReadyAt: document.timeline.expectedReadyAt,
       cookId: document.cookId,
+      schedule: scheduleOf(document),
       version: document.version,
     }));
+  }
+
+  /**
+   * Accepted scheduled orders waiting for their start (FR-684), via the
+   * `(restaurantId, state, schedule.plannedReadyAt)` index.
+   */
+  async listScheduled(
+    restaurantId: string,
+  ): Promise<readonly ScheduledOrder[]> {
+    const documents = await this.#collection.find(
+      {
+        restaurantId,
+        state: RestaurantOrderState.Accepted,
+        schedule: { $exists: true },
+      },
+      { sort: { "schedule.plannedReadyAt": 1, _id: 1 } },
+    );
+    return documents.flatMap((document) =>
+      document.schedule === undefined
+        ? []
+        : [
+            {
+              restaurantOrderId: document._id,
+              orderId: document.orderId,
+              items: boardItems(document),
+              schedule: { ...document.schedule },
+              priority: document.priority,
+              version: document.version,
+            },
+          ],
+    );
   }
 
   async listQueued(
@@ -313,6 +361,7 @@ export class DatabaseKitchenBoard
       acceptedAt: document.timeline.acceptedAt,
       queuedAt: document.timeline.queuedAt,
       expectedReadyAt: document.timeline.expectedReadyAt,
+      schedule: scheduleOf(document),
       version: document.version,
     }));
   }
@@ -385,6 +434,7 @@ export class DatabaseKitchenBoard
       marketId: document.marketId,
       state: document.state as PendingKitchenOrder["state"],
       expectedReadyAt: document.timeline.expectedReadyAt,
+      scheduled: document.schedule !== undefined,
     }));
   }
 

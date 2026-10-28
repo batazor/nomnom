@@ -73,20 +73,21 @@ func newHandlerPublishing(published *routes) createmarket.Handler {
 	return createmarket.New(granted{}, &markets{cells: map[string]bool{"cell-1": true}, created: map[vo.MarketID]market.Market{}}, published)
 }
 
-func berlin(name, currency, cell string) createmarket.Command {
-	return createmarket.Command{Subject: operator, MarketID: "berlin", Name: name, Currency: currency, CellID: cell}
+func berlin(name, currency, timeZone, cell string) createmarket.Command {
+	return createmarket.Command{Subject: operator, MarketID: "berlin", Name: name, Currency: currency, TimeZone: timeZone, CellID: cell}
 }
 
 func TestCreatesAMarketOnceAndRepeatsIdempotently(t *testing.T) {
 	published := &routes{}
 	handler := newHandlerPublishing(published)
 
-	first, err := handler.Handle(context.Background(), berlin(" Berlin ", "EUR", "cell-1"))
+	first, err := handler.Handle(context.Background(), berlin(" Berlin ", "EUR", "Europe/Berlin", "cell-1"))
 	require.NoError(t, err)
 	assert.True(t, first.Created)
 	assert.Equal(t, vo.Name("Berlin"), first.Market.Name(), "stored trimmed")
+	assert.Equal(t, vo.TimeZone("Europe/Berlin"), first.Market.TimeZone())
 
-	again, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "cell-1"))
+	again, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-1"))
 	require.NoError(t, err)
 	assert.False(t, again.Created)
 	assert.Equal(t, first.Market, again.Market)
@@ -97,11 +98,11 @@ func TestAnUnpublishedRouteKeepsTheMarketAndARepeatPublishesIt(t *testing.T) {
 	published := &routes{err: publishroutes.ErrRoutesUnavailable}
 	handler := newHandlerPublishing(published)
 
-	_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "cell-1"))
+	_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-1"))
 	assert.ErrorIs(t, err, publishroutes.ErrRoutesUnavailable)
 
 	published.err = nil
-	again, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "cell-1"))
+	again, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-1"))
 	require.NoError(t, err)
 	assert.False(t, again.Created, "the market stayed in the registry")
 	assert.Equal(t, 2, published.published)
@@ -109,20 +110,35 @@ func TestAnUnpublishedRouteKeepsTheMarketAndARepeatPublishesIt(t *testing.T) {
 
 func TestRefusesOtherValuesForAnExistingMarket(t *testing.T) {
 	handler := newHandler()
-	_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "cell-1"))
+	_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-1"))
 	require.NoError(t, err)
 
-	_, err = handler.Handle(context.Background(), berlin("Berlin", "USD", "cell-1"))
+	_, err = handler.Handle(context.Background(), berlin("Berlin", "USD", "Europe/Berlin", "cell-1"))
+	assert.ErrorIs(t, err, market.ErrAlreadyCreated)
+	_, err = handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Paris", "cell-1"))
 	assert.ErrorIs(t, err, market.ErrAlreadyCreated)
 }
 
+func TestRefusesAnUnknownTimeZoneAndKeepsTheRegistry(t *testing.T) {
+	stored := &markets{cells: map[string]bool{"cell-1": true}, created: map[vo.MarketID]market.Market{}}
+	published := &routes{}
+	handler := createmarket.New(granted{}, stored, published)
+
+	for _, timeZone := range []string{"Mars/Olympus", ""} {
+		_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", timeZone, "cell-1"))
+		assert.ErrorIs(t, err, vo.ErrInvalidValue, timeZone)
+	}
+	assert.Empty(t, stored.created)
+	assert.Zero(t, published.published)
+}
+
 func TestRefusesAMarketOfAnUnregisteredCell(t *testing.T) {
-	_, err := newHandler().Handle(context.Background(), berlin("Berlin", "EUR", "cell-9"))
+	_, err := newHandler().Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-9"))
 	assert.ErrorIs(t, err, market.ErrUnknownCell)
 }
 
 func TestRequiresManageMarkets(t *testing.T) {
-	cmd := berlin("Berlin", "EUR", "cell-1")
+	cmd := berlin("Berlin", "EUR", "Europe/Berlin", "cell-1")
 	cmd.Subject = application.Subject{Kind: application.SubjectService, ID: "bff", Service: "bff"}
 	published := &routes{}
 	_, err := newHandlerPublishing(published).Handle(context.Background(), cmd)
@@ -132,17 +148,17 @@ func TestRequiresManageMarkets(t *testing.T) {
 
 func TestARefusedMarketPublishesNothing(t *testing.T) {
 	published := &routes{}
-	_, err := newHandlerPublishing(published).Handle(context.Background(), berlin("Berlin", "EUR", "cell-9"))
+	_, err := newHandlerPublishing(published).Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-9"))
 	assert.True(t, errors.Is(err, market.ErrUnknownCell))
 	assert.Zero(t, published.published)
 }
 
 func TestRejectsInvalidValues(t *testing.T) {
 	for _, cmd := range []createmarket.Command{
-		berlin("", "EUR", "cell-1"),
-		berlin("Berlin", "eur", "cell-1"),
-		berlin("Berlin", "EUR", "Cell 1"),
-		{Subject: operator, MarketID: "Berlin", Name: "Berlin", Currency: "EUR", CellID: "cell-1"},
+		berlin("", "EUR", "Europe/Berlin", "cell-1"),
+		berlin("Berlin", "eur", "Europe/Berlin", "cell-1"),
+		berlin("Berlin", "EUR", "Europe/Berlin", "Cell 1"),
+		{Subject: operator, MarketID: "Berlin", Name: "Berlin", Currency: "EUR", TimeZone: "Europe/Berlin", CellID: "cell-1"},
 	} {
 		_, err := newHandler().Handle(context.Background(), cmd)
 		assert.Error(t, err)

@@ -57,7 +57,6 @@ func newHarness(t *testing.T) *harness {
 		temporal.ActivityCancelPaymentAuthorization,
 		temporal.ActivityRefundPayment,
 		temporal.ActivityRecordPaymentAuthorization,
-		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCancelRestaurantOrder,
 		temporal.ActivityCreateDelivery,
 		temporal.ActivityReplanDelivery,
@@ -67,6 +66,9 @@ func newHarness(t *testing.T) *harness {
 	} {
 		h.env.OnActivity(name, mock.Anything, mock.Anything).Return(nil).Run(record(name)).Maybe()
 	}
+	h.env.OnActivity(temporal.ActivityRequestRestaurantOrder, mock.Anything, mock.Anything).
+		Return(temporal.RestaurantOrderRequested{RestaurantOrderID: "ro-1"}, nil).
+		Run(record(temporal.ActivityRequestRestaurantOrder)).Maybe()
 	return h
 }
 

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package nomnom.orders.v1;
 
+import "google/protobuf/timestamp.proto";
 import "nomnom/orders/v1/orders.proto";
 
 service OrdersService {
@@ -56,6 +57,12 @@ message PlaceOrderRequest {
   // Unset means STANDARD. PREMIUM needs a restaurant with a premium fee, otherwise
   // FAILED_PRECONDITION with reason PREMIUM_UNAVAILABLE (FR-650).
   OrderPriority priority = 5;
+  // Start of the chosen delivery window; set makes a scheduled Order (FR-681).
+  // A full window is FAILED_PRECONDITION SLOT_UNAVAILABLE with a
+  // SlotUnavailable detail; a restaurant without scheduled orders or not
+  // accepting now is FAILED_PRECONDITION SCHEDULED_ORDERS_UNAVAILABLE; a
+  // window off the grid, the horizon or the schedule is INVALID_ARGUMENT.
+  google.protobuf.Timestamp delivery_window_start = 6;
 }
 
 message PlaceOrderResponse {

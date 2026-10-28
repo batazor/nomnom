@@ -9,6 +9,8 @@ package temporal
 import (
 	"time"
 
+	"go.temporal.io/sdk/workflow"
+
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
 )
@@ -57,6 +59,21 @@ const (
 	ActivityCancelDelivery             = "CancelDelivery"
 	ActivityCompleteOrder              = "CompleteOrder"
 	ActivityFailOrCancelOrder          = "FailOrCancelOrder"
+
+	// Activities of the scheduled route (FR-682, FR-678).
+	ActivityConfirmSlotReservation = "ConfirmSlotReservation"
+	ActivityPlanSchedule           = "PlanSchedule"
+	ActivityQueueRestaurantOrder   = "QueueRestaurantOrder"
+	ActivityReleaseSlotReservation = "ReleaseSlotReservation"
+)
+
+// The scheduled route is introduced under a Temporal patch (FR-682): a run
+// takes it only when its history records this change, so histories started
+// before it replay the ASAP route. The marker is written only for a Scheduled
+// Order, and the ASAP route records no new command.
+const (
+	ScheduledRouteChangeID = "scheduled-route"
+	ScheduledRouteVersion  = workflow.Version(1)
 )
 
 // Application error types crossing the workflow boundary.
@@ -72,6 +89,16 @@ const (
 type Input struct {
 	OrderID string
 	Policy  Policy
+	// DeliveryWindow is the window of a Scheduled Order from OrderPlaced; it
+	// chooses the scheduled route. Nil is an ASAP Order, as in every input
+	// recorded before the field existed.
+	DeliveryWindow *DeliveryWindow `json:",omitempty"`
+}
+
+// DeliveryWindow is the half-open interval [Start, End) of a Scheduled Order.
+type DeliveryWindow struct {
+	Start time.Time
+	End   time.Time
 }
 
 // Fact is the payload of every Integration Event Signal.
@@ -126,6 +153,7 @@ const (
 	ReasonDeliveryTimeout             = fulfillment.ReasonDeliveryTimeout
 	ReasonCustomerRequested           = fulfillment.ReasonCustomerRequested
 	ReasonOperatorDecision            = fulfillment.ReasonOperatorDecision
+	ReasonSlotUnavailable             = fulfillment.ReasonSlotUnavailable
 )
 
 // Stage is the Workflow Stage published as OrderFulfillmentStage.
@@ -134,6 +162,7 @@ type Stage = fulfillment.Stage
 const (
 	StageAuthorizingPayment = fulfillment.StageAuthorizingPayment
 	StageWaitingAcceptance  = fulfillment.StageWaitingAcceptance
+	StageScheduled          = fulfillment.StageScheduled
 	StagePreparing          = fulfillment.StagePreparing
 	StageWaitingOperator    = fulfillment.StageWaitingOperator
 	StageWaitingPickup      = fulfillment.StageWaitingPickup
@@ -159,7 +188,25 @@ type StepInput struct {
 	// CompleteOrder: the completion moment of the Order, the same on every
 	// Activity attempt.
 	DecidedAt time.Time `json:",omitzero"`
+	// PlannedReadyAt is the planned_ready_at of the first plan of a Scheduled
+	// Order, set for RequestRestaurantOrder and the replan PlanSchedule.
+	PlannedReadyAt time.Time `json:",omitzero"`
+	// RestaurantOrderID is set for QueueRestaurantOrder: the id returned by
+	// RequestRestaurantOrder.
+	RestaurantOrderID string `json:",omitempty"`
 }
+
+// RestaurantOrderRequested is the result of RequestRestaurantOrder.
+type RestaurantOrderRequested struct {
+	RestaurantOrderID string
+}
+
+// SlotDecision is the result of ConfirmSlotReservation: a window that filled
+// up after its hold expired is a result, not an error.
+type SlotDecision = neighbours.SlotDecision
+
+// Plan is the result of PlanSchedule, kept in Event History.
+type Plan = fulfillment.Plan
 
 // PaymentDecision is the result of AuthorizePayment and CapturePayment: the
 // business result of the payments port; a decline is a result, not an error.

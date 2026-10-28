@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { database, loadConfig, loadKafkaConfig } from "../pkg/config/config.ts";
+import {
+  database,
+  loadConfig,
+  loadKafkaConfig,
+  loadScheduledSlotConfig,
+} from "../pkg/config/config.ts";
 
 test("SERVER__PORT takes precedence over PORT", () => {
   const config = loadConfig({
@@ -264,4 +269,82 @@ test("FR-657 reads the wait time parameters and rejects inverted thresholds", ()
   );
   assert.throws(() => loadConfig({ WAIT_TIME__SAMPLE_SIZE: "0" }));
   assert.throws(() => loadConfig({ WAIT_TIME__ELEVATED_FACTOR: "fast" }));
+});
+
+/** SCHEDULED_SLOT__* of .env.example. */
+const scheduledSlotEnvironment = {
+  SCHEDULED_SLOT__WIDTH: "15m",
+  SCHEDULED_SLOT__MIN_LEAD: "45m",
+  SCHEDULED_SLOT__MAX_HORIZON: "48h",
+  SCHEDULED_SLOT__HOLD_TTL: "10m",
+  SCHEDULED_SLOT__ALTERNATIVES: "3",
+};
+
+test("FR-694 reads the Delivery Window grid from SCHEDULED_SLOT__*", () => {
+  assert.deepEqual(loadScheduledSlotConfig(scheduledSlotEnvironment), {
+    widthMs: 15 * 60_000,
+    minLeadMs: 45 * 60_000,
+    maxHorizonMs: 48 * 3_600_000,
+    holdTtlMs: 10 * 60_000,
+    alternatives: 3,
+  });
+});
+
+test("FR-694 every SCHEDULED_SLOT__ value is required", () => {
+  for (const name of Object.keys(scheduledSlotEnvironment)) {
+    for (const value of [undefined, "", " "]) {
+      assert.throws(
+        () =>
+          loadScheduledSlotConfig({
+            ...scheduledSlotEnvironment,
+            [name]: value,
+          }),
+        new RegExp(`${name} is required`),
+      );
+    }
+  }
+});
+
+test("AC-937 a width that does not divide 30 minutes stops startup", () => {
+  for (const width of ["20m", "7m", "45m", "1h"]) {
+    assert.throws(
+      () =>
+        loadScheduledSlotConfig({
+          ...scheduledSlotEnvironment,
+          SCHEDULED_SLOT__WIDTH: width,
+        }),
+      /SCHEDULED_SLOT__WIDTH must divide 30 minutes/,
+    );
+  }
+  for (const width of ["5m", "10m", "15m", "30m"]) {
+    assert.equal(
+      loadScheduledSlotConfig({
+        ...scheduledSlotEnvironment,
+        SCHEDULED_SLOT__WIDTH: width,
+      }).widthMs % 60_000,
+      0,
+    );
+  }
+});
+
+test("FR-694 malformed Delivery Window values stop startup", () => {
+  for (const [name, value, message] of [
+    ["SCHEDULED_SLOT__MIN_LEAD", "48h", /MIN_LEAD must be shorter/],
+    ["SCHEDULED_SLOT__MIN_LEAD", "49h", /MIN_LEAD must be shorter/],
+    ["SCHEDULED_SLOT__HOLD_TTL", "0m", /must be positive/],
+    ["SCHEDULED_SLOT__WIDTH", "15", /expected a duration/],
+    ["SCHEDULED_SLOT__ALTERNATIVES", "-1", /SCHEDULED_SLOT__ALTERNATIVES/],
+    ["SCHEDULED_SLOT__ALTERNATIVES", "two", /SCHEDULED_SLOT__ALTERNATIVES/],
+    ["SCHEDULED_SLOT__ALTERNATIVES", "1.5", /SCHEDULED_SLOT__ALTERNATIVES/],
+  ] as const) {
+    assert.throws(
+      () =>
+        loadScheduledSlotConfig({
+          ...scheduledSlotEnvironment,
+          [name]: value,
+        }),
+      message,
+      `${name}=${value}`,
+    );
+  }
 });

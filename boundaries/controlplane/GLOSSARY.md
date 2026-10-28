@@ -12,7 +12,7 @@
 _Avoid_: Cluster, region, shard
 
 **Market**:
-Город, в котором работает доставка; `market_id` — slug, название 1..64 символа, валюта ISO 4217. Создаётся сразу размещённым в Cell.
+Город, в котором работает доставка; `market_id` — slug, название 1..64 символа, валюта ISO 4217, часовой пояс IANA (`Europe/Berlin`). Создаётся сразу размещённым в Cell.
 _Avoid_: Tenant, region, city id
 
 **Market Placement**:

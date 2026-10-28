@@ -6,12 +6,14 @@ import {
   GetKitchenQueueResponseSchema,
   ListActiveRestaurantOrdersResponseSchema,
   ListIncomingOrdersResponseSchema,
+  ListScheduledOrdersResponseSchema,
   type RestaurantsService,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import {
   toActiveRestaurantOrderMessage,
   toIncomingOrderMessage,
   toKitchenQueueEntryMessage,
+  toScheduledOrderMessage,
 } from "./messages.ts";
 import { withRequestRevision } from "./revision.ts";
 import type { RestaurantsServiceDependencies } from "./service.ts";
@@ -19,11 +21,14 @@ import type { SubjectResolver } from "./subject.ts";
 
 type KitchenBoardRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
-  "getKitchenQueue" | "listIncomingOrders" | "listActiveRestaurantOrders"
+  | "getKitchenQueue"
+  | "listIncomingOrders"
+  | "listScheduledOrders"
+  | "listActiveRestaurantOrders"
 >;
 
 /**
- * Kitchen board queries of restaurant staff (FR-583, FR-586, active orders): read-only, they
+ * Kitchen board queries of restaurant staff (FR-583, FR-586, FR-684, active orders): read-only, they
  * require `restaurant#operate_kitchen` through the query's own access port.
  */
 export const createKitchenBoardRpcs = (
@@ -67,6 +72,20 @@ export const createKitchenBoardRpcs = (
           orders: incoming.orders.map((order) =>
             toIncomingOrderMessage(incoming.restaurantId, order),
           ),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    // Accepted scheduled orders waiting for their start (FR-684).
+    async listScheduledOrders(request, context) {
+      try {
+        const scheduled = await dependencies.listScheduledOrders.execute(
+          await boardQuery(request, context),
+        );
+        return create(ListScheduledOrdersResponseSchema, {
+          orders: scheduled.orders.map(toScheduledOrderMessage),
         });
       } catch (error) {
         throw transportError(error);

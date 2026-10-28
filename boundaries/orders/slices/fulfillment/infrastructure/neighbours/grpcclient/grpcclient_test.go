@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"nomnom/orders/pkg/application"
 	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
@@ -178,7 +180,9 @@ func TestRestaurantsRequestAndCancel(t *testing.T) {
 		Priority: order.PriorityPremium,
 	}
 
-	require.NoError(t, restaurants.RequestOrder(context.Background(), request))
+	id, err := restaurants.RequestOrder(context.Background(), request)
+	require.NoError(t, err)
+	assert.Equal(t, "ro-1", id)
 	require.NoError(t, restaurants.CancelOrder(context.Background(), request))
 	require.NoError(t, restaurants.CancelOrder(context.Background(), request), "a rejection by stage is done")
 }
@@ -206,4 +210,65 @@ func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {
 	})).Return(nil, status.Error(codes.FailedPrecondition, "candidate busy")).Once()
 
 	require.NoError(t, grpcclient.NewDelivery(conn).Replan(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
+}
+
+// FR-683: a Scheduled Order carries its window and planned readiness.
+func TestRestaurantsRequestSendsTheScheduleOfAScheduledOrder(t *testing.T) {
+	conn, _, server, _ := serve(t)
+	windowStart := time.Date(2026, time.October, 25, 19, 0, 0, 0, time.UTC)
+	plannedReadyAt := windowStart.Add(-20 * time.Minute)
+	server.EXPECT().ReceiveOrderRequest(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.ReceiveOrderRequestRequest) bool {
+		return proto.Equal(r, &restaurantsv1.ReceiveOrderRequestRequest{
+			RestaurantId: "restaurant-1",
+			OrderId:      "order-1",
+			Items:        []*restaurantsv1.OrderRequestItem{{MenuItemId: "menu-1", Quantity: 1}},
+			Priority:     restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD,
+			Schedule: &restaurantsv1.OrderSchedule{
+				WindowStart:    timestamppb.New(windowStart),
+				WindowEnd:      timestamppb.New(windowStart.Add(15 * time.Minute)),
+				PlannedReadyAt: timestamppb.New(plannedReadyAt),
+			},
+		})
+	})).Return(&restaurantsv1.ReceiveOrderRequestResponse{RestaurantOrderId: "ro-1", Created: true}, nil).Once()
+
+	id, err := grpcclient.NewRestaurants(conn).RequestOrder(context.Background(), neighbours.RestaurantOrderRequest{
+		OrderID: "order-1", RestaurantID: "restaurant-1",
+		Items:    []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 1}},
+		Priority: order.PriorityStandard,
+		Schedule: &neighbours.RestaurantOrderSchedule{
+			WindowStart: windowStart, WindowEnd: windowStart.Add(15 * time.Minute), PlannedReadyAt: plannedReadyAt,
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "ro-1", id)
+}
+
+func TestRestaurantsQueueConfirmAndReleaseSlot(t *testing.T) {
+	conn, _, server, _ := serve(t)
+	server.EXPECT().QueueRestaurantOrder(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.QueueRestaurantOrderRequest) bool {
+		return proto.Equal(r, &restaurantsv1.QueueRestaurantOrderRequest{RestaurantOrderId: "ro-1"})
+	})).Return(&restaurantsv1.QueueRestaurantOrderResponse{}, nil).Once()
+	server.EXPECT().ConfirmScheduledSlot(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.ConfirmScheduledSlotRequest) bool {
+		return proto.Equal(r, &restaurantsv1.ConfirmScheduledSlotRequest{OrderId: "order-1"})
+	})).Return(&restaurantsv1.ConfirmScheduledSlotResponse{
+		Result: &restaurantsv1.ConfirmScheduledSlotResponse_Confirmed{Confirmed: &restaurantsv1.DeliveryWindow{}},
+	}, nil).Once()
+	server.EXPECT().ConfirmScheduledSlot(mock.Anything, mock.Anything).Return(&restaurantsv1.ConfirmScheduledSlotResponse{
+		Result: &restaurantsv1.ConfirmScheduledSlotResponse_SlotUnavailable{SlotUnavailable: &restaurantsv1.SlotUnavailable{}},
+	}, nil).Once()
+	server.EXPECT().ReleaseScheduledSlot(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.ReleaseScheduledSlotRequest) bool {
+		return proto.Equal(r, &restaurantsv1.ReleaseScheduledSlotRequest{OrderId: "order-1"})
+	})).Return(&restaurantsv1.ReleaseScheduledSlotResponse{}, nil).Once()
+	restaurants := grpcclient.NewRestaurants(conn)
+	slot := neighbours.SlotRequest{OrderID: "order-1", IdempotencyKey: "order:order-1:confirm_slot"}
+
+	require.NoError(t, restaurants.QueueOrder(context.Background(), neighbours.QueueRequest{OrderID: "order-1", RestaurantOrderID: "ro-1"}))
+	confirmed, err := restaurants.ConfirmSlot(context.Background(), slot)
+	require.NoError(t, err)
+	assert.True(t, confirmed.Confirmed)
+	unavailable, err := restaurants.ConfirmSlot(context.Background(), slot)
+	require.NoError(t, err)
+	assert.False(t, unavailable.Confirmed, "a full window is a decision, not an error")
+	require.NoError(t, restaurants.ReleaseSlot(context.Background(), slot))
 }

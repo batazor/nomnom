@@ -9,7 +9,7 @@ import "nomnom/controlplane/v1/controlplane.proto";
 // nor the Cells call it.
 service ControlPlaneService {
   // Writes require platform#manage_markets. A repeat with the same values
-  // succeeds with created = false; other values for a known id are
+  // succeeds with created = false; other values (time zone included) for a known id are
   // ALREADY_EXISTS. CreateMarket of an unknown cell_id is FAILED_PRECONDITION.
   // After the write, including a repeat, the routes of the public gateway are
   // applied from the registry; when that fails the call is UNAVAILABLE
@@ -40,6 +40,9 @@ message CreateMarketRequest {
   string name = 2;
   string currency = 3;
   string cell_id = 4;
+  // Required IANA time zone (Europe/Berlin); empty or unknown is
+  // INVALID_ARGUMENT.
+  string time_zone = 5;
 }
 
 message CreateMarketResponse {

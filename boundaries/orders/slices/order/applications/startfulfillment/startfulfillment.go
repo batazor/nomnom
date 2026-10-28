@@ -21,6 +21,10 @@ type Input struct {
 	EventID    string
 	OrderID    order.ID
 	OccurredAt time.Time
+	// DeliveryWindowStart and DeliveryWindowEnd are the Delivery Window of a
+	// Scheduled Order from OrderPlaced; zero for an ASAP Order.
+	DeliveryWindowStart time.Time
+	DeliveryWindowEnd   time.Time
 }
 
 func (in Input) validate() error {
@@ -31,6 +35,8 @@ func (in Input) validate() error {
 		return application.InvalidInput("order_id", "is required")
 	case in.OccurredAt.IsZero():
 		return application.InvalidInput("occurred_at", "is required")
+	case in.DeliveryWindowStart.IsZero() != in.DeliveryWindowEnd.IsZero():
+		return application.InvalidInput("delivery_window", "requires start and end")
 	}
 	return nil
 }
@@ -61,6 +67,13 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if err := in.validate(); err != nil {
 		return Result{}, err
 	}
+	var window order.DeliveryWindow
+	if !in.DeliveryWindowStart.IsZero() {
+		var err error
+		if window, err = order.NewDeliveryWindow(in.DeliveryWindowStart, in.DeliveryWindowEnd); err != nil {
+			return Result{}, err
+		}
+	}
 
 	var final bool
 	readOrder := func(ctx context.Context) error {
@@ -86,7 +99,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{Outcome: fulfillment.OutcomeIgnoredLate}, nil
 	}
 
-	err = h.workflow.Start(ctx, fulfillment.StartRequest{OrderID: in.OrderID, EventID: in.EventID, OccurredAt: in.OccurredAt})
+	err = h.workflow.Start(ctx, fulfillment.StartRequest{OrderID: in.OrderID, EventID: in.EventID, OccurredAt: in.OccurredAt, DeliveryWindow: window})
 	if err != nil {
 		return Result{Outcome: outcome}, fmt.Errorf("%w: start order fulfillment workflow: %w", application.ErrDependencyUnavailable, err)
 	}

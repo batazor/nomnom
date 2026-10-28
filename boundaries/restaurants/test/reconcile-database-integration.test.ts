@@ -149,6 +149,7 @@ describe("reconciliation against MongoDB and SpiceDB", () => {
       name: "Pho",
       ownerId: owner.id,
       marketId: "berlin",
+      timeZone: "Europe/Berlin",
       registeredAt: startOfDay,
     });
     restaurant.assignStaff(cook);

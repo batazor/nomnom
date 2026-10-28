@@ -4,7 +4,7 @@
     {"id": "cell-1", "router": {"namespace": "nomnom-bff", "name": "bff", "port": 3010}}
   ],
   "markets": [
-    {"id": "berlin", "name": "Berlin", "currency": "EUR", "cellId": "cell-1"}
+    {"id": "berlin", "name": "Berlin", "currency": "EUR", "timeZone": "Europe/Berlin", "cellId": "cell-1"}
   ],
   "market": "berlin",
   "owner": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",

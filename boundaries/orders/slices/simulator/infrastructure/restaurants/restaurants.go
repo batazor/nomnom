@@ -20,7 +20,8 @@ import (
 // pageSize is the maximum page of ListRestaurants.
 const pageSize = 100
 
-// Catalog lists the open restaurants of the configured Markets (ADR 41):
+// Catalog lists the restaurants accepting orders in the configured Markets
+// (ADR 41) — opened by the flag and inside the opening hours (FR-699):
 // ListRestaurants is per Market. The Market of the Order is not chosen here:
 // Place Order takes it from the chosen Restaurant.
 type Catalog struct {
@@ -35,7 +36,8 @@ func New(conn grpc.ClientConnInterface, markets []vo.MarketID, timeout time.Dura
 	return &Catalog{client: restaurantsv1.NewRestaurantsServiceClient(conn), markets: markets, timeout: timeout}
 }
 
-// OpenRestaurants reads every page of the open restaurants of every Market.
+// OpenRestaurants reads every page of the restaurants accepting orders of
+// every Market.
 func (c *Catalog) OpenRestaurants(ctx context.Context) ([]order.RestaurantID, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -63,7 +65,7 @@ func (c *Catalog) openRestaurants(ctx context.Context, market vo.MarketID) ([]or
 			return nil, fmt.Errorf("restaurants.ListRestaurants %q: %w", market, err)
 		}
 		for _, restaurant := range page.GetRestaurants() {
-			if restaurant.GetIsOpen() {
+			if restaurant.GetAcceptingOrders() {
 				ids = append(ids, order.RestaurantID(restaurant.GetRestaurantId()))
 			}
 		}

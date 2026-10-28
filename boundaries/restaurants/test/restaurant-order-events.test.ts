@@ -252,3 +252,46 @@ test("AC-869 facts of the Wait Time Statistics carry the restaurant", () => {
     );
   }
 });
+
+test("FR-644 queued_at travels on Accepted only when queued with it, and on Preparation Started", () => {
+  const queued = fromBinary(
+    RestaurantOrderAcceptedSchema,
+    map({
+      ...base,
+      type: "RestaurantOrderAccepted",
+      acceptedAt: at,
+      expectedReadyAt: at,
+      queuedAt: at,
+    }).payload,
+  );
+  assert.deepEqual(
+    queued.queuedAt === undefined ? undefined : timestampDate(queued.queuedAt),
+    at,
+  );
+  const scheduled = fromBinary(
+    RestaurantOrderAcceptedSchema,
+    map({
+      ...base,
+      type: "RestaurantOrderAccepted",
+      acceptedAt: at,
+      expectedReadyAt: at,
+    }).payload,
+  );
+  assert.equal(scheduled.queuedAt, undefined);
+  const started = fromBinary(
+    PreparationStartedSchema,
+    map({
+      ...base,
+      type: "PreparationStarted",
+      preparationStartedAt: at,
+      queuedAt: base.occurredAt,
+    }).payload,
+  );
+  assert.equal(started.restaurantId, "rest-1");
+  assert.deepEqual(
+    started.queuedAt === undefined
+      ? undefined
+      : timestampDate(started.queuedAt),
+    base.occurredAt,
+  );
+});

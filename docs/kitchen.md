@@ -60,7 +60,7 @@ Restaurant Order → Kitchen Queue → Preparation → Assembly → Ready for Pi
 | Поле | Когда фиксируется | Использование |
 | --- | --- | --- |
 | `accepted_at` | Acceptance | Порядок очереди, время реакции ресторана |
-| `queued_at` | Queue Restaurant Order | Время ожидания в очереди |
+| `queued_at` | Queue Restaurant Order | Время ожидания в очереди; начало длительности Wait Time Statistics |
 | `preparation_started_at` | Start Preparation | Длительность Preparation; граница политики отмены |
 | `expected_ready_at` | Устанавливается при Acceptance или постановке в очередь, меняется Report Preparation Delay | Ожидание `orders`/`delivery`, задержки |
 | `ready_at` | Mark Ready for Pickup | Фактическая длительность, SLA |
@@ -113,10 +113,10 @@ Restaurant Order received → accepted → queued → preparation started
 
 | Use Case | Contract name (кандидат) | Actor | Предусловие (State) | Результат | Факт |
 | --- | --- | --- | --- | --- | --- |
-| **Receive Order Request** | `ReceiveRestaurantOrder` | Activity `orders` | Нет заказа с этим `orderId` | `RECEIVED`; повтор возвращает существующий заказ | — |
-| **Accept Order** | `AcceptRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `ACCEPTED`, затем `QUEUED`; `accepted_at`, `expected_ready_at` | `RestaurantOrderAccepted` |
+| **Receive Order Request** | `ReceiveRestaurantOrder` | Activity `orders` | Нет заказа с этим `orderId` | `RECEIVED`; запланированный заказ — с `schedule` (окно, `planned_ready_at`); повтор возвращает существующий заказ | — |
+| **Accept Order** | `AcceptRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | Без окна: `ACCEPTED`, затем `QUEUED`; `accepted_at`, `queued_at`, `expected_ready_at`. Запланированный: `ACCEPTED`, `expected_ready_at = planned_ready_at` | `RestaurantOrderAccepted` |
 | **Reject Order** | `RejectRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `REJECTED` с причиной | `RestaurantOrderRejected` |
-| **Queue Restaurant Order** | `QueueRestaurantOrder` | Система `restaurants` | `ACCEPTED` | `QUEUED`, `queued_at`; место определяется политикой очереди | `RestaurantOrderQueued` |
+| **Queue Restaurant Order** | `QueueRestaurantOrder` | `service` identity `orders` (запланированный заказ в `start_at`); заказ без окна — в UoW Accept Order | `ACCEPTED` | `QUEUED`, `queued_at`; `expected_ready_at` не меняется; место определяется политикой очереди | `RestaurantOrderQueued` (локальный) |
 | **Start Preparation** | `StartNextPreparation` | Сотрудник кухни | Голова Kitchen Queue в `QUEUED`; есть свободный Cook на линии | `PREPARING`, `preparation_started_at`, `cook_id`, `start_request_id`; без свободного Cook — `NoCookAvailable`; пустая очередь — пустой результат | `PreparationStarted` |
 | **Start Preparation Item** | `StartPreparationItem` | Сотрудник станции | Заказ `PREPARING`, item `PENDING` | Item `PREPARING` | `PreparationItemStarted` |
 | **Complete Preparation Item** | `CompletePreparationItem` | Сотрудник станции | Заказ `PREPARING`, item `PREPARING` | Item `READY` | `PreparationItemCompleted` |
@@ -131,7 +131,10 @@ Start/Complete Preparation Item существуют только при item-le
 
 #### Queue Restaurant Order
 
-Выполняется системой после Acceptance. Место в Kitchen Queue определяется согласованной политикой очереди; алгоритм не выбран ([Kitchen Queue](#kitchen-queue)). Приготовление не начинается, ресурсы кухни не тратятся. В MVP команда исполняется в той же UoW, что и Accept Order: handler вызывает `accept(...)` и `queue(...)` последовательно, aggregate записывает два Domain Event, публикуется только `RestaurantOrderAccepted`.
+Место в Kitchen Queue определяется политикой очереди ([Kitchen Queue](#kitchen-queue)). Приготовление не начинается, ресурсы кухни не тратятся.
+
+- **Заказ без окна** ставится в очередь в той же UoW, что и Accept Order: handler вызывает `accept(...)` и `queue(...)` последовательно, aggregate записывает два Domain Event, публикуется только `RestaurantOrderAccepted` — он несёт `queued_at` этой UoW.
+- **Запланированный заказ** ([change `add-scheduled-orders`](../openspec/changes/add-scheduled-orders/design.md)) после Acceptance остаётся в `ACCEPTED`: кухня подтверждает его сразу, а готовить начинает к окну. В `start_at` workflow `orders` вызывает gRPC `QueueRestaurantOrder(restaurant_order_id)` от своей `service` identity; сотрудник кухни этого сделать не может. Повтор для `QUEUED` — успешный no-op. Факт локальный: Integration Event нет, kitchen board получает Change Notification записи.
 
 #### Start Preparation
 
@@ -175,7 +178,8 @@ Start Next Preparation: кухня называет ресторан и `request
 
 | Use Case | Contract name (кандидат) | Actor | Результат | Модель |
 | --- | --- | --- | --- | --- |
-| **Get Kitchen Queue** | `GetKitchenQueue` | Сотрудник ресторана | Заказы `QUEUED` в порядке очереди с `expected_ready_at` | Projection Kitchen Queue |
+| **Get Kitchen Queue** | `GetKitchenQueue` | Сотрудник ресторана | Заказы `QUEUED` в порядке очереди с `expected_ready_at` и окном запланированного заказа | Projection Kitchen Queue |
+| **List Scheduled Orders** | `ListScheduledOrders` | Сотрудник ресторана | Принятые запланированные заказы в `ACCEPTED` по `planned_ready_at` с окном; в Kitchen Queue их нет до Queue Restaurant Order | Read model kitchen board |
 | **Get Restaurant Order** | `GetRestaurantOrder` | Сотрудник ресторана; авторизованный внутренний actor | Состав, State, timeline одного заказа | Read model `restaurants` |
 | **List Active Preparations** | `ListActivePreparations` | Сотрудник ресторана | Заказы `PREPARING`, `ASSEMBLED` с прогрессом позиций и задержками | Read model kitchen board |
 | **List Ready Orders** | `ListReadyOrders` | Сотрудник ресторана | Заказы `READY`, ожидающие передачи курьеру, с информацией о курьере при наличии | Read model kitchen board |
@@ -189,9 +193,12 @@ Kitchen Queue — бизнес-очередь кухни: порядок, в к�
 
 Очередь — projection по заказам в `QUEUED` с ключами `priority` и `queued_at`. Она не является aggregate: порядок вычисляется из данных `RestaurantOrder`, а не хранится. Порядок строгий (change [`add-premium-priority`](../openspec/changes/add-premium-priority/design.md)): Start Preparation берёт голову очереди, кухня заказ не выбирает.
 
-1. **Первыми** — `PREMIUM` и `STANDARD`, ждущие в очереди дольше базового времени ожидания ресторана ([Wait Time Statistics](#wait-time-statistics)) × `KITCHEN_QUEUE__AGING_FACTOR`: так обычные заказы не ждут бесконечно.
-2. **Затем** — остальные `STANDARD`.
-3. Внутри класса — FIFO по `queued_at`, затем по id.
+1. **Первыми** — запланированные заказы в `QUEUED` ([change `add-scheduled-orders`](../openspec/changes/add-scheduled-orders/design.md)): сначала `PREMIUM`, затем `STANDARD`, внутри — по `planned_ready_at`, затем `queued_at` и id. У запланированного заказа жёсткий срок к окну доставки, поэтому он обгоняет и премиум, и состарившиеся обычные.
+2. **Затем** — `PREMIUM` и `STANDARD`, ждущие в очереди дольше базового времени ожидания ресторана ([Wait Time Statistics](#wait-time-statistics)) × `KITCHEN_QUEUE__AGING_FACTOR`: так обычные заказы не ждут бесконечно.
+3. **Затем** — остальные `STANDARD`.
+4. Внутри классов 2 и 3 — FIFO по `queued_at`, затем по id.
+
+Принятый запланированный заказ до Queue Restaurant Order в очереди не стоит: его показывает List Scheduled Orders.
 
 Premium Priority — платная опция ресторана с доплатой (`Restaurant.premiumFee`); покупатель выбирает её при Place Order, `priority` заказа не меняется. Курьерский приоритет и привязка к courier ETA не вводятся.
 
@@ -272,11 +279,17 @@ drink   PENDING → READY ────────────┘
 
 Не решено: ручное назначение Cook, связь Cook с Kitchen Station. `expected_ready_at` считается по [Wait Time Statistics](#wait-time-statistics), без линии.
 
+## Приём заказов: расписание и окна
+
+Ресторан принимает заказы, только если он открыт флагом Open Restaurant **и** текущий момент внутри интервала его недельного расписания (Opening Hours) в его поясе (Restaurant Time Zone). Ресторан без интервалов заказов не принимает. Accept Order получает границы текущего интервала в `RestaurantAcceptingOrders`; вне интервала — отказ `outside_opening_hours`. Get Restaurant вычисляет `accepting_orders` и `next_opening_at` при чтении, List Restaurants по умолчанию отдаёт только принимающие сейчас рестораны. Change [`add-restaurant-opening-hours`](../openspec/changes/add-restaurant-opening-hours/design.md).
+
+Приём ASAP-заказов по загрузке кухни не ограничивается: ни паузы, ни скрытия ресторана, ни load shedding. Технический rate limiting gateway (429) с этим не связан. Единственное ограничение приёма по ёмкости — Schedule Slot: ресторан берёт не больше `slotCapacity` запланированных заказов на одно окно доставки, и только пока он сам принимает заказы ([change `add-scheduled-orders`](../openspec/changes/add-scheduled-orders/design.md)).
+
 ## Wait Time Statistics
 
-Перегрузку кухни видно до заказа, но приём не ограничивается: ни паузы, ни скрытия ресторана, ни load shedding. Технический rate limiting gateway (429) с этим не связан. Change [`add-kitchen-wait-time`](../openspec/changes/add-kitchen-wait-time/design.md).
+Перегрузку кухни видно до заказа, но приём ASAP-заказов не ограничивается (см. [Приём заказов](#приём-заказов-расписание-и-окна)). Change [`add-kitchen-wait-time`](../openspec/changes/add-kitchen-wait-time/design.md).
 
-- **Статистика** — read model в документе `Restaurant`: последние `WAIT_TIME__SAMPLE_SIZE` длительностей «принят → готов» и незавершённые заказы. Её ведёт consumer собственных `RestaurantOrderAccepted`, `RestaurantOrderReady`, `RestaurantOrderCancelled`, `PreparationFailed` (use case Record Wait Time); запись не меняет `version` агрегата. Cook Pool и линия не участвуют.
+- **Статистика** — read model в документе `Restaurant`: последние `WAIT_TIME__SAMPLE_SIZE` длительностей «поставлен в очередь → готов» и незавершённые заказы с их `queued_at`. Её ведёт consumer собственных фактов (use case Record Wait Time): `RestaurantOrderAccepted` с `queued_at` открывает заказ без окна; запланированный заказ принят без `queued_at` и в `ACCEPTED` незавершённым не считается — его открывает `PreparationStarted` с `queued_at` (постановка в очередь факта не публикует); `RestaurantOrderReady` записывает длительность, `RestaurantOrderCancelled` и `PreparationFailed` убирают заказ без длительности. Запись не меняет `version` агрегата. Cook Pool и линия не участвуют.
 - **Базовое время** — медиана выборки; пока она не набрана — `KITCHEN__PREPARATION_TIME`.
 - **Текущее ожидание** — большее из медианы готовых за `WAIT_TIME__RECENT_WINDOW` и возраста самого старого незавершённого заказа.
 - **Wait Level** — `ELEVATED` выше `WAIT_TIME__ELEVATED_FACTOR` базовых, снова `NORMAL` не выше `WAIT_TIME__NORMAL_FACTOR`; смена публикует `RestaurantWaitLevelChanged`, по нему обновляется кеш каталога. Уровень пересчитывается только на фактах ресторана, без таймеров.
@@ -314,9 +327,9 @@ Domain Event записывает domain method явно; FSM не создаё�
 
 | Integration Event | Нужен | Payload (кандидат) |
 | --- | --- | --- |
-| `RestaurantOrderAccepted` | `orders`: продолжить Fulfillment | `order_id`, `restaurant_order_id`, `restaurant_id`, `accepted_at`, `expected_ready_at` |
+| `RestaurantOrderAccepted` | `orders`: продолжить Fulfillment | `order_id`, `restaurant_order_id`, `restaurant_id`, `accepted_at`, `expected_ready_at`; `queued_at`, если заказ поставлен в очередь в той же UoW (без окна) |
 | `RestaurantOrderRejected` | `orders`: business failure | `order_id`, `reason`, `stage` (до/после Acceptance) |
-| `PreparationStarted` | `orders`: Record Preparation Started | `order_id`, `preparation_started_at`, `expected_ready_at` |
+| `PreparationStarted` | `orders`: Record Preparation Started; Wait Time Statistics | `order_id`, `preparation_started_at`, `expected_ready_at`, `restaurant_id`, `queued_at` |
 | `PreparationDelayed` | `orders`: ожидание Preparation; потенциально `delivery` | `order_id`, `expected_ready_at`, `previous_expected_ready_at` |
 | `RestaurantOrderReady` | `orders`: Record Order Ready; потенциально `delivery` | `order_id`, `ready_at` |
 | `RestaurantOrderCancelled` | `orders`: подтверждение результата компенсации | `order_id`, `stage`, `preparation_started` |
@@ -346,7 +359,8 @@ Kitchen board — projection, а не FSM один в один.
 
 | Колонка | States | Примечание |
 | --- | --- | --- |
-| `NEW` | `RECEIVED`, `ACCEPTED`, `QUEUED` | Отдельно отмечаются заказы, ожидающие решения, и заказы в очереди |
+| `NEW` | `RECEIVED`, `QUEUED` | Отдельно отмечаются заказы, ожидающие решения, и заказы в очереди |
+| `SCHEDULED` | `ACCEPTED` с окном | Запланированные: окно и `planned_ready_at`, действий нет; в очередь заказ ставит `orders` (List Scheduled Orders) |
 | `PREPARING` | `PREPARING`, `ASSEMBLED` | Имя Cook; прогресс позиций при item-level model; задержки по `expected_ready_at` |
 | `READY` | `READY` | До факта Pickup из `delivery`; данные курьера — информационные |
 

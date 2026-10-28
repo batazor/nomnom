@@ -33,4 +33,6 @@ message Market {
   string currency = 3;
   // Market Placement: the Cell that serves the Market.
   string cell_id = 4;
+  // IANA time zone (Europe/Berlin), immutable.
+  string time_zone = 5;
 }

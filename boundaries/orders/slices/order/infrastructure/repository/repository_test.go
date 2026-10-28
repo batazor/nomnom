@@ -72,6 +72,32 @@ func TestRepositoryKeepsPremiumPriority(t *testing.T) {
 	assert.Equal(t, order.StandardService(), plain.Service())
 }
 
+// FR-681: the Delivery Window of a Scheduled Order is stored with the Order
+// and its details projection; an ASAP Order has none.
+func TestRepositoryKeepsDeliveryWindow(t *testing.T) {
+	store := open(t)
+	ctx := context.Background()
+	scheduled, asap := uniqueID("scheduled"), uniqueID("asap")
+	start := ordertest.PlacedAt.Add(7 * time.Hour)
+	require.NoError(t, store.Add(ctx, ordertest.New(t, scheduled, ordertest.WithDeliveryWindow(t, start, start.Add(15*time.Minute)))))
+	require.NoError(t, store.Add(ctx, ordertest.New(t, asap)))
+
+	loaded, err := store.Get(ctx, scheduled)
+	require.NoError(t, err)
+	assert.Equal(t, start, loaded.DeliveryWindow().Start())
+	assert.Equal(t, start.Add(15*time.Minute), loaded.DeliveryWindow().End())
+	details, err := store.OrderDetails(ctx, scheduled)
+	require.NoError(t, err)
+	assert.Equal(t, loaded.DeliveryWindow(), details.DeliveryWindow)
+
+	plain, err := store.Get(ctx, asap)
+	require.NoError(t, err)
+	assert.True(t, plain.DeliveryWindow().IsZero())
+	plainDetails, err := store.OrderDetails(ctx, asap)
+	require.NoError(t, err)
+	assert.True(t, plainDetails.DeliveryWindow.IsZero())
+}
+
 func TestRepositoryKeepsCancellation(t *testing.T) {
 	store := open(t)
 	ctx := context.Background()

@@ -38,12 +38,14 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 		Columns("id", "customer_id", "restaurant_id", "market_id", "total_amount", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
 			"expected_ready_at", "expected_pickup_at", "expected_delivered_at",
-			"priority", "premium_fee_amount", "premium_fee_currency").
+			"priority", "premium_fee_amount", "premium_fee_currency",
+			"delivery_window_start", "delivery_window_end").
 		Values(snap.ID, snap.CustomerID, snap.RestaurantID, snap.MarketID.String(),
 			created.Total().Amount().String(), created.Total().Currency(),
 			snap.State, snap.PlacedAt, nullTime(snap.CancelledAt), outcome, code, snap.Version+1,
 			nullTime(snap.Expected.ReadyAt), nullTime(snap.Expected.PickupAt), nullTime(snap.Expected.DeliveredAt),
-			string(snap.Service.Priority()), feeAmount, feeCurrency))
+			string(snap.Service.Priority()), feeAmount, feeCurrency,
+			nullTime(snap.DeliveryWindow.Start()), nullTime(snap.DeliveryWindow.End())))
 	if isUniqueViolation(err) {
 		return fmt.Errorf("%w: %q", order.ErrOrderAlreadyExists, snap.ID)
 	}
@@ -126,16 +128,20 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 		priority         string
 		feeAmount        *string
 		feeCurrency      *string
+		windowStart      *time.Time
+		windowEnd        *time.Time
 	)
 	err := s.queryRow(ctx, psql.
 		Select("customer_id", "restaurant_id", "market_id", "total_amount::text", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
 			"expected_ready_at", "expected_pickup_at", "expected_delivered_at",
-			"priority", "premium_fee_amount::text", "premium_fee_currency").
+			"priority", "premium_fee_amount::text", "premium_fee_currency",
+			"delivery_window_start", "delivery_window_end").
 		From("orders").Where(sq.Eq{"id": id}),
 		&snap.CustomerID, &snap.RestaurantID, &marketID, &amount, &currency,
 		&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version,
-		&readyAt, &pickupAt, &deliveredAt, &priority, &feeAmount, &feeCurrency)
+		&readyAt, &pickupAt, &deliveredAt, &priority, &feeAmount, &feeCurrency,
+		&windowStart, &windowEnd)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return order.Snapshot{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, id)
 	}
@@ -160,6 +166,9 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	snap.PlacedAt = snap.PlacedAt.UTC()
 	snap.CancelledAt = utcTime(cancelledAt)
 	snap.Expected = order.ExpectedTimes{ReadyAt: utcTime(readyAt), PickupAt: utcTime(pickupAt), DeliveredAt: utcTime(deliveredAt)}
+	if snap.DeliveryWindow, err = deliveryWindow(windowStart, windowEnd); err != nil {
+		return order.Snapshot{}, fmt.Errorf("order %s delivery window: %w", id, err)
+	}
 	if outcome != nil && code != nil {
 		if snap.CancellationReason, err = order.NewCancellationReason(order.NegativeOutcome(*outcome), *code); err != nil {
 			return order.Snapshot{}, fmt.Errorf("order %s cancellation: %w", id, err)
@@ -223,6 +232,15 @@ func (s *Store) facts(ctx context.Context, id order.ID) ([]order.RecordedFact, e
 		facts = append(facts, fact)
 	}
 	return facts, rows.Err()
+}
+
+// deliveryWindow reads the nullable window columns: both NULL is an ASAP
+// Order; the CHECK constraint keeps them NULL together.
+func deliveryWindow(start, end *time.Time) (order.DeliveryWindow, error) {
+	if start == nil && end == nil {
+		return order.DeliveryWindow{}, nil
+	}
+	return order.NewDeliveryWindow(utcTime(start), utcTime(end))
 }
 
 func cancellation(reason order.CancellationReason) (*string, *string) {

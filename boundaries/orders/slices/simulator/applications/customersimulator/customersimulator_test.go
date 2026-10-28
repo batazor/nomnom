@@ -53,7 +53,7 @@ func newHarness(t *testing.T) harness {
 	t.Helper()
 	store := repositorytest.Open(t)
 	placementCatalog := NewMockPlacementCatalog(t)
-	policy, err := cancellationpolicy.NewFixed(time.Hour)
+	policy, err := cancellationpolicy.NewFixed(time.Hour, time.Hour)
 	require.NoError(t, err)
 	workflow := NewMockCancellationRequester(t)
 	module := orderdi.NewModule(orderdi.Dependencies{

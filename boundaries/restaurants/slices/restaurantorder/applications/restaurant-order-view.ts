@@ -1,5 +1,6 @@
 import type {
   OrderPriority,
+  OrderScheduleValue,
   RestaurantOrder,
   RestaurantOrderSnapshot,
   RestaurantOrderState,
@@ -19,6 +20,8 @@ export type RestaurantOrderView = Readonly<{
   }>[];
   timeline: RestaurantOrderTimeline;
   priority: OrderPriority;
+  /** Delivery Window and Planned Ready At of a scheduled order (FR-683). */
+  schedule: OrderScheduleValue | undefined;
   /** Cook assigned by Start Preparation, if it happened. */
   cookId: string | undefined;
   rejectionReason: string | undefined;
@@ -42,6 +45,8 @@ export const snapshotToView = (
   })),
   timeline: { ...snapshot.timeline },
   priority: snapshot.priority,
+  schedule:
+    snapshot.schedule === undefined ? undefined : { ...snapshot.schedule },
   cookId: snapshot.cookId,
   rejectionReason: snapshot.rejectionReason,
   failureReason: snapshot.failureReason,

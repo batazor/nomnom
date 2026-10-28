@@ -9,6 +9,7 @@ import type { Subject } from "../../../../pkg/application/subject.ts";
 import type { MarketId } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   DuplicateOrderIdError,
+  type OrderScheduleInput,
   type PreparationItemInput,
   RestaurantOrder,
   type RestaurantOrderRepository,
@@ -28,6 +29,11 @@ export type ReceiveOrderRequest = Readonly<{
   items: readonly PreparationItemInput[];
   /** Premium Priority chosen at Place Order (FR-651). */
   priority: string;
+  /**
+   * Delivery Window and Planned Ready At of a scheduled order (FR-683);
+   * a partial block is invalid.
+   */
+  schedule?: OrderScheduleInput;
 }>;
 
 /** Market of a registered restaurant; `undefined` when it is not registered. */
@@ -95,6 +101,7 @@ export class ReceiveOrderRequestHandler {
       marketId: marketId.value,
       items: command.items,
       priority: command.priority,
+      ...(command.schedule === undefined ? {} : { schedule: command.schedule }),
       receivedAt: this.#clock.now(),
     });
     try {

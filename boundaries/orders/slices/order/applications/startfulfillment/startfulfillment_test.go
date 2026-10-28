@@ -118,3 +118,32 @@ func TestRequiresEvent(t *testing.T) {
 
 	require.ErrorIs(t, err, application.ErrInvalidInput)
 }
+
+// FR-415: the Delivery Window of OrderPlaced reaches the workflow start, so
+// the workflow takes the scheduled route.
+func TestStartsScheduledWorkflowWithItsWindow(t *testing.T) {
+	windowStart := time.Date(2026, time.October, 27, 19, 0, 0, 0, time.UTC)
+	_, workflow, handler := newHandler(t, ordertest.WithDeliveryWindow(t, windowStart, windowStart.Add(15*time.Minute)))
+	window, err := order.NewDeliveryWindow(windowStart, windowStart.Add(15*time.Minute))
+	require.NoError(t, err)
+	scheduled := started
+	scheduled.DeliveryWindow = window
+	workflow.EXPECT().Start(mock.Anything, scheduled).Return(nil).Once()
+	in := input()
+	in.DeliveryWindowStart, in.DeliveryWindowEnd = windowStart, windowStart.Add(15*time.Minute)
+
+	_, err = handler.Handle(context.Background(), in)
+
+	require.NoError(t, err)
+}
+
+func TestRejectsHalfOfADeliveryWindow(t *testing.T) {
+	store, _, handler := newHandler(t)
+	in := input()
+	in.DeliveryWindowStart = occurredAt
+
+	_, err := handler.Handle(context.Background(), in)
+
+	require.ErrorIs(t, err, application.ErrInvalidInput)
+	assert.Zero(t, store.InboxSize())
+}

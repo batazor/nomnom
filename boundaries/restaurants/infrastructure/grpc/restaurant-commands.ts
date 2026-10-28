@@ -1,14 +1,21 @@
 import { create } from "@bufbuild/protobuf";
+import { durationMs } from "@bufbuild/protobuf/wkt";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { RestaurantChangeResult } from "../../slices/restaurant/applications/restaurant-view.ts";
 import type { PremiumFeeChange } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
+import type { ScheduledOrderSettingsValue } from "../../slices/restaurant/domains/restaurant/restaurant.ts";
 import { requireField, transportError } from "./errors.ts";
-import type { Money } from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
+import type {
+  Money,
+  ScheduledOrderSettings,
+} from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
   CloseRestaurantResponseSchema,
   OpenRestaurantResponseSchema,
   type RestaurantsService,
+  SetOpeningHoursResponseSchema,
+  SetScheduledOrderSettingsResponseSchema,
   UpdateRestaurantResponseSchema,
 } from "./gen/nomnom/restaurants/v1/service_pb.js";
 import { toRestaurantMessage } from "./messages.ts";
@@ -18,7 +25,11 @@ import type { SubjectResolver } from "./subject.ts";
 
 type OpeningRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
-  "openRestaurant" | "closeRestaurant" | "updateRestaurant"
+  | "openRestaurant"
+  | "closeRestaurant"
+  | "updateRestaurant"
+  | "setOpeningHours"
+  | "setScheduledOrderSettings"
 >;
 
 /** premium_fee sets, clear_premium_fee removes, neither keeps (FR-649). */
@@ -40,6 +51,44 @@ const premiumFeeChange = (request: {
       amount: request.premiumFee.amount,
       currency: request.premiumFee.currency,
     },
+  };
+};
+
+/**
+ * Exactly one of `settings` and `clear` (FR-672): settings are set together,
+ * `clear` stops scheduled orders; neither or both is invalid.
+ */
+const scheduledOrderSettings = (request: {
+  settings?: ScheduledOrderSettings;
+  clear: boolean;
+}): ScheduledOrderSettingsValue | undefined => {
+  if (request.settings !== undefined && request.clear) {
+    throw new ConnectError(
+      "settings and clear are mutually exclusive",
+      Code.InvalidArgument,
+    );
+  }
+  if (request.clear) return undefined;
+  const settings = request.settings;
+  if (settings === undefined) {
+    throw new ConnectError(
+      "settings or clear is required",
+      Code.InvalidArgument,
+    );
+  }
+  if (
+    settings.openingLead === undefined ||
+    settings.closingGrace === undefined
+  ) {
+    throw new ConnectError(
+      "settings.opening_lead and settings.closing_grace are required",
+      Code.InvalidArgument,
+    );
+  }
+  return {
+    slotCapacity: settings.slotCapacity,
+    openingLeadMs: durationMs(settings.openingLead),
+    closingGraceMs: durationMs(settings.closingGrace),
   };
 };
 
@@ -96,6 +145,49 @@ export const createOpeningRpcs = (
         });
         return create(
           UpdateRestaurantResponseSchema,
+          toOpeningResponse(result),
+        );
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    // Set Opening Hours (FR-696): the whole weekly schedule, `restaurant#manage`.
+    async setOpeningHours(request, context) {
+      try {
+        const { subject, restaurantId } = await openingCommand(
+          request,
+          context,
+        );
+        const result = await dependencies.setOpeningHours.execute({
+          subject,
+          restaurantId,
+          openingHours: request.openingHours.map((interval) => ({
+            day: interval.dayOfWeek,
+            opens: interval.opens,
+            closes: interval.closes,
+          })),
+        });
+        return create(SetOpeningHoursResponseSchema, toOpeningResponse(result));
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    // Set Scheduled Order Settings (FR-672): set together or cleared, `restaurant#manage`.
+    async setScheduledOrderSettings(request, context) {
+      try {
+        const { subject, restaurantId } = await openingCommand(
+          request,
+          context,
+        );
+        const result = await dependencies.setScheduledOrderSettings.execute({
+          subject,
+          restaurantId,
+          settings: scheduledOrderSettings(request),
+        });
+        return create(
+          SetScheduledOrderSettingsResponseSchema,
           toOpeningResponse(result),
         );
       } catch (error) {

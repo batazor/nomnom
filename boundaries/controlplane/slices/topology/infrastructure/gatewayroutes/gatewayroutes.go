@@ -203,6 +203,7 @@ func marketsBody(routes []publishroutes.MarketRoute) (string, error) {
 		ID       string `json:"id"`
 		Name     string `json:"name"`
 		Currency string `json:"currency"`
+		TimeZone string `json:"timeZone"`
 	}
 	list := struct {
 		Markets []entry `json:"markets"`
@@ -210,6 +211,7 @@ func marketsBody(routes []publishroutes.MarketRoute) (string, error) {
 	for _, route := range routes {
 		list.Markets = append(list.Markets, entry{
 			ID: string(route.Market.ID()), Name: string(route.Market.Name()), Currency: string(route.Market.Currency()),
+			TimeZone: string(route.Market.TimeZone()),
 		})
 	}
 	encoded, err := json.Marshal(list)

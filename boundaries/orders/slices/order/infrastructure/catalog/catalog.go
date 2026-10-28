@@ -38,8 +38,8 @@ type Limits struct {
 }
 
 // Catalog reads the current menu of restaurants. Each Snapshot makes two calls
-// bounded by one timeout: GetRestaurant for is_open and the premium fee, then
-// GetMenu.
+// bounded by one timeout: GetRestaurant for accepting_orders and the premium
+// fee, then GetMenu.
 type Catalog struct {
 	client  restaurantsv1.RestaurantsServiceClient
 	limits  Limits
@@ -70,7 +70,9 @@ func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID,
 	if err != nil {
 		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q: %w: %v", restaurantID, ErrInvalidRestaurant, err)
 	}
-	if !restaurant.GetRestaurant().GetIsOpen() {
+	// accepting_orders is the flag of the restaurant and its opening hours at
+	// the time of the read (FR-699); is_open alone ignores the schedule.
+	if !restaurant.GetRestaurant().GetAcceptingOrders() {
 		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurant %q: %w", restaurantID, placeorder.ErrRestaurantNotAcceptingOrders)
 	}
 

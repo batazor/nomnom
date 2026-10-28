@@ -2,6 +2,16 @@ import { Money, type MoneyValue } from "../../../menu/domains/menu/vo/money.ts";
 import { InvalidRestaurantError, InvalidRestaurantReason } from "./errors.ts";
 import type { RestaurantEvent } from "./events.ts";
 import { MarketId } from "./vo/market-id.ts";
+import {
+  OpeningHours,
+  type OpeningInterval,
+  type OpeningPeriod,
+} from "./vo/opening-hours.ts";
+import {
+  ScheduledOrderSettings,
+  type ScheduledOrderSettingsValue,
+} from "./vo/scheduled-order-settings.ts";
+import { TimeZone } from "./vo/time-zone.ts";
 
 export * from "./acceptance.ts";
 export * from "./errors.ts";
@@ -13,6 +23,16 @@ export type {
   RestaurantRenamed,
 } from "./events.ts";
 export { InvalidMarketIdError, MarketId } from "./vo/market-id.ts";
+export {
+  OpeningHours,
+  type OpeningInterval,
+  type OpeningPeriod,
+} from "./vo/opening-hours.ts";
+export {
+  ScheduledOrderSettings,
+  type ScheduledOrderSettingsValue,
+} from "./vo/scheduled-order-settings.ts";
+export { type LocalDate, TimeZone } from "./vo/time-zone.ts";
 
 export type RestaurantSnapshot = Readonly<{
   id: string;
@@ -20,6 +40,10 @@ export type RestaurantSnapshot = Readonly<{
   ownerId: string;
   /** Market of the restaurant (ADR 41), immutable. */
   marketId: string;
+  /** IANA time zone of the restaurant (FR-201), immutable. */
+  timeZone: string;
+  /** Weekly opening hours on the wall clock (FR-696); empty — never by schedule. */
+  openingHours: readonly OpeningInterval[];
   isOpen: boolean;
   /** User ids of the restaurant staff, sorted; source of `restaurant#staff`. */
   staff: readonly string[];
@@ -33,6 +57,11 @@ export type RestaurantSnapshot = Readonly<{
    * absent when the restaurant offers no premium.
    */
   premiumFee?: MoneyValue;
+  /**
+   * Settings of scheduled orders (FR-672); absent when the restaurant takes
+   * no scheduled orders.
+   */
+  scheduledOrders?: ScheduledOrderSettingsValue;
 }>;
 
 /**
@@ -81,12 +110,15 @@ export class Restaurant {
   readonly #id: string;
   readonly #ownerId: string;
   readonly #marketId: MarketId;
+  readonly #timeZone: TimeZone;
+  #openingHours: OpeningHours;
   readonly #version: number;
   #name: string;
   #isOpen: boolean;
   readonly #staff: Set<string>;
   #authorizationRevision: string | undefined;
   #premiumFee: Money | undefined;
+  #scheduledOrders: ScheduledOrderSettings | undefined;
   #events: RestaurantEvent[] = [];
 
   private constructor(snapshot: StoredRestaurantSnapshot, version: number) {
@@ -94,6 +126,8 @@ export class Restaurant {
     this.#name = snapshot.name;
     this.#ownerId = snapshot.ownerId;
     this.#marketId = MarketId.of(snapshot.marketId);
+    this.#timeZone = TimeZone.of(snapshot.timeZone);
+    this.#openingHours = OpeningHours.of(snapshot.openingHours);
     this.#isOpen = snapshot.isOpen;
     this.#staff = new Set(snapshot.staff ?? []);
     this.#authorizationRevision = snapshot.authorizationRevision;
@@ -101,6 +135,10 @@ export class Restaurant {
       snapshot.premiumFee === undefined
         ? undefined
         : Money.from(snapshot.premiumFee);
+    this.#scheduledOrders =
+      snapshot.scheduledOrders === undefined
+        ? undefined
+        : ScheduledOrderSettings.of(snapshot.scheduledOrders);
     this.#version = version;
   }
 
@@ -110,6 +148,8 @@ export class Restaurant {
     ownerId: string;
     /** Market the restaurant serves; set once at registration (ADR 41). */
     marketId: string;
+    /** IANA time zone of the restaurant; set once at registration (FR-201). */
+    timeZone: string;
     registeredAt: Date;
   }): Restaurant {
     const ownerId = input.ownerId.trim();
@@ -122,6 +162,8 @@ export class Restaurant {
         name: restaurantName(input.name),
         ownerId,
         marketId: MarketId.of(input.marketId).value,
+        timeZone: TimeZone.of(input.timeZone).value,
+        openingHours: [],
         isOpen: false,
         staff: [],
       },
@@ -163,6 +205,69 @@ export class Restaurant {
 
   get isOpen(): boolean {
     return this.#isOpen;
+  }
+
+  get timeZone(): TimeZone {
+    return this.#timeZone;
+  }
+
+  get openingHours(): OpeningHours {
+    return this.#openingHours;
+  }
+
+  /**
+   * Replaces the weekly schedule (FR-696). Returns `false` when it is already
+   * current.
+   */
+  setOpeningHours(intervals: readonly OpeningInterval[]): boolean {
+    const next = OpeningHours.of(intervals);
+    if (next.equals(this.#openingHours)) {
+      return false;
+    }
+    this.#openingHours = next;
+    return true;
+  }
+
+  /** Schedule period running at `at` (FR-699). */
+  openingPeriodAt(at: Date): OpeningPeriod | undefined {
+    return this.#openingHours.periodAt(this.#timeZone, at);
+  }
+
+  /** Schedule periods overlapping `[from, to)`, by opening (FR-698). */
+  openingPeriodsBetween(from: Date, to: Date): OpeningPeriod[] {
+    return this.#openingHours.periodsBetween(this.#timeZone, from, to);
+  }
+
+  /** Opened by the flag and inside the schedule at `at` (FR-699). */
+  acceptsOrdersAt(at: Date): boolean {
+    return this.#isOpen && this.openingPeriodAt(at) !== undefined;
+  }
+
+  /** Settings of scheduled orders; `undefined` when none are taken. */
+  get scheduledOrders(): ScheduledOrderSettings | undefined {
+    return this.#scheduledOrders;
+  }
+
+  /**
+   * Sets the settings of scheduled orders together, or clears them with
+   * `undefined` (FR-672). Existing reservations are not affected. Returns
+   * `false` when they are already current.
+   */
+  setScheduledOrderSettings(
+    settings: ScheduledOrderSettingsValue | undefined,
+  ): boolean {
+    const next =
+      settings === undefined ? undefined : ScheduledOrderSettings.of(settings);
+    const current = this.#scheduledOrders;
+    if (
+      next === undefined
+        ? current === undefined
+        : current !== undefined && next.equals(current)
+    ) {
+      return false;
+    }
+    this.#scheduledOrders = next;
+    return true;
   }
 
   /** User ids of the staff, sorted. */
@@ -290,6 +395,8 @@ export class Restaurant {
       name: this.#name,
       ownerId: this.#ownerId,
       marketId: this.#marketId.value,
+      timeZone: this.#timeZone.value,
+      openingHours: this.#openingHours.intervals,
       isOpen: this.#isOpen,
       staff: this.staff,
       ...(this.#authorizationRevision === undefined
@@ -298,6 +405,9 @@ export class Restaurant {
       ...(this.#premiumFee === undefined
         ? {}
         : { premiumFee: this.#premiumFee.toValue() }),
+      ...(this.#scheduledOrders === undefined
+        ? {}
+        : { scheduledOrders: this.#scheduledOrders.toValue() }),
     };
   }
 

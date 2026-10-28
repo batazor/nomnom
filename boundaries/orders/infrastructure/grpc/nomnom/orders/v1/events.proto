@@ -20,6 +20,9 @@ message OrderPlaced {
   repeated OrderItem items = 6;
   // Market of the aggregate (ADR 41).
   string market_id = 7;
+  // Delivery window of a scheduled Order (FR-681); the workflow takes the
+  // scheduled route when set.
+  DeliveryWindow delivery_window = 8;
 }
 
 // Заказ успешно завершён.

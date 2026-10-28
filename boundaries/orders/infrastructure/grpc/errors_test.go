@@ -41,6 +41,8 @@ func TestTransportErrorKeepsPublishedCodesAndReasons(t *testing.T) {
 		{placeorder.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
 		{placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
 		{placeorder.ErrPremiumUnavailable, codes.FailedPrecondition, "PREMIUM_UNAVAILABLE"},
+		{placeorder.ErrScheduledOrdersUnavailable, codes.FailedPrecondition, "SCHEDULED_ORDERS_UNAVAILABLE"},
+		{order.ErrInvalidDeliveryWindow, codes.InvalidArgument, "INVALID_ORDER"},
 		{application.InvalidInput("order_id", "is required"), codes.InvalidArgument, "INVALID_ARGUMENT"},
 		{order.NotOrderable{}, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
 		{vo.ErrInvalidQuantity, codes.InvalidArgument, "INVALID_ORDER"},

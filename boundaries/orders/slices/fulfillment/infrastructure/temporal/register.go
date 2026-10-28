@@ -32,6 +32,10 @@ func Register(registry Registry, activities *Activities) {
 		ActivityCancelDelivery:             activities.CancelDelivery,
 		ActivityCompleteOrder:              activities.CompleteOrder,
 		ActivityFailOrCancelOrder:          activities.FailOrCancelOrder,
+		ActivityConfirmSlotReservation:     activities.ConfirmSlotReservation,
+		ActivityPlanSchedule:               activities.PlanSchedule,
+		ActivityQueueRestaurantOrder:       activities.QueueRestaurantOrder,
+		ActivityReleaseSlotReservation:     activities.ReleaseSlotReservation,
 	} {
 		registry.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

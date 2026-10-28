@@ -47,6 +47,9 @@ type StartRequest struct {
 	OrderID    order.ID
 	EventID    string
 	OccurredAt time.Time
+	// DeliveryWindow of OrderPlaced: set starts the scheduled route of a
+	// Scheduled Order (FR-415), zero the ASAP route.
+	DeliveryWindow order.DeliveryWindow
 }
 
 // Starter starts the workflow of one Order with its OrderPlaced; repeated calls

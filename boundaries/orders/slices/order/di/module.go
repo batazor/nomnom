@@ -49,6 +49,7 @@ type Dependencies struct {
 	Authorizer Authorizer
 	Policy     CancellationPolicy
 	Catalog    placeorder.Catalog
+	Slots      placeorder.SlotReservations
 	Workflow   Workflow
 	Clock      application.Clock
 	IDs        placeorder.IDGenerator
@@ -66,6 +67,7 @@ func NewModule(deps Dependencies) *Module {
 		Outbox:          store,
 		IdempotencyKeys: store,
 		Catalog:         deps.Catalog,
+		Slots:           deps.Slots,
 		Relationships:   store,
 		IDs:             deps.IDs,
 		Clock:           deps.Clock,

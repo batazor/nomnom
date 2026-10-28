@@ -236,6 +236,13 @@ export declare type Order = Message<"nomnom.orders.v1.Order"> & {
    * @generated from field: nomnom.orders.v1.Money premium_fee = 17;
    */
   premiumFee?: Money | undefined;
+
+  /**
+   * Delivery window of a scheduled Order (FR-681); unset for an ASAP Order.
+   *
+   * @generated from field: nomnom.orders.v1.DeliveryWindow delivery_window = 18;
+   */
+  deliveryWindow?: DeliveryWindow | undefined;
 };
 
 /**
@@ -243,6 +250,48 @@ export declare type Order = Message<"nomnom.orders.v1.Order"> & {
  * Use `create(OrderSchema)` to create a new message.
  */
 export declare const OrderSchema: GenMessage<Order>;
+
+/**
+ * Delivery window [start, end) of a scheduled Order.
+ *
+ * @generated from message nomnom.orders.v1.DeliveryWindow
+ */
+export declare type DeliveryWindow = Message<"nomnom.orders.v1.DeliveryWindow"> & {
+  /**
+   * @generated from field: google.protobuf.Timestamp start = 1;
+   */
+  start?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp end = 2;
+   */
+  end?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.orders.v1.DeliveryWindow.
+ * Use `create(DeliveryWindowSchema)` to create a new message.
+ */
+export declare const DeliveryWindowSchema: GenMessage<DeliveryWindow>;
+
+/**
+ * Error detail of PlaceOrder FAILED_PRECONDITION with reason SLOT_UNAVAILABLE
+ * (FR-692): the nearest available windows of the restaurant.
+ *
+ * @generated from message nomnom.orders.v1.SlotUnavailable
+ */
+export declare type SlotUnavailable = Message<"nomnom.orders.v1.SlotUnavailable"> & {
+  /**
+   * @generated from field: repeated nomnom.orders.v1.DeliveryWindow alternatives = 1;
+   */
+  alternatives: DeliveryWindow[];
+};
+
+/**
+ * Describes the message nomnom.orders.v1.SlotUnavailable.
+ * Use `create(SlotUnavailableSchema)` to create a new message.
+ */
+export declare const SlotUnavailableSchema: GenMessage<SlotUnavailable>;
 
 /**
  * @generated from message nomnom.orders.v1.OrderSummary
