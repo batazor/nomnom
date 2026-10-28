@@ -102,9 +102,10 @@ func (a *App) stop(ctx context.Context) error {
 func NewGRPCServer(module *topologydi.Module, subjects grpcadapter.SubjectResolver) *grpc.Server {
 	server := grpc.NewServer(grpc.ConnectionTimeout(2*time.Second), grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	controlplanev1.RegisterControlPlaneServiceServer(server, grpcadapter.NewService(grpcadapter.Handlers{
-		RegisterCell: module.RegisterCell,
-		CreateMarket: module.CreateMarket,
-		ListMarkets:  module.ListMarkets,
+		RegisterCell:  module.RegisterCell,
+		CreateMarket:  module.CreateMarket,
+		ArchiveMarket: module.ArchiveMarket,
+		ListMarkets:   module.ListMarkets,
 	}, subjects))
 	return server
 }

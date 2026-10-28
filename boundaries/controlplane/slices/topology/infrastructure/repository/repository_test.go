@@ -253,3 +253,41 @@ func TestEmptyRegistryReadsAsEmpty(t *testing.T) {
 	assert.Empty(t, listed)
 	assert.Empty(t, snapshot(t, store))
 }
+
+func TestArchivedMarketLeavesTheListAndTheRoutes(t *testing.T) {
+	ctx := context.Background()
+	store := open(t)
+	_, err := repository.NewCells(store).Add(ctx, cell.New("cell-1", router(t, "bff")))
+	require.NoError(t, err)
+	markets := repository.NewMarkets(store)
+	for _, m := range []market.Market{
+		market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"),
+		market.New("kind-e2e-1", "Kind e2e 1", "EUR", "Europe/Berlin", "cell-1"),
+	} {
+		_, err := markets.Add(ctx, m)
+		require.NoError(t, err)
+	}
+
+	archived, err := markets.Archive(ctx, "kind-e2e-1")
+	require.NoError(t, err)
+	assert.True(t, archived)
+	archived, err = markets.Archive(ctx, "kind-e2e-1")
+	require.NoError(t, err)
+	assert.False(t, archived, "a repeat changes nothing")
+	_, err = markets.Archive(ctx, "paris")
+	assert.ErrorIs(t, err, market.ErrNotFound)
+
+	listed, err := markets.List(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []market.Market{market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1")}, listed)
+	assert.Equal(t, []publishroutes.MarketRoute{
+		{Market: market.New("berlin", "Berlin", "EUR", "Europe/Berlin", "cell-1"), Router: router(t, "bff")},
+	}, snapshot(t, store))
+
+	stored, err := markets.Get(ctx, "kind-e2e-1")
+	require.NoError(t, err)
+	assert.True(t, stored.Archived(), "the row stays and keeps its id taken")
+	added, err := markets.Add(ctx, market.New("kind-e2e-1", "Kind e2e 1", "EUR", "Europe/Berlin", "cell-1"))
+	require.NoError(t, err)
+	assert.False(t, added)
+}

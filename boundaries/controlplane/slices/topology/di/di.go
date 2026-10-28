@@ -10,6 +10,7 @@ import (
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/archivemarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/listmarkets"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
@@ -26,6 +27,7 @@ var APISet = wire.NewSet(NewAuthorizer, NewRouteApplier, NewModule)
 type Module struct {
 	RegisterCell  registercell.Handler
 	CreateMarket  createmarket.Handler
+	ArchiveMarket archivemarket.Handler
 	ListMarkets   listmarkets.Handler
 	PublishRoutes publishroutes.Handler
 }
@@ -36,6 +38,7 @@ func NewModule(store *repository.Store, authorizer application.Authorizer, appli
 	return &Module{
 		RegisterCell:  registercell.New(authorizer, repository.NewCells(store), routes),
 		CreateMarket:  createmarket.New(authorizer, markets, routes),
+		ArchiveMarket: archivemarket.New(authorizer, markets, routes),
 		ListMarkets:   listmarkets.New(authorizer, markets),
 		PublishRoutes: routes,
 	}

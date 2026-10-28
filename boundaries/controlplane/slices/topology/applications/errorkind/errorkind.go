@@ -24,10 +24,12 @@ func Classify(err error) application.ErrorKind {
 		return application.KindInvalidInput
 	case errors.Is(err, application.ErrPermissionDenied):
 		return application.KindPermission
-	case errors.Is(err, cell.ErrAlreadyRegistered), errors.Is(err, market.ErrAlreadyCreated):
+	case errors.Is(err, cell.ErrAlreadyRegistered), errors.Is(err, market.ErrAlreadyCreated), errors.Is(err, market.ErrArchived):
 		return application.KindAlreadyExists
 	case errors.Is(err, market.ErrUnknownCell):
 		return application.KindDomainRule
+	case errors.Is(err, market.ErrNotFound):
+		return application.KindNotFound
 	default:
 		return application.KindInternal
 	}

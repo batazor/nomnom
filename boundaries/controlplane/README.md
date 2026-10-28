@@ -6,14 +6,17 @@
 Язык — [GLOSSARY](GLOSSARY.md), локальные решения — [docs/adr](docs/adr).
 
 Control plane не в горячем пути: ни gateway, ни ячейки к нему не обращаются. После каждой записи
-(`RegisterCell`, `CreateMarket`, в том числе повтора) и один раз при старте до readiness он
+(`RegisterCell`, `CreateMarket`, `ArchiveMarket`, в том числе повтора) и один раз при старте до readiness он
 server-side apply применяет в неймспейс публичного gateway (`ROUTES__NAMESPACE`) полный набор
 ресурсов из реестра ([publish routes](slices/topology/applications/publishroutes/README.md)):
 
 - `HTTPRoute market-<market_id>` — `/m/<market_id>` в Service Router Cell, префикс снимается,
-  `X-Nomnom-Market` ставится из маршрута; метка `nomnom.dev/route: market`;
+  `X-Nomnom-Market` ставится из маршрута; метка `nomnom.dev/route: market`; маршруты Market с этой
+  меткой и `app.kubernetes.io/managed-by: nomnom-controlplane`, которых нет в реестре (архивные),
+  удаляются;
 - `ConfigMap`, `HTTPRouteFilter` (`directResponse`) и `HTTPRoute markets` — Envoy сам отвечает на
-  `GET /markets` списком `{"markets":[{"id","name","currency","timeZone"}]}` по названию.
+  `GET /markets` списком `{"markets":[{"id","name","currency","timeZone"}]}` неархивных Market по
+  названию.
 
 Чтение реестра и применение — под advisory lock PostgreSQL в одной read-only транзакции, так что
 параллельные записи не применят более старый снимок. Не применилось при записи — `UNAVAILABLE`
@@ -26,7 +29,8 @@ server-side apply применяет в неймспейс публичного 
 | --- | --- | --- |
 | `RegisterCell` | оператор (user assertion через делегата, ADR 32) | `platform#manage_markets` (SpiceDB, ADR 18); Cell — `cell_id` и `router` (Service Cosmo Router: DNS-1123 namespace и name, порт 1..65535); повтор с теми же значениями — `created = false`, с другими — `ALREADY_EXISTS`; затем публикация маршрутов |
 | `CreateMarket` | оператор | то же; `time_zone` — обязательный IANA-пояс (`Europe/Berlin`), пустой или неизвестный — `INVALID_ARGUMENT`, другой пояс для известного `market_id` — `ALREADY_EXISTS`; незарегистрированная Cell — `FAILED_PRECONDITION` (`CELL_NOT_FOUND`); затем публикация маршрутов |
-| `ListMarkets` | оператор | `platform#manage_markets`; по name, затем market_id |
+| `ArchiveMarket` | оператор | `platform#manage_markets`; Market уходит из списка и с gateway, `market_id` больше не создаётся (`CreateMarket` — `ALREADY_EXISTS`, `MARKET_ARCHIVED`); повтор — `archived = false`; неизвестный `market_id` — `NOT_FOUND` (`MARKET_NOT_FOUND`); затем публикация маршрутов ([archive market](slices/topology/applications/archivemarket/README.md)) |
+| `ListMarkets` | оператор | `platform#manage_markets`; неархивные, по name, затем market_id |
 
 Ошибки — `google.rpc.ErrorInfo` домена `nomnom.controlplane.v1`:
 
@@ -35,7 +39,8 @@ server-side apply применяет в неймспейс публичного 
 | `UNAUTHENTICATED` | `AUTHENTICATION_REQUIRED` — нет/неверный projected token, assertion не от делегата |
 | `INVALID_ARGUMENT` | `INVALID_ARGUMENT` — slug, Router Cell, название, валюта, часовой пояс |
 | `PERMISSION_DENIED` | `OPERATION_NOT_ALLOWED` |
-| `ALREADY_EXISTS` | `CELL_ALREADY_REGISTERED`, `MARKET_ALREADY_EXISTS` |
+| `NOT_FOUND` | `MARKET_NOT_FOUND` |
+| `ALREADY_EXISTS` | `CELL_ALREADY_REGISTERED`, `MARKET_ALREADY_EXISTS`, `MARKET_ARCHIVED` |
 | `FAILED_PRECONDITION` | `CELL_NOT_FOUND` |
 | `UNAVAILABLE` | `DEPENDENCY_UNAVAILABLE` — SpiceDB не ответил (fail closed); `ROUTES_UNAVAILABLE` — маршруты публичного gateway не применены, повторите команду |
 | `INTERNAL` | `INTERNAL_ERROR` |
@@ -45,6 +50,7 @@ server-side apply применяет в неймспейс публичного 
 - `slices/topology` — домены `cell` и `market` (value objects в `vo/`), use cases
   [`registercell`](slices/topology/applications/registercell/README.md),
   [`createmarket`](slices/topology/applications/createmarket/README.md),
+  [`archivemarket`](slices/topology/applications/archivemarket/README.md),
   [`listmarkets`](slices/topology/applications/listmarkets/README.md),
   [`publishroutes`](slices/topology/applications/publishroutes/README.md); PostgreSQL-репозитории
   (pgx + squirrel, ADR 39), проверка SpiceDB и адаптер маршрутов `infrastructure/gatewayroutes`

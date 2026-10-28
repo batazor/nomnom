@@ -1,6 +1,7 @@
 {{- /*
 ADR 41: control plane применяет server-side apply маршруты Market и список Market публичного
-gateway — только в неймспейсе routes.namespace и только эти ресурсы.
+gateway — только в неймспейсе routes.namespace и только эти ресурсы; маршруты архивных Market
+он находит (list) и удаляет (delete).
 */ -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -12,7 +13,7 @@ metadata:
 rules:
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes"]
-    verbs: ["get", "create", "patch"]
+    verbs: ["get", "list", "create", "patch", "delete"]
   - apiGroups: ["gateway.envoyproxy.io"]
     resources: ["httproutefilters"]
     verbs: ["get", "create", "patch"]

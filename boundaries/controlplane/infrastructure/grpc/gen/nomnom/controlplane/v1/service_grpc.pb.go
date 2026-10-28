@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ControlPlaneService_RegisterCell_FullMethodName = "/nomnom.controlplane.v1.ControlPlaneService/RegisterCell"
-	ControlPlaneService_CreateMarket_FullMethodName = "/nomnom.controlplane.v1.ControlPlaneService/CreateMarket"
-	ControlPlaneService_ListMarkets_FullMethodName  = "/nomnom.controlplane.v1.ControlPlaneService/ListMarkets"
+	ControlPlaneService_RegisterCell_FullMethodName  = "/nomnom.controlplane.v1.ControlPlaneService/RegisterCell"
+	ControlPlaneService_CreateMarket_FullMethodName  = "/nomnom.controlplane.v1.ControlPlaneService/CreateMarket"
+	ControlPlaneService_ArchiveMarket_FullMethodName = "/nomnom.controlplane.v1.ControlPlaneService/ArchiveMarket"
+	ControlPlaneService_ListMarkets_FullMethodName   = "/nomnom.controlplane.v1.ControlPlaneService/ListMarkets"
 )
 
 // ControlPlaneServiceClient is the client API for ControlPlaneService service.
@@ -40,7 +41,12 @@ type ControlPlaneServiceClient interface {
 	// (ROUTES_UNAVAILABLE), the write stays and a repeat applies them again.
 	RegisterCell(ctx context.Context, in *RegisterCellRequest, opts ...grpc.CallOption) (*RegisterCellResponse, error)
 	CreateMarket(ctx context.Context, in *CreateMarketRequest, opts ...grpc.CallOption) (*CreateMarketResponse, error)
-	// Requires platform#manage_markets.
+	// Archives a Market: it leaves ListMarkets and the public gateway, its id
+	// is never created again (CreateMarket is ALREADY_EXISTS, MARKET_ARCHIVED).
+	// A repeat succeeds with archived = false; an unknown market_id is
+	// NOT_FOUND. Routes are applied as after the other writes.
+	ArchiveMarket(ctx context.Context, in *ArchiveMarketRequest, opts ...grpc.CallOption) (*ArchiveMarketResponse, error)
+	// Requires platform#manage_markets. Archived Markets are not listed.
 	ListMarkets(ctx context.Context, in *ListMarketsRequest, opts ...grpc.CallOption) (*ListMarketsResponse, error)
 }
 
@@ -66,6 +72,16 @@ func (c *controlPlaneServiceClient) CreateMarket(ctx context.Context, in *Create
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateMarketResponse)
 	err := c.cc.Invoke(ctx, ControlPlaneService_CreateMarket_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) ArchiveMarket(ctx context.Context, in *ArchiveMarketRequest, opts ...grpc.CallOption) (*ArchiveMarketResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ArchiveMarketResponse)
+	err := c.cc.Invoke(ctx, ControlPlaneService_ArchiveMarket_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +114,12 @@ type ControlPlaneServiceServer interface {
 	// (ROUTES_UNAVAILABLE), the write stays and a repeat applies them again.
 	RegisterCell(context.Context, *RegisterCellRequest) (*RegisterCellResponse, error)
 	CreateMarket(context.Context, *CreateMarketRequest) (*CreateMarketResponse, error)
-	// Requires platform#manage_markets.
+	// Archives a Market: it leaves ListMarkets and the public gateway, its id
+	// is never created again (CreateMarket is ALREADY_EXISTS, MARKET_ARCHIVED).
+	// A repeat succeeds with archived = false; an unknown market_id is
+	// NOT_FOUND. Routes are applied as after the other writes.
+	ArchiveMarket(context.Context, *ArchiveMarketRequest) (*ArchiveMarketResponse, error)
+	// Requires platform#manage_markets. Archived Markets are not listed.
 	ListMarkets(context.Context, *ListMarketsRequest) (*ListMarketsResponse, error)
 	mustEmbedUnimplementedControlPlaneServiceServer()
 }
@@ -115,6 +136,9 @@ func (UnimplementedControlPlaneServiceServer) RegisterCell(context.Context, *Reg
 }
 func (UnimplementedControlPlaneServiceServer) CreateMarket(context.Context, *CreateMarketRequest) (*CreateMarketResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateMarket not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) ArchiveMarket(context.Context, *ArchiveMarketRequest) (*ArchiveMarketResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ArchiveMarket not implemented")
 }
 func (UnimplementedControlPlaneServiceServer) ListMarkets(context.Context, *ListMarketsRequest) (*ListMarketsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMarkets not implemented")
@@ -176,6 +200,24 @@ func _ControlPlaneService_CreateMarket_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ControlPlaneService_ArchiveMarket_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ArchiveMarketRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).ArchiveMarket(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_ArchiveMarket_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).ArchiveMarket(ctx, req.(*ArchiveMarketRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ControlPlaneService_ListMarkets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListMarketsRequest)
 	if err := dec(in); err != nil {
@@ -208,6 +250,10 @@ var ControlPlaneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateMarket",
 			Handler:    _ControlPlaneService_CreateMarket_Handler,
+		},
+		{
+			MethodName: "ArchiveMarket",
+			Handler:    _ControlPlaneService_ArchiveMarket_Handler,
 		},
 		{
 			MethodName: "ListMarkets",

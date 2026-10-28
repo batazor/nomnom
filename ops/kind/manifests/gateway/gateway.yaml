@@ -663,7 +663,8 @@ spec:
           namespace: nomnom-controlplane
           port: 8086
 ---
-# Control plane (ADR 41): команды оператора (platform#manage_markets) — Cell и Market.
+# Control plane (ADR 41): команды оператора (platform#manage_markets) — Cell и Market,
+# в том числе архив Market.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -683,6 +684,10 @@ spec:
             type: Exact
             service: nomnom.controlplane.v1.ControlPlaneService
             method: CreateMarket
+        - method:
+            type: Exact
+            service: nomnom.controlplane.v1.ControlPlaneService
+            method: ArchiveMarket
       backendRefs:
         - name: controlplane
           namespace: nomnom-controlplane

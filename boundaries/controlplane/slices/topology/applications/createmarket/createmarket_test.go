@@ -54,6 +54,15 @@ func (m *markets) Get(_ context.Context, id vo.MarketID) (market.Market, error) 
 
 func (m *markets) List(context.Context) ([]market.Market, error) { return nil, nil }
 
+func (m *markets) Archive(_ context.Context, id vo.MarketID) (bool, error) {
+	existing, ok := m.created[id]
+	if !ok {
+		return false, market.ErrNotFound
+	}
+	m.created[id] = existing.Archive()
+	return !existing.Archived(), nil
+}
+
 // routes is a mock of route publication that counts publications.
 type routes struct {
 	published int
@@ -163,4 +172,16 @@ func TestRejectsInvalidValues(t *testing.T) {
 		_, err := newHandler().Handle(context.Background(), cmd)
 		assert.Error(t, err)
 	}
+}
+
+func TestRefusesToCreateAnArchivedMarketAgain(t *testing.T) {
+	stored := &markets{cells: map[string]bool{"cell-1": true}, created: map[vo.MarketID]market.Market{}}
+	handler := createmarket.New(granted{}, stored, &routes{})
+	_, err := handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-1"))
+	require.NoError(t, err)
+	_, err = stored.Archive(context.Background(), "berlin")
+	require.NoError(t, err)
+
+	_, err = handler.Handle(context.Background(), berlin("Berlin", "EUR", "Europe/Berlin", "cell-1"))
+	assert.ErrorIs(t, err, market.ErrArchived)
 }

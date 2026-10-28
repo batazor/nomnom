@@ -8,6 +8,7 @@ import (
 
 	controlplanev1 "github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/archivemarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/listmarkets"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/registercell"
@@ -17,9 +18,10 @@ import (
 
 // Handlers are the use cases behind the API.
 type Handlers struct {
-	RegisterCell application.Handler[registercell.Command, registercell.Result]
-	CreateMarket application.Handler[createmarket.Command, createmarket.Result]
-	ListMarkets  application.Handler[listmarkets.Query, []market.Market]
+	RegisterCell  application.Handler[registercell.Command, registercell.Result]
+	CreateMarket  application.Handler[createmarket.Command, createmarket.Result]
+	ArchiveMarket application.Handler[archivemarket.Command, archivemarket.Result]
+	ListMarkets   application.Handler[listmarkets.Query, []market.Market]
 }
 
 type Service struct {
@@ -60,6 +62,18 @@ func (s *Service) CreateMarket(ctx context.Context, req *controlplanev1.CreateMa
 		return nil, transportError(err)
 	}
 	return &controlplanev1.CreateMarketResponse{Market: toMarket(result.Market), Created: result.Created}, nil
+}
+
+func (s *Service) ArchiveMarket(ctx context.Context, req *controlplanev1.ArchiveMarketRequest) (*controlplanev1.ArchiveMarketResponse, error) {
+	subject, err := s.subjects.Resolve(ctx)
+	if err != nil {
+		return nil, transportError(err)
+	}
+	result, err := s.handlers.ArchiveMarket.Handle(ctx, archivemarket.Command{Subject: subject, MarketID: req.GetMarketId()})
+	if err != nil {
+		return nil, transportError(err)
+	}
+	return &controlplanev1.ArchiveMarketResponse{Archived: result.Archived}, nil
 }
 
 func (s *Service) ListMarkets(ctx context.Context, _ *controlplanev1.ListMarketsRequest) (*controlplanev1.ListMarketsResponse, error) {

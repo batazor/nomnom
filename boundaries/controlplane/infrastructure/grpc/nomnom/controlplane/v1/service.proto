@@ -16,8 +16,13 @@ service ControlPlaneService {
   // (ROUTES_UNAVAILABLE), the write stays and a repeat applies them again.
   rpc RegisterCell(RegisterCellRequest) returns (RegisterCellResponse);
   rpc CreateMarket(CreateMarketRequest) returns (CreateMarketResponse);
+  // Archives a Market: it leaves ListMarkets and the public gateway, its id
+  // is never created again (CreateMarket is ALREADY_EXISTS, MARKET_ARCHIVED).
+  // A repeat succeeds with archived = false; an unknown market_id is
+  // NOT_FOUND. Routes are applied as after the other writes.
+  rpc ArchiveMarket(ArchiveMarketRequest) returns (ArchiveMarketResponse);
 
-  // Requires platform#manage_markets.
+  // Requires platform#manage_markets. Archived Markets are not listed.
   rpc ListMarkets(ListMarketsRequest) returns (ListMarketsResponse);
 }
 
@@ -48,6 +53,15 @@ message CreateMarketRequest {
 message CreateMarketResponse {
   Market market = 1;
   bool created = 2;
+}
+
+message ArchiveMarketRequest {
+  string market_id = 1;
+}
+
+message ArchiveMarketResponse {
+  // False when the Market was archived already.
+  bool archived = 1;
 }
 
 message ListMarketsRequest {}

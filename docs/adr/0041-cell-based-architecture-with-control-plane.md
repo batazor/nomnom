@@ -58,12 +58,18 @@ Router ячеек — публичный gateway; всё, что обслужи�
 - Записи — `RegisterCell`, `CreateMarket` — только для `platform#manage_markets` (оператор,
   [ADR 18](0018-spicedb-for-authorization.md)). Повтор с теми же значениями идемпотентен, с другими —
   `ALREADY_EXISTS`. Market создаётся сразу размещённым в существующей Cell.
-- Чтение `ListMarkets` — для оператора.
+- `ArchiveMarket` (тоже `platform#manage_markets`) архивирует Market: он уходит из `ListMarkets`, из
+  списка Market и с публичного gateway (его `HTTPRoute` удаляется), строка реестра остаётся, и
+  `market_id` больше не создаётся (`ALREADY_EXISTS`, `MARKET_ARCHIVED`). Повтор — успех с
+  `archived = false`. Удаления Market нет: id не переиспользуется. Так прогоны kind e2e, которым
+  нужен свой Market на прогон, убирают его в cleanup.
+- Чтение `ListMarkets` — для оператора; архивные Market не возвращаются.
 - **Маршруты публичного gateway пишет control plane.** Из реестра он строит ресурсы Gateway API в
   неймспейсе публичного gateway и применяет их server-side apply: `HTTPRoute` на каждое размещение
   Market (см. «Маршрутизация») и список Market для выбора в UI — `ConfigMap`, который Envoy отдаёт
   сам по `GET /markets` через `HTTPRouteFilter` `directResponse`. Права ServiceAccount control plane
-  — только запись `HTTPRoute`, `HTTPRouteFilter` и `ConfigMap` в этом неймспейсе. Запись оператора
+  — только запись `HTTPRoute`, `HTTPRouteFilter` и `ConfigMap` в этом неймспейсе и удаление своих
+  `HTTPRoute` Market, которых нет в реестре (архивных). Запись оператора
   сначала фиксируется в БД, затем применяются ресурсы; ошибка применения возвращается оператору как
   `UNAVAILABLE`, и повтор той же команды (идемпотентный) применяет их снова. При старте control
   plane один раз приводит ресурсы к реестру.

@@ -15,8 +15,8 @@ import (
 // The key is unique within the database of the control plane.
 const routesLockKey int64 = 410001
 
-// Routes is the registry snapshot of route publication: markets joined with
-// the Router of their Cell.
+// Routes is the registry snapshot of route publication: the Markets that are
+// not archived joined with the Router of their Cell.
 type Routes struct{ store *Store }
 
 var _ publishroutes.Registry = Routes{}
@@ -45,7 +45,7 @@ func (r Routes) Locked(ctx context.Context, publish func(context.Context, []publ
 func (r Routes) snapshot(ctx context.Context, tx pgx.Tx) ([]publishroutes.MarketRoute, error) {
 	columns := append(qualified("m", marketColumns), routerColumns("c")...)
 	sql, args, err := psql.Select(columns...).From("markets m").Join("cells c ON c.cell_id = m.cell_id").
-		OrderBy("m.name", "m.market_id").ToSql()
+		Where("m.archived_at IS NULL").OrderBy("m.name", "m.market_id").ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build routes query: %w", err)
 	}

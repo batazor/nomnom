@@ -39,7 +39,7 @@ func (m Markets) Add(ctx context.Context, candidate market.Market) (bool, error)
 
 func (m Markets) Get(ctx context.Context, id vo.MarketID) (market.Market, error) {
 	var row marketRow
-	err := m.store.queryRow(ctx, psql.Select(marketColumns...).From("markets").Where("market_id = ?", string(id)), row.dest()...)
+	err := m.store.queryRow(ctx, psql.Select(append(marketColumns, "archived_at IS NOT NULL")...).From("markets").Where("market_id = ?", string(id)), append(row.dest(), &row.archived)...)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return market.Market{}, fmt.Errorf("%w: %s", market.ErrNotFound, id)
@@ -49,8 +49,28 @@ func (m Markets) Get(ctx context.Context, id vo.MarketID) (market.Market, error)
 	return row.restore()
 }
 
+// Archive sets archived_at once; a second call changes nothing.
+func (m Markets) Archive(ctx context.Context, id vo.MarketID) (bool, error) {
+	sql, args, err := psql.Update("markets").Set("archived_at", m.store.now().UTC()).
+		Where("market_id = ? AND archived_at IS NULL", string(id)).ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build statement: %w", err)
+	}
+	tag, err := m.store.pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return false, fmt.Errorf("archive market: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return true, nil
+	}
+	if _, err := m.Get(ctx, id); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 func (m Markets) List(ctx context.Context) ([]market.Market, error) {
-	rows, err := m.store.query(ctx, psql.Select(marketColumns...).From("markets").OrderBy("name", "market_id"))
+	rows, err := m.store.query(ctx, psql.Select(marketColumns...).From("markets").Where("archived_at IS NULL").OrderBy("name", "market_id"))
 	if err != nil {
 		return nil, fmt.Errorf("select markets: %w", err)
 	}
@@ -73,7 +93,12 @@ func (m Markets) List(ctx context.Context) ([]market.Market, error) {
 	return markets, nil
 }
 
-type marketRow struct{ id, name, currency, timeZone, cellID string }
+// marketRow is a stored Market; archived is read only where it matters, the
+// list and the routes hold no archived Market.
+type marketRow struct {
+	id, name, currency, timeZone, cellID string
+	archived                             bool
+}
 
 func (r *marketRow) dest() []any { return []any{&r.id, &r.name, &r.currency, &r.timeZone, &r.cellID} }
 
@@ -90,5 +115,9 @@ func (r marketRow) restore() (market.Market, error) {
 	if err := errors.Join(errName, errCurrency, errTimeZone, errCell); err != nil {
 		return market.Market{}, fmt.Errorf("stored market %s: %w", id, err)
 	}
-	return market.New(id, name, currency, timeZone, cellID), nil
+	restored := market.New(id, name, currency, timeZone, cellID)
+	if r.archived {
+		restored = restored.Archive()
+	}
+	return restored, nil
 }

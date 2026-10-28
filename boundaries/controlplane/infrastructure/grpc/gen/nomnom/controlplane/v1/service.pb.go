@@ -256,6 +256,95 @@ func (x *CreateMarketResponse) GetCreated() bool {
 	return false
 }
 
+type ArchiveMarketRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MarketId      string                 `protobuf:"bytes,1,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveMarketRequest) Reset() {
+	*x = ArchiveMarketRequest{}
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveMarketRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveMarketRequest) ProtoMessage() {}
+
+func (x *ArchiveMarketRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveMarketRequest.ProtoReflect.Descriptor instead.
+func (*ArchiveMarketRequest) Descriptor() ([]byte, []int) {
+	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ArchiveMarketRequest) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
+type ArchiveMarketResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// False when the Market was archived already.
+	Archived      bool `protobuf:"varint,1,opt,name=archived,proto3" json:"archived,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveMarketResponse) Reset() {
+	*x = ArchiveMarketResponse{}
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveMarketResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveMarketResponse) ProtoMessage() {}
+
+func (x *ArchiveMarketResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveMarketResponse.ProtoReflect.Descriptor instead.
+func (*ArchiveMarketResponse) Descriptor() ([]byte, []int) {
+	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ArchiveMarketResponse) GetArchived() bool {
+	if x != nil {
+		return x.Archived
+	}
+	return false
+}
+
 type ListMarketsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -264,7 +353,7 @@ type ListMarketsRequest struct {
 
 func (x *ListMarketsRequest) Reset() {
 	*x = ListMarketsRequest{}
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[4]
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -276,7 +365,7 @@ func (x *ListMarketsRequest) String() string {
 func (*ListMarketsRequest) ProtoMessage() {}
 
 func (x *ListMarketsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[4]
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -289,7 +378,7 @@ func (x *ListMarketsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMarketsRequest.ProtoReflect.Descriptor instead.
 func (*ListMarketsRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{4}
+	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{6}
 }
 
 type ListMarketsResponse struct {
@@ -302,7 +391,7 @@ type ListMarketsResponse struct {
 
 func (x *ListMarketsResponse) Reset() {
 	*x = ListMarketsResponse{}
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[5]
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -314,7 +403,7 @@ func (x *ListMarketsResponse) String() string {
 func (*ListMarketsResponse) ProtoMessage() {}
 
 func (x *ListMarketsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[5]
+	mi := &file_nomnom_controlplane_v1_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -327,7 +416,7 @@ func (x *ListMarketsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMarketsResponse.ProtoReflect.Descriptor instead.
 func (*ListMarketsResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{5}
+	return file_nomnom_controlplane_v1_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListMarketsResponse) GetMarkets() []*Market {
@@ -356,13 +445,18 @@ const file_nomnom_controlplane_v1_service_proto_rawDesc = "" +
 	"\ttime_zone\x18\x05 \x01(\tR\btimeZone\"h\n" +
 	"\x14CreateMarketResponse\x126\n" +
 	"\x06market\x18\x01 \x01(\v2\x1e.nomnom.controlplane.v1.MarketR\x06market\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\x14\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"3\n" +
+	"\x14ArchiveMarketRequest\x12\x1b\n" +
+	"\tmarket_id\x18\x01 \x01(\tR\bmarketId\"3\n" +
+	"\x15ArchiveMarketResponse\x12\x1a\n" +
+	"\barchived\x18\x01 \x01(\bR\barchived\"\x14\n" +
 	"\x12ListMarketsRequest\"O\n" +
 	"\x13ListMarketsResponse\x128\n" +
-	"\amarkets\x18\x01 \x03(\v2\x1e.nomnom.controlplane.v1.MarketR\amarkets2\xd3\x02\n" +
+	"\amarkets\x18\x01 \x03(\v2\x1e.nomnom.controlplane.v1.MarketR\amarkets2\xc1\x03\n" +
 	"\x13ControlPlaneService\x12i\n" +
 	"\fRegisterCell\x12+.nomnom.controlplane.v1.RegisterCellRequest\x1a,.nomnom.controlplane.v1.RegisterCellResponse\x12i\n" +
-	"\fCreateMarket\x12+.nomnom.controlplane.v1.CreateMarketRequest\x1a,.nomnom.controlplane.v1.CreateMarketResponse\x12f\n" +
+	"\fCreateMarket\x12+.nomnom.controlplane.v1.CreateMarketRequest\x1a,.nomnom.controlplane.v1.CreateMarketResponse\x12l\n" +
+	"\rArchiveMarket\x12,.nomnom.controlplane.v1.ArchiveMarketRequest\x1a-.nomnom.controlplane.v1.ArchiveMarketResponse\x12f\n" +
 	"\vListMarkets\x12*.nomnom.controlplane.v1.ListMarketsRequest\x1a+.nomnom.controlplane.v1.ListMarketsResponseB\x95\x02\n" +
 	"\x1acom.nomnom.controlplane.v1B\fServiceProtoP\x01Zogithub.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1;controlplanev1\xa2\x02\x03NCX\xaa\x02\x16Nomnom.Controlplane.V1\xca\x02\x16Nomnom\\Controlplane\\V1\xe2\x02\"Nomnom\\Controlplane\\V1\\GPBMetadata\xea\x02\x18Nomnom::Controlplane::V1b\x06proto3"
 
@@ -378,34 +472,38 @@ func file_nomnom_controlplane_v1_service_proto_rawDescGZIP() []byte {
 	return file_nomnom_controlplane_v1_service_proto_rawDescData
 }
 
-var file_nomnom_controlplane_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_nomnom_controlplane_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_nomnom_controlplane_v1_service_proto_goTypes = []any{
-	(*RegisterCellRequest)(nil),  // 0: nomnom.controlplane.v1.RegisterCellRequest
-	(*RegisterCellResponse)(nil), // 1: nomnom.controlplane.v1.RegisterCellResponse
-	(*CreateMarketRequest)(nil),  // 2: nomnom.controlplane.v1.CreateMarketRequest
-	(*CreateMarketResponse)(nil), // 3: nomnom.controlplane.v1.CreateMarketResponse
-	(*ListMarketsRequest)(nil),   // 4: nomnom.controlplane.v1.ListMarketsRequest
-	(*ListMarketsResponse)(nil),  // 5: nomnom.controlplane.v1.ListMarketsResponse
-	(*ServiceRef)(nil),           // 6: nomnom.controlplane.v1.ServiceRef
-	(*Cell)(nil),                 // 7: nomnom.controlplane.v1.Cell
-	(*Market)(nil),               // 8: nomnom.controlplane.v1.Market
+	(*RegisterCellRequest)(nil),   // 0: nomnom.controlplane.v1.RegisterCellRequest
+	(*RegisterCellResponse)(nil),  // 1: nomnom.controlplane.v1.RegisterCellResponse
+	(*CreateMarketRequest)(nil),   // 2: nomnom.controlplane.v1.CreateMarketRequest
+	(*CreateMarketResponse)(nil),  // 3: nomnom.controlplane.v1.CreateMarketResponse
+	(*ArchiveMarketRequest)(nil),  // 4: nomnom.controlplane.v1.ArchiveMarketRequest
+	(*ArchiveMarketResponse)(nil), // 5: nomnom.controlplane.v1.ArchiveMarketResponse
+	(*ListMarketsRequest)(nil),    // 6: nomnom.controlplane.v1.ListMarketsRequest
+	(*ListMarketsResponse)(nil),   // 7: nomnom.controlplane.v1.ListMarketsResponse
+	(*ServiceRef)(nil),            // 8: nomnom.controlplane.v1.ServiceRef
+	(*Cell)(nil),                  // 9: nomnom.controlplane.v1.Cell
+	(*Market)(nil),                // 10: nomnom.controlplane.v1.Market
 }
 var file_nomnom_controlplane_v1_service_proto_depIdxs = []int32{
-	6, // 0: nomnom.controlplane.v1.RegisterCellRequest.router:type_name -> nomnom.controlplane.v1.ServiceRef
-	7, // 1: nomnom.controlplane.v1.RegisterCellResponse.cell:type_name -> nomnom.controlplane.v1.Cell
-	8, // 2: nomnom.controlplane.v1.CreateMarketResponse.market:type_name -> nomnom.controlplane.v1.Market
-	8, // 3: nomnom.controlplane.v1.ListMarketsResponse.markets:type_name -> nomnom.controlplane.v1.Market
-	0, // 4: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:input_type -> nomnom.controlplane.v1.RegisterCellRequest
-	2, // 5: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:input_type -> nomnom.controlplane.v1.CreateMarketRequest
-	4, // 6: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:input_type -> nomnom.controlplane.v1.ListMarketsRequest
-	1, // 7: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:output_type -> nomnom.controlplane.v1.RegisterCellResponse
-	3, // 8: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:output_type -> nomnom.controlplane.v1.CreateMarketResponse
-	5, // 9: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:output_type -> nomnom.controlplane.v1.ListMarketsResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	8,  // 0: nomnom.controlplane.v1.RegisterCellRequest.router:type_name -> nomnom.controlplane.v1.ServiceRef
+	9,  // 1: nomnom.controlplane.v1.RegisterCellResponse.cell:type_name -> nomnom.controlplane.v1.Cell
+	10, // 2: nomnom.controlplane.v1.CreateMarketResponse.market:type_name -> nomnom.controlplane.v1.Market
+	10, // 3: nomnom.controlplane.v1.ListMarketsResponse.markets:type_name -> nomnom.controlplane.v1.Market
+	0,  // 4: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:input_type -> nomnom.controlplane.v1.RegisterCellRequest
+	2,  // 5: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:input_type -> nomnom.controlplane.v1.CreateMarketRequest
+	4,  // 6: nomnom.controlplane.v1.ControlPlaneService.ArchiveMarket:input_type -> nomnom.controlplane.v1.ArchiveMarketRequest
+	6,  // 7: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:input_type -> nomnom.controlplane.v1.ListMarketsRequest
+	1,  // 8: nomnom.controlplane.v1.ControlPlaneService.RegisterCell:output_type -> nomnom.controlplane.v1.RegisterCellResponse
+	3,  // 9: nomnom.controlplane.v1.ControlPlaneService.CreateMarket:output_type -> nomnom.controlplane.v1.CreateMarketResponse
+	5,  // 10: nomnom.controlplane.v1.ControlPlaneService.ArchiveMarket:output_type -> nomnom.controlplane.v1.ArchiveMarketResponse
+	7,  // 11: nomnom.controlplane.v1.ControlPlaneService.ListMarkets:output_type -> nomnom.controlplane.v1.ListMarketsResponse
+	8,  // [8:12] is the sub-list for method output_type
+	4,  // [4:8] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_controlplane_v1_service_proto_init() }
@@ -420,7 +518,7 @@ func file_nomnom_controlplane_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_controlplane_v1_service_proto_rawDesc), len(file_nomnom_controlplane_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

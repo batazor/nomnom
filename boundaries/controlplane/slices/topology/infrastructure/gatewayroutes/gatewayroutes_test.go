@@ -9,8 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -120,10 +122,24 @@ func TestAnEmptyRegistryPublishesAnEmptyList(t *testing.T) {
 	assert.Equal(t, `{"markets":[]}`, body)
 }
 
-// applied records server-side apply patches; failing names a resource to refuse.
-func applied(t *testing.T, failing string) (*dynamicfake.FakeDynamicClient, *[]string) {
+// httpRoute is an HTTPRoute stored in the cluster with its labels.
+func httpRoute(name string, labels map[string]string) runtime.Object {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("gateway.networking.k8s.io/v1")
+	obj.SetKind("HTTPRoute")
+	obj.SetNamespace("nomnom-gateway")
+	obj.SetName(name)
+	obj.SetLabels(labels)
+	return obj
+}
+
+// applied records server-side apply patches; failing names a resource to
+// refuse; stored are the objects in the cluster before the apply.
+func applied(t *testing.T, failing string, stored ...runtime.Object) (*dynamicfake.FakeDynamicClient, *[]string) {
 	t.Helper()
-	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}: "HTTPRouteList",
+	}, stored...)
 	var names []string
 	client.PrependReactor("patch", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		patch := action.(k8stesting.PatchAction)
@@ -154,4 +170,23 @@ func TestApplyReportsAFailureAndAppliesTheRest(t *testing.T) {
 	err := gatewayroutes.New(client, cfg).Apply(context.Background(), routes(t))
 	assert.ErrorContains(t, err, "httproutes nomnom-gateway/market-berlin")
 	assert.Contains(t, *names, "httproutes/market-hamburg")
+}
+
+func TestApplyRemovesTheRoutesOfArchivedMarkets(t *testing.T) {
+	managed := map[string]string{"nomnom.dev/route": "market", "app.kubernetes.io/managed-by": "nomnom-controlplane"}
+	client, _ := applied(t, "",
+		httpRoute("market-berlin", managed),
+		httpRoute("market-kind-e2e-1", managed),
+		httpRoute("market-foreign", map[string]string{"nomnom.dev/route": "market"}),
+	)
+	require.NoError(t, gatewayroutes.New(client, cfg).Apply(context.Background(), routes(t)))
+
+	httpRoutes := client.Resource(schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}).Namespace("nomnom-gateway")
+	list, err := httpRoutes.List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	var names []string
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	assert.ElementsMatch(t, []string{"market-berlin", "market-foreign"}, names)
 }

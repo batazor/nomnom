@@ -56,7 +56,7 @@ spec:
                 market: ($market)
       # В конце теста, в том числе после провала, курьер прогона уходит с линии (если успел
       # выйти; ответ лишь пишется в log): свободный курьер прошлого прогона получал бы предложения следующих прогонов
-      # до истечения каждого.
+      # до истечения каждого. Market прогона архивируется.
       cleanup:
         # Удалить ресторан нельзя: у restaurants нет delete/archive RPC. Ресторан прогона
         # закрывается (ListRestaurants его больше не показывает), персонал отзывается. Ids
@@ -111,6 +111,27 @@ spec:
                   internal-gateway.envoy-gateway-system.svc.cluster.local:8080 \
                   nomnom.delivery.v1.DeliveryService/SetCourierAvailability 2>&1
               ' "$assertion" "$COURIER" || echo "courier $COURIER stays as is (not registered or not online)"
+        # Последним Market прогона архивируется (ADR 41): он уходит из списка Market и с публичного
+        # gateway, иначе каждый прогон добавлял бы город в выбор клиента. Market, который прогон не
+        # успел создать, — NOT_FOUND, это лишь пишется в log.
+        - script:
+            env:
+              - name: MARKET
+                value: ($market)
+            content: |
+              set -eu
+              root="$(git rev-parse --show-toplevel)"
+              key="$(mktemp)"
+              trap 'rm -f "$key"' EXIT
+              kubectl -n nomnom-bff get secret bff-assertion-key -o json | jq -r '.data["tls.key"] // .data["key.pem"]' | base64 -d >"$key"
+              assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind nomnom.controlplane kind-operator)"
+              kubectl -n nomnom-bff exec deploy/e2e-driver -- sh -c '
+                grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \
+                  -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.controlplane)" \
+                  -H "x-nomnom-user-assertion: $0" -d "{\"marketId\":\"$1\"}" \
+                  internal-gateway.envoy-gateway-system.svc.cluster.local:8080 \
+                  nomnom.controlplane.v1.ControlPlaneService/ArchiveMarket 2>&1
+              ' "$assertion" "$MARKET" || echo "market $MARKET stays (not created)"
 
     # 0. Оператор создаёт Market прогона в cell-1 (его регистрирует chart ops/kind/demo).
     - name: operator creates run market

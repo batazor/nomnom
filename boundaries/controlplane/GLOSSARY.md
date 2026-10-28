@@ -31,6 +31,10 @@ _Avoid_: Placement Map, routing table
 JSON `GET /markets`, который Envoy публичного gateway отдаёт сам из `ConfigMap markets`; его строит control plane.
 _Avoid_: Markets query
 
+**Архивный Market**:
+Market после `ArchiveMarket`: нет в `ListMarkets`, в Списке Market и Маршрутах Market; строка реестра остаётся, `market_id` не создаётся снова.
+_Avoid_: Deleted market, removed market
+
 **Idempotent Repeat**:
-Повтор `RegisterCell`/`CreateMarket` с теми же значениями: успех с `created = false`; другие значения для известного id — `ALREADY_EXISTS`.
+Повтор `RegisterCell`/`CreateMarket` с теми же значениями: успех с `created = false`; другие значения для известного id — `ALREADY_EXISTS`. Повтор `ArchiveMarket` — успех с `archived = false`.
 _Avoid_: Upsert, update

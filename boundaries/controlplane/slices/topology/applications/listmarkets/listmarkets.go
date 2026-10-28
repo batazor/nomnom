@@ -1,4 +1,5 @@
-// Package listmarkets returns every Market of the registry (ADR 41). Only
+// Package listmarkets returns every Market of the registry that is not
+// archived (ADR 41). Only
 // platform#manage_markets — the platform operator — reads it; clients get the
 // Markets from the public gateway, not from the control plane.
 package listmarkets
@@ -16,7 +17,7 @@ type Query struct {
 	Subject application.Subject
 }
 
-// Lister reads every Market by name, then by id.
+// Lister reads every Market that is not archived, by name, then by id.
 type Lister interface {
 	List(ctx context.Context) ([]market.Market, error)
 }

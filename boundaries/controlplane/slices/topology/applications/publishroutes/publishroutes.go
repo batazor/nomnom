@@ -27,12 +27,13 @@ type MarketRoute struct {
 // Registry reads the snapshot of the routes under the lock of route
 // publication.
 type Registry interface {
-	// Locked runs publish while it holds the lock; routes are every Market by
-	// name, then by id, read after the lock is taken.
+	// Locked runs publish while it holds the lock; routes are every Market
+	// that is not archived, by name, then by id, read after the lock is taken.
 	Locked(ctx context.Context, publish func(ctx context.Context, routes []MarketRoute) error) error
 }
 
-// Applier applies the whole set of routes to the public gateway.
+// Applier applies the whole set of routes to the public gateway; a Market
+// route outside the set is removed.
 type Applier interface {
 	Apply(ctx context.Context, routes []MarketRoute) error
 }

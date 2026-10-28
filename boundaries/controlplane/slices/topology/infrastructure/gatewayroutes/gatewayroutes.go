@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,6 +43,9 @@ const (
 	RouteMarket = "market"
 	routeList   = "markets"
 )
+
+// marketRoutesSelector selects the Market routes this field manager applied.
+var marketRoutesSelector = LabelRoute + "=" + RouteMarket + ",app.kubernetes.io/managed-by=" + FieldManager
 
 var (
 	gvrHTTPRoute       = schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}
@@ -87,20 +91,45 @@ func NewInCluster(cfg Config) (Applier, error) {
 	return New(client, cfg), nil
 }
 
-// Apply applies the list of Markets first and the Market routes after it;
-// every resource is applied even when one fails, and all failures are returned.
+// Apply applies the list of Markets first and the Market routes after it,
+// then removes the Market routes of this field manager that the snapshot has
+// not — those of archived Markets. Every step runs even when one fails, and
+// all failures are returned.
 func (a Applier) Apply(ctx context.Context, routes []publishroutes.MarketRoute) error {
 	resources, err := Build(a.cfg, routes)
 	if err != nil {
 		return err
 	}
 	var errs []error
+	kept := make(map[string]bool, len(routes))
 	for _, resource := range resources {
 		name := resource.Object.GetName()
+		kept[name] = true
 		_, err := a.client.Resource(resource.GVR).Namespace(a.cfg.Namespace).
 			Apply(ctx, name, resource.Object, metav1.ApplyOptions{FieldManager: FieldManager, Force: true})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("apply %s %s/%s: %w", resource.GVR.Resource, a.cfg.Namespace, name, err))
+		}
+	}
+	return errors.Join(append(errs, a.prune(ctx, kept))...)
+}
+
+// prune deletes the Market routes outside kept; an HTTPRoute gone already is
+// fine.
+func (a Applier) prune(ctx context.Context, kept map[string]bool) error {
+	httpRoutes := a.client.Resource(gvrHTTPRoute).Namespace(a.cfg.Namespace)
+	list, err := httpRoutes.List(ctx, metav1.ListOptions{LabelSelector: marketRoutesSelector})
+	if err != nil {
+		return fmt.Errorf("list market routes in %s: %w", a.cfg.Namespace, err)
+	}
+	var errs []error
+	for _, item := range list.Items {
+		name := item.GetName()
+		if kept[name] {
+			continue
+		}
+		if err := httpRoutes.Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("delete httproutes %s/%s: %w", a.cfg.Namespace, name, err))
 		}
 	}
 	return errors.Join(errs...)

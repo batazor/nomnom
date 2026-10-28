@@ -28,6 +28,7 @@ type transport struct {
 var transportByKind = map[application.ErrorKind]transport{
 	application.KindInvalidInput:  {code: codes.InvalidArgument, reason: "INVALID_ARGUMENT"},
 	application.KindAlreadyExists: {code: codes.AlreadyExists, reason: "ALREADY_EXISTS"},
+	application.KindNotFound:      {code: codes.NotFound, reason: "NOT_FOUND"},
 	application.KindDomainRule:    {code: codes.FailedPrecondition, reason: "FAILED_PRECONDITION"},
 	application.KindUnavailable:   {code: codes.Unavailable, reason: "DEPENDENCY_UNAVAILABLE", message: "dependency unavailable"},
 	application.KindPermission:    {code: codes.PermissionDenied, reason: "OPERATION_NOT_ALLOWED"},
@@ -49,6 +50,10 @@ func transportError(err error) error {
 		answer.reason = "CELL_ALREADY_REGISTERED"
 	case errors.Is(err, market.ErrAlreadyCreated):
 		answer.reason = "MARKET_ALREADY_EXISTS"
+	case errors.Is(err, market.ErrArchived):
+		answer.reason = "MARKET_ARCHIVED"
+	case errors.Is(err, market.ErrNotFound):
+		answer.reason = "MARKET_NOT_FOUND"
 	case errors.Is(err, market.ErrUnknownCell):
 		answer.reason = "CELL_NOT_FOUND"
 	case errors.Is(err, publishroutes.ErrRoutesUnavailable):

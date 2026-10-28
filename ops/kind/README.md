@@ -130,7 +130,7 @@ make kind-down
   [`values/controlplane.yaml`](values/controlplane.yaml): своя PostgreSQL и SpiceDB
   (`manifests/netpol/app-infrastructure.yaml`), бизнес-порт 8086 только через internal gateway.
   Allowlist: `nomnom-bff/bff`, `nomnom-bff/demo-seed` (делегат оператора для `RegisterCell`,
-  `CreateMarket`) и `nomnom-bff/e2e-driver`; все операции — только оператору
+  `CreateMarket`) и `nomnom-bff/e2e-driver` (в cleanup — `ArchiveMarket` Market прогона); все операции — только оператору
   (`platform#manage_markets`). После каждой записи и при старте control plane server-side apply
   пишет в `nomnom-gateway` маршруты публичного gateway: `HTTPRoute market-<market_id>`
   (`/m/<market_id>` → Service `nomnom-bff/bff`, префикс снимается, `X-Nomnom-Market` ставится из
@@ -251,7 +251,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `delivery-v1-administration` | `RegisterCourier`, `RetireCourier`, `OfferDeliveryToCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 | `controlplane-v1-reads` | `ListMarkets` | `reads` |
-| `controlplane-v1-commands` | `RegisterCell`, `CreateMarket` | `commands` |
+| `controlplane-v1-commands` | `RegisterCell`, `CreateMarket`, `ArchiveMarket` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
 `reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и

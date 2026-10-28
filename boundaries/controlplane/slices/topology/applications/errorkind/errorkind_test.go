@@ -23,6 +23,8 @@ func TestClassify(t *testing.T) {
 		fmt.Errorf("register: %w", cell.ErrAlreadyRegistered):                                   application.KindAlreadyExists,
 		market.ErrAlreadyCreated:                                                                application.KindAlreadyExists,
 		fmt.Errorf("create: %w", market.ErrUnknownCell):                                         application.KindDomainRule,
+		market.ErrArchived: application.KindAlreadyExists,
+		fmt.Errorf("archive: %w", market.ErrNotFound): application.KindNotFound,
 		errors.New("boom"): application.KindInternal,
 	} {
 		assert.Equal(t, kind, errorkind.Classify(err), err.Error())
