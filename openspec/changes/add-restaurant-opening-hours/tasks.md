@@ -14,7 +14,7 @@
 
 ## 3. ops и документация
 
-- [ ] 3.1 Seed расписания демо-ресторанов, kind e2e.
+- [x] 3.1 Seed расписания демо-ресторанов, kind e2e.
 - [x] 3.2 `docs/kitchen.md`, `docs/specification-pattern.md`, `docs/ubiquitous-language.md`, README `restaurants`, ADR 0002 `restaurants`.
 
 ## 4. Проверка

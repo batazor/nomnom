@@ -2,7 +2,7 @@
 
 ## 1. controlplane: часовой пояс Market
 
-- [ ] 1.1 `time_zone` в `CreateMarket` и реестре, валидация IANA, migration существующих Market; `timeZone` в ConfigMap `GET /markets`; тесты (`FR-689`, `AC-933`, `AC-934`, `FR-632`, `AC-811`).
+- [x] 1.1 `time_zone` в `CreateMarket` и реестре, валидация IANA, migration существующих Market; `timeZone` в ConfigMap `GET /markets`; тесты (`FR-689`, `AC-933`, `AC-934`, `FR-632`, `AC-811`).
 
 ## 2. restaurants: окна и резервации
 
@@ -20,7 +20,7 @@
 
 ## 4. delivery
 
-- [ ] 4.1 Статистика `courier_lead` и `transit` по фактам Delivery, конфиг `DELIVERY_ESTIMATE__*`, gRPC `EstimateDeliveryDuration`; PostgreSQL testcontainers (`FR-676`, `FR-691`, `AC-904`, `AC-905`, `AC-935`).
+- [x] 4.1 Статистика `courier_lead` и `transit` по фактам Delivery, конфиг `DELIVERY_ESTIMATE__*`, gRPC `EstimateDeliveryDuration`; PostgreSQL testcontainers (`FR-676`, `FR-691`, `AC-904`, `AC-905`, `AC-935`).
 
 ## 5. orders
 
@@ -39,7 +39,7 @@
 ## 7. ops и документация
 
 - [ ] 7.1 Values `restaurants`, `orders`, `delivery`; GRPCRoute новых методов; seed ёмкости демо-ресторанов и поясов Market; kind e2e запланированного заказа.
-- [ ] 7.2 Правка ADR 5 `orders` (stage `scheduled`, таймеры, резервация в Saga), ADR 0002 `restaurants` (коллекция окон), ADR 41 (пояс Market); `docs/kitchen.md` (запланированные заказы, приём ASAP без ограничений, статистика от `queued_at`), `docs/fsm.md`, `docs/ubiquitous-language.md` (Scheduled Order, Delivery Window, Schedule Slot, Slot Reservation, Planned Ready At), README сервисов.
+- [x] 7.2 Правка ADR 5 `orders` (stage `scheduled`, таймеры, резервация в Saga), ADR 0002 `restaurants` (коллекция окон), ADR 41 (пояс Market); `docs/kitchen.md` (запланированные заказы, приём ASAP без ограничений, статистика от `queued_at`), `docs/fsm.md`, `docs/ubiquitous-language.md` (Scheduled Order, Delivery Window, Schedule Slot, Slot Reservation, Planned Ready At), README сервисов.
 
 ## 8. Проверка
 

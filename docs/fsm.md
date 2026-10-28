@@ -338,7 +338,8 @@ stateDiagram-v2
 
 - `PREPARING × MarkReady` — заказ не становится Ready, минуя Assembly;
 - `ACCEPTED/QUEUED × Reject` — Reject After Acceptance не разрешён до продуктового решения; при решении строки добавляются в таблицу, а не обходятся в handler;
-- `QUEUED × Accept` и последующие States — `InvalidTransition`; так как в MVP Queue выполняется в одной UoW с Accept, повтор Accept Order почти всегда встретит `QUEUED`, и UI показывает актуальное состояние заказа;
+- `QUEUED × Accept` и последующие States — `InvalidTransition`; ASAP-заказ Accept Order ставит в очередь в той же UoW, поэтому его повтор почти всегда встретит `QUEUED`, и UI показывает актуальное состояние заказа;
+- `ACCEPTED` устойчив только у запланированного заказа (change [`add-scheduled-orders`](../openspec/changes/add-scheduled-orders/design.md)): Accept оставляет его в `ACCEPTED` с `expected_ready_at = planned_ready_at`, а `Queue` выполняет workflow `orders` в момент старта через `QueueRestaurantOrder`. Окно доставки — данные заказа, а не State; новый State не вводится;
 - `READY × Cancel` и `PICKED_UP × Cancel` — application сопоставляет ошибку с бизнес-результатом `CancellationRejected{ALREADY_READY}`, который Activity `orders` не повторяет как technical failure.
 
 Интерпретация `AlreadyInState` — application layer ([Transition table и результат](#transition-table-и-результат)). Предложение для kitchen board: Start Preparation и Mark Ready for Pickup превращают повтор в успешный no-op без нового Domain Event; Cancel Restaurant Order возвращает сохранённый результат отмены. Политика остаётся предложением до подтверждения продуктом.

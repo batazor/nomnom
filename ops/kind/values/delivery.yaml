@@ -24,6 +24,9 @@ env:
   TRACKING__CITY_BLOCKS: "12"
   TRACKING__BLOCK_METERS: "150"
   TRACKING__PERSIST_INTERVAL: 15s
+  # Kafka consumer собственных фактов Delivery для Delivery Duration Statistics (FR-676);
+  # группа и начальный offset заданы в chart (values.yaml).
+  KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
