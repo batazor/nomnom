@@ -3,6 +3,7 @@ package spicedb_test
 import (
 	"context"
 	"errors"
+	"io"
 	"strconv"
 	"testing"
 	"time"
@@ -116,8 +117,10 @@ func TestSyncFailsAsUnavailable(t *testing.T) {
 	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
 }
 
-// AC-465, AC-467, AC-518, AC-519, AC-522, AC-534, AC-535 against SpiceDB in a
-// testcontainer with the repository bootstrap.
+// The relationship sync and the freshness of checks by the stored ZedToken
+// (AC-467, AC-516, AC-519, AC-535) against SpiceDB in a testcontainer with
+// the repository bootstrap. Permission paths of the schema are asserted by
+// `make authz-validate` (authorization/validation.yaml), not here.
 func TestAgainstSpiceDB(t *testing.T) {
 	server, err := testfixture.StartSpiceDB(context.Background())
 	require.NoError(t, err)
@@ -129,70 +132,76 @@ func TestAgainstSpiceDB(t *testing.T) {
 	a := spicedb.NewAuthorizer(client, stored, 2*time.Second)
 	ctx := context.Background()
 	orderID := "order-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	check := func(subject application.Subject, permission application.Permission) error {
-		return a.Check(ctx, application.AccessCheck{
-			Subject: subject, Permission: permission,
-			Resource: application.Resource{Type: "order", ID: orderID},
-		})
-	}
-	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-" + orderID}
+	customerID := "customer-" + orderID
 
 	sync := func(restaurantID, deliveryID string) {
 		t.Helper()
 		revision, err := a.SyncOrderRelationships(ctx, order.ID(orderID), syncorderrelationships.Subjects{
-			CustomerID: order.CustomerID(customer.ID), RestaurantID: order.RestaurantID(restaurantID), DeliveryID: deliveryID,
+			CustomerID: order.CustomerID(customerID), RestaurantID: order.RestaurantID(restaurantID), DeliveryID: deliveryID,
 		})
 		require.NoError(t, err)
 		stored[orderID] = revision
 	}
+	// relationships lists the stored relationships of the Order as
+	// "relation@type:id", read fully consistently.
+	relationships := func() []string {
+		t.Helper()
+		stream, err := client.ReadRelationships(ctx, &v1.ReadRelationshipsRequest{
+			Consistency:        &v1.Consistency{Requirement: &v1.Consistency_FullyConsistent{FullyConsistent: true}},
+			RelationshipFilter: &v1.RelationshipFilter{ResourceType: "order", OptionalResourceId: orderID},
+		})
+		require.NoError(t, err)
+		var found []string
+		for {
+			resp, err := stream.Recv()
+			if errors.Is(err, io.EOF) {
+				return found
+			}
+			require.NoError(t, err)
+			r := resp.GetRelationship()
+			found = append(found, r.GetRelation()+"@"+r.GetSubject().GetObject().GetObjectType()+":"+r.GetSubject().GetObject().GetObjectId())
+		}
+	}
+	check := func(userID string) error {
+		return a.Check(ctx, application.AccessCheck{
+			Subject:    application.Subject{Kind: application.SubjectUser, ID: userID},
+			Permission: "view",
+			Resource:   application.Resource{Type: "order", ID: orderID},
+		})
+	}
 
-	// AC-516: the sync writes order#customer and order#restaurant.
-	require.ErrorIs(t, check(customer, "view"), application.ErrPermissionDenied)
+	// AC-516, AC-467: the sync writes order#customer and order#restaurant, and
+	// the check right after it reads at least as fresh as the stored revision.
 	sync("restaurant-1", "")
-	require.NoError(t, check(customer, "view"))
-	require.NoError(t, check(customer, "cancel"))
-	require.ErrorIs(t, check(application.Subject{Kind: application.SubjectUser, ID: "stranger"}, "view"), application.ErrPermissionDenied)
+	require.ElementsMatch(t, []string{"customer@user:" + customerID, "restaurant@restaurant:restaurant-1"}, relationships())
+	require.NoError(t, check(customerID))
 
-	// AC-522: restaurant staff view through order#restaurant; the courier
-	// views while delivery#courier names them; nobody but the customer cancels.
-	// The sync replaces the restaurant of the previous state.
-	restaurantID := "restaurant-" + orderID
-	owner := application.Subject{Kind: application.SubjectUser, ID: "owner-" + orderID}
-	touch(t, client, "restaurant", restaurantID, "owner", "user", owner.ID)
-	sync(restaurantID, "")
-	require.NoError(t, check(owner, "view"))
-	require.ErrorIs(t, check(owner, "cancel"), application.ErrPermissionDenied)
-
-	// AC-518: order#delivery links the Order; the courier of the Delivery
-	// (delivery#courier, written by delivery) views it, another courier does not.
+	// The sync replaces the restaurant and links the Delivery. delivery#courier
+	// is written by delivery before the sync, so the stored revision covers it.
 	deliveryA, deliveryB := "delivery-a-"+orderID, "delivery-b-"+orderID
-	courier1 := application.Subject{Kind: application.SubjectUser, ID: "courier-1-" + orderID}
-	courier2 := application.Subject{Kind: application.SubjectUser, ID: "courier-2-" + orderID}
-	touch(t, client, "delivery", deliveryA, "courier", "user", courier1.ID)
-	touch(t, client, "delivery", deliveryB, "courier", "user", courier2.ID)
-	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "no order#delivery yet")
-	sync(restaurantID, deliveryA)
-	require.NoError(t, check(courier1, "view"))
-	require.ErrorIs(t, check(courier1, "cancel"), application.ErrPermissionDenied)
-	require.ErrorIs(t, check(courier2, "view"), application.ErrPermissionDenied, "a courier without delivery#courier of this Delivery")
+	courierA, courierB := "courier-a-"+orderID, "courier-b-"+orderID
+	touch(t, client, "delivery", deliveryA, "courier", "user", courierA)
+	touch(t, client, "delivery", deliveryB, "courier", "user", courierB)
+	sync("restaurant-2", deliveryA)
+	require.ElementsMatch(t, []string{
+		"customer@user:" + customerID, "restaurant@restaurant:restaurant-2", "delivery@delivery:" + deliveryA,
+	}, relationships())
 
 	// AC-519: a change of Delivery replaces the link; a repeated sync of the
-	// same state changes nothing.
-	sync(restaurantID, deliveryB)
-	sync(restaurantID, deliveryB)
-	require.ErrorIs(t, check(courier1, "view"), application.ErrPermissionDenied, "the stored revision makes the change visible")
-	require.NoError(t, check(courier2, "view"))
+	// same state changes nothing. The stored revision makes the change visible
+	// to the next check at once.
+	require.NoError(t, check(courierA))
+	sync("restaurant-2", deliveryB)
+	sync("restaurant-2", deliveryB)
+	require.ElementsMatch(t, []string{
+		"customer@user:" + customerID, "restaurant@restaurant:restaurant-2", "delivery@delivery:" + deliveryB,
+	}, relationships())
+	require.ErrorIs(t, check(courierA), application.ErrPermissionDenied)
+	require.NoError(t, check(courierB))
 
 	// AC-535: a cancelled Delivery unlinks the Order.
-	sync(restaurantID, "")
-	require.ErrorIs(t, check(courier2, "view"), application.ErrPermissionDenied)
-	require.NoError(t, check(customer, "view"))
-
-	worker := application.Subject{Kind: application.SubjectService, ID: "orders-worker"}
-	require.NoError(t, a.Check(ctx, application.AccessCheck{
-		Subject: worker, Permission: "manage_payments",
-		Resource: application.Resource{Type: "platform", ID: "nomnom"},
-	}))
+	sync("restaurant-2", "")
+	require.ElementsMatch(t, []string{"customer@user:" + customerID, "restaurant@restaurant:restaurant-2"}, relationships())
 }
 
 // touch writes resourceType:resourceID#relation@subjectType:subjectID as the
