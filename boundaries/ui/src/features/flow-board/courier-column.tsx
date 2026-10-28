@@ -1,6 +1,6 @@
 import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
-import { useClient, useMutation, useQuery, useSubscription } from "urql";
+import { useMutation, useQuery, useSubscription } from "urql";
 
 import {
   AcceptDeliveryOfferDocument,
@@ -14,7 +14,6 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button, Illustration } from "../../shared/ui";
-import { useDropTarget } from "./board-dnd";
 import { CourierPoolPanel } from "./courier-pool";
 import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
@@ -68,46 +67,6 @@ export function CourierColumn({
     else setProblem(null);
   }
 
-  // A kitchen order dropped here: the courier goes online if needed and takes
-  // the offer of that order, the same as pressing its buttons.
-  const client = useClient();
-  async function take(orderId: string) {
-    setProblem(null);
-    const known = courier;
-    if (!known) return;
-    let current = known;
-    if (current.availability === "BUSY") {
-      setProblem("board.dnd.courierBusy");
-      return;
-    }
-    if (current.availability === "UNAVAILABLE") {
-      const result = await setAvailability({ availability: "AVAILABLE" });
-      current = result.data?.setCourierAvailability.courier ?? current;
-      if (result.error) return settle({ error: result.error });
-    }
-    let offer = current.offers.find(
-      (candidate) => candidate.orderId === orderId,
-    );
-    if (!offer) {
-      const fresh = await client
-        .query(BoardCourierDocument, {}, { requestPolicy: "network-only" })
-        .toPromise();
-      offer = fresh.data?.courier?.offers.find(
-        (candidate) => candidate.orderId === orderId,
-      );
-    }
-    if (!offer) {
-      setProblem("board.dnd.noOffer");
-      return;
-    }
-    const result = await acceptOffer({ offerId: offer.id });
-    settle({
-      error: result.error,
-      problem: result.data?.acceptDeliveryOffer.problem,
-    });
-  }
-  const drop = useDropTarget("order", (cargo) => void take(cargo.orderId));
-
   if (!data && error) {
     return (
       <>
@@ -130,7 +89,7 @@ export function CourierColumn({
   const delivery = courier.currentDelivery;
 
   return (
-    <div className="board-courier" {...drop}>
+    <div className="board-courier">
       <CourierPoolPanel />
       <div className="board-courier-state">
         <p className="board-state" data-availability={courier.availability}>

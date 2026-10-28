@@ -387,6 +387,74 @@ func (_c *MockDeliveryServiceServer_CreateDelivery_Call) RunAndReturn(run func(c
 	return _c
 }
 
+// EstimateDeliveryDuration provides a mock function for the type MockDeliveryServiceServer
+func (_mock *MockDeliveryServiceServer) EstimateDeliveryDuration(context1 context.Context, estimateDeliveryDurationRequest *deliveryv1.EstimateDeliveryDurationRequest) (*deliveryv1.EstimateDeliveryDurationResponse, error) {
+	ret := _mock.Called(context1, estimateDeliveryDurationRequest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EstimateDeliveryDuration")
+	}
+
+	var r0 *deliveryv1.EstimateDeliveryDurationResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.EstimateDeliveryDurationRequest) (*deliveryv1.EstimateDeliveryDurationResponse, error)); ok {
+		return returnFunc(context1, estimateDeliveryDurationRequest)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.EstimateDeliveryDurationRequest) *deliveryv1.EstimateDeliveryDurationResponse); ok {
+		r0 = returnFunc(context1, estimateDeliveryDurationRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*deliveryv1.EstimateDeliveryDurationResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *deliveryv1.EstimateDeliveryDurationRequest) error); ok {
+		r1 = returnFunc(context1, estimateDeliveryDurationRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDeliveryServiceServer_EstimateDeliveryDuration_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EstimateDeliveryDuration'
+type MockDeliveryServiceServer_EstimateDeliveryDuration_Call struct {
+	*mock.Call
+}
+
+// EstimateDeliveryDuration is a helper method to define mock.On call
+//   - context1 context.Context
+//   - estimateDeliveryDurationRequest *deliveryv1.EstimateDeliveryDurationRequest
+func (_e *MockDeliveryServiceServer_Expecter) EstimateDeliveryDuration(context1 any, estimateDeliveryDurationRequest any) *MockDeliveryServiceServer_EstimateDeliveryDuration_Call {
+	return &MockDeliveryServiceServer_EstimateDeliveryDuration_Call{Call: _e.mock.On("EstimateDeliveryDuration", context1, estimateDeliveryDurationRequest)}
+}
+
+func (_c *MockDeliveryServiceServer_EstimateDeliveryDuration_Call) Run(run func(context1 context.Context, estimateDeliveryDurationRequest *deliveryv1.EstimateDeliveryDurationRequest)) *MockDeliveryServiceServer_EstimateDeliveryDuration_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *deliveryv1.EstimateDeliveryDurationRequest
+		if args[1] != nil {
+			arg1 = args[1].(*deliveryv1.EstimateDeliveryDurationRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDeliveryServiceServer_EstimateDeliveryDuration_Call) Return(estimateDeliveryDurationResponse *deliveryv1.EstimateDeliveryDurationResponse, err error) *MockDeliveryServiceServer_EstimateDeliveryDuration_Call {
+	_c.Call.Return(estimateDeliveryDurationResponse, err)
+	return _c
+}
+
+func (_c *MockDeliveryServiceServer_EstimateDeliveryDuration_Call) RunAndReturn(run func(context1 context.Context, estimateDeliveryDurationRequest *deliveryv1.EstimateDeliveryDurationRequest) (*deliveryv1.EstimateDeliveryDurationResponse, error)) *MockDeliveryServiceServer_EstimateDeliveryDuration_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetCourierCurrentDelivery provides a mock function for the type MockDeliveryServiceServer
 func (_mock *MockDeliveryServiceServer) GetCourierCurrentDelivery(context1 context.Context, getCourierCurrentDeliveryRequest *deliveryv1.GetCourierCurrentDeliveryRequest) (*deliveryv1.GetCourierCurrentDeliveryResponse, error) {
 	ret := _mock.Called(context1, getCourierCurrentDeliveryRequest)
@@ -723,6 +791,74 @@ func (_c *MockDeliveryServiceServer_ListAvailableDeliveryOffers_Call) Return(lis
 }
 
 func (_c *MockDeliveryServiceServer_ListAvailableDeliveryOffers_Call) RunAndReturn(run func(context1 context.Context, listAvailableDeliveryOffersRequest *deliveryv1.ListAvailableDeliveryOffersRequest) (*deliveryv1.ListAvailableDeliveryOffersResponse, error)) *MockDeliveryServiceServer_ListAvailableDeliveryOffers_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// OfferDeliveryToCourier provides a mock function for the type MockDeliveryServiceServer
+func (_mock *MockDeliveryServiceServer) OfferDeliveryToCourier(context1 context.Context, offerDeliveryToCourierRequest *deliveryv1.OfferDeliveryToCourierRequest) (*deliveryv1.OfferDeliveryToCourierResponse, error) {
+	ret := _mock.Called(context1, offerDeliveryToCourierRequest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OfferDeliveryToCourier")
+	}
+
+	var r0 *deliveryv1.OfferDeliveryToCourierResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.OfferDeliveryToCourierRequest) (*deliveryv1.OfferDeliveryToCourierResponse, error)); ok {
+		return returnFunc(context1, offerDeliveryToCourierRequest)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *deliveryv1.OfferDeliveryToCourierRequest) *deliveryv1.OfferDeliveryToCourierResponse); ok {
+		r0 = returnFunc(context1, offerDeliveryToCourierRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*deliveryv1.OfferDeliveryToCourierResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *deliveryv1.OfferDeliveryToCourierRequest) error); ok {
+		r1 = returnFunc(context1, offerDeliveryToCourierRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDeliveryServiceServer_OfferDeliveryToCourier_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OfferDeliveryToCourier'
+type MockDeliveryServiceServer_OfferDeliveryToCourier_Call struct {
+	*mock.Call
+}
+
+// OfferDeliveryToCourier is a helper method to define mock.On call
+//   - context1 context.Context
+//   - offerDeliveryToCourierRequest *deliveryv1.OfferDeliveryToCourierRequest
+func (_e *MockDeliveryServiceServer_Expecter) OfferDeliveryToCourier(context1 any, offerDeliveryToCourierRequest any) *MockDeliveryServiceServer_OfferDeliveryToCourier_Call {
+	return &MockDeliveryServiceServer_OfferDeliveryToCourier_Call{Call: _e.mock.On("OfferDeliveryToCourier", context1, offerDeliveryToCourierRequest)}
+}
+
+func (_c *MockDeliveryServiceServer_OfferDeliveryToCourier_Call) Run(run func(context1 context.Context, offerDeliveryToCourierRequest *deliveryv1.OfferDeliveryToCourierRequest)) *MockDeliveryServiceServer_OfferDeliveryToCourier_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *deliveryv1.OfferDeliveryToCourierRequest
+		if args[1] != nil {
+			arg1 = args[1].(*deliveryv1.OfferDeliveryToCourierRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDeliveryServiceServer_OfferDeliveryToCourier_Call) Return(offerDeliveryToCourierResponse *deliveryv1.OfferDeliveryToCourierResponse, err error) *MockDeliveryServiceServer_OfferDeliveryToCourier_Call {
+	_c.Call.Return(offerDeliveryToCourierResponse, err)
+	return _c
+}
+
+func (_c *MockDeliveryServiceServer_OfferDeliveryToCourier_Call) RunAndReturn(run func(context1 context.Context, offerDeliveryToCourierRequest *deliveryv1.OfferDeliveryToCourierRequest) (*deliveryv1.OfferDeliveryToCourierResponse, error)) *MockDeliveryServiceServer_OfferDeliveryToCourier_Call {
 	_c.Call.Return(run)
 	return _c
 }

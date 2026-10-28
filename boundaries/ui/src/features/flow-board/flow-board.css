@@ -457,9 +457,11 @@ button.board-card-head {
   background: var(--color-primary-soft);
 }
 
-.board-courier {
-  min-height: 12rem;
+/* A free courier of the pool takes a dropped order: the mark goes around the
+   row, outside its text. */
+.board-pool-members > li[data-drop] {
   border-radius: var(--radius-control);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: no-preference) {

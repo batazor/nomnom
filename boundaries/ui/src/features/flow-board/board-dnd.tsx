@@ -9,8 +9,8 @@ import {
 } from "react";
 
 // What can be carried across the board: the customer's cart to the kitchen,
-// which places the order, or a kitchen order to the courier. Buttons do the
-// same steps without a pointer.
+// which places the order, or a kitchen order to a free courier of the pool,
+// who gets an offer of it.
 export type BoardCargo =
   | { kind: "cart"; submit: () => void }
   | { kind: "order"; orderId: string };
@@ -55,18 +55,20 @@ export function useDragSource(cargo: BoardCargo | null) {
   } as const;
 }
 
-// Props of a column that accepts cargo of one kind. data-drop is "ready"
-// while matching cargo is being dragged and "over" while it hovers here.
+// Props of an element that accepts cargo of one kind while enabled. data-drop
+// is "ready" while matching cargo is being dragged and "over" while it hovers
+// here.
 export function useDropTarget<K extends BoardCargo["kind"]>(
   kind: K,
   onDrop: (cargo: Extract<BoardCargo, { kind: K }>) => void,
+  enabled = true,
 ) {
   const { cargo, end } = useContext(DragContext);
   const [over, setOver] = useState(false);
   // dragenter/dragleave fire for every child; the depth tells when the
-  // pointer really left the column.
+  // pointer really left the element.
   const depth = useRef(0);
-  const accepts = cargo?.kind === kind;
+  const accepts = enabled && cargo?.kind === kind;
 
   return {
     "data-drop": accepts ? (over ? "over" : "ready") : undefined,

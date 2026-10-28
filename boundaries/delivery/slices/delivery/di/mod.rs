@@ -14,6 +14,9 @@ use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
+use crate::slices::delivery::applications::estimate_delivery_duration::{
+    self, DeliveryDurationSamples,
+};
 use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
@@ -26,20 +29,25 @@ use crate::slices::delivery::applications::list_available_delivery_offers::{
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
+use crate::slices::delivery::applications::record_delivery_duration::{
+    self, DeliveryDurationStatistics, DeliveryInbox,
+};
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    dispatch_deliveries, expire_delivery_offers, find_courier, offer_delivery, reassign_courier,
-    reject_delivery_offer, replan_delivery, report_delivery_failure,
+    dispatch_deliveries, expire_delivery_offers, find_courier, offer_delivery,
+    offer_delivery_to_courier, reassign_courier, reject_delivery_offer, replan_delivery,
+    report_delivery_failure,
 };
 use crate::slices::delivery::domains::delivery::{
-    DeliveryOfferRepository, DeliveryRepository, VirtualCity,
+    DeliveryEstimatePolicy, DeliveryOfferRepository, DeliveryRepository, VirtualCity,
 };
 
 /// Транзакционная роль хранилища слайса: Unit of Work, репозитории
-/// `Delivery` и offer, занятость курьера (порт слайса `courier`) и Outbox.
-/// Одно хранилище, поэтому Unit of Work охватывает все эти записи.
+/// `Delivery` и offer, занятость курьера (порт слайса `courier`), Outbox,
+/// Inbox и Delivery Duration Statistics. Одно хранилище, поэтому Unit of
+/// Work охватывает все эти записи.
 pub trait TransactionalStore:
     TransactionScope
     + DeliveryRepository
@@ -48,6 +56,8 @@ pub trait TransactionalStore:
     + ExpiredDeliveryOffers
     + CourierAssignment
     + DeliveryOutbox
+    + DeliveryInbox
+    + DeliveryDurationStatistics
     + Send
     + Sync
 {
@@ -61,6 +71,8 @@ impl<T> TransactionalStore for T where
         + ExpiredDeliveryOffers
         + CourierAssignment
         + DeliveryOutbox
+        + DeliveryInbox
+        + DeliveryDurationStatistics
         + Send
         + Sync
 {
@@ -72,6 +84,7 @@ pub trait DeliveryReadModels:
     + CourierCurrentDeliveryReadModel
     + CourierPoolReadModel
     + OrderDeliveryReadModel
+    + DeliveryDurationSamples
     + Send
     + Sync
 {
@@ -82,6 +95,7 @@ impl<T> DeliveryReadModels for T where
         + CourierCurrentDeliveryReadModel
         + CourierPoolReadModel
         + OrderDeliveryReadModel
+        + DeliveryDurationSamples
         + Send
         + Sync
 {
@@ -114,6 +128,8 @@ pub trait DeliveryPorts: Interface {
 /// Числовые параметры назначения; значения задаёт корневой `di`.
 pub trait DeliverySettings: Interface {
     fn assignment_policy(&self) -> AssignmentPolicy;
+    /// Delivery Duration Estimate (FR-691): sample size and baselines.
+    fn estimate_policy(&self) -> DeliveryEstimatePolicy;
 }
 
 /// Модуль, через который корневой `di` передаёт слайсу порты и настройки.
@@ -139,6 +155,12 @@ pub trait DeliveryUseCases: Interface {
         &self,
         subject: &Subject,
         input: offer_delivery::Input,
+    ) -> Result<offer_delivery::Output, DeliveryApplicationError>;
+
+    fn offer_delivery_to_courier(
+        &self,
+        subject: &Subject,
+        input: offer_delivery_to_courier::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError>;
 
     fn list_available_delivery_offers(
@@ -213,6 +235,18 @@ pub trait DeliveryUseCases: Interface {
         input: replan_delivery::Input,
     ) -> Result<replan_delivery::Output, DeliveryApplicationError>;
 
+    fn estimate_delivery_duration(
+        &self,
+        subject: &Subject,
+        input: estimate_delivery_duration::Input,
+    ) -> Result<estimate_delivery_duration::Output, DeliveryApplicationError>;
+
+    /// Consumer of the Delivery's own facts: no caller subject.
+    fn record_delivery_duration(
+        &self,
+        input: record_delivery_duration::Input,
+    ) -> Result<record_delivery_duration::Output, DeliveryApplicationError>;
+
     /// Background job of the process: no caller subject.
     fn expire_delivery_offers(
         &self,
@@ -283,6 +317,26 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         input: offer_delivery::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
         offer_delivery::Handler {
+            authorization: self.ports.authorization(),
+            unit_of_work: &self.unit_of_work(),
+            deliveries: self.ports.store(),
+            couriers: self.ports.store(),
+            offers: self.ports.store(),
+            offers_of: self.ports.store(),
+            outbox: self.ports.store(),
+            ids: self.ports.ids(),
+            clock: self.ports.clock(),
+            policy: self.settings.assignment_policy(),
+        }
+        .execute(subject, input)
+    }
+
+    fn offer_delivery_to_courier(
+        &self,
+        subject: &Subject,
+        input: offer_delivery_to_courier::Input,
+    ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
+        offer_delivery_to_courier::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
@@ -484,6 +538,33 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             relationships: self.ports.relationships(),
         }
         .execute(subject, input)
+    }
+
+    fn estimate_delivery_duration(
+        &self,
+        subject: &Subject,
+        input: estimate_delivery_duration::Input,
+    ) -> Result<estimate_delivery_duration::Output, DeliveryApplicationError> {
+        estimate_delivery_duration::Handler {
+            authorization: self.ports.authorization(),
+            samples: self.ports.read_models(),
+            policy: self.settings.estimate_policy(),
+        }
+        .execute(subject, input)
+    }
+
+    fn record_delivery_duration(
+        &self,
+        input: record_delivery_duration::Input,
+    ) -> Result<record_delivery_duration::Output, DeliveryApplicationError> {
+        record_delivery_duration::Handler {
+            unit_of_work: &self.unit_of_work(),
+            inbox: self.ports.store(),
+            statistics: self.ports.store(),
+            deliveries: self.ports.store(),
+            policy: self.settings.estimate_policy(),
+        }
+        .execute(input)
     }
 
     fn expire_delivery_offers(

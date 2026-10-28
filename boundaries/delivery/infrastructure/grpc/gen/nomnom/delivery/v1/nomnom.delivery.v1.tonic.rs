@@ -235,6 +235,35 @@ pub mod delivery_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        pub async fn estimate_delivery_duration(
+            &mut self,
+            request: impl tonic::IntoRequest<super::EstimateDeliveryDurationRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::EstimateDeliveryDurationResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/nomnom.delivery.v1.DeliveryService/EstimateDeliveryDuration",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "nomnom.delivery.v1.DeliveryService",
+                        "EstimateDeliveryDuration",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
         pub async fn register_courier(
             &mut self,
             request: impl tonic::IntoRequest<super::RegisterCourierRequest>,
@@ -318,6 +347,35 @@ pub mod delivery_service_client {
                     GrpcMethod::new(
                         "nomnom.delivery.v1.DeliveryService",
                         "GetCourierPool",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn offer_delivery_to_courier(
+            &mut self,
+            request: impl tonic::IntoRequest<super::OfferDeliveryToCourierRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::OfferDeliveryToCourierResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/nomnom.delivery.v1.DeliveryService/OfferDeliveryToCourier",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "nomnom.delivery.v1.DeliveryService",
+                        "OfferDeliveryToCourier",
                     ),
                 );
             self.inner.unary(req, path, codec).await
@@ -659,6 +717,13 @@ pub mod delivery_service_server {
             tonic::Response<super::CancelDeliveryResponse>,
             tonic::Status,
         >;
+        async fn estimate_delivery_duration(
+            &self,
+            request: tonic::Request<super::EstimateDeliveryDurationRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::EstimateDeliveryDurationResponse>,
+            tonic::Status,
+        >;
         async fn register_courier(
             &self,
             request: tonic::Request<super::RegisterCourierRequest>,
@@ -678,6 +743,13 @@ pub mod delivery_service_server {
             request: tonic::Request<super::GetCourierPoolRequest>,
         ) -> std::result::Result<
             tonic::Response<super::GetCourierPoolResponse>,
+            tonic::Status,
+        >;
+        async fn offer_delivery_to_courier(
+            &self,
+            request: tonic::Request<super::OfferDeliveryToCourierRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::OfferDeliveryToCourierResponse>,
             tonic::Status,
         >;
         async fn update_courier_location(
@@ -1063,6 +1135,57 @@ pub mod delivery_service_server {
                     };
                     Box::pin(fut)
                 }
+                "/nomnom.delivery.v1.DeliveryService/EstimateDeliveryDuration" => {
+                    #[allow(non_camel_case_types)]
+                    struct EstimateDeliveryDurationSvc<T: DeliveryService>(pub Arc<T>);
+                    impl<
+                        T: DeliveryService,
+                    > tonic::server::UnaryService<super::EstimateDeliveryDurationRequest>
+                    for EstimateDeliveryDurationSvc<T> {
+                        type Response = super::EstimateDeliveryDurationResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::EstimateDeliveryDurationRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DeliveryService>::estimate_delivery_duration(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = EstimateDeliveryDurationSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/nomnom.delivery.v1.DeliveryService/RegisterCourier" => {
                     #[allow(non_camel_case_types)]
                     struct RegisterCourierSvc<T: DeliveryService>(pub Arc<T>);
@@ -1186,6 +1309,55 @@ pub mod delivery_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetCourierPoolSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/nomnom.delivery.v1.DeliveryService/OfferDeliveryToCourier" => {
+                    #[allow(non_camel_case_types)]
+                    struct OfferDeliveryToCourierSvc<T: DeliveryService>(pub Arc<T>);
+                    impl<
+                        T: DeliveryService,
+                    > tonic::server::UnaryService<super::OfferDeliveryToCourierRequest>
+                    for OfferDeliveryToCourierSvc<T> {
+                        type Response = super::OfferDeliveryToCourierResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::OfferDeliveryToCourierRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DeliveryService>::offer_delivery_to_courier(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = OfferDeliveryToCourierSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

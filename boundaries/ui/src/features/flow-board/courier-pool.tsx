@@ -13,6 +13,7 @@ import {
   BoardCourierPoolDocument,
   type CourierPoolProblemCode,
   type CourierPoolViewFragment,
+  OfferDeliveryToCourierDocument,
   RetireCourierDocument,
   SetCourierOnLineDocument,
 } from "../../shared/graphql/generated/graphql";
@@ -100,6 +101,7 @@ const problemMessage: Record<CourierPoolProblemCode, MessageKey> = {
   COURIER_NAME_INVALID: "board.couriers.problem.COURIER_NAME_INVALID",
   COURIER_STATUS_CONFLICT: "board.couriers.problem.COURIER_STATUS_CONFLICT",
   COURIER_ON_LINE: "board.couriers.problem.COURIER_ON_LINE",
+  OFFER_REFUSED: "board.couriers.problem.OFFER_REFUSED",
 };
 
 type Outcome = Readonly<{
@@ -109,13 +111,16 @@ type Outcome = Readonly<{
 
 // Courier Pool in the courier column header: the line, the load and the
 // deliveries waiting for a courier, the couriers with their line actions and
-// − and + for the pool. Hidden for users who are no dispatcher (AC-798).
+// − and + for the pool. A kitchen order dropped on a free courier offers its
+// delivery to that courier, who accepts or rejects it. Hidden for users who
+// are no dispatcher (AC-798).
 export function CourierPoolPanel() {
   const { t, locale } = useI18n();
   const pool = useCourierPool();
   const [adding, add] = useMutation(AddCourierDocument);
   const [lining, setOnLine] = useMutation(SetCourierOnLineDocument);
   const [retiring, retire] = useMutation(RetireCourierDocument);
+  const [, offer] = useMutation(OfferDeliveryToCourierDocument);
   const [problem, setProblem] = useState<MessageKey | null>(null);
   if (!pool) return null;
 
@@ -124,6 +129,14 @@ export function CourierPoolPanel() {
     else if (outcome.problem) setProblem(problemMessage[outcome.problem]);
     else setProblem(null);
     return !outcome.error && !outcome.problem;
+  }
+
+  async function offerTo(courierId: string, orderId: string) {
+    const result = await offer({ orderId, courierId });
+    settle({
+      error: result.error,
+      problem: result.data?.offerDeliveryToCourier.problem,
+    });
   }
 
   const members: PoolMember[] = pool.couriers.map((courier) => ({
@@ -151,6 +164,10 @@ export function CourierPoolPanel() {
           orderId={courier.currentOrderId}
         />
       ) : undefined,
+    onDropOrder:
+      courier.availability === "AVAILABLE"
+        ? (orderId: string) => void offerTo(courier.id, orderId)
+        : undefined,
   }));
 
   async function setLine(courierId: string, onLine: boolean): Promise<boolean> {

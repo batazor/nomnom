@@ -69,6 +69,10 @@ func (s *deliveryServer) RetireCourier(ctx context.Context, r *deliveryv1.Retire
 	return &deliveryv1.RetireCourierResponse{}, s.record(ctx, "retire "+r.GetCourierId())
 }
 
+func (s *deliveryServer) OfferDeliveryToCourier(ctx context.Context, r *deliveryv1.OfferDeliveryToCourierRequest) (*deliveryv1.OfferDeliveryToCourierResponse, error) {
+	return &deliveryv1.OfferDeliveryToCourierResponse{}, s.record(ctx, "offer "+r.GetOrderId()+" "+r.GetCourierId())
+}
+
 func connect(t *testing.T, server *deliveryServer) *Delivery {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
@@ -122,10 +126,11 @@ func TestCommandsGoToTheirRPCAndNameRefusals(t *testing.T) {
 	require.NoError(t, delivery.SetOnLine(dispatcherContext(), "courier-3", true))
 	require.NoError(t, delivery.SetOnLine(dispatcherContext(), "courier-3", false))
 	require.NoError(t, delivery.Retire(dispatcherContext(), "courier-3"))
+	require.NoError(t, delivery.Offer(dispatcherContext(), "order-1", "courier-1"))
 	assert.Equal(t, []string{
 		"register courier-3 Сергей", "place courier-3",
 		"COURIER_AVAILABILITY_AVAILABLE courier-3", "COURIER_AVAILABILITY_UNAVAILABLE courier-3",
-		"retire courier-3",
+		"retire courier-3", "offer order-1 courier-1",
 	}, server.calls)
 	assert.Equal(t, []string{"berlin"}, server.markets, "a new courier joins the pool of the request Market")
 
@@ -138,4 +143,7 @@ func TestCommandsGoToTheirRPCAndNameRefusals(t *testing.T) {
 	refused(codes.FailedPrecondition, func() error { return delivery.Retire(dispatcherContext(), "courier-1") }, applications.ErrCourierOnLine)
 	refused(codes.NotFound, func() error { return delivery.Retire(dispatcherContext(), "courier-9") }, applications.ErrCourierNotFound)
 	refused(codes.PermissionDenied, func() error { return delivery.Retire(dispatcherContext(), "courier-1") }, applications.ErrNotPermitted)
+	refused(codes.FailedPrecondition, func() error { return delivery.Offer(dispatcherContext(), "order-1", "courier-2") }, applications.ErrOfferRefused)
+	refused(codes.NotFound, func() error { return delivery.Offer(dispatcherContext(), "order-9", "courier-1") }, applications.ErrOfferRefused)
+	refused(codes.PermissionDenied, func() error { return delivery.Offer(dispatcherContext(), "order-1", "courier-1") }, applications.ErrNotPermitted)
 }

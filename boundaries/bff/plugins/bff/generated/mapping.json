@@ -179,6 +179,13 @@
     },
     {
       "type": "OPERATION_TYPE_MUTATION",
+      "original": "offerDeliveryToCourier",
+      "mapped": "MutationOfferDeliveryToCourier",
+      "request": "MutationOfferDeliveryToCourierRequest",
+      "response": "MutationOfferDeliveryToCourierResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
       "original": "setSimulatorEnabled",
       "mapped": "MutationSetSimulatorEnabled",
       "request": "MutationSetSimulatorEnabledRequest",
@@ -496,6 +503,20 @@
           "original": "retireCourier",
           "mapped": "retire_courier",
           "argumentMappings": [
+            {
+              "original": "courierId",
+              "mapped": "courier_id"
+            }
+          ]
+        },
+        {
+          "original": "offerDeliveryToCourier",
+          "mapped": "offer_delivery_to_courier",
+          "argumentMappings": [
+            {
+              "original": "orderId",
+              "mapped": "order_id"
+            },
             {
               "original": "courierId",
               "mapped": "courier_id"
@@ -1663,6 +1684,10 @@
         {
           "original": "COURIER_ON_LINE",
           "mapped": "COURIER_POOL_PROBLEM_CODE_COURIER_ON_LINE"
+        },
+        {
+          "original": "OFFER_REFUSED",
+          "mapped": "COURIER_POOL_PROBLEM_CODE_OFFER_REFUSED"
         }
       ]
     },

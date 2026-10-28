@@ -42,6 +42,11 @@ service BffService {
   rpc MutationCloseRestaurant(MutationCloseRestaurantRequest) returns (MutationCloseRestaurantResponse) {}
   // Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
   rpc MutationHireCook(MutationHireCookRequest) returns (MutationHireCookResponse) {}
+  /*
+   * Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+   * or rejects it. Requires a dispatcher or the operator
+   */
+  rpc MutationOfferDeliveryToCourier(MutationOfferDeliveryToCourierRequest) returns (MutationOfferDeliveryToCourierResponse) {}
   // Open a restaurant of the current user for new orders; repeating it changes nothing
   rpc MutationOpenRestaurant(MutationOpenRestaurantRequest) returns (MutationOpenRestaurantResponse) {}
   // Place an order for the current customer
@@ -520,6 +525,25 @@ message MutationStartNextPreparationResponse {
    * no other order. order is null when the queue is empty
    */
   KitchenActionPayload start_next_preparation = 1;
+}
+/*
+ * Request message for offerDeliveryToCourier operation: Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+ * or rejects it. Requires a dispatcher or the operator.
+ */
+message MutationOfferDeliveryToCourierRequest {
+  string order_id = 1;
+  string courier_id = 2;
+}
+/*
+ * Response message for offerDeliveryToCourier operation: Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+ * or rejects it. Requires a dispatcher or the operator.
+ */
+message MutationOfferDeliveryToCourierResponse {
+  /*
+   * Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+   * or rejects it. Requires a dispatcher or the operator
+   */
+  CourierPoolPayload offer_delivery_to_courier = 1;
 }
 
 /*
@@ -1212,6 +1236,8 @@ enum CourierPoolProblemCode {
   COURIER_POOL_PROBLEM_CODE_COURIER_STATUS_CONFLICT = 2;
   // The courier is on line and cannot leave the pool
   COURIER_POOL_PROBLEM_CODE_COURIER_ON_LINE = 3;
+  // The order has no delivery waiting for a courier, or the courier is not free
+  COURIER_POOL_PROBLEM_CODE_OFFER_REFUSED = 4;
 }
 
 message OrderLineInput {

@@ -194,6 +194,17 @@ mutation RetireCourier($courierId: ID!) {
   }
 }
 
+# A kitchen order dropped on a free courier of the pool: the courier gets an
+# offer of its delivery and accepts or rejects it.
+mutation OfferDeliveryToCourier($orderId: ID!, $courierId: ID!) {
+  offerDeliveryToCourier(orderId: $orderId, courierId: $courierId) {
+    courierPool {
+      ...CourierPoolView
+    }
+    problem
+  }
+}
+
 # Work of the courier: the query loads it, courierChanged pushes it after
 # every change (ADR 36); mutations answer with the same fields.
 fragment CourierWork on Courier {

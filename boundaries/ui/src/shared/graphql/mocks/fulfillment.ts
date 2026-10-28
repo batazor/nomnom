@@ -55,6 +55,9 @@ type Delivery = {
   orderId: string;
   offerId: string;
   stage: "SEARCHING" | "ASSIGNED" | "PICKED_UP" | "COMPLETED";
+  // Pool courier a dispatcher offered the delivery to; the mock user is
+  // offered every searching delivery while available.
+  offeredTo?: string;
 };
 
 type KitchenActionInput = {
@@ -546,11 +549,15 @@ export function createFulfillment({
   }
 
   function poolCourierView(courier: MockPoolCourier) {
+    const offered = [...deliveries.values()].find(
+      (delivery) =>
+        delivery.stage === "SEARCHING" && delivery.offeredTo === courier.id,
+    );
     return {
       id: courier.id,
       name: courier.name,
       availability: courier.availability,
-      offeredOrderId: null,
+      offeredOrderId: offered?.orderId ?? null,
       currentOrderId: null,
     };
   }
@@ -623,6 +630,25 @@ export function createFulfillment({
     return { courierPool: courierPool(), problem: null };
   }
 
+  // Like OfferDeliveryToCourier: only a searching delivery goes to an
+  // available courier; anything else is OFFER_REFUSED.
+  function offerDeliveryToCourier(orderId: string, courierId: string) {
+    const delivery = deliveries.get(orderId);
+    const courierAvailability =
+      courierId === mockCourierId
+        ? availability
+        : couriers.find((candidate) => candidate.id === courierId)
+            ?.availability;
+    if (
+      delivery?.stage !== "SEARCHING" ||
+      courierAvailability !== "AVAILABLE"
+    ) {
+      return { courierPool: courierPool(), problem: "OFFER_REFUSED" };
+    }
+    delivery.offeredTo = courierId;
+    return { courierPool: courierPool(), problem: null };
+  }
+
   function retireCourier(courierId: string) {
     if (courierId === mockCourierId) {
       if (availability !== "UNAVAILABLE") {
@@ -650,6 +676,7 @@ export function createFulfillment({
     addCourier,
     setCourierOnLine,
     retireCourier,
+    offerDeliveryToCourier,
     applyKitchenAction,
     startNextPreparation,
     courier,

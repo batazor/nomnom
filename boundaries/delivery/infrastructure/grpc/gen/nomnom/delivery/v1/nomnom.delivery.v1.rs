@@ -352,6 +352,23 @@ pub struct CancelDeliveryResponse {
     pub rejection_reason: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct EstimateDeliveryDurationRequest {
+    /// Required (ADR 41): the Market of the estimate.
+    #[prost(string, tag="1")]
+    pub market_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct EstimateDeliveryDurationResponse {
+    /// Create Delivery → Pickup: median courier lead of the Market, or
+    /// DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD until the sample is full.
+    #[prost(message, optional, tag="1")]
+    pub courier_lead: ::core::option::Option<::prost_types::Duration>,
+    /// Pickup → handover: median transit of the Market, or
+    /// DELIVERY_ESTIMATE__BASELINE_TRANSIT until the sample is full.
+    #[prost(message, optional, tag="2")]
+    pub transit: ::core::option::Option<::prost_types::Duration>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RegisterCourierRequest {
     /// User id of the courier: that user gets courier#act on courier:<courier_id>.
     #[prost(string, tag="1")]
@@ -479,6 +496,23 @@ pub struct ListAvailableDeliveryOffersResponse {
     pub courier_id: ::prost::alloc::string::String,
     #[prost(message, repeated, tag="2")]
     pub offers: ::prost::alloc::vec::Vec<DeliveryOffer>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OfferDeliveryToCourierRequest {
+    #[prost(string, tag="1")]
+    pub order_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OfferDeliveryToCourierResponse {
+    #[prost(message, optional, tag="1")]
+    pub offer: ::core::option::Option<DeliveryOffer>,
+    #[prost(string, tag="2")]
+    pub courier_id: ::prost::alloc::string::String,
+    /// false when an open offer to the same courier already existed.
+    #[prost(bool, tag="3")]
+    pub created: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AcceptDeliveryOfferRequest {

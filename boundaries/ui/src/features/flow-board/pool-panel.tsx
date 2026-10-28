@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import { Button } from "../../shared/ui";
+import { useDropTarget } from "./board-dnd";
 
 // Shared parts of the Cook Pool and Courier Pool in the column headers
 // (FR-624): the load of the line with − and + for the pool size, and the
@@ -65,6 +66,8 @@ export type PoolMember = Readonly<{
   // How far the work has got, under «doing»; absent when nothing is known.
   progress?: ReactNode;
   onLine: boolean;
+  // A kitchen order dropped on the row; absent when the worker takes none.
+  onDropOrder?: (orderId: string) => void;
 }>;
 
 // Workers of the pool with the line action; busy ones have none.
@@ -79,41 +82,65 @@ export function PoolMembers({
   pending: boolean;
   onLine: (member: PoolMember, onLine: boolean) => void;
 }) {
-  const { t } = useI18n();
   return (
     <ul aria-label={label} className="board-pool-members">
       {members.map((member) => (
-        <li data-state={member.state} key={member.id}>
-          <span aria-hidden="true" className="board-state-dot" />
-          <span className="board-pool-name">{member.name}</span>
-          <span className="board-pool-doing">{member.doing}</span>
-          {member.progress}
-          <span className="board-pool-actions">
-            {member.state === "working" ? null : member.onLine ? (
-              <Button
-                aria-label={t("board.pool.takeOffNamed", { name: member.name })}
-                disabled={pending}
-                onClick={() => onLine(member, false)}
-                size="sm"
-                variant="ghost"
-              >
-                {t("board.pool.takeOff")}
-              </Button>
-            ) : (
-              <Button
-                aria-label={t("board.pool.putOnNamed", { name: member.name })}
-                disabled={pending}
-                onClick={() => onLine(member, true)}
-                size="sm"
-                variant="outline"
-              >
-                {t("board.pool.putOn")}
-              </Button>
-            )}
-          </span>
-        </li>
+        <PoolMemberRow
+          key={member.id}
+          member={member}
+          onLine={onLine}
+          pending={pending}
+        />
       ))}
     </ul>
+  );
+}
+
+function PoolMemberRow({
+  member,
+  pending,
+  onLine,
+}: {
+  member: PoolMember;
+  pending: boolean;
+  onLine: (member: PoolMember, onLine: boolean) => void;
+}) {
+  const { t } = useI18n();
+  const drop = useDropTarget(
+    "order",
+    (cargo) => member.onDropOrder?.(cargo.orderId),
+    member.onDropOrder !== undefined,
+  );
+  return (
+    <li data-state={member.state} {...drop}>
+      <span aria-hidden="true" className="board-state-dot" />
+      <span className="board-pool-name">{member.name}</span>
+      <span className="board-pool-doing">{member.doing}</span>
+      {member.progress}
+      <span className="board-pool-actions">
+        {member.state === "working" ? null : member.onLine ? (
+          <Button
+            aria-label={t("board.pool.takeOffNamed", { name: member.name })}
+            disabled={pending}
+            onClick={() => onLine(member, false)}
+            size="sm"
+            variant="ghost"
+          >
+            {t("board.pool.takeOff")}
+          </Button>
+        ) : (
+          <Button
+            aria-label={t("board.pool.putOnNamed", { name: member.name })}
+            disabled={pending}
+            onClick={() => onLine(member, true)}
+            size="sm"
+            variant="outline"
+          >
+            {t("board.pool.putOn")}
+          </Button>
+        )}
+      </span>
+    </li>
   );
 }
 

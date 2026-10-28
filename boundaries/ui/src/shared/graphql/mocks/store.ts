@@ -474,6 +474,10 @@ export function createMockStore({
     retireCourier: mutation(({ courierId }: { courierId: string }) =>
       fulfillment.retireCourier(courierId),
     ),
+    offerDeliveryToCourier: mutation(
+      ({ orderId, courierId }: { orderId: string; courierId: string }) =>
+        fulfillment.offerDeliveryToCourier(orderId, courierId),
+    ),
     courier: () => fulfillment.courier(),
     setCourierAvailability: mutation(
       ({

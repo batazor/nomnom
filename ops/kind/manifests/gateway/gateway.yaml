@@ -438,6 +438,28 @@ spec:
           namespace: nomnom-delivery
           port: 8083
 ---
+# Чтения delivery для Order Fulfillment (orders-worker): Delivery Duration Estimate Market
+# для планирования запланированного заказа (FR-691). Идемпотентны, повторяются политикой reads.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: delivery-v1-reads
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: internal
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: EstimateDeliveryDuration
+      backendRefs:
+        - name: delivery
+          namespace: nomnom-delivery
+          port: 8083
+---
 # Команды курьера (courier#act) и Report Delivery Failure (курьер или диспетчер,
 # platform#dispatch_delivery). Их вызывает BFF (courier-экран) и в kind — fixture e2e-driver.
 apiVersion: gateway.networking.k8s.io/v1
@@ -521,7 +543,8 @@ spec:
           port: 8083
 ---
 # Courier Pool (platform#manage_couriers: оператор или диспетчер): регистрация и выбытие
-# курьеров; их вызывает BFF (flow-board), в kind — Job demo-seed и fixture e2e-driver.
+# курьеров, offer доставки выбранному курьеру (platform#offer_delivery); их вызывает BFF
+# (flow-board), в kind — Job demo-seed и fixture e2e-driver.
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
@@ -541,6 +564,10 @@ spec:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
             method: RetireCourier
+        - method:
+            type: Exact
+            service: nomnom.delivery.v1.DeliveryService
+            method: OfferDeliveryToCourier
       backendRefs:
         - name: delivery
           namespace: nomnom-delivery
@@ -653,6 +680,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: delivery-v1-courier-reads
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: delivery-v1-reads
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: controlplane-v1-reads

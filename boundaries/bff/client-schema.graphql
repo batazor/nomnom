@@ -643,6 +643,10 @@ enum CourierPoolProblemCode {
   COURIER_STATUS_CONFLICT
   """The courier is on line and cannot leave the pool"""
   COURIER_ON_LINE
+  """
+  The order has no delivery waiting for a courier, or the courier is not free
+  """
+  OFFER_REFUSED
 }
 
 type CourierPoolPayload {
@@ -845,6 +849,11 @@ type Mutation {
   setCourierOnLine(courierId: ID!, onLine: Boolean!): CourierPoolPayload!
   """Take a courier off line out of the Courier Pool for good"""
   retireCourier(courierId: ID!): CourierPoolPayload!
+  """
+  Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+  or rejects it. Requires a dispatcher or the operator
+  """
+  offerDeliveryToCourier(orderId: ID!, courierId: ID!): CourierPoolPayload!
   """
   Switch the demo Simulator in orders, restaurants and delivery; requires the operator
   """

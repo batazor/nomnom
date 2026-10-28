@@ -1,8 +1,9 @@
 // Package infrastructure adapts the Courier Pool port to the Courier Pool
 // RPCs of delivery.v1.DeliveryService — GetCourierPool, RegisterCourier,
-// UpdateCourierLocation, SetCourierAvailability and RetireCourier — called
-// through the internal gateway on behalf of the user (ADR 32). delivery
-// authorizes platform#manage_couriers.
+// UpdateCourierLocation, SetCourierAvailability, RetireCourier and
+// OfferDeliveryToCourier — called through the internal gateway on behalf of
+// the user (ADR 32). delivery authorizes platform#manage_couriers, and
+// platform#offer_delivery for the offer.
 package infrastructure
 
 import (
@@ -100,6 +101,18 @@ func (d *Delivery) SetOnLine(ctx context.Context, courierID string, onLine bool)
 func (d *Delivery) Retire(ctx context.Context, courierID string) error {
 	_, err := d.client.RetireCourier(ctx, &deliveryv1.RetireCourierRequest{CourierId: courierID})
 	return poolError("retire courier", err, codes.FailedPrecondition, applications.ErrCourierOnLine)
+}
+
+// Offer offers the delivery of the order to the courier. An order without a
+// delivery and an unknown courier are refusals of the offer, as are a
+// delivery that waits for no courier and a courier who is not free.
+func (d *Delivery) Offer(ctx context.Context, orderID, courierID string) error {
+	_, err := d.client.OfferDeliveryToCourier(ctx, &deliveryv1.OfferDeliveryToCourierRequest{OrderId: orderID, CourierId: courierID})
+	switch status.Code(err) {
+	case codes.NotFound, codes.FailedPrecondition:
+		return applications.ErrOfferRefused
+	}
+	return poolError("offer delivery to courier", err, codes.OK, nil)
 }
 
 // poolError names the refusals of delivery: refusal is the status of the one

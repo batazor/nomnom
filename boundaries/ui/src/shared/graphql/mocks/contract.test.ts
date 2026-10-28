@@ -95,6 +95,7 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   AddCourier: { name: "Сергей" },
   SetCourierOnLine: { courierId: "courier-anna", onLine: true },
   RetireCourier: { courierId: "courier-anna" },
+  OfferDeliveryToCourier: { orderId: "order-1", courierId: "courier-timur" },
   PlaceOrder: {
     input: {
       restaurantId: kitchenEight.id,

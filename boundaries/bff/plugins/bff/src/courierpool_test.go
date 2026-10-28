@@ -82,3 +82,19 @@ func TestCourierPoolCommandsAnswerThePoolAndTheProblem(t *testing.T) {
 	_, err = svc.MutationRetireCourier(ctx, &service.MutationRetireCourierRequest{})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
+
+func TestOfferDeliveryToCourierAnswersThePoolAndTheProblem(t *testing.T) {
+	change := newMockChangeCourierPoolHandler(t)
+	change.EXPECT().Handle(mock.Anything, applications.Request{Command: applications.CommandOffer, CourierID: "courier-2", OrderID: "order-1"}).
+		Return(applications.Result{Pool: pool, Problem: applications.ProblemOfferRefused}, nil).Once()
+	svc, ctx := courierPoolService(t, newMockGetCourierPoolHandler(t), change)
+
+	response, err := svc.MutationOfferDeliveryToCourier(ctx, &service.MutationOfferDeliveryToCourierRequest{OrderId: "order-1", CourierId: "courier-2"})
+
+	require.NoError(t, err)
+	assert.Equal(t, service.CourierPoolProblemCode_COURIER_POOL_PROBLEM_CODE_OFFER_REFUSED, response.GetOfferDeliveryToCourier().GetProblem())
+	assert.Equal(t, "berlin", response.GetOfferDeliveryToCourier().GetCourierPool().GetId())
+
+	_, err = svc.MutationOfferDeliveryToCourier(ctx, &service.MutationOfferDeliveryToCourierRequest{CourierId: "courier-2"})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}

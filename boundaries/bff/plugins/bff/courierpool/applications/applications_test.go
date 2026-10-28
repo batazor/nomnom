@@ -66,6 +66,28 @@ func TestLineCommandsAnswerProblemsAndErrors(t *testing.T) {
 	assert.ErrorIs(t, err, broken)
 }
 
+// A dispatcher offers an order to the courier they chose; a refusal of
+// delivery is the problem of the answer.
+func TestOfferGoesToTheChosenCourier(t *testing.T) {
+	offered := Pool{Size: 1, OnLine: 1, Couriers: []Courier{{ID: "courier-1", Name: "Анна", Availability: AvailabilityAvailable, OfferedOrderID: "order-1"}}}
+	dispatch := NewMockDispatch(t)
+	mock.InOrder(
+		dispatch.EXPECT().Offer(mock.Anything, "order-1", "courier-1").Return(nil).Once(),
+		dispatch.EXPECT().Pool(mock.Anything).Return(offered, nil).Once(),
+		dispatch.EXPECT().Offer(mock.Anything, "order-2", "courier-1").Return(ErrOfferRefused).Once(),
+		dispatch.EXPECT().Pool(mock.Anything).Return(offered, nil).Once(),
+	)
+	handler := NewChangePool(dispatch, fixedID, start)
+
+	result, err := handler.Handle(context.Background(), Request{Command: CommandOffer, OrderID: "order-1", CourierID: "courier-1"})
+	require.NoError(t, err)
+	assert.Equal(t, Result{Pool: offered}, result)
+
+	result, err = handler.Handle(context.Background(), Request{Command: CommandOffer, OrderID: "order-2", CourierID: "courier-1"})
+	require.NoError(t, err)
+	assert.Equal(t, ProblemOfferRefused, result.Problem)
+}
+
 func TestStartPointIsValidated(t *testing.T) {
 	_, err := NewLocation(52.5, 13.4)
 	require.NoError(t, err)

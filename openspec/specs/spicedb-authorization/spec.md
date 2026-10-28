@@ -8,7 +8,7 @@
 ### Requirement: Общая schema и grants развёртывания
 **ID:** FR-434
 
-Система SHALL хранить authorization schema в `authorization/schema.zed`, а grants `service` identities — в `authorization/bootstrap.yaml` с assertions, проверяемыми `zed validate`. Fulfillment-команды MUST быть permissions `platform:nomnom`, выданными relation `fulfillment`; действия диспетчера доставки — permission `dispatch_delivery`, выданной relation `operator`.
+Система SHALL хранить authorization schema в `authorization/schema.zed`, а grants `service` identities — в `authorization/bootstrap.yaml` с assertions, проверяемыми `zed validate`. Fulfillment-команды MUST быть permissions `platform:nomnom`, выданными relation `fulfillment`; действия диспетчера доставки — permission `dispatch_delivery`, выданной relation `operator`; offer доставки заказа выбранному курьеру — permission `offer_delivery`, выданной relations `operator` и `dispatcher`.
 
 #### Scenario: Grant orders-worker
 **ID:** AC-464

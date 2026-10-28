@@ -17,6 +17,7 @@ var (
 		applications.ProblemCourierNameInvalid:    service.CourierPoolProblemCode_COURIER_POOL_PROBLEM_CODE_COURIER_NAME_INVALID,
 		applications.ProblemCourierStatusConflict: service.CourierPoolProblemCode_COURIER_POOL_PROBLEM_CODE_COURIER_STATUS_CONFLICT,
 		applications.ProblemCourierOnLine:         service.CourierPoolProblemCode_COURIER_POOL_PROBLEM_CODE_COURIER_ON_LINE,
+		applications.ProblemOfferRefused:          service.CourierPoolProblemCode_COURIER_POOL_PROBLEM_CODE_OFFER_REFUSED,
 	}
 )
 

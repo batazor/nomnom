@@ -66,7 +66,10 @@ export const messages = {
     "checkout.premium": "Приоритет — приготовим первым, +{fee}",
     "checkout.totalWithPremium": "С приоритетом: {total}",
     "checkout.retry": "Отправить ещё раз",
-    "checkout.sending": "Оформляем заказ",
+    "checkout.sending":
+      "Оформляем заказ: ресторан сверяет блюда и цены. Кнопка ждёт ответа, чтобы заказ не ушёл дважды, — обычно это секунда.",
+    "checkout.sendingSlow":
+      "Ответ задерживается: сервер ещё обрабатывает заказ. Нажимать снова не нужно — как только он ответит, откроется заказ или появится кнопка «Отправить ещё раз».",
     "checkout.signInNeeded":
       "Войдите, чтобы оформить заказ. Корзина сохранится.",
     "checkout.transportError":
@@ -332,6 +335,8 @@ export const messages = {
       "Курьер на доставке или убран из пула — линию сейчас не изменить.",
     "board.couriers.problem.COURIER_ON_LINE":
       "Курьер на линии — сначала снимите его.",
+    "board.couriers.problem.OFFER_REFUSED":
+      "Этот заказ не предложить: он уже не ждёт курьера или курьер занят.",
     "board.kitchen.eta": "Готовка заказа от {time}",
     "board.kitchen.eta.minutes": "Готово через ~{minutes}\u00a0мин",
     "board.kitchen.eta.countdown": "Готово через {countdown}",
@@ -364,8 +369,6 @@ export const messages = {
     "board.courier.problem.OFFER_NOT_AVAILABLE": "Предложение уже недоступно.",
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "Заказ ещё не готов к этому шагу.",
-    "board.dnd.courierBusy": "Курьер уже везёт другой заказ.",
-    "board.dnd.noOffer": "Этот заказ вам пока не предложен.",
   },
   en: {
     "app.brand": "nomnom",
@@ -435,7 +438,10 @@ export const messages = {
     "checkout.premium": "Priority — cooked first, +{fee}",
     "checkout.totalWithPremium": "With priority: {total}",
     "checkout.retry": "Send again",
-    "checkout.sending": "Placing the order",
+    "checkout.sending":
+      "Placing the order: the restaurant checks dishes and prices. The button waits for the answer so the order is not sent twice — usually a second.",
+    "checkout.sendingSlow":
+      "The answer is late: the server is still processing the order. No need to press again — once it answers, the order opens or a “Send again” button appears.",
     "checkout.signInNeeded": "Sign in to place the order. The cart stays.",
     "checkout.transportError":
       "Could not send the order. Check your connection and try again.",
@@ -708,6 +714,8 @@ export const messages = {
       "The courier is on a delivery or left the pool: the line cannot change now.",
     "board.couriers.problem.COURIER_ON_LINE":
       "The courier is on line: take them off line first.",
+    "board.couriers.problem.OFFER_REFUSED":
+      "This order cannot be offered: it no longer waits for a courier, or the courier is busy.",
     "board.kitchen.eta": "Cooking the order from {time}",
     "board.kitchen.eta.minutes": "Ready in ~{minutes}\u00a0min",
     "board.kitchen.eta.countdown": "Ready in {countdown}",
@@ -741,8 +749,6 @@ export const messages = {
       "The offer is no longer available.",
     "board.courier.problem.DELIVERY_STAGE_CONFLICT":
       "The order is not ready for this step yet.",
-    "board.dnd.courierBusy": "The courier is already on another delivery.",
-    "board.dnd.noOffer": "This order has not been offered to you yet.",
   },
 } as const;
 

@@ -34,6 +34,8 @@ definition platform {
 	permission register_restaurant = operator
 	/** delivery: Courier Pool — register, retire, read, line of any courier. */
 	permission manage_couriers = operator + dispatcher
+	/** delivery: offer the delivery of an order to a chosen courier of the Courier Pool. */
+	permission offer_delivery = operator + dispatcher
 	/** delivery: dispatcher actions on any delivery (Report Delivery Failure). */
 	permission dispatch_delivery = operator
 	/** orders, restaurants, delivery: read and switch the demo Simulator (FR-604). */

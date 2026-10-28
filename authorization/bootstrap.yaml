@@ -14,5 +14,6 @@ assertions:
     - platform:nomnom#manage_payments@service:bff
     - platform:nomnom#register_restaurant@service:orders-worker
     - platform:nomnom#manage_couriers@service:orders-worker
+    - platform:nomnom#offer_delivery@service:orders-worker
     # AC-695: dispatcher actions belong to the operator, not to the workflow.
     - platform:nomnom#dispatch_delivery@service:orders-worker

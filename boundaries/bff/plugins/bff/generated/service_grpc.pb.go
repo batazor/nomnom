@@ -29,6 +29,7 @@ const (
 	BffService_MutationApplyKitchenAction_FullMethodName         = "/service.BffService/MutationApplyKitchenAction"
 	BffService_MutationCloseRestaurant_FullMethodName            = "/service.BffService/MutationCloseRestaurant"
 	BffService_MutationHireCook_FullMethodName                   = "/service.BffService/MutationHireCook"
+	BffService_MutationOfferDeliveryToCourier_FullMethodName     = "/service.BffService/MutationOfferDeliveryToCourier"
 	BffService_MutationOpenRestaurant_FullMethodName             = "/service.BffService/MutationOpenRestaurant"
 	BffService_MutationPlaceOrder_FullMethodName                 = "/service.BffService/MutationPlaceOrder"
 	BffService_MutationRequestOrderCancellation_FullMethodName   = "/service.BffService/MutationRequestOrderCancellation"
@@ -82,6 +83,9 @@ type BffServiceClient interface {
 	MutationCloseRestaurant(ctx context.Context, in *MutationCloseRestaurantRequest, opts ...grpc.CallOption) (*MutationCloseRestaurantResponse, error)
 	// Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
 	MutationHireCook(ctx context.Context, in *MutationHireCookRequest, opts ...grpc.CallOption) (*MutationHireCookResponse, error)
+	// Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+	// or rejects it. Requires a dispatcher or the operator
+	MutationOfferDeliveryToCourier(ctx context.Context, in *MutationOfferDeliveryToCourierRequest, opts ...grpc.CallOption) (*MutationOfferDeliveryToCourierResponse, error)
 	// Open a restaurant of the current user for new orders; repeating it changes nothing
 	MutationOpenRestaurant(ctx context.Context, in *MutationOpenRestaurantRequest, opts ...grpc.CallOption) (*MutationOpenRestaurantResponse, error)
 	// Place an order for the current customer
@@ -231,6 +235,16 @@ func (c *bffServiceClient) MutationHireCook(ctx context.Context, in *MutationHir
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MutationHireCookResponse)
 	err := c.cc.Invoke(ctx, BffService_MutationHireCook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bffServiceClient) MutationOfferDeliveryToCourier(ctx context.Context, in *MutationOfferDeliveryToCourierRequest, opts ...grpc.CallOption) (*MutationOfferDeliveryToCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationOfferDeliveryToCourierResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationOfferDeliveryToCourier_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -468,6 +482,9 @@ type BffServiceServer interface {
 	MutationCloseRestaurant(context.Context, *MutationCloseRestaurantRequest) (*MutationCloseRestaurantResponse, error)
 	// Add a cook off line to the Cook Pool of a restaurant; requires its staff or owner
 	MutationHireCook(context.Context, *MutationHireCookRequest) (*MutationHireCookResponse, error)
+	// Offer the delivery of an order to a chosen courier of the Courier Pool; the courier accepts
+	// or rejects it. Requires a dispatcher or the operator
+	MutationOfferDeliveryToCourier(context.Context, *MutationOfferDeliveryToCourierRequest) (*MutationOfferDeliveryToCourierResponse, error)
 	// Open a restaurant of the current user for new orders; repeating it changes nothing
 	MutationOpenRestaurant(context.Context, *MutationOpenRestaurantRequest) (*MutationOpenRestaurantResponse, error)
 	// Place an order for the current customer
@@ -552,6 +569,9 @@ func (UnimplementedBffServiceServer) MutationCloseRestaurant(context.Context, *M
 }
 func (UnimplementedBffServiceServer) MutationHireCook(context.Context, *MutationHireCookRequest) (*MutationHireCookResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationHireCook not implemented")
+}
+func (UnimplementedBffServiceServer) MutationOfferDeliveryToCourier(context.Context, *MutationOfferDeliveryToCourierRequest) (*MutationOfferDeliveryToCourierResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationOfferDeliveryToCourier not implemented")
 }
 func (UnimplementedBffServiceServer) MutationOpenRestaurant(context.Context, *MutationOpenRestaurantRequest) (*MutationOpenRestaurantResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationOpenRestaurant not implemented")
@@ -810,6 +830,24 @@ func _BffService_MutationHireCook_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BffServiceServer).MutationHireCook(ctx, req.(*MutationHireCookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BffService_MutationOfferDeliveryToCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationOfferDeliveryToCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationOfferDeliveryToCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationOfferDeliveryToCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationOfferDeliveryToCourier(ctx, req.(*MutationOfferDeliveryToCourierRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1220,6 +1258,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MutationHireCook",
 			Handler:    _BffService_MutationHireCook_Handler,
+		},
+		{
+			MethodName: "MutationOfferDeliveryToCourier",
+			Handler:    _BffService_MutationOfferDeliveryToCourier_Handler,
 		},
 		{
 			MethodName: "MutationOpenRestaurant",

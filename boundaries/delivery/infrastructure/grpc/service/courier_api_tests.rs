@@ -574,6 +574,82 @@ async fn non_operator_cannot_register_a_courier() {
     api.stop().await;
 }
 
+/// A dispatcher of the Courier Pool offers an order to the courier they
+/// chose; only that courier sees the offer, and accepting it assigns them.
+#[tokio::test]
+async fn dispatcher_offers_an_order_to_the_chosen_courier() {
+    let authorization = authorization(&["courier-1", "courier-2"], &[]);
+    authorization.grant_delivery(
+        Subject::User("dispatcher-1".to_owned()),
+        DeliveryPermission::OfferDeliveryToCourier,
+        DeliveryResource::Platform,
+    );
+    let mut api = Api::start(authorization).await;
+    api.courier_on_line("courier-1").await;
+    api.courier_on_line("courier-2").await;
+    let delivery_id = api
+        .client
+        .create_delivery(as_orders_worker(CreateDeliveryRequest {
+            order_id: "order-1".to_owned(),
+            market_id: "berlin".to_owned(),
+        }))
+        .await
+        .expect("created")
+        .into_inner()
+        .delivery_id;
+
+    let offered = api
+        .client
+        .offer_delivery_to_courier(as_user(
+            "dispatcher-1",
+            OfferDeliveryToCourierRequest {
+                order_id: "order-1".to_owned(),
+                courier_id: "courier-2".to_owned(),
+            },
+        ))
+        .await
+        .expect("offered")
+        .into_inner();
+    let offer = offered.offer.expect("offer");
+    assert_eq!(offer.delivery_id, delivery_id);
+    assert_eq!(offer.order_id, "order-1");
+    assert_eq!(offered.courier_id, "courier-2");
+    assert!(offered.created);
+    assert!(api.offers("courier-1").await.is_empty());
+    assert_eq!(api.offers("courier-2").await, vec![offer.clone()]);
+
+    api.accept("courier-2", offer.offer_id).await;
+    assert_eq!(api.delivery_state(&delivery_id), State::Assigned);
+    assert_eq!(api.courier_status("courier-2"), DomainCourierStatus::Busy);
+
+    let busy = api
+        .client
+        .offer_delivery_to_courier(as_user(
+            "dispatcher-1",
+            OfferDeliveryToCourierRequest {
+                order_id: "order-1".to_owned(),
+                courier_id: "courier-1".to_owned(),
+            },
+        ))
+        .await
+        .expect_err("assigned delivery is not offered");
+    assert_eq!(busy.code(), tonic::Code::FailedPrecondition);
+
+    let stranger = api
+        .client
+        .offer_delivery_to_courier(as_user(
+            "courier-1",
+            OfferDeliveryToCourierRequest {
+                order_id: "order-1".to_owned(),
+                courier_id: "courier-1".to_owned(),
+            },
+        ))
+        .await
+        .expect_err("a courier is no dispatcher");
+    assert_eq!(stranger.code(), tonic::Code::PermissionDenied);
+    api.stop().await;
+}
+
 #[tokio::test]
 async fn rejection_and_failure_report_reach_their_handlers() {
     let mut api = Api::start(authorization(&["courier-1"], &["order-1", "order-2"])).await;

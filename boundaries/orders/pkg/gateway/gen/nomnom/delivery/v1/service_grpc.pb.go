@@ -24,9 +24,11 @@ const (
 	DeliveryService_CreateDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
 	DeliveryService_ReplanDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
 	DeliveryService_CancelDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
+	DeliveryService_EstimateDeliveryDuration_FullMethodName    = "/nomnom.delivery.v1.DeliveryService/EstimateDeliveryDuration"
 	DeliveryService_RegisterCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/RegisterCourier"
 	DeliveryService_RetireCourier_FullMethodName               = "/nomnom.delivery.v1.DeliveryService/RetireCourier"
 	DeliveryService_GetCourierPool_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/GetCourierPool"
+	DeliveryService_OfferDeliveryToCourier_FullMethodName      = "/nomnom.delivery.v1.DeliveryService/OfferDeliveryToCourier"
 	DeliveryService_UpdateCourierLocation_FullMethodName       = "/nomnom.delivery.v1.DeliveryService/UpdateCourierLocation"
 	DeliveryService_SetCourierAvailability_FullMethodName      = "/nomnom.delivery.v1.DeliveryService/SetCourierAvailability"
 	DeliveryService_ListAvailableDeliveryOffers_FullMethodName = "/nomnom.delivery.v1.DeliveryService/ListAvailableDeliveryOffers"
@@ -59,6 +61,12 @@ type DeliveryServiceClient interface {
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
 	ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error)
 	CancelDelivery(ctx context.Context, in *CancelDeliveryRequest, opts ...grpc.CallOption) (*CancelDeliveryResponse, error)
+	// Delivery Duration Estimate of a Market for planning scheduled orders
+	// (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
+	// durations of the Market, each the configured baseline until its sample
+	// is full. Requires platform#coordinate_delivery, like the commands above;
+	// market_id empty or not a slug is INVALID_ARGUMENT.
+	EstimateDeliveryDuration(ctx context.Context, in *EstimateDeliveryDurationRequest, opts ...grpc.CallOption) (*EstimateDeliveryDurationResponse, error)
 	// Courier Pool of the platform (FR-301, FR-619, FR-621): all require
 	// platform#manage_couriers (operator or dispatcher). RegisterCourier needs a
 	// name of 1..64 characters after trim (INVALID_ARGUMENT otherwise); a known
@@ -70,6 +78,14 @@ type DeliveryServiceClient interface {
 	RegisterCourier(ctx context.Context, in *RegisterCourierRequest, opts ...grpc.CallOption) (*RegisterCourierResponse, error)
 	RetireCourier(ctx context.Context, in *RetireCourierRequest, opts ...grpc.CallOption) (*RetireCourierResponse, error)
 	GetCourierPool(ctx context.Context, in *GetCourierPoolRequest, opts ...grpc.CallOption) (*GetCourierPoolResponse, error)
+	// A dispatcher of the Courier Pool (platform#offer_delivery) offers the
+	// waiting Delivery of order_id to the courier they chose; the courier
+	// accepts or rejects it with AcceptDeliveryOffer or RejectDeliveryOffer.
+	// An order without a Delivery is NOT_FOUND; a Delivery that waits for no
+	// courier, or a courier that is not available or of another Market, is
+	// FAILED_PRECONDITION. An open offer to the same courier is returned with
+	// created = false.
+	OfferDeliveryToCourier(ctx context.Context, in *OfferDeliveryToCourierRequest, opts ...grpc.CallOption) (*OfferDeliveryToCourierResponse, error)
 	// Courier RPCs: the subject needs courier#act on courier_id; the domain
 	// rejects actions on a delivery or offer of another courier.
 	// UpdateCourierLocation and SetCourierAvailability are also allowed with
@@ -147,6 +163,16 @@ func (c *deliveryServiceClient) CancelDelivery(ctx context.Context, in *CancelDe
 	return out, nil
 }
 
+func (c *deliveryServiceClient) EstimateDeliveryDuration(ctx context.Context, in *EstimateDeliveryDurationRequest, opts ...grpc.CallOption) (*EstimateDeliveryDurationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EstimateDeliveryDurationResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_EstimateDeliveryDuration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *deliveryServiceClient) RegisterCourier(ctx context.Context, in *RegisterCourierRequest, opts ...grpc.CallOption) (*RegisterCourierResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterCourierResponse)
@@ -171,6 +197,16 @@ func (c *deliveryServiceClient) GetCourierPool(ctx context.Context, in *GetCouri
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCourierPoolResponse)
 	err := c.cc.Invoke(ctx, DeliveryService_GetCourierPool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *deliveryServiceClient) OfferDeliveryToCourier(ctx context.Context, in *OfferDeliveryToCourierRequest, opts ...grpc.CallOption) (*OfferDeliveryToCourierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OfferDeliveryToCourierResponse)
+	err := c.cc.Invoke(ctx, DeliveryService_OfferDeliveryToCourier_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +333,12 @@ type DeliveryServiceServer interface {
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)
 	ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error)
 	CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error)
+	// Delivery Duration Estimate of a Market for planning scheduled orders
+	// (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
+	// durations of the Market, each the configured baseline until its sample
+	// is full. Requires platform#coordinate_delivery, like the commands above;
+	// market_id empty or not a slug is INVALID_ARGUMENT.
+	EstimateDeliveryDuration(context.Context, *EstimateDeliveryDurationRequest) (*EstimateDeliveryDurationResponse, error)
 	// Courier Pool of the platform (FR-301, FR-619, FR-621): all require
 	// platform#manage_couriers (operator or dispatcher). RegisterCourier needs a
 	// name of 1..64 characters after trim (INVALID_ARGUMENT otherwise); a known
@@ -308,6 +350,14 @@ type DeliveryServiceServer interface {
 	RegisterCourier(context.Context, *RegisterCourierRequest) (*RegisterCourierResponse, error)
 	RetireCourier(context.Context, *RetireCourierRequest) (*RetireCourierResponse, error)
 	GetCourierPool(context.Context, *GetCourierPoolRequest) (*GetCourierPoolResponse, error)
+	// A dispatcher of the Courier Pool (platform#offer_delivery) offers the
+	// waiting Delivery of order_id to the courier they chose; the courier
+	// accepts or rejects it with AcceptDeliveryOffer or RejectDeliveryOffer.
+	// An order without a Delivery is NOT_FOUND; a Delivery that waits for no
+	// courier, or a courier that is not available or of another Market, is
+	// FAILED_PRECONDITION. An open offer to the same courier is returned with
+	// created = false.
+	OfferDeliveryToCourier(context.Context, *OfferDeliveryToCourierRequest) (*OfferDeliveryToCourierResponse, error)
 	// Courier RPCs: the subject needs courier#act on courier_id; the domain
 	// rejects actions on a delivery or offer of another courier.
 	// UpdateCourierLocation and SetCourierAvailability are also allowed with
@@ -349,6 +399,9 @@ func (UnimplementedDeliveryServiceServer) ReplanDelivery(context.Context, *Repla
 func (UnimplementedDeliveryServiceServer) CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelDelivery not implemented")
 }
+func (UnimplementedDeliveryServiceServer) EstimateDeliveryDuration(context.Context, *EstimateDeliveryDurationRequest) (*EstimateDeliveryDurationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EstimateDeliveryDuration not implemented")
+}
 func (UnimplementedDeliveryServiceServer) RegisterCourier(context.Context, *RegisterCourierRequest) (*RegisterCourierResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterCourier not implemented")
 }
@@ -357,6 +410,9 @@ func (UnimplementedDeliveryServiceServer) RetireCourier(context.Context, *Retire
 }
 func (UnimplementedDeliveryServiceServer) GetCourierPool(context.Context, *GetCourierPoolRequest) (*GetCourierPoolResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCourierPool not implemented")
+}
+func (UnimplementedDeliveryServiceServer) OfferDeliveryToCourier(context.Context, *OfferDeliveryToCourierRequest) (*OfferDeliveryToCourierResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method OfferDeliveryToCourier not implemented")
 }
 func (UnimplementedDeliveryServiceServer) UpdateCourierLocation(context.Context, *UpdateCourierLocationRequest) (*UpdateCourierLocationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateCourierLocation not implemented")
@@ -498,6 +554,24 @@ func _DeliveryService_CancelDelivery_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DeliveryService_EstimateDeliveryDuration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EstimateDeliveryDurationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).EstimateDeliveryDuration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_EstimateDeliveryDuration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).EstimateDeliveryDuration(ctx, req.(*EstimateDeliveryDurationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DeliveryService_RegisterCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterCourierRequest)
 	if err := dec(in); err != nil {
@@ -548,6 +622,24 @@ func _DeliveryService_GetCourierPool_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DeliveryServiceServer).GetCourierPool(ctx, req.(*GetCourierPoolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DeliveryService_OfferDeliveryToCourier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OfferDeliveryToCourierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DeliveryServiceServer).OfferDeliveryToCourier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DeliveryService_OfferDeliveryToCourier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DeliveryServiceServer).OfferDeliveryToCourier(ctx, req.(*OfferDeliveryToCourierRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -760,6 +852,10 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DeliveryService_CancelDelivery_Handler,
 		},
 		{
+			MethodName: "EstimateDeliveryDuration",
+			Handler:    _DeliveryService_EstimateDeliveryDuration_Handler,
+		},
+		{
 			MethodName: "RegisterCourier",
 			Handler:    _DeliveryService_RegisterCourier_Handler,
 		},
@@ -770,6 +866,10 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCourierPool",
 			Handler:    _DeliveryService_GetCourierPool_Handler,
+		},
+		{
+			MethodName: "OfferDeliveryToCourier",
+			Handler:    _DeliveryService_OfferDeliveryToCourier_Handler,
 		},
 		{
 			MethodName: "UpdateCourierLocation",

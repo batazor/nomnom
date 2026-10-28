@@ -25,6 +25,9 @@ var (
 	ErrStatusConflict = errors.New("courier status forbids the line change")
 	// ErrCourierOnLine is a courier on line who cannot leave the pool.
 	ErrCourierOnLine = errors.New("courier is on line")
+	// ErrOfferRefused is a delivery offer delivery refuses: the order has no
+	// delivery waiting for a courier, or the courier is not free.
+	ErrOfferRefused = errors.New("delivery offer is refused")
 )
 
 // Availability of a courier for new deliveries.
@@ -88,6 +91,10 @@ type Dispatch interface {
 	SetOnLine(ctx context.Context, courierID string, onLine bool) error
 	// Retire also returns ErrCourierOnLine.
 	Retire(ctx context.Context, courierID string) error
+	// Offer offers the delivery of the order to the courier; the courier
+	// accepts or rejects it. Returns ErrOfferRefused instead of
+	// ErrCourierNotFound.
+	Offer(ctx context.Context, orderID, courierID string) error
 }
 
 // GetPool reads the Courier Pool.

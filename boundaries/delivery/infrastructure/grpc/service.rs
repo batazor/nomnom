@@ -18,9 +18,9 @@ use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::{CourierStatus as DomainCourierStatus, Location};
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    get_courier_current_delivery, get_courier_pool, get_order_delivery,
-    list_available_delivery_offers, reject_delivery_offer, replan_delivery,
-    report_delivery_failure,
+    estimate_delivery_duration, get_courier_current_delivery, get_courier_pool, get_order_delivery,
+    list_available_delivery_offers, offer_delivery_to_courier, reject_delivery_offer,
+    replan_delivery, report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;
@@ -33,16 +33,17 @@ use super::v1::{
     CancelDeliveryResponse, ConfirmDeliveryRequest, ConfirmDeliveryResponse, ConfirmPickupRequest,
     ConfirmPickupResponse, CourierAvailability, CourierLocation, CourierStatus,
     CreateDeliveryRequest, CreateDeliveryResponse, Delivery, DeliveryOffer, DeliveryState,
-    GeoPoint, GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse,
-    GetCourierPoolRequest, GetCourierPoolResponse, GetOrderDeliveryRequest,
-    GetOrderDeliveryResponse, GetSimulatorRequest, GetSimulatorResponse,
-    ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse, OrderCourier,
-    OrderTracking, PoolCourier, RegisterCourierRequest, RegisterCourierResponse,
-    RejectDeliveryOfferRequest, RejectDeliveryOfferResponse, ReplanDeliveryRequest,
-    ReplanDeliveryResponse, ReportDeliveryFailureRequest, ReportDeliveryFailureResponse,
-    RetireCourierRequest, RetireCourierResponse, SetCourierAvailabilityRequest,
-    SetCourierAvailabilityResponse, SetSimulatorEnabledRequest, SetSimulatorEnabledResponse,
-    UpdateCourierLocationRequest, UpdateCourierLocationResponse, VirtualCity,
+    EstimateDeliveryDurationRequest, EstimateDeliveryDurationResponse, GeoPoint,
+    GetCourierCurrentDeliveryRequest, GetCourierCurrentDeliveryResponse, GetCourierPoolRequest,
+    GetCourierPoolResponse, GetOrderDeliveryRequest, GetOrderDeliveryResponse, GetSimulatorRequest,
+    GetSimulatorResponse, ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
+    OfferDeliveryToCourierRequest, OfferDeliveryToCourierResponse, OrderCourier, OrderTracking,
+    PoolCourier, RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
+    RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
+    ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, RetireCourierRequest,
+    RetireCourierResponse, SetCourierAvailabilityRequest, SetCourierAvailabilityResponse,
+    SetSimulatorEnabledRequest, SetSimulatorEnabledResponse, UpdateCourierLocationRequest,
+    UpdateCourierLocationResponse, VirtualCity,
 };
 
 mod status;
@@ -157,6 +158,22 @@ impl DeliveryService for DeliveryGrpcService {
         Ok(Response::new(CreateDeliveryResponse {
             delivery_id: output.delivery_id.as_str().to_owned(),
             created: output.created,
+        }))
+    }
+
+    async fn estimate_delivery_duration(
+        &self,
+        request: Request<EstimateDeliveryDurationRequest>,
+    ) -> Result<Response<EstimateDeliveryDurationResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let market_id = request.into_inner().market_id;
+        let estimate = self
+            .deliveries()
+            .estimate_delivery_duration(&subject, estimate_delivery_duration::Input { market_id })
+            .map_err(delivery_transport_error)?;
+        Ok(Response::new(EstimateDeliveryDurationResponse {
+            courier_lead: Some(proto_duration(estimate.courier_lead)?),
+            transit: Some(proto_duration(estimate.transit)?),
         }))
     }
 
@@ -405,6 +422,35 @@ impl DeliveryService for DeliveryGrpcService {
         }))
     }
 
+    async fn offer_delivery_to_courier(
+        &self,
+        request: Request<OfferDeliveryToCourierRequest>,
+    ) -> Result<Response<OfferDeliveryToCourierResponse>, Status> {
+        let subject = self.subjects.resolve(request.metadata())?;
+        let request = request.into_inner();
+        let order_id = request.order_id.clone();
+        let output = self
+            .deliveries()
+            .offer_delivery_to_courier(
+                &subject,
+                offer_delivery_to_courier::Input {
+                    order_id: request.order_id,
+                    courier_id: request.courier_id,
+                },
+            )
+            .map_err(delivery_transport_error)?;
+        Ok(Response::new(OfferDeliveryToCourierResponse {
+            offer: Some(DeliveryOffer {
+                offer_id: output.offer_id.as_str().to_owned(),
+                delivery_id: output.delivery_id.as_str().to_owned(),
+                expires_at_epoch_seconds: output.expires_at_epoch_seconds,
+                order_id,
+            }),
+            courier_id: output.courier_id.as_str().to_owned(),
+            created: output.created,
+        }))
+    }
+
     async fn reject_delivery_offer(
         &self,
         request: Request<RejectDeliveryOfferRequest>,
@@ -635,4 +681,11 @@ fn order_tracking(tracking: get_order_delivery::OrderTrackingView) -> OrderTrack
             recorded_at_epoch_seconds: position.recorded_at_epoch_seconds,
         }),
     }
+}
+
+/// `google.protobuf.Duration` of an estimate; the estimates are minutes, far
+/// below the range of the message.
+fn proto_duration(duration: std::time::Duration) -> Result<prost_types::Duration, Status> {
+    prost_types::Duration::try_from(duration)
+        .map_err(|error| Status::internal(format!("duration out of range: {error}")))
 }

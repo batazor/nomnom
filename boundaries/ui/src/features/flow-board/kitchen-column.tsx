@@ -333,7 +333,8 @@ function KitchenOrderCard({
     else if (payload.problem) setProblem("board.kitchen.conflict");
   }
 
-  // An accepted order has a delivery, so the courier can take it.
+  // An accepted order has a delivery, so a dispatcher can offer it to a
+  // free courier of the pool.
   const drag = useDragSource(
     order.stage === "RECEIVED"
       ? null

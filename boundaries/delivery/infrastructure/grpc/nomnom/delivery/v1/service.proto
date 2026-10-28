@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package nomnom.delivery.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "nomnom/delivery/v1/delivery.proto";
 
@@ -23,6 +24,12 @@ service DeliveryService {
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
   rpc ReplanDelivery(ReplanDeliveryRequest) returns (ReplanDeliveryResponse);
   rpc CancelDelivery(CancelDeliveryRequest) returns (CancelDeliveryResponse);
+  // Delivery Duration Estimate of a Market for planning scheduled orders
+  // (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
+  // durations of the Market, each the configured baseline until its sample
+  // is full. Requires platform#coordinate_delivery, like the commands above;
+  // market_id empty or not a slug is INVALID_ARGUMENT.
+  rpc EstimateDeliveryDuration(EstimateDeliveryDurationRequest) returns (EstimateDeliveryDurationResponse);
 
   // Courier Pool of the platform (FR-301, FR-619, FR-621): all require
   // platform#manage_couriers (operator or dispatcher). RegisterCourier needs a
@@ -35,6 +42,14 @@ service DeliveryService {
   rpc RegisterCourier(RegisterCourierRequest) returns (RegisterCourierResponse);
   rpc RetireCourier(RetireCourierRequest) returns (RetireCourierResponse);
   rpc GetCourierPool(GetCourierPoolRequest) returns (GetCourierPoolResponse);
+  // A dispatcher of the Courier Pool (platform#offer_delivery) offers the
+  // waiting Delivery of order_id to the courier they chose; the courier
+  // accepts or rejects it with AcceptDeliveryOffer or RejectDeliveryOffer.
+  // An order without a Delivery is NOT_FOUND; a Delivery that waits for no
+  // courier, or a courier that is not available or of another Market, is
+  // FAILED_PRECONDITION. An open offer to the same courier is returned with
+  // created = false.
+  rpc OfferDeliveryToCourier(OfferDeliveryToCourierRequest) returns (OfferDeliveryToCourierResponse);
 
   // Courier RPCs: the subject needs courier#act on courier_id; the domain
   // rejects actions on a delivery or offer of another courier.
@@ -151,6 +166,20 @@ message CancelDeliveryResponse {
   string rejection_reason = 3;
 }
 
+message EstimateDeliveryDurationRequest {
+  // Required (ADR 41): the Market of the estimate.
+  string market_id = 1;
+}
+
+message EstimateDeliveryDurationResponse {
+  // Create Delivery → Pickup: median courier lead of the Market, or
+  // DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD until the sample is full.
+  google.protobuf.Duration courier_lead = 1;
+  // Pickup → handover: median transit of the Market, or
+  // DELIVERY_ESTIMATE__BASELINE_TRANSIT until the sample is full.
+  google.protobuf.Duration transit = 2;
+}
+
 message RegisterCourierRequest {
   // User id of the courier: that user gets courier#act on courier:<courier_id>.
   string courier_id = 1;
@@ -241,6 +270,18 @@ message ListAvailableDeliveryOffersRequest {
 message ListAvailableDeliveryOffersResponse {
   string courier_id = 1;
   repeated DeliveryOffer offers = 2;
+}
+
+message OfferDeliveryToCourierRequest {
+  string order_id = 1;
+  string courier_id = 2;
+}
+
+message OfferDeliveryToCourierResponse {
+  DeliveryOffer offer = 1;
+  string courier_id = 2;
+  // false when an open offer to the same courier already existed.
+  bool created = 3;
 }
 
 message AcceptDeliveryOfferRequest {

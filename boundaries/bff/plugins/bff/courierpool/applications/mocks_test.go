@@ -46,6 +46,69 @@ func (_m *MockDispatch) EXPECT() *MockDispatch_Expecter {
 	return &MockDispatch_Expecter{mock: &_m.Mock}
 }
 
+// Offer provides a mock function for the type MockDispatch
+func (_mock *MockDispatch) Offer(ctx context.Context, orderID string, courierID string) error {
+	ret := _mock.Called(ctx, orderID, courierID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Offer")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, orderID, courierID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockDispatch_Offer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Offer'
+type MockDispatch_Offer_Call struct {
+	*mock.Call
+}
+
+// Offer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - orderID string
+//   - courierID string
+func (_e *MockDispatch_Expecter) Offer(ctx any, orderID any, courierID any) *MockDispatch_Offer_Call {
+	return &MockDispatch_Offer_Call{Call: _e.mock.On("Offer", ctx, orderID, courierID)}
+}
+
+func (_c *MockDispatch_Offer_Call) Run(run func(ctx context.Context, orderID string, courierID string)) *MockDispatch_Offer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDispatch_Offer_Call) Return(err error) *MockDispatch_Offer_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockDispatch_Offer_Call) RunAndReturn(run func(ctx context.Context, orderID string, courierID string) error) *MockDispatch_Offer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Place provides a mock function for the type MockDispatch
 func (_mock *MockDispatch) Place(ctx context.Context, courierID string, location Location) error {
 	ret := _mock.Called(ctx, courierID, location)

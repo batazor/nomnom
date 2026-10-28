@@ -135,7 +135,8 @@
         "addCourier": 13,
         "setCourierOnLine": 14,
         "retireCourier": 15,
-        "setSimulatorEnabled": 9
+        "setSimulatorEnabled": 9,
+        "offerDeliveryToCourier": 17
       }
     },
     "MutationPlaceOrderRequest": {
@@ -899,6 +900,23 @@
         "cursor": 1,
         "node": 2
       }
+    },
+    "MutationOfferDeliveryToCourierRequest": {
+      "fields": {
+        "order_id": 1,
+        "courier_id": 2
+      }
+    },
+    "MutationOfferDeliveryToCourier": {
+      "fields": {
+        "orderId": 1,
+        "courierId": 2
+      }
+    },
+    "MutationOfferDeliveryToCourierResponse": {
+      "fields": {
+        "offer_delivery_to_courier": 1
+      }
     }
   },
   "enums": {
@@ -1022,7 +1040,8 @@
       "fields": {
         "COURIER_NAME_INVALID": 1,
         "COURIER_STATUS_CONFLICT": 2,
-        "COURIER_ON_LINE": 3
+        "COURIER_ON_LINE": 3,
+        "OFFER_REFUSED": 4
       }
     },
     "OrderPriority": {

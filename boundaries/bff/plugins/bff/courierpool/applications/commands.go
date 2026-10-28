@@ -14,6 +14,7 @@ const (
 	CommandPutOnLine   Command = "put_on_line"
 	CommandTakeOffLine Command = "take_off_line"
 	CommandRetire      Command = "retire"
+	CommandOffer       Command = "offer"
 )
 
 // Problem is a business reason why a Courier Pool command cannot be applied.
@@ -23,14 +24,16 @@ const (
 	ProblemCourierNameInvalid    Problem = "courier_name_invalid"
 	ProblemCourierStatusConflict Problem = "courier_status_conflict"
 	ProblemCourierOnLine         Problem = "courier_on_line"
+	ProblemOfferRefused          Problem = "offer_refused"
 )
 
 // Request is one Courier Pool command: Name for add, CourierID for the
-// others.
+// others, and OrderID for offer.
 type Request struct {
 	Command   Command
 	Name      string
 	CourierID string
+	OrderID   string
 }
 
 // Result is the pool after the command and the problem, empty on success.
@@ -43,6 +46,7 @@ var problems = map[error]Problem{
 	ErrInvalidCourierName: ProblemCourierNameInvalid,
 	ErrStatusConflict:     ProblemCourierStatusConflict,
 	ErrCourierOnLine:      ProblemCourierOnLine,
+	ErrOfferRefused:       ProblemOfferRefused,
 }
 
 // ChangePool runs a Courier Pool command and reads the pool back. A new
@@ -72,6 +76,8 @@ func (h ChangePool) Handle(ctx context.Context, request Request) (Result, error)
 		err = h.dispatch.SetOnLine(ctx, request.CourierID, false)
 	case CommandRetire:
 		err = h.dispatch.Retire(ctx, request.CourierID)
+	case CommandOffer:
+		err = h.dispatch.Offer(ctx, request.OrderID, request.CourierID)
 	default:
 		return Result{}, fmt.Errorf("unknown courier pool command %q", request.Command)
 	}

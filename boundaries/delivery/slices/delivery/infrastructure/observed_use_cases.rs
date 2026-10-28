@@ -19,9 +19,10 @@ use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    dispatch_deliveries, expire_delivery_offers, find_courier, get_courier_current_delivery,
-    get_courier_pool, get_order_delivery, list_available_delivery_offers, offer_delivery,
-    reassign_courier, reject_delivery_offer, replan_delivery, report_delivery_failure,
+    dispatch_deliveries, estimate_delivery_duration, expire_delivery_offers, find_courier,
+    get_courier_current_delivery, get_courier_pool, get_order_delivery,
+    list_available_delivery_offers, offer_delivery, offer_delivery_to_courier, reassign_courier,
+    record_delivery_duration, reject_delivery_offer, replan_delivery, report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 
@@ -30,6 +31,7 @@ use super::transitions::TransitionMetrics;
 pub const CREATE_DELIVERY: UseCase = UseCase::command("create_delivery");
 pub const FIND_COURIER: UseCase = UseCase::query("find_courier");
 pub const OFFER_DELIVERY: UseCase = UseCase::command("offer_delivery");
+pub const OFFER_DELIVERY_TO_COURIER: UseCase = UseCase::command("offer_delivery_to_courier");
 pub const LIST_AVAILABLE_DELIVERY_OFFERS: UseCase =
     UseCase::query("list_available_delivery_offers");
 pub const GET_COURIER_CURRENT_DELIVERY: UseCase = UseCase::query("get_courier_current_delivery");
@@ -45,6 +47,8 @@ pub const CANCEL_DELIVERY: UseCase = UseCase::command("cancel_delivery");
 pub const REPLAN_DELIVERY: UseCase = UseCase::command("replan_delivery");
 pub const EXPIRE_DELIVERY_OFFERS: UseCase = UseCase::command("expire_delivery_offers");
 pub const DISPATCH_DELIVERIES: UseCase = UseCase::command("dispatch_deliveries");
+pub const ESTIMATE_DELIVERY_DURATION: UseCase = UseCase::query("estimate_delivery_duration");
+pub const RECORD_DELIVERY_DURATION: UseCase = UseCase::command("record_delivery_duration");
 
 /// `nomnom.outcome` and `error.type` of a failed call.
 #[must_use]
@@ -134,6 +138,16 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         input: offer_delivery::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
         self.observe(OFFER_DELIVERY, || self.inner.offer_delivery(subject, input))
+    }
+
+    fn offer_delivery_to_courier(
+        &self,
+        subject: &Subject,
+        input: offer_delivery_to_courier::Input,
+    ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
+        self.observe(OFFER_DELIVERY_TO_COURIER, || {
+            self.inner.offer_delivery_to_courier(subject, input)
+        })
     }
 
     fn list_available_delivery_offers(
@@ -269,6 +283,25 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
         self.observe(DISPATCH_DELIVERIES, || {
             self.inner.dispatch_deliveries(input)
+        })
+    }
+
+    fn estimate_delivery_duration(
+        &self,
+        subject: &Subject,
+        input: estimate_delivery_duration::Input,
+    ) -> Result<estimate_delivery_duration::Output, DeliveryApplicationError> {
+        self.observe(ESTIMATE_DELIVERY_DURATION, || {
+            self.inner.estimate_delivery_duration(subject, input)
+        })
+    }
+
+    fn record_delivery_duration(
+        &self,
+        input: record_delivery_duration::Input,
+    ) -> Result<record_delivery_duration::Output, DeliveryApplicationError> {
+        self.observe(RECORD_DELIVERY_DURATION, || {
+            self.inner.record_delivery_duration(input)
         })
     }
 }

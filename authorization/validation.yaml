@@ -32,6 +32,9 @@ assertions:
     # FR-620: operators and dispatchers manage the Courier Pool.
     - platform:nomnom#manage_couriers@user:example-operator
     - platform:nomnom#manage_couriers@user:example-dispatcher
+    # Operators and dispatchers offer a delivery to a courier they chose.
+    - platform:nomnom#offer_delivery@user:example-operator
+    - platform:nomnom#offer_delivery@user:example-dispatcher
     - courier:example-courier#act@user:example-courier
     - delivery:example-delivery#act_as_courier@user:example-courier
     # AC-695: the platform operator dispatches deliveries.
@@ -61,6 +64,8 @@ assertions:
     # AC-791: neither a courier nor a stranger manages the Courier Pool.
     - platform:nomnom#manage_couriers@user:example-courier
     - platform:nomnom#manage_couriers@user:example-stranger
+    - platform:nomnom#offer_delivery@user:example-courier
+    - platform:nomnom#offer_delivery@user:example-stranger
     - platform:nomnom#operate_simulator@user:example-dispatcher
     - platform:nomnom#manage_markets@user:example-dispatcher
     - platform:nomnom#manage_markets@user:example-owner

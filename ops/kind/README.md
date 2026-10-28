@@ -245,9 +245,10 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `restaurants-v1-cook-pool` | `HireCook`, `PutCookOnLine`, `TakeCookOffLine`, `RetireCook` | `commands` |
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
 | `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
+| `delivery-v1-reads` | `EstimateDeliveryDuration` | `reads` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
 | `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderDelivery` | `reads` |
-| `delivery-v1-administration` | `RegisterCourier`, `RetireCourier` | `commands` |
+| `delivery-v1-administration` | `RegisterCourier`, `RetireCourier`, `OfferDeliveryToCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
 | `controlplane-v1-reads` | `ListMarkets` | `reads` |
 | `controlplane-v1-commands` | `RegisterCell`, `CreateMarket` | `commands` |

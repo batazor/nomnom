@@ -65,6 +65,9 @@ func (s *BffService) changeCourierPool(ctx context.Context, operation string, re
 	if request.Command != applications.CommandAdd && request.CourierID == "" {
 		return nil, status.Error(codes.InvalidArgument, "courierId is required")
 	}
+	if request.Command == applications.CommandOffer && request.OrderID == "" {
+		return nil, status.Error(codes.InvalidArgument, "orderId is required")
+	}
 	ctx, err := s.requireCustomer(ctx)
 	if err != nil {
 		return nil, err
@@ -119,6 +122,20 @@ func (s *BffService) MutationRetireCourier(ctx context.Context, request *service
 		return nil, err
 	}
 	return &service.MutationRetireCourierResponse{RetireCourier: payload}, nil
+}
+
+// MutationOfferDeliveryToCourier offers the delivery of an order to the
+// courier a dispatcher chose on the flow board; the courier accepts it.
+func (s *BffService) MutationOfferDeliveryToCourier(ctx context.Context, request *service.MutationOfferDeliveryToCourierRequest) (*service.MutationOfferDeliveryToCourierResponse, error) {
+	payload, err := s.changeCourierPool(ctx, "offerDeliveryToCourier", applications.Request{
+		Command:   applications.CommandOffer,
+		CourierID: request.GetCourierId(),
+		OrderID:   request.GetOrderId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &service.MutationOfferDeliveryToCourierResponse{OfferDeliveryToCourier: payload}, nil
 }
 
 func courierPoolError(operation string, err error) error {

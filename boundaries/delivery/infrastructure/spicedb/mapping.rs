@@ -109,12 +109,18 @@ const fn coordinates_delivery(permission: DeliveryPermission) -> bool {
             | DeliveryPermission::ReassignCourier
             | DeliveryPermission::CancelDelivery
             | DeliveryPermission::ReplanDelivery
+            | DeliveryPermission::EstimateDeliveryDuration
     )
 }
 
 /// Permissions that follow `order#view`.
 fn views_order(permission: DeliveryPermission) -> bool {
     permission == DeliveryPermission::ViewOrderDelivery
+}
+
+/// Permissions of a dispatcher of the Courier Pool on the platform.
+fn dispatches_offers(permission: DeliveryPermission) -> bool {
+    permission == DeliveryPermission::OfferDeliveryToCourier
 }
 
 /// Check слайса `delivery`; `None` — сочетание не отображено и отклоняется.
@@ -129,6 +135,16 @@ pub fn delivery_check(
     }
     // The courier of an order and its tracking are part of what its viewers
     // see (FR-626, FR-660).
+    // A dispatcher offers the delivery of any order of the platform to a
+    // courier they chose.
+    if dispatches_offers(permission) {
+        return match resource {
+            DeliveryResource::Platform => {
+                Some(PermissionCheck::platform("offer_delivery", subject))
+            }
+            _ => None,
+        };
+    }
     if views_order(permission) {
         return match resource {
             DeliveryResource::Order(id) => {
@@ -164,10 +180,11 @@ mod tests {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
-    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 13] = [
+    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 15] = [
         DeliveryPermission::CreateDelivery,
         DeliveryPermission::FindCourier,
         DeliveryPermission::OfferDelivery,
+        DeliveryPermission::OfferDeliveryToCourier,
         DeliveryPermission::AcceptDeliveryOffer,
         DeliveryPermission::RejectDeliveryOffer,
         DeliveryPermission::ReassignCourier,
@@ -178,6 +195,7 @@ mod tests {
         DeliveryPermission::CancelDelivery,
         DeliveryPermission::ReplanDelivery,
         DeliveryPermission::ViewOrderDelivery,
+        DeliveryPermission::EstimateDeliveryDuration,
     ];
 
     fn worker() -> Subject {
@@ -279,9 +297,11 @@ mod tests {
 
     #[test]
     fn other_delivery_permissions_check_courier_or_delivery() {
-        let others = ALL_DELIVERY_PERMISSIONS
-            .into_iter()
-            .filter(|permission| !coordinates_delivery(*permission) && !views_order(*permission));
+        let others = ALL_DELIVERY_PERMISSIONS.into_iter().filter(|permission| {
+            !coordinates_delivery(*permission)
+                && !views_order(*permission)
+                && !dispatches_offers(*permission)
+        });
         for permission in others {
             let on_delivery = if permission == DeliveryPermission::ReportDeliveryFailure {
                 "platform:nomnom#dispatch_delivery@user:user-1"
@@ -314,6 +334,31 @@ mod tests {
                     &user(),
                     permission,
                     &DeliveryResource::Order(OrderId::new("order-1"))
+                ),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn dispatcher_offer_checks_platform_offer_delivery() {
+        assert_eq!(
+            rendered(delivery_check(
+                &user(),
+                DeliveryPermission::OfferDeliveryToCourier,
+                &DeliveryResource::Platform
+            )),
+            Some("platform:nomnom#offer_delivery@user:user-1".to_owned())
+        );
+        for resource in delivery_resources() {
+            if matches!(resource, DeliveryResource::Platform) {
+                continue;
+            }
+            assert_eq!(
+                delivery_check(
+                    &user(),
+                    DeliveryPermission::OfferDeliveryToCourier,
+                    &resource
                 ),
                 None
             );

@@ -214,35 +214,38 @@ describe("flow board", () => {
     ).toBeInTheDocument();
   });
 
-  it("carries an accepted order to the courier by dragging", async () => {
+  it("offers an accepted order to the free courier it is dropped on", async () => {
     const user = userEvent.setup();
     renderBoard();
-    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Добавить в корзину: Манго и клейкий рис",
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
-    await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ });
+    await placeOrder(user);
 
     const accept = await waitFor(selectedKitchenCard);
     await user.click(within(accept).getByRole("button", { name: "Принять" }));
 
-    // The accepted order dropped on the courier: online and taken.
     const card = await waitFor(() => {
       const found = selectedKitchenCard();
       expect(found).toHaveAttribute("draggable", "true");
       return found;
     });
-    const courier = column("Курьер");
+    const members = await within(column("Курьер")).findByRole("list", {
+      name: "Курьеры платформы",
+    });
+    const row = (name: string) => {
+      const found = within(members).getByText(name).closest("li");
+      if (!found) throw new Error(`No pool row of ${name}`);
+      return found;
+    };
     fireEvent.dragStart(card, { dataTransfer: dataTransfer() });
-    const target = courier.querySelector<HTMLElement>("[data-drop]");
-    if (!target) throw new Error("Courier column does not accept the order");
-    fireEvent.drop(target, { dataTransfer: dataTransfer() });
+    // Only a free courier on line takes the order.
+    expect(row("Тимур")).toHaveAttribute("data-drop", "ready");
+    expect(row("Анна")).not.toHaveAttribute("data-drop");
+    fireEvent.drop(row("Тимур"), { dataTransfer: dataTransfer() });
 
-    expect(await within(courier).findByText("Текущая доставка")).toBeVisible();
-    expect(within(courier).getByText("На доставке")).toBeVisible();
+    // Тимур got an offer; accepting it is up to him.
+    expect(
+      await within(row("Тимур")).findByText("получил предложение"),
+    ).toBeVisible();
+    expect(within(selectedKitchenCard()).getByText(/Тимур/)).toBeVisible();
   });
 
   it("grows the order details out of the timeline", async () => {
