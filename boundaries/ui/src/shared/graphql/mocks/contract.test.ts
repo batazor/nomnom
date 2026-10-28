@@ -76,6 +76,8 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   },
   BoardOrderStatus: { id: "order-preparing" },
   BoardOrderChanged: { id: "order-preparing" },
+  BoardCourierTrip: { id: "order-preparing" },
+  BoardCourierTripChanged: { id: "order-preparing" },
   BoardKitchenChanged: { restaurantId: kitchenEight.id },
   BoardCourierChanged: { id: mockCourierId },
   HireCook: { restaurantId: kitchenEight.id, name: "Тимур" },

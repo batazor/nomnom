@@ -282,3 +282,28 @@ subscription BoardOrderChanged($id: ID!) {
     ...BoardOrderView
   }
 }
+
+# Trip of a delivering courier in the Courier Pool: the milestone that began
+# the leg and the moment it should end. The query loads it, orderChanged
+# pushes it (ADR 36).
+fragment CourierTripView on Order {
+  id
+  milestones {
+    kind
+    occurredAt
+  }
+  expectedPickupAt
+  expectedDeliveredAt
+}
+
+query BoardCourierTrip($id: ID!) {
+  order(id: $id) {
+    ...CourierTripView
+  }
+}
+
+subscription BoardCourierTripChanged($id: ID!) {
+  orderChanged(id: $id) {
+    ...CourierTripView
+  }
+}

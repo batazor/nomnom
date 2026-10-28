@@ -62,6 +62,8 @@ export type PoolMember = Readonly<{
   state: "free" | "working" | "offline";
   // What the worker does now: «готовит заказ от 12:30», «свободен».
   doing: string;
+  // How far the work has got, under «doing»; absent when nothing is known.
+  progress?: ReactNode;
   onLine: boolean;
 }>;
 
@@ -85,6 +87,7 @@ export function PoolMembers({
           <span aria-hidden="true" className="board-state-dot" />
           <span className="board-pool-name">{member.name}</span>
           <span className="board-pool-doing">{member.doing}</span>
+          {member.progress}
           <span className="board-pool-actions">
             {member.state === "working" ? null : member.onLine ? (
               <Button

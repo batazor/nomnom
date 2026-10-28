@@ -627,3 +627,43 @@ button.board-card-head {
   gap: var(--space-2);
   justify-items: start;
 }
+
+/* Progress of a courier's delivery under their row: the bar fills until the
+   expected moment, the tooltip tells how long is left. */
+.board-trip {
+  position: relative;
+  display: block;
+  grid-column: 2;
+  padding-block: var(--space-1);
+}
+
+.board-trip-bar {
+  display: block;
+  overflow: hidden;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  cursor: help;
+}
+
+.board-trip-bar:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.board-trip-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transform-origin: left center;
+}
+
+.board-trip-bar[data-late] .board-trip-fill {
+  background: var(--color-warning);
+}
+
+.board-trip-panel {
+  right: auto;
+  left: 0;
+}

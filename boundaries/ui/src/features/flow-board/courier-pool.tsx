@@ -18,6 +18,7 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
+import { CourierTrip } from "./courier-trip";
 import {
   PoolLoad,
   type PoolMember,
@@ -143,6 +144,13 @@ export function CourierPoolPanel() {
             ? t("board.couriers.offered")
             : t("board.couriers.free")
           : t("board.pool.offLine"),
+    progress:
+      courier.availability === "BUSY" && courier.currentOrderId ? (
+        <CourierTrip
+          courierName={courier.name}
+          orderId={courier.currentOrderId}
+        />
+      ) : undefined,
   }));
 
   async function setLine(courierId: string, onLine: boolean): Promise<boolean> {
