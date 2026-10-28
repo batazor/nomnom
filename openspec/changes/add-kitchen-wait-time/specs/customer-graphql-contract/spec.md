@@ -5,7 +5,7 @@
 ### Requirement: Ожидание ресторана в customer-схеме
 **ID:** FR-647
 
-`Restaurant` SHALL иметь поле `waitTime: RestaurantWaitTime` с `elevated: Boolean!` и `expectedWaitMinutes: Int!` из публичного представления `restaurants`. Запросы `restaurants` и `restaurant` SHALL заполнять его всегда; в остальных местах схемы оно MUST быть `null`, как `menu`, а не нулевыми значениями. MSW-моки SHALL покрывать оба уровня.
+`Restaurant` SHALL иметь поле `waitTime: RestaurantWaitTime` с `elevated: Boolean!` и `expectedWaitMinutes: Int!` из публичного представления `restaurants`. Запросы `restaurants` и `restaurant` SHALL заполнять его всегда, без нулевых значений вместо данных; ресторан вне каталога — `RestaurantSummary` без ожидания (FR-670). MSW-моки SHALL покрывать оба уровня.
 
 #### Scenario: Перегруженная кухня
 **ID:** AC-847

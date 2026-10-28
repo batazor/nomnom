@@ -82,7 +82,7 @@ service BffService {
    * restaurant, null if the restaurant does not exist or the user may not operate its kitchen
    */
   rpc QueryKitchen(QueryKitchenRequest) returns (QueryKitchenResponse) {}
-  // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+  // Restaurants the current user owns, open and closed, ordered by identifier
   rpc QueryMyRestaurants(QueryMyRestaurantsRequest) returns (QueryMyRestaurantsResponse) {}
   // Order of the current customer, null if it does not exist or belongs to someone else
   rpc QueryOrder(QueryOrderRequest) returns (QueryOrderResponse) {}
@@ -277,17 +277,17 @@ message QueryCustomerOrdersRequest {
 // Response message for customerOrders operation: Orders of the current customer, newest first.
 message QueryCustomerOrdersResponse {
   // Orders of the current customer, newest first
-  OrderConnection customer_orders = 1;
+  OrderSummaryConnection customer_orders = 1;
 }
-// Request message for myRestaurants operation: Restaurants the current user owns, open and closed, ordered by identifier; menu is null.
+// Request message for myRestaurants operation: Restaurants the current user owns, open and closed, ordered by identifier.
 message QueryMyRestaurantsRequest {
   int32 first = 1;
   google.protobuf.StringValue after = 2;
 }
-// Response message for myRestaurants operation: Restaurants the current user owns, open and closed, ordered by identifier; menu is null.
+// Response message for myRestaurants operation: Restaurants the current user owns, open and closed, ordered by identifier.
 message QueryMyRestaurantsResponse {
-  // Restaurants the current user owns, open and closed, ordered by identifier; menu is null
-  RestaurantConnection my_restaurants = 1;
+  // Restaurants the current user owns, open and closed, ordered by identifier
+  RestaurantSummaryConnection my_restaurants = 1;
 }
 /*
  * Request message for kitchen operation: Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
@@ -535,7 +535,7 @@ message Order {
   // Why the order ended, set only for CANCELLED and FAILED
   OrderEndReason end_reason = 3;
   // Restaurant that fulfills the order
-  Restaurant restaurant = 4;
+  RestaurantSummary restaurant = 4;
   // Ordered items
   repeated OrderItem items = 5;
   // Total amount of the order, the premium fee included
@@ -563,13 +563,10 @@ message Order {
   google.protobuf.StringValue expected_delivered_at = 13;
   /*
    * Courier delivering the order, null before a courier is assigned and after a failed
-   * delivery; order(id) and orderChanged resolve it, customerOrders leaves it null
+   * delivery
    */
   OrderCourier courier = 14;
-  /*
-   * Live tracking of the courier, null unless the delivery is assigned or picked
-   * up; order(id) and orderChanged resolve it, customerOrders leaves it null
-   */
+  // Live tracking of the courier, null unless the delivery is assigned or picked up
   OrderTracking tracking = 15;
   // Premium Priority chosen at checkout
   OrderPriority priority = 16;
@@ -597,8 +594,8 @@ message CourierPosition {
  * Router resolve kitchenChanged events (ADR 36)
  */
 message Kitchen {
-  // Restaurant the kitchen belongs to; menu is null
-  Restaurant restaurant = 1;
+  // Restaurant the kitchen belongs to
+  RestaurantSummary restaurant = 1;
   /*
    * Orders in RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY: RECEIVED by ascending
    * receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
@@ -661,7 +658,7 @@ message RestaurantConnection {
   PageInfo page_info = 2;
 }
 
-// Restaurant as shown to a customer
+// Restaurant of the catalog, as a customer chooses it
 message Restaurant {
   reserved 3;
   // Restaurant identifier
@@ -672,18 +669,22 @@ message Restaurant {
   bool accepting_orders = 4;
   // Current menu, null if the restaurant has not published one
   Menu menu = 5;
-  // Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
+  // Wait for an order placed now
   RestaurantWaitTime wait_time = 6;
-  /*
-   * Fee of Premium Priority, null when the restaurant offers no premium; set by the catalog
-   * queries restaurants and restaurant, null elsewhere
-   */
+  // Fee of Premium Priority, null when the restaurant offers no premium
   Money premium_fee = 7;
 }
 
-message OrderConnection {
+message OrderSummaryConnection {
   // Orders of the page, newest first
-  repeated OrderEdge edges = 1;
+  repeated OrderSummaryEdge edges = 1;
+  // Pagination state
+  PageInfo page_info = 2;
+}
+
+message RestaurantSummaryConnection {
+  // Restaurants of the page
+  repeated RestaurantSummaryEdge edges = 1;
   // Pagination state
   PageInfo page_info = 2;
 }
@@ -731,8 +732,8 @@ message RequestOrderCancellationPayload {
 
 // Result of opening or closing a restaurant by its owner
 message RestaurantOpeningPayload {
-  // Restaurant after the command; acceptingOrders is its opening state, menu is null
-  Restaurant restaurant = 1;
+  // Restaurant after the command; acceptingOrders is its opening state
+  RestaurantSummary restaurant = 1;
   // False when the restaurant was already in the requested state
   bool changed = 2;
 }
@@ -799,6 +800,16 @@ message PageInfo {
   google.protobuf.StringValue end_cursor = 2;
 }
 
+// Restaurant outside the catalog: of an order, of a kitchen or of its owner
+message RestaurantSummary {
+  // Restaurant identifier
+  string id = 1;
+  // Display name
+  string name = 2;
+  // Whether the restaurant accepts new orders now
+  bool accepting_orders = 3;
+}
+
 // Wait for a new order of a restaurant, estimated from its recent orders
 message RestaurantWaitTime {
   // The kitchen is slower than usual for this restaurant
@@ -832,6 +843,13 @@ message RestaurantEdge {
   string cursor = 1;
   // Restaurant
   Restaurant node = 2;
+}
+
+message RestaurantSummaryEdge {
+  // Opaque cursor of this item
+  string cursor = 1;
+  // Restaurant
+  RestaurantSummary node = 2;
 }
 
 // Customer-facing lifecycle of an order
@@ -971,11 +989,29 @@ message OrderCourier {
   string name = 1;
 }
 
-message OrderEdge {
+// Order in the history of its customer; order(id) reads the rest
+message OrderSummary {
+  // Order identifier
+  string id = 1;
+  // Customer-facing lifecycle status
+  OrderStatus status = 2;
+  // Why the order ended, set only for CANCELLED and FAILED
+  OrderEndReason end_reason = 3;
+  // Moment the order was placed in RFC 3339
+  string placed_at = 4;
+  // Total amount of the order, the premium fee included
+  Money total = 5;
+  // Premium Priority chosen at checkout
+  OrderPriority priority = 6;
+  // Restaurant that fulfills the order
+  RestaurantSummary restaurant = 7;
+}
+
+message OrderSummaryEdge {
   // Opaque cursor of this item
   string cursor = 1;
   // Order
-  Order node = 2;
+  OrderSummary node = 2;
 }
 
 // Stage of a restaurant order in the kitchen

@@ -116,7 +116,7 @@ type BffServiceClient interface {
 	// Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
 	// restaurant, null if the restaurant does not exist or the user may not operate its kitchen
 	QueryKitchen(ctx context.Context, in *QueryKitchenRequest, opts ...grpc.CallOption) (*QueryKitchenResponse, error)
-	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+	// Restaurants the current user owns, open and closed, ordered by identifier
 	QueryMyRestaurants(ctx context.Context, in *QueryMyRestaurantsRequest, opts ...grpc.CallOption) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
 	QueryOrder(ctx context.Context, in *QueryOrderRequest, opts ...grpc.CallOption) (*QueryOrderResponse, error)
@@ -502,7 +502,7 @@ type BffServiceServer interface {
 	// Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
 	// restaurant, null if the restaurant does not exist or the user may not operate its kitchen
 	QueryKitchen(context.Context, *QueryKitchenRequest) (*QueryKitchenResponse, error)
-	// Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+	// Restaurants the current user owns, open and closed, ordered by identifier
 	QueryMyRestaurants(context.Context, *QueryMyRestaurantsRequest) (*QueryMyRestaurantsResponse, error)
 	// Order of the current customer, null if it does not exist or belongs to someone else
 	QueryOrder(context.Context, *QueryOrderRequest) (*QueryOrderResponse, error)

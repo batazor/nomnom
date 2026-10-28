@@ -6,6 +6,7 @@ import type {
 import { mockTracking } from "./courier-tracks";
 import {
   kitchenEight,
+  restaurantSummary,
   type MockOrder,
   orderLine,
   orderTotal,
@@ -53,7 +54,7 @@ function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
     id: spec.id,
     status: spec.status,
     endReason: spec.endReason ?? null,
-    restaurant: kitchenEight,
+    restaurant: restaurantSummary(kitchenEight),
     items: defaultItems,
     total: orderTotal(defaultItems),
     priority: "STANDARD",

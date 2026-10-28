@@ -24,8 +24,7 @@ func restaurantConnection(page applications.RestaurantPage) *service.RestaurantC
 	return connection
 }
 
-// restaurantWithMenu leaves menu null for a restaurant without one; the
-// catalog queries always carry the wait time.
+// restaurantWithMenu leaves menu null for a restaurant without one.
 func restaurantWithMenu(view applications.RestaurantView) *service.Restaurant {
 	restaurant := restaurantMessage(view.Restaurant)
 	restaurant.WaitTime = &service.RestaurantWaitTime{

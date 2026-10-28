@@ -31,7 +31,10 @@ func TestCustomerOrdersOfTheVerifiedCustomer(t *testing.T) {
 	list := newMockListCustomerOrdersHandler(t)
 	list.EXPECT().Handle(mock.Anything, customer, 1, "c0").Return(applications.OrderPage{
 		Edges: []applications.OrderEdge{{Cursor: "c1", Order: applications.OrderView{
-			ID: "order-1", Status: applications.StatusReceived, Priority: applications.PriorityStandard, PlacedAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
+			ID: "order-1", Status: applications.StatusCancelled, EndReason: applications.EndCustomerCancelled, Priority: applications.PriorityPremium,
+			Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
+			Total:      applications.Money{Amount: "12.50", Currency: "RUB"},
+			PlacedAt:   time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
 		}}},
 		HasNextPage: true,
 		EndCursor:   "c1",
@@ -45,8 +48,16 @@ func TestCustomerOrdersOfTheVerifiedCustomer(t *testing.T) {
 	connection := response.GetCustomerOrders()
 	require.Len(t, connection.GetEdges(), 1)
 	assert.Equal(t, "c1", connection.GetEdges()[0].GetCursor())
-	assert.Equal(t, "order-1", connection.GetEdges()[0].GetNode().GetId())
-	assert.Equal(t, service.OrderStatus_ORDER_STATUS_RECEIVED, connection.GetEdges()[0].GetNode().GetStatus())
+	// AC-893: the node is the card of the order, order(id) reads the rest.
+	node := connection.GetEdges()[0].GetNode()
+	assert.Equal(t, "order-1", node.GetId())
+	assert.Equal(t, service.OrderStatus_ORDER_STATUS_CANCELLED, node.GetStatus())
+	assert.Equal(t, service.OrderEndReason_ORDER_END_REASON_CUSTOMER_CANCELLED, node.GetEndReason())
+	assert.Equal(t, service.OrderPriority_ORDER_PRIORITY_PREMIUM, node.GetPriority())
+	assert.Equal(t, "12.50", node.GetTotal().GetAmount())
+	assert.Equal(t, "2026-10-25T12:00:00Z", node.GetPlacedAt())
+	assert.Equal(t, "Кухня №8", node.GetRestaurant().GetName())
+	assert.True(t, node.GetRestaurant().GetAcceptingOrders())
 	assert.True(t, connection.GetPageInfo().GetHasNextPage())
 	assert.Equal(t, "c1", connection.GetPageInfo().GetEndCursor().GetValue())
 

@@ -47,7 +47,6 @@ func TestOpenRestaurantRunsOnBehalfOfTheUser(t *testing.T) {
 	assert.Equal(t, nightBakery.ID, payload.GetRestaurant().GetId())
 	assert.Equal(t, "Ночная пекарня", payload.GetRestaurant().GetName())
 	assert.True(t, payload.GetRestaurant().GetAcceptingOrders())
-	assert.Nil(t, payload.GetRestaurant().GetMenu())
 }
 
 // AC-752: a repeat is not an error.
@@ -122,7 +121,6 @@ func TestMyRestaurantsListsRestaurantsOfTheUser(t *testing.T) {
 	node := connection.GetEdges()[0].GetNode()
 	assert.Equal(t, nightBakery.ID, node.GetId())
 	assert.False(t, node.GetAcceptingOrders())
-	assert.Nil(t, node.GetMenu())
 	assert.True(t, connection.GetPageInfo().GetHasNextPage())
 	assert.Equal(t, nightBakery.ID, connection.GetPageInfo().GetEndCursor().GetValue())
 }

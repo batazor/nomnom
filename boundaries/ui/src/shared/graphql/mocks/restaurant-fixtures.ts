@@ -37,11 +37,24 @@ export type MockRestaurant = {
   name: string;
   acceptingOrders: boolean;
   menu: { items: MockMenuItem[] } | null;
-  // Set by the catalog queries, null elsewhere like in the BFF.
-  waitTime: MockWaitTime | null;
+  waitTime: MockWaitTime;
   // Fee of Premium Priority, null when the restaurant offers none (FR-652).
   premiumFee: MockMoney | null;
 };
+
+// Restaurant outside the catalog: of an order, a kitchen or its owner (FR-670).
+export type MockRestaurantSummary = Pick<
+  MockRestaurant,
+  "id" | "name" | "acceptingOrders"
+>;
+
+export function restaurantSummary({
+  id,
+  name,
+  acceptingOrders,
+}: MockRestaurant): MockRestaurantSummary {
+  return { id, name, acceptingOrders };
+}
 
 // A kitchen working at its usual pace.
 const usualWait: MockWaitTime = { elevated: false, expectedWaitMinutes: 20 };
@@ -62,7 +75,7 @@ export type MockOrder = {
   id: string;
   status: OrderStatus;
   endReason: OrderEndReason | null;
-  restaurant: MockRestaurant;
+  restaurant: MockRestaurantSummary;
   items: MockOrderItem[];
   total: MockMoney;
   priority: OrderPriority;

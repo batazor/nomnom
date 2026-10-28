@@ -583,6 +583,23 @@
       ]
     },
     {
+      "type": "RestaurantSummary",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "acceptingOrders",
+          "mapped": "accepting_orders"
+        }
+      ]
+    },
+    {
       "type": "RestaurantWaitTime",
       "fieldMappings": [
         {
@@ -644,6 +661,32 @@
     },
     {
       "type": "RestaurantConnection",
+      "fieldMappings": [
+        {
+          "original": "edges",
+          "mapped": "edges"
+        },
+        {
+          "original": "pageInfo",
+          "mapped": "page_info"
+        }
+      ]
+    },
+    {
+      "type": "RestaurantSummaryEdge",
+      "fieldMappings": [
+        {
+          "original": "cursor",
+          "mapped": "cursor"
+        },
+        {
+          "original": "node",
+          "mapped": "node"
+        }
+      ]
+    },
+    {
+      "type": "RestaurantSummaryConnection",
       "fieldMappings": [
         {
           "original": "edges",
@@ -866,7 +909,40 @@
       ]
     },
     {
-      "type": "OrderEdge",
+      "type": "OrderSummary",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "status",
+          "mapped": "status"
+        },
+        {
+          "original": "endReason",
+          "mapped": "end_reason"
+        },
+        {
+          "original": "placedAt",
+          "mapped": "placed_at"
+        },
+        {
+          "original": "total",
+          "mapped": "total"
+        },
+        {
+          "original": "priority",
+          "mapped": "priority"
+        },
+        {
+          "original": "restaurant",
+          "mapped": "restaurant"
+        }
+      ]
+    },
+    {
+      "type": "OrderSummaryEdge",
       "fieldMappings": [
         {
           "original": "cursor",
@@ -879,7 +955,7 @@
       ]
     },
     {
-      "type": "OrderConnection",
+      "type": "OrderSummaryConnection",
       "fieldMappings": [
         {
           "original": "edges",

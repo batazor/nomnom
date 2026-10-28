@@ -6,7 +6,11 @@ import type {
   OrderMilestoneKind,
   OrderStatus,
 } from "../generated/graphql";
-import type { MockOrder, MockRestaurant } from "./restaurant-fixtures";
+import {
+  type MockOrder,
+  type MockRestaurant,
+  restaurantSummary,
+} from "./restaurant-fixtures";
 
 // Kitchen and courier side of orders placed through the mock BFF, like
 // restaurants and delivery would drive them: kitchen commands move the
@@ -358,7 +362,7 @@ export function createFulfillment({
       );
     return {
       restaurantId,
-      restaurant: { ...found, menu: null },
+      restaurant: restaurantSummary(found),
       orders: active.map(kitchenView),
       cookPool: cookPool(restaurantId),
     };

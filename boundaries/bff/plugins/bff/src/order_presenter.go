@@ -68,13 +68,9 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 	order := &service.Order{
 		Id:     view.ID,
 		Status: status,
-		Restaurant: &service.Restaurant{
-			Id:              view.Restaurant.ID,
-			Name:            view.Restaurant.Name,
-			AcceptingOrders: view.Restaurant.IsOpen,
-		},
-		Total:    money(view.Total),
-		PlacedAt: timestamp(view.PlacedAt),
+		Restaurant: orderRestaurant(view.Restaurant),
+		Total:      money(view.Total),
+		PlacedAt:   timestamp(view.PlacedAt),
 	}
 	if order.Priority, err = enumValue(orderPriorities, "order priority", view.Priority); err != nil {
 		return nil, err
@@ -82,10 +78,8 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 	if view.PremiumFee != nil {
 		order.PremiumFee = money(*view.PremiumFee)
 	}
-	if view.EndReason != "" {
-		if order.EndReason, err = enumValue(orderEndReasons, "order end reason", view.EndReason); err != nil {
-			return nil, err
-		}
+	if order.EndReason, err = orderEndReason(view.EndReason); err != nil {
+		return nil, err
 	}
 	for _, item := range view.Items {
 		order.Items = append(order.Items, &service.OrderItem{
@@ -118,6 +112,45 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 		order.Tracking = trackingMessage(*view.Tracking)
 	}
 	return order, nil
+}
+
+// orderSummaryMessage presents an Order in the history of its customer: the
+// fields of its card, order(id) reads the rest.
+func orderSummaryMessage(view applications.OrderView) (*service.OrderSummary, error) {
+	status, err := enumValue(orderStatuses, "order status", view.Status)
+	if err != nil {
+		return nil, err
+	}
+	summary := &service.OrderSummary{
+		Id:         view.ID,
+		Status:     status,
+		PlacedAt:   timestamp(view.PlacedAt),
+		Total:      money(view.Total),
+		Restaurant: orderRestaurant(view.Restaurant),
+	}
+	if summary.Priority, err = enumValue(orderPriorities, "order priority", view.Priority); err != nil {
+		return nil, err
+	}
+	if summary.EndReason, err = orderEndReason(view.EndReason); err != nil {
+		return nil, err
+	}
+	return summary, nil
+}
+
+func orderRestaurant(restaurant applications.Restaurant) *service.RestaurantSummary {
+	return &service.RestaurantSummary{
+		Id:              restaurant.ID,
+		Name:            restaurant.Name,
+		AcceptingOrders: restaurant.IsOpen,
+	}
+}
+
+// orderEndReason is UNSPECIFIED for an order that has not ended.
+func orderEndReason(reason applications.EndReason) (service.OrderEndReason, error) {
+	if reason == "" {
+		return service.OrderEndReason_ORDER_END_REASON_UNSPECIFIED, nil
+	}
+	return enumValue(orderEndReasons, "order end reason", reason)
 }
 
 func trackingMessage(tracking applications.Tracking) *service.OrderTracking {
@@ -164,22 +197,21 @@ func deadline(t *time.Time) *wrapperspb.StringValue {
 	return wrapperspb.String(timestamp(*t))
 }
 
-// orderConnection presents a page of the order history; every node is the
-// same Order as order(id).
-func orderConnection(page applications.OrderPage) (*service.OrderConnection, error) {
-	connection := &service.OrderConnection{
-		Edges:    make([]*service.OrderEdge, 0, len(page.Edges)),
+// orderConnection presents a page of the order history.
+func orderConnection(page applications.OrderPage) (*service.OrderSummaryConnection, error) {
+	connection := &service.OrderSummaryConnection{
+		Edges:    make([]*service.OrderSummaryEdge, 0, len(page.Edges)),
 		PageInfo: &service.PageInfo{HasNextPage: page.HasNextPage},
 	}
 	if page.EndCursor != "" {
 		connection.PageInfo.EndCursor = wrapperspb.String(page.EndCursor)
 	}
 	for _, edge := range page.Edges {
-		order, err := orderMessage(edge.Order)
+		order, err := orderSummaryMessage(edge.Order)
 		if err != nil {
 			return nil, err
 		}
-		connection.Edges = append(connection.Edges, &service.OrderEdge{Cursor: edge.Cursor, Node: order})
+		connection.Edges = append(connection.Edges, &service.OrderSummaryEdge{Cursor: edge.Cursor, Node: order})
 	}
 	return connection, nil
 }

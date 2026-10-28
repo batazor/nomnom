@@ -37,11 +37,9 @@ var (
 	}
 )
 
-// kitchenMessage leaves the menu of the restaurant null: the kitchen does not
-// read it.
 func kitchenMessage(view applications.KitchenView) (*service.Kitchen, error) {
 	message := &service.Kitchen{
-		Restaurant: &service.Restaurant{
+		Restaurant: &service.RestaurantSummary{
 			Id:              view.Restaurant.ID,
 			Name:            view.Restaurant.Name,
 			AcceptingOrders: view.Restaurant.IsOpen,

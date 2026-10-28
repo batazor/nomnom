@@ -7,7 +7,6 @@ import (
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
-// restaurantOpeningPayload leaves menu null: the commands do not read it.
 func restaurantOpeningPayload(result applications.OpeningResult) *service.RestaurantOpeningPayload {
 	return &service.RestaurantOpeningPayload{
 		Restaurant: managedRestaurantMessage(result.Restaurant),
@@ -15,17 +14,16 @@ func restaurantOpeningPayload(result applications.OpeningResult) *service.Restau
 	}
 }
 
-// ownedRestaurantConnection leaves menu null: the list does not read it.
-func ownedRestaurantConnection(page applications.RestaurantPage) *service.RestaurantConnection {
-	connection := &service.RestaurantConnection{
-		Edges:    make([]*service.RestaurantEdge, 0, len(page.Edges)),
+func ownedRestaurantConnection(page applications.RestaurantPage) *service.RestaurantSummaryConnection {
+	connection := &service.RestaurantSummaryConnection{
+		Edges:    make([]*service.RestaurantSummaryEdge, 0, len(page.Edges)),
 		PageInfo: &service.PageInfo{HasNextPage: page.HasNextPage},
 	}
 	if page.EndCursor != "" {
 		connection.PageInfo.EndCursor = wrapperspb.String(page.EndCursor)
 	}
 	for _, edge := range page.Edges {
-		connection.Edges = append(connection.Edges, &service.RestaurantEdge{
+		connection.Edges = append(connection.Edges, &service.RestaurantSummaryEdge{
 			Cursor: edge.Cursor,
 			Node:   managedRestaurantMessage(edge.Restaurant),
 		})
@@ -33,8 +31,8 @@ func ownedRestaurantConnection(page applications.RestaurantPage) *service.Restau
 	return connection
 }
 
-func managedRestaurantMessage(restaurant applications.Restaurant) *service.Restaurant {
-	return &service.Restaurant{
+func managedRestaurantMessage(restaurant applications.Restaurant) *service.RestaurantSummary {
+	return &service.RestaurantSummary{
 		Id:              restaurant.ID,
 		Name:            restaurant.Name,
 		AcceptingOrders: restaurant.IsOpen,

@@ -60,7 +60,6 @@ func TestKitchenShowsTheBoardOnBehalfOfTheUser(t *testing.T) {
 	kitchenMessage := response.GetKitchen()
 	assert.Equal(t, "Кухня №8", kitchenMessage.GetRestaurant().GetName())
 	assert.True(t, kitchenMessage.GetRestaurant().GetAcceptingOrders())
-	assert.Nil(t, kitchenMessage.GetRestaurant().GetMenu())
 	require.Len(t, kitchenMessage.GetOrders(), 2)
 	order := kitchenMessage.GetOrders()[0]
 	assert.Equal(t, "ro-1", order.GetId())

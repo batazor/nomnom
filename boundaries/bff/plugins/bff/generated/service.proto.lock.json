@@ -857,6 +857,48 @@
       "fields": {
         "start_next_preparation": 1
       }
+    },
+    "OrderSummaryConnection": {
+      "fields": {
+        "edges": 1,
+        "pageInfo": 2
+      }
+    },
+    "RestaurantSummaryConnection": {
+      "fields": {
+        "edges": 1,
+        "pageInfo": 2
+      }
+    },
+    "RestaurantSummary": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "acceptingOrders": 3
+      }
+    },
+    "RestaurantSummaryEdge": {
+      "fields": {
+        "cursor": 1,
+        "node": 2
+      }
+    },
+    "OrderSummary": {
+      "fields": {
+        "id": 1,
+        "status": 2,
+        "endReason": 3,
+        "placedAt": 4,
+        "total": 5,
+        "priority": 6,
+        "restaurant": 7
+      }
+    },
+    "OrderSummaryEdge": {
+      "fields": {
+        "cursor": 1,
+        "node": 2
+      }
     }
   },
   "enums": {

@@ -9,7 +9,9 @@ import {
   liveOrderStepCount,
   type MockOrder,
   type MockRestaurant,
+  type MockRestaurantSummary,
   managedRestaurantIds,
+  restaurantSummary,
   orderLine,
   orderTotal,
   preparationDelayed,
@@ -54,7 +56,7 @@ type CancellationPayload = {
   problem: { code: string } | null;
 };
 
-type OpeningPayload = { restaurant: MockRestaurant; changed: boolean };
+type OpeningPayload = { restaurant: MockRestaurantSummary; changed: boolean };
 
 // The error shape Cosmo Router gives for a gRPC error of the BFF plugin: the
 // code sits under extensions.errors[].extensions.code.
@@ -214,7 +216,7 @@ export function createMockStore({
     const changed = restaurant.acceptingOrders !== open;
     state.opening.set(restaurantId, open);
     return {
-      restaurant: { ...restaurant, acceptingOrders: open, menu: null },
+      restaurant: { ...restaurantSummary(restaurant), acceptingOrders: open },
       changed,
     };
   }
@@ -299,7 +301,7 @@ export function createMockStore({
       id: `order-placed-${state.orders.size + 1}`,
       status: "RECEIVED",
       endReason: null,
-      restaurant,
+      restaurant: restaurantSummary(restaurant),
       items,
       total: premiumFee
         ? withFee(orderTotal(items), premiumFee)
@@ -384,7 +386,7 @@ export function createMockStore({
       paginate(
         currentRestaurants()
           .filter((restaurant) => managedRestaurantIds.has(restaurant.id))
-          .map((restaurant) => ({ ...restaurant, menu: null })),
+          .map(restaurantSummary),
         args,
       ),
     customerOrders: (args: PageArgs) =>

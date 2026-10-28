@@ -52,7 +52,7 @@ type PageInfo {
 }
 
 """
-Restaurant as shown to a customer
+Restaurant of the catalog, as a customer chooses it
 """
 type Restaurant {
   """
@@ -72,14 +72,31 @@ type Restaurant {
   """
   menu: Menu
   """
-  Wait for an order placed now; set by the catalog queries restaurants and restaurant, null elsewhere
+  Wait for an order placed now
   """
-  waitTime: RestaurantWaitTime
+  waitTime: RestaurantWaitTime!
   """
-  Fee of Premium Priority, null when the restaurant offers no premium; set by the catalog
-  queries restaurants and restaurant, null elsewhere
+  Fee of Premium Priority, null when the restaurant offers no premium
   """
   premiumFee: Money
+}
+
+"""
+Restaurant outside the catalog: of an order, of a kitchen or of its owner
+"""
+type RestaurantSummary {
+  """
+  Restaurant identifier
+  """
+  id: ID!
+  """
+  Display name
+  """
+  name: String!
+  """
+  Whether the restaurant accepts new orders now
+  """
+  acceptingOrders: Boolean!
 }
 
 """
@@ -148,6 +165,28 @@ type RestaurantConnection {
   Restaurants of the page
   """
   edges: [RestaurantEdge!]!
+  """
+  Pagination state
+  """
+  pageInfo: PageInfo!
+}
+
+type RestaurantSummaryEdge {
+  """
+  Opaque cursor of this item
+  """
+  cursor: String!
+  """
+  Restaurant
+  """
+  node: RestaurantSummary!
+}
+
+type RestaurantSummaryConnection {
+  """
+  Restaurants of the page
+  """
+  edges: [RestaurantSummaryEdge!]!
   """
   Pagination state
   """
@@ -338,7 +377,7 @@ type Order @key(fields: "id") {
   """
   Restaurant that fulfills the order
   """
-  restaurant: Restaurant!
+  restaurant: RestaurantSummary!
   """
   Ordered items
   """
@@ -384,12 +423,11 @@ type Order @key(fields: "id") {
   expectedDeliveredAt: String
   """
   Courier delivering the order, null before a courier is assigned and after a failed
-  delivery; order(id) and orderChanged resolve it, customerOrders leaves it null
+  delivery
   """
   courier: OrderCourier
   """
-  Live tracking of the courier, null unless the delivery is assigned or picked
-  up; order(id) and orderChanged resolve it, customerOrders leaves it null
+  Live tracking of the courier, null unless the delivery is assigned or picked up
   """
   tracking: OrderTracking
 }
@@ -487,7 +525,41 @@ type OrderCourier {
   name: String!
 }
 
-type OrderEdge {
+"""
+Order in the history of its customer; order(id) reads the rest
+"""
+type OrderSummary {
+  """
+  Order identifier
+  """
+  id: ID!
+  """
+  Customer-facing lifecycle status
+  """
+  status: OrderStatus!
+  """
+  Why the order ended, set only for CANCELLED and FAILED
+  """
+  endReason: OrderEndReason
+  """
+  Moment the order was placed in RFC 3339
+  """
+  placedAt: String!
+  """
+  Total amount of the order, the premium fee included
+  """
+  total: Money!
+  """
+  Premium Priority chosen at checkout
+  """
+  priority: OrderPriority!
+  """
+  Restaurant that fulfills the order
+  """
+  restaurant: RestaurantSummary!
+}
+
+type OrderSummaryEdge {
   """
   Opaque cursor of this item
   """
@@ -495,14 +567,14 @@ type OrderEdge {
   """
   Order
   """
-  node: Order!
+  node: OrderSummary!
 }
 
-type OrderConnection {
+type OrderSummaryConnection {
   """
   Orders of the page, newest first
   """
-  edges: [OrderEdge!]!
+  edges: [OrderSummaryEdge!]!
   """
   Pagination state
   """
@@ -684,9 +756,9 @@ type Kitchen @key(fields: "restaurantId") {
   """
   restaurantId: ID!
   """
-  Restaurant the kitchen belongs to; menu is null
+  Restaurant the kitchen belongs to
   """
-  restaurant: Restaurant!
+  restaurant: RestaurantSummary!
   """
   Orders in RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY: RECEIVED by ascending
   receivedAt, then the kitchen queue order, then the rest by ascending receivedAt
@@ -1001,11 +1073,11 @@ type Query {
   """
   Orders of the current customer, newest first
   """
-  customerOrders(first: Int!, after: String): OrderConnection!
+  customerOrders(first: Int!, after: String): OrderSummaryConnection!
   """
-  Restaurants the current user owns, open and closed, ordered by identifier; menu is null
+  Restaurants the current user owns, open and closed, ordered by identifier
   """
-  myRestaurants(first: Int!, after: String): RestaurantConnection!
+  myRestaurants(first: Int!, after: String): RestaurantSummaryConnection!
   """
   Active orders of a restaurant for its kitchen; requires kitchen staff or the owner of the
   restaurant, null if the restaurant does not exist or the user may not operate its kitchen
@@ -1185,9 +1257,9 @@ Result of opening or closing a restaurant by its owner
 """
 type RestaurantOpeningPayload {
   """
-  Restaurant after the command; acceptingOrders is its opening state, menu is null
+  Restaurant after the command; acceptingOrders is its opening state
   """
-  restaurant: Restaurant!
+  restaurant: RestaurantSummary!
   """
   False when the restaurant was already in the requested state
   """

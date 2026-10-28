@@ -156,7 +156,7 @@ describe("manage restaurant", () => {
                 __typename: "RestaurantOpeningPayload",
                 changed: false,
                 restaurant: {
-                  __typename: "Restaurant",
+                  __typename: "RestaurantSummary",
                   id: kitchen,
                   name: "Кухня №8",
                   acceptingOrders: false,
