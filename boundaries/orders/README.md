@@ -493,21 +493,9 @@ use cases не пишут. Place Order, Record Courier Assignment (новая De
 make run
 ```
 
-Temporal worker `cmd/orders-worker` опрашивает task queue `orders`. Локально — против Temporal dev server в Docker (`temporalio/temporal:1.9.1`, UI на `http://localhost:8233`):
-
-```bash
-make temporal-dev
-```
-
-```bash
-make run-worker
-```
-
-`run-worker` включает регистрацию Search Attribute, management port — `9082`; соседние контексты вызываются через `INTERNAL_GATEWAY_ADDR`. Остановить dev server:
-
-```bash
-make temporal-dev-stop
-```
+Temporal worker `cmd/orders-worker` и consumer `cmd/orders-consumer` локально не запускаются: worker
+разворачивает Temporal Worker Controller ([ADR 5](docs/adr/0005-order-fulfillment-orchestration.md#versioning-workflow-code)),
+поэтому оба процесса работают только в kind (`make kind-deploy` в корне репозитория).
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
@@ -515,6 +503,7 @@ make temporal-dev-stop
 | `TEMPORAL__NAMESPACE` | `default` | Namespace окружения |
 | `TEMPORAL__CONNECT_TIMEOUT` | `10s` | Предел подключения и проверки Search Attribute в startup |
 | `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES` | `false` | Создать `OrderFulfillmentStage`, если его нет (нужны права оператора) |
+| `TEMPORAL_DEPLOYMENT_NAME`, `TEMPORAL_WORKER_BUILD_ID` | — | Worker Deployment Version worker'а; задаёт Temporal Worker Controller, без них worker не стартует |
 | `FULFILLMENT__<KEY>` | см. `config.example.yaml` | `Policy` workflow (placeholders), `PUBLISH_STAGE`, `NEIGHBOURS` (также выбирает catalog Place Order) |
 | `CATALOG__MINIMUM_TOTAL`, `CATALOG__MAXIMUM_TOTAL`, `CATALOG__TIMEOUT` | `0`, `100000`, `2s` | Лимиты суммы Place Order в валюте меню (placeholders) и deadline чтения `GetRestaurant` + `GetMenu` |
 | `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |

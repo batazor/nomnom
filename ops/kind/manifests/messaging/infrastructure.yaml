@@ -100,7 +100,7 @@ spec:
       port: 9092
       targetPort: kafka
 ---
-# Temporal dev server (тот же образ, что make temporal-dev в boundaries/orders).
+# Temporal dev server (тот же образ, что TemporalImage в boundaries/orders/pkg/testfixture).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

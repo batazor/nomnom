@@ -36,7 +36,7 @@ const (
 	KafkaImage = "apache/kafka:4.4.0"
 	// SpiceDBImage is SPICEDB_IMAGE of the root Makefile.
 	SpiceDBImage = "authzed/spicedb:v1.57.0"
-	// TemporalImage is TEMPORAL_IMAGE of the Makefile (Temporal CLI dev server).
+	// TemporalImage is the Temporal CLI dev server of ops/kind/manifests/messaging/infrastructure.yaml.
 	TemporalImage = "temporalio/temporal:1.9.1"
 	// SpiceDBPresharedKey is the key of the SpiceDB container.
 	SpiceDBPresharedKey = "devkey"
@@ -213,7 +213,7 @@ type Temporal struct {
 	container testcontainers.Container
 }
 
-// StartTemporal runs the dev server of `make temporal-dev`.
+// StartTemporal runs the Temporal dev server of TemporalImage.
 func StartTemporal(ctx context.Context) (*Temporal, error) {
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
