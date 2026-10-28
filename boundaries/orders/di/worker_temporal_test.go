@@ -48,6 +48,8 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 			Namespace:                "default",
 			ConnectTimeout:           10 * time.Second,
 			RegisterSearchAttributes: true,
+			DeploymentName:           "default/orders-worker",
+			BuildID:                  "orders-test",
 		},
 		Fulfillment: config.FulfillmentConfig{
 			AcceptanceTimeout:       time.Minute,
@@ -86,6 +88,13 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	temporalClient, err := client.DialContext(ctx, client.Options{HostPort: address, Namespace: "default"})
 	require.NoError(t, err)
 	defer temporalClient.Close()
+	// Temporal Worker Controller makes the polled version current; the version
+	// appears in the Worker Deployment once the worker polls.
+	deployment := temporalClient.WorkerDeploymentClient().GetHandle(cfg.Temporal.DeploymentName)
+	require.Eventually(t, func() bool {
+		_, err := deployment.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{BuildID: cfg.Temporal.BuildID})
+		return err == nil
+	}, 20*time.Second, 100*time.Millisecond, "version %s did not become current", cfg.Temporal.BuildID)
 	port := fulfillmenttemporal.NewClient(temporalClient, NewFulfillmentPolicy(cfg.Fulfillment))
 	workflowID := fulfillmenttemporal.WorkflowID(string(orderID))
 
@@ -142,6 +151,12 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	stage, ok := description.TypedSearchAttributes.GetKeyword(fulfillmenttemporal.StageSearchAttribute)
 	assert.True(t, ok)
 	assert.Equal(t, string(fulfillmenttemporal.StageCompleted), stage)
+
+	execution, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	require.NoError(t, err)
+	versioning := execution.GetWorkflowExecutionInfo().GetVersioningInfo()
+	assert.Equal(t, enumspb.VERSIONING_BEHAVIOR_PINNED, versioning.GetBehavior())
+	assert.Equal(t, cfg.Temporal.BuildID, versioning.GetDeploymentVersion().GetBuildId())
 }
 
 // activityCompleted reports whether an Activity of the given type completed in

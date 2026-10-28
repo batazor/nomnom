@@ -55,6 +55,23 @@ deploy:
           config.apiVersion: controller.config.cert-manager.io/v1alpha1
           config.kind: ControllerConfiguration
           config.enableGatewayAPI: true
+      # Temporal Worker Controller (ADR 5 orders): Deployment на каждый Build ID worker'а,
+      # регистрация Worker Deployment Version и маршрутизация новых workflow. CRD — отдельный
+      # chart, ставится первым; сертификат webhook выпускает cert-manager.
+      - name: temporal-worker-controller-crds
+        remoteChart: oci://docker.io/temporalio/temporal-worker-controller-crds
+        version: 0.33.0
+        namespace: temporal-system
+        createNamespace: true
+        upgradeOnChange: true
+        wait: true
+      - name: temporal-worker-controller
+        remoteChart: oci://docker.io/temporalio/temporal-worker-controller
+        version: 0.33.0
+        namespace: temporal-system
+        createNamespace: true
+        upgradeOnChange: true
+        wait: true
     hooks:
       after:
         # Установленные chart Envoy Gateway CRD должны совпадать с закреплённой версией Gateway API.
@@ -232,6 +249,17 @@ deploy:
                 k -n nomnom-infra delete job dead-letter-topics --ignore-not-found --wait
                 k apply -f ../manifests/messaging/dead-letter-topics.yaml
                 k -n nomnom-infra wait job/dead-letter-topics --for=condition=Complete --timeout=180s
+      after:
+        # Skaffold status check не знает WorkerDeployment: ждём, пока Temporal Worker Controller
+        # сделает версию orders-worker текущей, иначе новые заказы не на чем исполнять.
+        - host:
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                kubectl --context "$SKAFFOLD_KUBE_CONTEXT" -n nomnom-orders wait workerdeployment/orders-worker \
+                  --for=condition=Ready --timeout=300s
     releases:
       - name: orders
         chartPath: ../../../boundaries/orders/ops/helm

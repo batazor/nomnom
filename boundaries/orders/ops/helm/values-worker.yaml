@@ -1,8 +1,22 @@
 # Temporal worker orders: отдельный release того же chart.
 #   helm upgrade --install orders-worker ops/helm -f ops/helm/values-worker.yaml
-# Адрес и namespace Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE) задаются values окружения
-# через env.
+# Worker разворачивается WorkerDeployment Temporal Worker Controller (ADR 5 контекста): контроллер
+# создаёт Deployment на каждый Build ID и задаёт TEMPORAL_DEPLOYMENT_NAME и TEMPORAL_WORKER_BUILD_ID.
+# Адрес и namespace Temporal (temporal.hostPort, temporal.namespace) задаются values окружения.
 component: worker
+
+temporal:
+  hostPort: ""
+  namespace: ""
+
+workerDeployment:
+  # Новые заказы сразу идут на новую версию; начатые (Pinned) доживают на своей.
+  rollout:
+    strategy: AllAtOnce
+  # Версия без открытых Pinned workflow (Drained) масштабируется в 0 через час и удаляется через сутки.
+  sunset:
+    scaledownDelay: 1h
+    deleteDelay: 24h
 
 telemetry:
   serviceName: orders-worker

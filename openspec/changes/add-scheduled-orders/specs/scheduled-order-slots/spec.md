@@ -33,7 +33,7 @@
 ### Requirement: List Scheduled Slots возвращает окна с доступностью
 **ID:** FR-673
 
-List Scheduled Slots SHALL возвращать окна ресторана шириной `SCHEDULED_SLOT__WIDTH`, выровненные по UTC кратно ширине, от первой границы не раньше `now + MIN_LEAD` до `now + MAX_HORIZON`, каждое с `start`, `end` и `available`. Окно MUST быть недоступно, если активных резерваций не меньше ёмкости; активная резервация — `confirmed` или `held` с непросроченным hold. Ресторан без настроек или не принимающий заказы сейчас SHALL получать пустой список. Query SHALL быть публичным, как Get Restaurant.
+List Scheduled Slots SHALL публично возвращать окна ресторана шириной `SCHEDULED_SLOT__WIDTH`, выровненные по UTC, от `now + MIN_LEAD` до `now + MAX_HORIZON`, с `start`, `end` и `available`. Окно MUST быть недоступно, если активных (`confirmed` или непросроченных `held`) резерваций не меньше ёмкости. Ресторан без настроек или не принимающий заказы сейчас SHALL получать пустой список.
 
 #### Scenario: Окно заполнено
 **ID:** AC-896

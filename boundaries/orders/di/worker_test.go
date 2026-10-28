@@ -44,6 +44,8 @@ func testConfig() config.Config {
 			HostPort:       "temporal:7233",
 			Namespace:      "orders-local",
 			ConnectTimeout: time.Second,
+			DeploymentName: "nomnom-orders/orders-worker",
+			BuildID:        "orders-1a2b3c",
 		},
 		Fulfillment: config.FulfillmentConfig{PublishStage: true},
 		Shutdown:    config.ShutdownConfig{DrainTimeout: 3 * time.Second},
@@ -73,9 +75,10 @@ func newTestWorker(t *testing.T, cfg config.Config, poller *mockRunner) (*Tempor
 
 func TestTemporalWorkerStartsAndStops(t *testing.T) {
 	runner := newMockRunner(t)
-	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, mock.MatchedBy(func(options workflow.RegisterOptions) bool {
-		return options.Name == "OrderFulfillment"
-	})).Return().Once()
+	runner.EXPECT().RegisterWorkflowWithOptions(mock.Anything, workflow.RegisterOptions{
+		Name:               "OrderFulfillment",
+		VersioningBehavior: workflow.VersioningBehaviorPinned,
+	}).Return().Once()
 	for _, name := range activityNames {
 		runner.EXPECT().RegisterActivityWithOptions(mock.Anything, activity.RegisterOptions{Name: name}).Return().Once()
 	}
@@ -86,6 +89,10 @@ func TestTemporalWorkerStartsAndStops(t *testing.T) {
 
 	require.NoError(t, w.Start(context.Background()))
 	assert.Equal(t, 3*time.Second, options.WorkerStopTimeout)
+	assert.Equal(t, worker.DeploymentOptions{
+		UseVersioning: true,
+		Version:       worker.WorkerDeploymentVersion{DeploymentName: "nomnom-orders/orders-worker", BuildID: "orders-1a2b3c"},
+	}, options.DeploymentOptions)
 
 	runErr := make(chan error, 1)
 	go func() { runErr <- w.Run() }()
@@ -140,6 +147,26 @@ func TestTemporalWorkerStartFailureClosesClient(t *testing.T) {
 	temporalClient.On("Close").Return().Once()
 
 	require.ErrorIs(t, w.Start(context.Background()), startErr)
+}
+
+// Without the Worker Deployment Version set by Temporal Worker Controller the
+// worker fails startup before connecting.
+func TestTemporalWorkerWithoutVersionFailsStartup(t *testing.T) {
+	for _, env := range []string{config.EnvTemporalDeploymentName, config.EnvTemporalWorkerBuildID} {
+		cfg := testConfig()
+		if env == config.EnvTemporalDeploymentName {
+			cfg.Temporal.DeploymentName = ""
+		} else {
+			cfg.Temporal.BuildID = ""
+		}
+		w := NewTemporalWorker(cfg, nil)
+		w.dial = func(context.Context, client.Options) (client.Client, error) {
+			t.Fatal("worker without a version must not connect")
+			return nil, nil
+		}
+
+		require.ErrorContains(t, w.Start(context.Background()), env)
+	}
 }
 
 // AC-451: an unreachable Temporal fails startup within the connect timeout.

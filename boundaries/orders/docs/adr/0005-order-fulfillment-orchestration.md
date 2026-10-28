@@ -93,6 +93,24 @@ Workflow не читает БД. Stage публикуется низкокард
 
 API, Kafka consumer и Temporal worker — управляемые процессы по [ADR 17](../../../../docs/adr/0017-cloud-native-application-runtime.md). Worker при shutdown прекращает poll, даёт Activities завершиться, закрывает clients и flush telemetry. Crash worker не является business failure и не запускает compensation.
 
+### Versioning workflow code
+
+Код workflow версионируется Worker Versioning (Worker Deployment Versions), а не patch-ветками (`workflow.GetVersion`) в коде. Worker объявляет версию `DeploymentOptions{UseVersioning, Version{DeploymentName, BuildID}}`, а каждый workflow — `VersioningBehavior` при регистрации; поведение по умолчанию у worker не задаётся, и workflow без явного поведения не регистрируется.
+
+- `PINNED` — run живёт на версии worker'а, где стартовал; код не патчится.
+- `AUTO_UPGRADE` — run переезжает на текущую версию, поэтому изменение кода требует patching.
+- Upgrade on Continue-as-New (preview) — долгий `PINNED` run переходит на новую версию при следующем Continue-As-New. Preview-возможности Temporal допустимы.
+
+| Workflow | Длительность | Стратегия |
+| --- | --- | --- |
+| Order Fulfillment (сага заказа) | минуты–часы | `PINNED`, без патчей |
+| GroupCart | до недели | `PINNED` + Upgrade on Continue-as-New |
+| Scheduled order | часы–дни | `PINNED` + Continue-As-New или `AUTO_UPGRADE` + patching |
+
+GroupCart и Scheduled order пока не реализованы; таблица задаёт их стратегию. Replay tests в CI обязательны для каждого workflow с `AUTO_UPGRADE`.
+
+Версии разворачивает [Temporal Worker Controller](https://github.com/temporalio/temporal-worker-controller) — одинаково в kind и в production. Release `orders-worker` описывает `WorkerDeployment` и `Connection` вместо `Deployment`. Контроллер создаёт `Deployment` на каждый Build ID (хеш pod template), передаёт поду `TEMPORAL_DEPLOYMENT_NAME` и `TEMPORAL_WORKER_BUILD_ID`, регистрирует версию и делает её текущей. Без этих переменных worker не стартует. Rollout `AllAtOnce`: новые заказы сразу идут на новую версию, начатые доживают на своей. Версию без открытых `PINNED` runs (Drained) контроллер масштабирует в 0 через 1 час и удаляет через 24 часа. Возврат к версии, которая была текущей в последний час, контроллер выполняет сразу; runs, начатые на откатываемой версии, на ней и завершаются.
+
 ### Отложенные продуктовые решения
 
 Этот ADR не выбирает следующие решения; каждое принимается отдельным SDD change до реализации соответствующего шага:
@@ -110,4 +128,4 @@ API, Kafka consumer и Temporal worker — управляемые процесс
 
 Старт, входящие события, внешние эффекты и компенсации безопасны при at-least-once повторах и crash, а ответственность `payments`, `restaurants` и `delivery` не переходит в `orders`. `Order` остаётся source of truth и доступен без Temporal. У старта один путь — consumer собственного `OrderPlaced`; кухня получает только оплаченные заказы, и оплата видна в `Order` фактом `payment_authorized`.
 
-Цена: два уровня дедупликации; старт workflow зависит от Debezium и Kafka, поэтому при их задержке workflow, а с ним и кухня, стартует позже; кухня ждёт Authorization; рост Event History на длинных заказах (потребуется Continue-As-New), versioning workflow code и replay tests в CI до первого production rollout. Откат worker допустим только к версии, совместимой с записанными histories.
+Цена: два уровня дедупликации; старт workflow зависит от Debezium и Kafka, поэтому при их задержке workflow, а с ним и кухня, стартует позже; кухня ждёт Authorization; рост Event History на длинных заказах (потребуется Continue-As-New). Версионирование `PINNED` убирает патчи и replay tests из саги, но каждое изменение pod template — новая версия, а старая держит поды, пока на ней есть открытые заказы. Production зависит от Temporal Worker Controller и Temporal Server с Worker Deployments (не ниже 1.29.1).

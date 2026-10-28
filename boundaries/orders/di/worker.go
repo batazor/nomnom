@@ -70,6 +70,9 @@ func NewTemporalWorker(cfg config.Config, activities *fulfillmenttemporal.Activi
 // Start подключается к Temporal, проверяет Search Attribute и начинает poll в
 // пределах connect timeout; ошибка завершает процесс.
 func (w *TemporalWorker) Start(ctx context.Context) error {
+	if err := w.cfg.ValidateVersion(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, w.cfg.ConnectTimeout)
 	defer cancel()
 
@@ -99,7 +102,17 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 		}
 	}
 
+	// Worker Deployment Versioning: Temporal Worker Controller registers the
+	// version and routes new workflows to it; every workflow declares its
+	// VersioningBehavior at registration.
 	w.worker = w.newWorker(c, worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			UseVersioning: true,
+			Version: worker.WorkerDeploymentVersion{
+				DeploymentName: w.cfg.DeploymentName,
+				BuildID:        w.cfg.BuildID,
+			},
+		},
 		WorkerStopTimeout: w.drain,
 		OnFatalError: func(err error) {
 			select {
@@ -115,7 +128,8 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 	}
 	w.client = c
 	slog.InfoContext(ctx, "orders-worker polling task queue",
-		slog.String("temporal.task_queue", fulfillmenttemporal.TaskQueue), slog.String("temporal.namespace", w.cfg.Namespace))
+		slog.String("temporal.task_queue", fulfillmenttemporal.TaskQueue), slog.String("temporal.namespace", w.cfg.Namespace),
+		slog.String("temporal.worker.deployment_name", w.cfg.DeploymentName), slog.String("temporal.worker.build_id", w.cfg.BuildID))
 	return nil
 }
 

@@ -17,7 +17,7 @@ Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `
 
 ```bash
 make kind-e2e       # весь цикл для CI: кластер → skaffold run → проверки → удаление
-make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium (Hubble observer), Envoy Gateway, cert-manager
+make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium (Hubble observer), Envoy Gateway, cert-manager, Temporal Worker Controller
 make kind-deploy    # skaffold run: сборка образов, загрузка в kind, gateway, charts приложений, readiness
 make kind-dev       # skaffold dev (профиль core): пересборка и передеплой при изменении исходников
 make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри и остаются

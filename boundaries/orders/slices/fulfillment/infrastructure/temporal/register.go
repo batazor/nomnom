@@ -12,9 +12,13 @@ type Registry interface {
 }
 
 // Register adds the workflow and its Activities under stable names to a worker
-// polling task queue TaskQueue.
+// polling task queue TaskQueue. The workflow is Pinned (ADR 5): a run finishes
+// on the Worker Deployment Version it started on, so its code is not patched.
 func Register(registry Registry, activities *Activities) {
-	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: WorkflowName})
+	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{
+		Name:               WorkflowName,
+		VersioningBehavior: workflow.VersioningBehaviorPinned,
+	})
 	for name, fn := range map[string]any{
 		ActivityAuthorizePayment:           activities.AuthorizePayment,
 		ActivityCapturePayment:             activities.CapturePayment,

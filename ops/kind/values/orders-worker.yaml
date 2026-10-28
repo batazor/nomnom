@@ -9,11 +9,14 @@ image:
 env:
   # Activities вызывают restaurants, delivery и payments только через internal gateway.
   INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
-  TEMPORAL__NAMESPACE: default
   # Temporal dev server держит namespace в памяти: Search Attribute стадии workflow создаёт
   # сам worker при старте, иначе он не стартует.
   TEMPORAL__REGISTER_SEARCH_ATTRIBUTES: "true"
+
+# Temporal dev server (manifests/messaging/infrastructure.yaml): Connection WorkerDeployment и env worker.
+temporal:
+  hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+  namespace: default
 
 # ADR 8: состояние Order Fulfillment — в PostgreSQL orders (Secret создаёт scripts/postgres.sh).
 postgres:

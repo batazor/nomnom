@@ -82,15 +82,31 @@ REST Kafka Connect, `cdc.database.*` — адрес базы и ссылка н�
 
 Worker `cmd/orders-worker` разворачивается отдельным release того же chart с `values-worker.yaml`:
 `component: worker`, `command: ["/orders-worker"]`, `service.enabled: false` — без Service и бизнес-порта,
-только технический порт `metrics` и probes. Адрес и namespace Temporal задаются values окружения через
-`env` (`TEMPORAL__HOST_PORT`, `TEMPORAL__NAMESPACE`); Temporal Server в chart не входит.
+только технический порт `metrics` и probes.
+
+Release worker описывает не `Deployment`, а `WorkerDeployment` и `Connection` [Temporal Worker
+Controller](https://github.com/temporalio/temporal-worker-controller)
+([ADR 5 контекста](../docs/adr/0005-order-fulfillment-orchestration.md#versioning-workflow-code)); контроллер и его
+CRD должны быть установлены в кластере. Он создаёт `Deployment` на каждый Build ID (хеш pod template), передаёт
+поду `TEMPORAL_DEPLOYMENT_NAME` и `TEMPORAL_WORKER_BUILD_ID` и делает версию текущей; Order Fulfillment
+Workflow — `PINNED`, начатые заказы доживают на своей версии. Pod template общий с API и consumer
+(`templates/_podtemplate.tpl`).
+
+| Параметр | По умолчанию | Назначение |
+| --- | --- | --- |
+| `temporal.hostPort` | пусто, обязателен | Адрес Temporal Server: `Connection` и `TEMPORAL__HOST_PORT` worker'а |
+| `temporal.namespace` | пусто, обязателен | Temporal namespace: `WorkerDeployment` и `TEMPORAL__NAMESPACE` worker'а |
+| `workerDeployment.rollout` | `strategy: AllAtOnce` | Как новые workflow переходят на новую версию |
+| `workerDeployment.sunset` | `scaledownDelay: 1h`, `deleteDelay: 24h` | Когда Drained версия масштабируется в 0 и удаляется |
 
 ```bash
-helm template orders-worker ops/helm -f ops/helm/values-worker.yaml
+helm template orders-worker ops/helm -f ops/helm/values-worker.yaml \
+  --set temporal.hostPort=temporal:7233 --set temporal.namespace=default
 ```
 
 ```bash
-helm upgrade --install orders-worker ops/helm -f ops/helm/values-worker.yaml
+helm upgrade --install orders-worker ops/helm -f ops/helm/values-worker.yaml \
+  --set temporal.hostPort=temporal:7233 --set temporal.namespace=default
 ```
 
 ## Образ
@@ -190,13 +206,3 @@ Chart реализует [runtime contract](../../../docs/cloud-native-runtime.m
 
 `resources.requests` и `resources.limits` не заданы: профиль потребления ещё не измерен.
 Значения задаются environment values после нагрузочной проверки.
-
-## Temporal worker
-
-По [ADR 2 контекста](../docs/adr/0002-use-temporal-to-orchestrate-orders.md) API и Temporal
-worker `orders` — отдельные процессы. Сейчас в коде существует единственный entrypoint
-`cmd/orders`, поэтому chart разворачивает только API и фиктивный worker Deployment не создаёт.
-
-Когда появится entrypoint worker, он разворачивается отдельным workload: отдельным template
-в этом chart или отдельным release с собственными values (`component: worker`, без `Service`).
-Два независимых процесса в одном контейнере не запускаются.
