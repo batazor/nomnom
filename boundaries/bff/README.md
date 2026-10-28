@@ -31,11 +31,13 @@ BFF — отдельный сервис и единая прикладная т�
 | `bffInfo` | метаданные BFF | реализована |
 | `restaurants(first, after)` | рестораны с cursor-пагинацией | реализована (`catalog`) |
 | `restaurant(id)` | ресторан с меню | реализована (`catalog`) |
+| `Restaurant.scheduledSlots` | окна доставки запланированных заказов (field resolver `ResolveRestaurantScheduledSlots`, только когда поле запрошено) | реализовано (`catalog`) |
 | `order(id)` | заказ текущего покупателя; `null` для отсутствующего и чужого | реализована (`ordertracking`) |
 | `customerOrders(first, after)` | история заказов покупателя от новых к старым (`orders.ListCustomerOrders` + `GetOrder` на каждый заказ) | реализована (`ordertracking`) |
 | `placeOrder(input)` | Place Order, идемпотентно по `idempotencyKey`; `priority` не задан — `STANDARD`, `PREMIUM` без доплаты ресторана — problem `PREMIUM_UNAVAILABLE` | реализована (`checkout`) |
 | `requestOrderCancellation(input)` | Cancellation Request, идемпотентно по `requestId` | реализована (`ordertracking`) |
 | `openRestaurant(restaurantId)`, `closeRestaurant(restaurantId)` | открытие ресторана владельцем, повтор — `changed = false` | реализованы (`restaurantmanagement`) |
+| `setOpeningHours(restaurantId, openingHours)` | недельное расписание владельцем целиком; payload — `Restaurant`, перечитанный после команды | реализована (`restaurantmanagement`) |
 | `myRestaurants(first, after)` | открытые и закрытые рестораны текущего пользователя (`restaurants.ListOwnedRestaurants`) как `RestaurantSummary`; нужен access token | реализован (`restaurantmanagement`) |
 | `simulator`, `setSimulatorEnabled(enabled)` | demo Simulator трёх контекстов, `enabled` — AND ответов; нужен оператор (`platform#operate_simulator`) | реализованы (`simulator`) |
 | `kitchen(restaurantId)` | активные заказы ресторана для кухни; `null` для отсутствующего ресторана и кухни, которой пользователь не управляет | реализован (`kitchen`) |
@@ -71,7 +73,9 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-
 Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/catalog/applications` — сценарии List Restaurants и Get Restaurant с меню без Protobuf и GraphQL-типов; `catalog/infrastructure` вызывает публичные `ListRestaurants`, `GetRestaurant`, `GetMenu` и `BatchGetMenus` `restaurants` с service token BFF и без user assertion (`identity.WithoutUser`). Resolvers каталога access token не требуют.
 
 - `restaurants(first, after)` → `ListRestaurants` только открытых ресторанов (`include_closed = false`); `first` — 1..100, иначе error `INVALID_ARGUMENT`; `after` и `pageInfo.endCursor` — `next_page_token` `restaurants` как есть, cursor ребра — id ресторана (тот же ключ курсора), на последней странице `endCursor` — cursor последнего ребра, на пустой — `null`; меню всех ресторанов страницы читаются одним `BatchGetMenus` (ресторан без меню — `null`, ошибка вызова роняет запрос; пустая страница `restaurants` не вызывает): customer UI показывает превью блюд на карточке ресторана.
-- `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; `acceptingOrders` — `is_open`, пустое описание позиции — `null`.
+- `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; пустое описание позиции — `null`.
+- **Расписание** ([FR-700](../../openspec/changes/add-restaurant-opening-hours/)): `Restaurant.acceptingOrders` — `accepting_orders` `restaurants` (флаг и расписание на момент чтения), а не `is_open`; `timeZone`, `openingHours` (`dayOfWeek` 1..7, `opens`/`closes` `HH:MM`) и `nextOpeningAt` (RFC 3339, только у открытого флагом ресторана вне расписания) — как в `restaurants`. Ответ без `time_zone` — ошибка запроса. `RestaurantSummary.acceptingOrders` (заказ, кухня, `myRestaurants`, `openRestaurant`) — по-прежнему флаг владельца `is_open`. `ListRestaurants` по умолчанию не возвращает ресторан вне расписания, поэтому «Откроется в …» видно на `restaurant(id)`.
+- **Окна запланированных заказов** ([FR-685](../../openspec/changes/add-scheduled-orders/)): `Restaurant.scheduledSlots: [DeliveryWindow!]!` (`start`, `end`, `available`) — field resolver `@connect__fieldResolver(context: "id")`: Router вызывает `ResolveRestaurantScheduledSlots` одним вызовом на все рестораны ответа и только когда клиент запросил поле; plugin читает публичный `ListScheduledSlots` на каждый ресторан (batch-RPC окон у `restaurants` нет, список каталога поле не запрашивает). Пустой список — ресторан без настроек или не принимающий заказы сейчас; окно без границ — ошибка.
 - `waitTime { elevated, expectedWaitMinutes }` (FR-647) — `wait_time` из `GetRestaurant`/`ListRestaurants`: уровень ожидания и минуты на момент чтения `restaurants`. `Restaurant` возвращают только `restaurants` и `restaurant`, поэтому `waitTime` не nullable; в заказе, на кухне и в `myRestaurants` ресторан — `RestaurantSummary { id name acceptingOrders }` без меню, ожидания и премиума ([FR-670](../../openspec/changes/split-contextual-graphql-types/)). Ответ `restaurants` без `wait_time` — ошибка запроса, а не нули.
 - Без gateway или identity — error `UNAVAILABLE` (`catalog operations are not available`); остальные сбои `restaurants` — error `UNAVAILABLE` без внутренних деталей.
 
@@ -87,11 +91,13 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-
 | успех | `order` из `GetOrder` (`RECEIVED`), `problems = []` |
 | `FAILED_PRECONDITION` / `ORDER_NOT_ORDERABLE` | `order = null`, problem на каждый известный код из metadata `codes`; `menu_item_ids` — у `ORDER_ITEM_UNAVAILABLE`, у лимитов суммы `menuItemIds = []` |
 | `FAILED_PRECONDITION` / `RESTAURANT_NOT_ACCEPTING_ORDERS` | `order = null`, problem без позиций |
+| `FAILED_PRECONDITION` / `SLOT_UNAVAILABLE` | `order = null`, problem `SLOT_UNAVAILABLE` с `alternativeWindows` из detail `nomnom.orders.v1.SlotUnavailable` (`available = true`); окно без границ — error |
+| `FAILED_PRECONDITION` / `SCHEDULED_ORDERS_UNAVAILABLE` | `order = null`, problem без позиций и окон |
 | `NOT_FOUND` / `RESTAURANT_NOT_FOUND` | error `NOT_FOUND`: в схеме нет problem для несуществующего ресторана, исправить это в корзине нельзя |
 | `INVALID_ARGUMENT` (`INVALID_ORDER`, `INVALID_ARGUMENT`) | error `INVALID_ARGUMENT` без деталей `orders` |
 | остальные сбои, в том числе отказ без известных кодов | error `UNAVAILABLE` без внутренних деталей |
 
-Повтор с тем же `idempotencyKey` возвращает уже оформленный заказ.
+Повтор с тем же `idempotencyKey` возвращает уже оформленный заказ. `deliveryWindowStart` (RFC 3339; не момент — error `INVALID_ARGUMENT`) уходит в `PlaceOrderRequest.delivery_window_start` и делает заказ запланированным; `PREMIUM` допустим вместе с окном. У problems без окон `alternativeWindows = []`.
 
 Правила контракта:
 
@@ -99,6 +105,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-
 - Бизнес-отказы mutations возвращаются в payload (`problems`, `problem`), GraphQL errors — только transport, authentication и нереализованные операции.
 - Покупатель не передаётся аргументом: subject определяется по аутентифицированному запросу.
 - Моменты времени — `String` в RFC 3339, `Money.amount` — десятичная строка; unions и custom scalars не используются.
+- `Order.deliveryWindow` — `delivery_window` `Order` (`null` у ASAP-заказа). `OrderStatus.SCHEDULED` — `confirmed` с окном и без факта `preparation_started` (FR-685): заказ принят и ждёт старта по плану; с фактом — `PREPARING`, как у ASAP. План workflow (`start_at`, `courier_request_at`) в схему не попадает.
 - `Order.cancellation` берётся из `Order.cancellation_window` ответа `orders` `GetOrder`: `availableUntil = closes_at`, если `opens_at ≤ now ≤ closes_at` по часам BFF, иначе `null`. `orders` возвращает окно, только пока Order State допускает отмену; сам запрос отмены `orders` проверяет заново.
 
 ### Слайс `simulator`
@@ -131,6 +138,8 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды — `
 | `INVALID_ARGUMENT` | error `INVALID_ARGUMENT` без деталей `restaurants` |
 | остальные сбои, в том числе `UNAVAILABLE` | error `UNAVAILABLE` без внутренних деталей |
 
+`setOpeningHours` ([FR-700](../../openspec/changes/add-restaurant-opening-hours/)) идёт тем же путём (`SetOpeningHours`, `restaurant#manage`, GRPCRoute `restaurants-v1-management`) с тем же переводом отказов; payload `SetOpeningHoursPayload { restaurant: Restaurant! changed }` — ресторан, перечитанный сценарием `GetRestaurant` каталога: `accepting_orders` и `next_opening_at` меняются вместе с расписанием. Отвергнутое расписание — error `INVALID_ARGUMENT` с сообщением `invalid opening hours: <overlap|invalid_time|empty_interval|invalid_day> at day <1..7> <opens>-<closes>`: `restaurants` не кладёт в этот отказ `ErrorInfo`, поэтому адаптер разбирает текст `InvalidOpeningHoursError`, а BFF собирает сообщение заново; UI показывает ошибку у этого интервала. Нераспознанный `INVALID_ARGUMENT` — error без деталей.
+
 Бизнес-отказа, который пользователь исправит в форме, у открытия нет, поэтому отказы — GraphQL errors, а не `problems`. Router отдаёт gRPC-код в `errors[].extensions.errors[].extensions.code` (`PermissionDenied`, `NotFound`, …).
 
 ### Слайс `kitchen`
@@ -139,6 +148,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды — `
 
 - `kitchen(restaurantId)`: заказы в `RECEIVED`…`READY` из `ListActiveRestaurantOrders` (позиции, `received_at`, `accepted_at` и `expected_ready_at` → nullable `acceptedAt`/`expectedReadyAt` в RFC 3339, `null` до Acceptance; их же отдаёт lookup `kitchenChanged`); порядок — `RECEIVED` по `receivedAt`, затем `QUEUED` в порядке `GetKitchenQueue` (заказ, которого нет в очереди из-за гонки двух чтений, — после неё по `receivedAt`), затем остальные по `receivedAt`; названия позиций — из `GetMenu` (позиции, которой нет в меню, — пустое имя); `restaurant` — `RestaurantSummary`. `ListIncomingOrders` не нужен: новый RPC покрывает и `RECEIVED`.
 - `applyKitchenAction`: после команды заказ перечитывается из `ListActiveRestaurantOrders` (ответ команды без позиций и `receivedAt`); у `REJECT` и у заказа, ушедшего с доски, `order = null`. Причина отказа `RejectRestaurantOrder` не передаётся: в схеме её нет.
+- **Запланированные заказы** ([FR-688](../../openspec/changes/add-scheduled-orders/)): `Kitchen.scheduledOrders` — `ListScheduledOrders` (`restaurant#operate_kitchen`, GRPCRoute `restaurants-v1-kitchen-reads`) по `planned_ready_at`: позиции, приоритет, `deliveryWindow` и `plannedReadyAt`; команд у них нет. Входящий запланированный заказ несёт `KitchenOrder.deliveryWindow` из `RestaurantOrder.schedule`. Каждая запись Restaurant Order, в том числе `QueueRestaurantOrder` в момент старта, публикует `kitchenChanged`, а lookup перечитывает доску тем же сценарием — карточка переходит в очередь без polling.
 - `startNextPreparation` (restaurants FR-225, FR-655): `StartNextPreparation` с `requestId` попытки; начатый заказ перечитывается так же, как после `applyKitchenAction`. Команды `START_PREPARATION` у `applyKitchenAction` нет. `KitchenOrder.priority`, `Order.priority`/`premiumFee` и `Restaurant.premiumFee` (только запросы каталога) — из `restaurants` и `orders`; не заданный ими приоритет — ошибка, а не значение по умолчанию.
 - **Cook Pool** ([FR-622, FR-625](../../openspec/changes/add-cook-and-courier-pools/)): `Kitchen.cookPool` — `GetCookPool` (`restaurant#view_orders`): размер, на линии, занято, очередь и повара по имени с текущим заказом; `KitchenOrder.cook` — повар из пула по `cook_id` заказа (`null` до старта и у выбывшего повара). Mutations `hireCook`, `setCookOnLine`, `retireCook` вызывают `HireCook`, `PutCookOnLine`/`TakeCookOffLine`, `RetireCook` (`restaurant#manage_cooks`, GRPCRoute `restaurants-v1-cook-pool`) и отвечают `CookPoolPayload` — пул перечитывается после команды. Изменения поваров приходят тем же `kitchenChanged`.
 

@@ -1,7 +1,12 @@
 import { execute, parse, subscribe } from "graphql";
 import { describe, expect, it, vi } from "vitest";
 
-import { kitchenEight, nightBakery, restaurantFixtures } from "./fixtures";
+import {
+  kitchenEight,
+  nightBakery,
+  restaurantFixtures,
+  sunriseBakery,
+} from "./fixtures";
 import { publicSchema } from "./schema";
 import { createMockStore, liveStepMs, type MockStore } from "./store";
 
@@ -382,7 +387,10 @@ describe("mock store", () => {
       store,
       "{ restaurants(first: 100) { edges { cursor } } }",
     );
-    expect(catalog.restaurants.edges).toHaveLength(restaurantFixtures.length);
+    // All but the one before its opening hours.
+    expect(catalog.restaurants.edges).toHaveLength(
+      restaurantFixtures.length - 1,
+    );
 
     store.reset();
     expect(
@@ -418,6 +426,114 @@ describe("mock store", () => {
     expect(result.data).toBeNull();
     expect(result.errors?.[0]?.extensions).toEqual({
       errors: [{ message: expect.any(String), extensions: { code } }],
+    });
+  });
+
+  it("names the next opening of a restaurant before its hours (AC-949)", async () => {
+    const store = createMockStore({
+      now: () => new Date("2026-10-28T05:20:00Z"),
+    });
+    const data = await run<{
+      restaurant: { acceptingOrders: boolean; nextOpeningAt: string | null };
+    }>(
+      store,
+      "query ($id: ID!) { restaurant(id: $id) { acceptingOrders nextOpeningAt } }",
+      { id: sunriseBakery.id },
+    );
+    expect(data.restaurant).toEqual({
+      acceptingOrders: false,
+      nextOpeningAt: "2026-10-28T07:00:00.000Z",
+    });
+  });
+
+  it("lists windows on the grid with a full one and reserves a chosen one", async () => {
+    const store = createMockStore({
+      now: () => new Date("2026-10-28T16:05:00Z"),
+    });
+    const slotsQuery =
+      "query ($id: ID!) { restaurant(id: $id) { scheduledSlots { start end available } } }";
+    type Slots = {
+      restaurant: {
+        scheduledSlots: { start: string; end: string; available: boolean }[];
+      };
+    };
+    const { restaurant } = await run<Slots>(store, slotsQuery, {
+      id: kitchenEight.id,
+    });
+    expect(restaurant.scheduledSlots[0]).toEqual({
+      start: "2026-10-28T17:15:00.000Z",
+      end: "2026-10-28T17:30:00.000Z",
+      available: true,
+    });
+    expect(restaurant.scheduledSlots[2].available).toBe(false);
+
+    const scheduled = `mutation ($input: PlaceOrderInput!) {
+      placeOrder(input: $input) {
+        order { id status deliveryWindow { start end } }
+        problems { code alternativeWindows { start } }
+      }
+    }`;
+    type Placed = {
+      placeOrder: {
+        order: { deliveryWindow: { start: string } | null } | null;
+        problems: { code: string; alternativeWindows: { start: string }[] }[];
+      };
+    };
+    const placed = await run<Placed>(
+      store,
+      scheduled,
+      placeInput({
+        deliveryWindowStart: restaurant.scheduledSlots[0].start,
+        priority: "PREMIUM",
+      }),
+    );
+    expect(placed.placeOrder.order?.deliveryWindow?.start).toBe(
+      restaurant.scheduledSlots[0].start,
+    );
+
+    // AC-928: the full window offers the nearest available ones.
+    const full = await run<Placed>(
+      store,
+      scheduled,
+      placeInput({
+        idempotencyKey: "checkout-full",
+        deliveryWindowStart: restaurant.scheduledSlots[2].start,
+      }),
+    );
+    expect(full.placeOrder.order).toBeNull();
+    expect(full.placeOrder.problems).toEqual([
+      {
+        code: "SLOT_UNAVAILABLE",
+        alternativeWindows: restaurant.scheduledSlots
+          .slice(3, 6)
+          .map(({ start }) => ({ start })),
+      },
+    ]);
+  });
+
+  it("rejects overlapping opening hours naming the interval (AC-950)", async () => {
+    const store = createMockStore();
+    const result = await execute({
+      schema: publicSchema,
+      document: parse(`mutation ($id: ID!, $hours: [OpeningIntervalInput!]!) {
+        setOpeningHours(restaurantId: $id, openingHours: $hours) { changed }
+      }`),
+      rootValue: store.rootValue,
+      variableValues: {
+        id: kitchenEight.id,
+        hours: [
+          { dayOfWeek: 5, opens: "18:00", closes: "02:00" },
+          { dayOfWeek: 6, opens: "01:00", closes: "03:00" },
+        ],
+      },
+    });
+    expect(result.errors?.[0]?.extensions).toEqual({
+      errors: [
+        {
+          message: "invalid opening hours: overlap at day 6 01:00-03:00",
+          extensions: { code: "InvalidArgument" },
+        },
+      ],
     });
   });
 });

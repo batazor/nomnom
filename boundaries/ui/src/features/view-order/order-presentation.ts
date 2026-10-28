@@ -55,6 +55,15 @@ export const statusPresentation: Record<OrderStatus, StatusPresentation> = {
     step: step("PAID"),
     final: false,
   },
+  // A scheduled order the restaurant accepted waits for the start its
+  // window gives it: the confirmed step, with no cooking yet (FR-687).
+  SCHEDULED: {
+    label: "order.status.SCHEDULED.label",
+    detail: "order.status.SCHEDULED.detail",
+    icon: "check",
+    step: step("CONFIRMED"),
+    final: false,
+  },
   CONFIRMED: {
     label: "order.status.CONFIRMED.label",
     detail: "order.status.CONFIRMED.detail",

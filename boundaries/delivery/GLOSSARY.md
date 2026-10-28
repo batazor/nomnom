@@ -45,3 +45,11 @@ _Avoid_: Order failure, technical error
 **Delivery Cancellation**:
 Окончательная отмена доставки по запросу процесса исполнения заказа до Pickup; назначенный курьер освобождается. После Pickup отмена отклоняется.
 _Avoid_: Delivery Failure, Reassignment
+
+**Delivery Duration Statistics**:
+Read model `delivery` по Market: последние длительности Create Delivery → Pickup (`courier_lead`) и Pickup → вручение (`transit`), которые consumer собирает из собственных фактов Delivery. Отменённая или неудавшаяся доставка выбывает без длительности.
+_Avoid_: ETA, delivery time (без уточнения вида)
+
+**Delivery Duration Estimate**:
+Ожидаемые `courier_lead` и `transit` доставки в Market: медианы Delivery Duration Statistics, пока выборка не набрана — базовые значения из конфигурации. По ней `orders` планирует запланированный заказ.
+_Avoid_: Expected time (FR-610, время, названное курьером), promise

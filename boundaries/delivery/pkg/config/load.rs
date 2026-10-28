@@ -6,6 +6,8 @@ use std::path::Path;
 use config::{Config as ConfigLoader, ConfigError, File};
 use config::{ConfigBuilder, builder::DefaultState};
 
+use super::estimate::DELIVERY_ESTIMATE_SETTINGS;
+use super::kafka::KAFKA_SETTINGS;
 use super::simulator::SIMULATOR_SETTINGS;
 use super::tracking::TRACKING_SETTINGS;
 use super::{
@@ -38,6 +40,8 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     builder = configure_database(builder, |name| std::env::var(name).ok())?;
     builder = configure_simulator(builder, |name| std::env::var(name).ok())?;
     builder = configure_tracking(builder, |name| std::env::var(name).ok())?;
+    builder = configure_kafka(builder, |name| std::env::var(name).ok())?;
+    builder = configure_delivery_estimate(builder, |name| std::env::var(name).ok())?;
 
     let config: AppConfig = builder.build()?.try_deserialize()?;
     config.server.validate()?;
@@ -50,6 +54,7 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     config.simulator.validate()?;
     config.tracking.validate()?;
     config.valkey.validate()?;
+    config.kafka.validate()?;
 
     Ok(config)
 }
@@ -184,6 +189,37 @@ pub(super) fn configure_tracking(
     for (key, name) in TRACKING_SETTINGS {
         if let Some(value) = env(name) {
             builder = builder.set_override(key, value)?;
+        }
+    }
+    Ok(builder)
+}
+
+/// Kafka consumer без значений по умолчанию: ключ задаёт файл или
+/// переменная.
+pub(super) fn configure_kafka(
+    builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    configure_required(builder, &KAFKA_SETTINGS, env)
+}
+
+/// Delivery Duration Estimate без значений по умолчанию: ключ задаёт файл
+/// или переменная.
+pub(super) fn configure_delivery_estimate(
+    builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    configure_required(builder, &DELIVERY_ESTIMATE_SETTINGS, env)
+}
+
+fn configure_required(
+    mut builder: ConfigBuilder<DefaultState>,
+    settings: &[(&str, &str)],
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    for (key, name) in settings {
+        if let Some(value) = env(name) {
+            builder = builder.set_override(*key, value)?;
         }
     }
     Ok(builder)

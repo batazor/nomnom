@@ -46,6 +46,14 @@ type OrderSnapshot struct {
 	Window *CancellationWindow
 	// Deadlines named by the kitchen and the courier; nil until named.
 	Deadlines Deadlines
+	// DeliveryWindow is set only for a scheduled Order (orders FR-681).
+	DeliveryWindow *DeliveryWindow
+}
+
+// DeliveryWindow is the delivery window [Start, End) of a scheduled Order.
+type DeliveryWindow struct {
+	Start time.Time
+	End   time.Time
 }
 
 // Deadlines are the latest fulfillment deadlines of an Order (FR-611): the

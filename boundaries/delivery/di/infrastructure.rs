@@ -7,7 +7,7 @@
 //! тестовые графы [`super::service`] и передаёт их параметрами компонентов.
 
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use shaku::{Component, Interface, module};
 
@@ -32,6 +32,9 @@ use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDelive
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
+use crate::slices::delivery::applications::record_delivery_duration::{
+    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
+};
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::di::{
@@ -39,8 +42,9 @@ use crate::slices::delivery::di::{
     WaitingDeliveriesQuery,
 };
 use crate::slices::delivery::domains::delivery::{
-    Delivery, DeliveryFailureCode, DeliveryId, DeliveryOffer, DeliveryOfferId,
-    DeliveryOfferRepository, DeliveryRepository, OrderId, VirtualCity,
+    Delivery, DeliveryEstimatePolicy, DeliveryFailureCode, DeliveryId, DeliveryOffer,
+    DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DurationKind, OrderId,
+    VirtualCity,
 };
 use crate::slices::delivery::infrastructure::failure_log::FailureLog;
 use crate::slices::delivery::infrastructure::observability::{DomainMetrics, ObservedOutbox};
@@ -392,6 +396,48 @@ impl ExpiredDeliveryOffers for ObservedStore {
     }
 }
 
+impl DeliveryInbox for ObservedStore {
+    fn claim(
+        &self,
+        consumer: &str,
+        event_id: &str,
+        event_type: &str,
+    ) -> Result<bool, RepositoryError> {
+        self.inner.claim(consumer, event_id, event_type)
+    }
+}
+
+impl DeliveryDurationStatistics for ObservedStore {
+    fn open_transit(
+        &self,
+        delivery_id: &DeliveryId,
+        market_id: &MarketId,
+        picked_up_at_ms: i64,
+    ) -> Result<(), RepositoryError> {
+        self.inner
+            .open_transit(delivery_id, market_id, picked_up_at_ms)
+    }
+
+    fn close_transit(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Option<OpenTransit>, RepositoryError> {
+        self.inner.close_transit(delivery_id)
+    }
+
+    fn record_duration(
+        &self,
+        market_id: &MarketId,
+        kind: DurationKind,
+        delivery_id: &DeliveryId,
+        duration: Duration,
+        keep: u32,
+    ) -> Result<(), RepositoryError> {
+        self.inner
+            .record_duration(market_id, kind, delivery_id, duration, keep)
+    }
+}
+
 impl CourierAssignment for ObservedStore {
     fn status(&self, courier_id: &CourierId) -> Result<CourierStatus, CourierAssignmentError> {
         self.inner.status(courier_id)
@@ -496,11 +542,18 @@ impl CourierSettings for LocalCourierSettings {
 
 #[derive(Component)]
 #[shaku(interface = DeliverySettings)]
-pub struct LocalDeliverySettings;
+pub struct LocalDeliverySettings {
+    /// `DELIVERY_ESTIMATE__*` of the process (FR-691).
+    estimate: DeliveryEstimatePolicy,
+}
 
 impl DeliverySettings for LocalDeliverySettings {
     fn assignment_policy(&self) -> AssignmentPolicy {
         LOCAL_ASSIGNMENT_POLICY
+    }
+
+    fn estimate_policy(&self) -> DeliveryEstimatePolicy {
+        self.estimate
     }
 }
 
@@ -535,6 +588,7 @@ pub(super) fn infrastructure(
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
     tracking: ProcessTracking,
+    estimate: DeliveryEstimatePolicy,
 ) -> Arc<InfrastructureModule> {
     Arc::new(
         InfrastructureModule::builder()
@@ -550,6 +604,9 @@ pub(super) fn infrastructure(
             })
             .with_component_parameters::<LocalCourierSettings>(LocalCourierSettingsParameters {
                 persist_interval_seconds: tracking.persist_interval_seconds,
+            })
+            .with_component_parameters::<LocalDeliverySettings>(LocalDeliverySettingsParameters {
+                estimate,
             })
             .with_component_parameters::<LocalSimulatorPorts>(LocalSimulatorPortsParameters {
                 store: stores.simulator,

@@ -124,6 +124,7 @@
         "requestOrderCancellation": 2,
         "openRestaurant": 3,
         "closeRestaurant": 4,
+        "setOpeningHours": 18,
         "applyKitchenAction": 5,
         "startNextPreparation": 16,
         "hireCook": 10,
@@ -135,8 +136,8 @@
         "addCourier": 13,
         "setCourierOnLine": 14,
         "retireCourier": 15,
-        "setSimulatorEnabled": 9,
-        "offerDeliveryToCourier": 17
+        "offerDeliveryToCourier": 17,
+        "setSimulatorEnabled": 9
       }
     },
     "MutationPlaceOrderRequest": {
@@ -182,7 +183,10 @@
         "acceptingOrders": 4,
         "menu": 5,
         "waitTime": 6,
-        "premiumFee": 7
+        "premiumFee": 7,
+        "timeZone": 8,
+        "openingHours": 9,
+        "nextOpeningAt": 10
       },
       "reservedNumbers": [
         3
@@ -205,7 +209,8 @@
         "expectedPickupAt": 12,
         "expectedDeliveredAt": 13,
         "courier": 14,
-        "tracking": 15
+        "tracking": 15,
+        "deliveryWindow": 18
       },
       "reservedNumbers": [
         7
@@ -222,7 +227,8 @@
         "restaurantId": 1,
         "items": 2,
         "idempotencyKey": 4,
-        "priority": 5
+        "priority": 5,
+        "deliveryWindowStart": 6
       },
       "reservedNumbers": [
         3
@@ -319,7 +325,8 @@
     "PlaceOrderProblem": {
       "fields": {
         "code": 1,
-        "menuItemIds": 2
+        "menuItemIds": 2,
+        "alternativeWindows": 3
       }
     },
     "OrderCancellationProblem": {
@@ -470,7 +477,8 @@
         "restaurantId": 3,
         "restaurant": 1,
         "orders": 2,
-        "cookPool": 4
+        "cookPool": 4,
+        "scheduledOrders": 5
       }
     },
     "Courier": {
@@ -516,7 +524,8 @@
         "acceptedAt": 6,
         "expectedReadyAt": 7,
         "cook": 8,
-        "priority": 9
+        "priority": 9,
+        "deliveryWindow": 10
       }
     },
     "DeliveryOffer": {
@@ -917,6 +926,66 @@
       "fields": {
         "offer_delivery_to_courier": 1
       }
+    },
+    "MutationSetOpeningHoursRequest": {
+      "fields": {
+        "restaurant_id": 1,
+        "opening_hours": 2
+      }
+    },
+    "MutationSetOpeningHours": {
+      "fields": {
+        "restaurantId": 1,
+        "openingHours": 2
+      }
+    },
+    "MutationSetOpeningHoursResponse": {
+      "fields": {
+        "set_opening_hours": 1
+      }
+    },
+    "OpeningIntervalInput": {
+      "fields": {
+        "dayOfWeek": 1,
+        "opens": 2,
+        "closes": 3
+      }
+    },
+    "SetOpeningHoursPayload": {
+      "fields": {
+        "restaurant": 1,
+        "changed": 2
+      }
+    },
+    "OpeningInterval": {
+      "fields": {
+        "dayOfWeek": 1,
+        "opens": 2,
+        "closes": 3
+      }
+    },
+    "DeliveryWindow": {
+      "fields": {
+        "start": 1,
+        "end": 2,
+        "available": 3
+      }
+    },
+    "OrderDeliveryWindow": {
+      "fields": {
+        "start": 1,
+        "end": 2
+      }
+    },
+    "ScheduledKitchenOrder": {
+      "fields": {
+        "id": 1,
+        "orderId": 2,
+        "items": 3,
+        "priority": 4,
+        "deliveryWindow": 5,
+        "plannedReadyAt": 6
+      }
     }
   },
   "enums": {
@@ -924,6 +993,7 @@
       "fields": {
         "RECEIVED": 1,
         "PAID": 9,
+        "SCHEDULED": 10,
         "CONFIRMED": 2,
         "PREPARING": 3,
         "READY_FOR_PICKUP": 4,
@@ -961,7 +1031,9 @@
         "ORDER_TOTAL_BELOW_MINIMUM": 2,
         "ORDER_TOTAL_ABOVE_MAXIMUM": 3,
         "RESTAURANT_NOT_ACCEPTING_ORDERS": 4,
-        "PREMIUM_UNAVAILABLE": 5
+        "PREMIUM_UNAVAILABLE": 5,
+        "SLOT_UNAVAILABLE": 6,
+        "SCHEDULED_ORDERS_UNAVAILABLE": 7
       }
     },
     "OrderCancellationOutcome": {

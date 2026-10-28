@@ -51,6 +51,14 @@ const variablesByOperation: Record<string, Record<string, unknown>> = {
   ViewRestaurant: { id: kitchenEight.id },
   MockCustomerOrders: { first: 3 },
   OpenRestaurant: { restaurantId: nightBakery.id },
+  ManageOpeningHours: { restaurantId: kitchenEight.id },
+  SetOpeningHours: {
+    restaurantId: kitchenEight.id,
+    openingHours: [
+      { dayOfWeek: 5, opens: "18:00", closes: "02:00" },
+      { dayOfWeek: 6, opens: "18:00", closes: "02:00" },
+    ],
+  },
   CloseRestaurant: { restaurantId: kitchenEight.id },
   BoardKitchen: { restaurantId: kitchenEight.id },
   BoardOwnedRestaurants: {},

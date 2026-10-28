@@ -58,8 +58,8 @@ impl OutboxMapper for NoIntegrationEvents {
 
 /// `traceparent` column of a row: the current span (the gRPC server span of
 /// the command), `''` without one; Debezium sends it as the `traceparent`
-/// header. The process consumes no Integration Events, so there is no
-/// `causation_id`.
+/// header. The only consumer of the process (Delivery Duration Statistics)
+/// writes no Outbox rows, so there is no `causation_id`.
 pub(super) fn row_traceparent() -> String {
     current_traceparent().unwrap_or_default()
 }

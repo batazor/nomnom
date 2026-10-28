@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment ManagedOpeningHours on Restaurant { acceptingOrders id nextOpeningAt openingHours { closes dayOfWeek opens } timeZone } mutation SetOpeningHours($openingHours: [OpeningIntervalInput!]!, $restaurantId: ID!) { setOpeningHours(restaurantId: $restaurantId, openingHours: $openingHours) { changed restaurant { ...ManagedOpeningHours } } }"
+}

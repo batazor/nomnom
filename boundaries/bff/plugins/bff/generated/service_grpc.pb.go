@@ -38,6 +38,7 @@ const (
 	BffService_MutationSetCookOnLine_FullMethodName              = "/service.BffService/MutationSetCookOnLine"
 	BffService_MutationSetCourierAvailability_FullMethodName     = "/service.BffService/MutationSetCourierAvailability"
 	BffService_MutationSetCourierOnLine_FullMethodName           = "/service.BffService/MutationSetCourierOnLine"
+	BffService_MutationSetOpeningHours_FullMethodName            = "/service.BffService/MutationSetOpeningHours"
 	BffService_MutationSetSimulatorEnabled_FullMethodName        = "/service.BffService/MutationSetSimulatorEnabled"
 	BffService_MutationStartNextPreparation_FullMethodName       = "/service.BffService/MutationStartNextPreparation"
 	BffService_QueryBffInfo_FullMethodName                       = "/service.BffService/QueryBffInfo"
@@ -50,6 +51,7 @@ const (
 	BffService_QueryRestaurant_FullMethodName                    = "/service.BffService/QueryRestaurant"
 	BffService_QueryRestaurants_FullMethodName                   = "/service.BffService/QueryRestaurants"
 	BffService_QuerySimulator_FullMethodName                     = "/service.BffService/QuerySimulator"
+	BffService_ResolveRestaurantScheduledSlots_FullMethodName    = "/service.BffService/ResolveRestaurantScheduledSlots"
 )
 
 // BffServiceClient is the client API for BffService service.
@@ -102,6 +104,9 @@ type BffServiceClient interface {
 	MutationSetCourierAvailability(ctx context.Context, in *MutationSetCourierAvailabilityRequest, opts ...grpc.CallOption) (*MutationSetCourierAvailabilityResponse, error)
 	// Put a courier on line or take them off line; repeating it changes nothing
 	MutationSetCourierOnLine(ctx context.Context, in *MutationSetCourierOnLineRequest, opts ...grpc.CallOption) (*MutationSetCourierOnLineResponse, error)
+	// Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+	// intervals are an INVALID_ARGUMENT error naming the day and the interval
+	MutationSetOpeningHours(ctx context.Context, in *MutationSetOpeningHoursRequest, opts ...grpc.CallOption) (*MutationSetOpeningHoursResponse, error)
 	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
 	MutationSetSimulatorEnabled(ctx context.Context, in *MutationSetSimulatorEnabledRequest, opts ...grpc.CallOption) (*MutationSetSimulatorEnabledResponse, error)
 	// Start preparing the head of the kitchen queue: premium orders first, the kitchen does not
@@ -131,6 +136,9 @@ type BffServiceClient interface {
 	// Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
 	// three; requires the operator (platform#operate_simulator)
 	QuerySimulator(ctx context.Context, in *QuerySimulatorRequest, opts ...grpc.CallOption) (*QuerySimulatorResponse, error)
+	// Delivery windows of scheduled orders by start, available or full; empty when the
+	// restaurant takes no scheduled orders or does not accept orders now. Read only when asked
+	ResolveRestaurantScheduledSlots(ctx context.Context, in *ResolveRestaurantScheduledSlotsRequest, opts ...grpc.CallOption) (*ResolveRestaurantScheduledSlotsResponse, error)
 }
 
 type bffServiceClient struct {
@@ -331,6 +339,16 @@ func (c *bffServiceClient) MutationSetCourierOnLine(ctx context.Context, in *Mut
 	return out, nil
 }
 
+func (c *bffServiceClient) MutationSetOpeningHours(ctx context.Context, in *MutationSetOpeningHoursRequest, opts ...grpc.CallOption) (*MutationSetOpeningHoursResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MutationSetOpeningHoursResponse)
+	err := c.cc.Invoke(ctx, BffService_MutationSetOpeningHours_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *bffServiceClient) MutationSetSimulatorEnabled(ctx context.Context, in *MutationSetSimulatorEnabledRequest, opts ...grpc.CallOption) (*MutationSetSimulatorEnabledResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MutationSetSimulatorEnabledResponse)
@@ -451,6 +469,16 @@ func (c *bffServiceClient) QuerySimulator(ctx context.Context, in *QuerySimulato
 	return out, nil
 }
 
+func (c *bffServiceClient) ResolveRestaurantScheduledSlots(ctx context.Context, in *ResolveRestaurantScheduledSlotsRequest, opts ...grpc.CallOption) (*ResolveRestaurantScheduledSlotsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveRestaurantScheduledSlotsResponse)
+	err := c.cc.Invoke(ctx, BffService_ResolveRestaurantScheduledSlots_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BffServiceServer is the server API for BffService service.
 // All implementations must embed UnimplementedBffServiceServer
 // for forward compatibility.
@@ -501,6 +529,9 @@ type BffServiceServer interface {
 	MutationSetCourierAvailability(context.Context, *MutationSetCourierAvailabilityRequest) (*MutationSetCourierAvailabilityResponse, error)
 	// Put a courier on line or take them off line; repeating it changes nothing
 	MutationSetCourierOnLine(context.Context, *MutationSetCourierOnLineRequest) (*MutationSetCourierOnLineResponse, error)
+	// Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+	// intervals are an INVALID_ARGUMENT error naming the day and the interval
+	MutationSetOpeningHours(context.Context, *MutationSetOpeningHoursRequest) (*MutationSetOpeningHoursResponse, error)
 	// Switch the demo Simulator in orders, restaurants and delivery; requires the operator
 	MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error)
 	// Start preparing the head of the kitchen queue: premium orders first, the kitchen does not
@@ -530,6 +561,9 @@ type BffServiceServer interface {
 	// Demo Simulator of orders, restaurants and delivery; enabled only when it is on in all
 	// three; requires the operator (platform#operate_simulator)
 	QuerySimulator(context.Context, *QuerySimulatorRequest) (*QuerySimulatorResponse, error)
+	// Delivery windows of scheduled orders by start, available or full; empty when the
+	// restaurant takes no scheduled orders or does not accept orders now. Read only when asked
+	ResolveRestaurantScheduledSlots(context.Context, *ResolveRestaurantScheduledSlotsRequest) (*ResolveRestaurantScheduledSlotsResponse, error)
 	mustEmbedUnimplementedBffServiceServer()
 }
 
@@ -597,6 +631,9 @@ func (UnimplementedBffServiceServer) MutationSetCourierAvailability(context.Cont
 func (UnimplementedBffServiceServer) MutationSetCourierOnLine(context.Context, *MutationSetCourierOnLineRequest) (*MutationSetCourierOnLineResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationSetCourierOnLine not implemented")
 }
+func (UnimplementedBffServiceServer) MutationSetOpeningHours(context.Context, *MutationSetOpeningHoursRequest) (*MutationSetOpeningHoursResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MutationSetOpeningHours not implemented")
+}
 func (UnimplementedBffServiceServer) MutationSetSimulatorEnabled(context.Context, *MutationSetSimulatorEnabledRequest) (*MutationSetSimulatorEnabledResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MutationSetSimulatorEnabled not implemented")
 }
@@ -632,6 +669,9 @@ func (UnimplementedBffServiceServer) QueryRestaurants(context.Context, *QueryRes
 }
 func (UnimplementedBffServiceServer) QuerySimulator(context.Context, *QuerySimulatorRequest) (*QuerySimulatorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QuerySimulator not implemented")
+}
+func (UnimplementedBffServiceServer) ResolveRestaurantScheduledSlots(context.Context, *ResolveRestaurantScheduledSlotsRequest) (*ResolveRestaurantScheduledSlotsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveRestaurantScheduledSlots not implemented")
 }
 func (UnimplementedBffServiceServer) mustEmbedUnimplementedBffServiceServer() {}
 func (UnimplementedBffServiceServer) testEmbeddedByValue()                    {}
@@ -996,6 +1036,24 @@ func _BffService_MutationSetCourierOnLine_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_MutationSetOpeningHours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MutationSetOpeningHoursRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).MutationSetOpeningHours(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_MutationSetOpeningHours_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).MutationSetOpeningHours(ctx, req.(*MutationSetOpeningHoursRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BffService_MutationSetSimulatorEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MutationSetSimulatorEnabledRequest)
 	if err := dec(in); err != nil {
@@ -1212,6 +1270,24 @@ func _BffService_QuerySimulator_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BffService_ResolveRestaurantScheduledSlots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveRestaurantScheduledSlotsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BffServiceServer).ResolveRestaurantScheduledSlots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BffService_ResolveRestaurantScheduledSlots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BffServiceServer).ResolveRestaurantScheduledSlots(ctx, req.(*ResolveRestaurantScheduledSlotsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BffService_ServiceDesc is the grpc.ServiceDesc for BffService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1296,6 +1372,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BffService_MutationSetCourierOnLine_Handler,
 		},
 		{
+			MethodName: "MutationSetOpeningHours",
+			Handler:    _BffService_MutationSetOpeningHours_Handler,
+		},
+		{
 			MethodName: "MutationSetSimulatorEnabled",
 			Handler:    _BffService_MutationSetSimulatorEnabled_Handler,
 		},
@@ -1342,6 +1422,10 @@ var BffService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QuerySimulator",
 			Handler:    _BffService_QuerySimulator_Handler,
+		},
+		{
+			MethodName: "ResolveRestaurantScheduledSlots",
+			Handler:    _BffService_ResolveRestaurantScheduledSlots_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

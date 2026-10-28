@@ -14,6 +14,7 @@ path = "cmd/delivery/main.rs"
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
 getrandom = "0.4.3"
 http = "1.5.0"
+humantime = "2.4.0"
 humantime-serde = "1.1.1"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
 opentelemetry = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
@@ -21,6 +22,7 @@ opentelemetry-otlp = { version = "0.33.1", default-features = false, features = 
 opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "trace"] }
 prost = "0.14.4"
 prost-types = "0.14.4"
+rdkafka = { version = "0.39.0", default-features = false, features = ["tokio", "libz-static"] }
 redis = { version = "1.8.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

@@ -36,7 +36,7 @@ func assertComplete[A ~string, G ~int32](t *testing.T, table map[A]G, values []A
 // AC-641: the tables cover every application constant and every GraphQL value.
 func TestEnumTablesAreComplete(t *testing.T) {
 	assertComplete(t, orderStatuses, []tracking.Status{
-		tracking.StatusReceived, tracking.StatusPaid, tracking.StatusConfirmed, tracking.StatusPreparing, tracking.StatusReadyForPickup,
+		tracking.StatusReceived, tracking.StatusPaid, tracking.StatusScheduled, tracking.StatusConfirmed, tracking.StatusPreparing, tracking.StatusReadyForPickup,
 		tracking.StatusPickedUp, tracking.StatusDelivered, tracking.StatusCancelled, tracking.StatusFailed,
 	}, service.OrderStatus_name)
 	assertComplete(t, orderEndReasons, []tracking.EndReason{
@@ -55,7 +55,8 @@ func TestEnumTablesAreComplete(t *testing.T) {
 	assertComplete(t, placeOrderProblemCodes, []checkoutapp.ProblemCode{
 		checkoutapp.ProblemOrderItemUnavailable, checkoutapp.ProblemOrderTotalBelowMinimum,
 		checkoutapp.ProblemOrderTotalAboveMaximum, checkoutapp.ProblemRestaurantNotAcceptingOrders,
-		checkoutapp.ProblemPremiumUnavailable,
+		checkoutapp.ProblemPremiumUnavailable, checkoutapp.ProblemSlotUnavailable,
+		checkoutapp.ProblemScheduledOrdersUnavailable,
 	}, service.PlaceOrderProblemCode_name)
 	assertComplete(t, orderPriorities, []tracking.Priority{tracking.PriorityStandard, tracking.PriorityPremium}, service.OrderPriority_name)
 }

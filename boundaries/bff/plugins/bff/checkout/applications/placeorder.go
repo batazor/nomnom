@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	tracking "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
@@ -31,20 +32,33 @@ const (
 	ProblemOrderTotalAboveMaximum       ProblemCode = "ORDER_TOTAL_ABOVE_MAXIMUM"
 	ProblemRestaurantNotAcceptingOrders ProblemCode = "RESTAURANT_NOT_ACCEPTING_ORDERS"
 	ProblemPremiumUnavailable           ProblemCode = "PREMIUM_UNAVAILABLE"
+	ProblemSlotUnavailable              ProblemCode = "SLOT_UNAVAILABLE"
+	ProblemScheduledOrdersUnavailable   ProblemCode = "SCHEDULED_ORDERS_UNAVAILABLE"
 )
 
-// Problem refers to Menu Items, or to the whole Order when MenuItemIDs is empty.
+// Problem refers to Menu Items, or to the whole Order when MenuItemIDs is
+// empty. AlternativeWindows are the nearest available delivery windows of
+// SLOT_UNAVAILABLE, empty for the other problems.
 type Problem struct {
-	Code        ProblemCode
-	MenuItemIDs []string
+	Code               ProblemCode
+	MenuItemIDs        []string
+	AlternativeWindows []Window
+}
+
+// Window is a delivery window [Start, End) of a scheduled Order.
+type Window struct {
+	Start time.Time
+	End   time.Time
 }
 
 // PlacementRefused is a business refusal of orders. Reason is its ErrorInfo
-// reason; Codes and MenuItemIDs come from the metadata of ORDER_NOT_ORDERABLE.
+// reason; Codes and MenuItemIDs come from the metadata of ORDER_NOT_ORDERABLE,
+// Alternatives from the SlotUnavailable detail of SLOT_UNAVAILABLE.
 type PlacementRefused struct {
-	Reason      string
-	Codes       []string
-	MenuItemIDs []string
+	Reason       string
+	Codes        []string
+	MenuItemIDs  []string
+	Alternatives []Window
 }
 
 func (e PlacementRefused) Error() string { return "placement refused: " + e.Reason }
@@ -69,6 +83,9 @@ type Input struct {
 	// IdempotencyKey identifies the checkout attempt; a retry with the same key
 	// returns the Order placed by the first attempt.
 	IdempotencyKey string
+	// DeliveryWindowStart is the start of the chosen delivery window of a
+	// scheduled Order; nil places an ASAP Order.
+	DeliveryWindowStart *time.Time
 }
 
 // OrderPlacer is the Place Order command of orders on behalf of the customer
@@ -133,9 +150,14 @@ var orderableProblems = map[string]ProblemCode{
 func problemsOf(refused PlacementRefused) []Problem {
 	switch refused.Reason {
 	case "RESTAURANT_NOT_ACCEPTING_ORDERS":
-		return []Problem{{Code: ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}}}
+		return []Problem{{Code: ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}}
 	case "PREMIUM_UNAVAILABLE":
-		return []Problem{{Code: ProblemPremiumUnavailable, MenuItemIDs: []string{}}}
+		return []Problem{{Code: ProblemPremiumUnavailable, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}}
+	case "SLOT_UNAVAILABLE":
+		alternatives := append(make([]Window, 0, len(refused.Alternatives)), refused.Alternatives...)
+		return []Problem{{Code: ProblemSlotUnavailable, MenuItemIDs: []string{}, AlternativeWindows: alternatives}}
+	case "SCHEDULED_ORDERS_UNAVAILABLE":
+		return []Problem{{Code: ProblemScheduledOrdersUnavailable, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}}
 	case "ORDER_NOT_ORDERABLE":
 		problems := make([]Problem, 0, len(refused.Codes))
 		for _, reason := range refused.Codes {
@@ -143,7 +165,7 @@ func problemsOf(refused PlacementRefused) []Problem {
 			if !known {
 				continue
 			}
-			problem := Problem{Code: code, MenuItemIDs: []string{}}
+			problem := Problem{Code: code, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}
 			if code == ProblemOrderItemUnavailable {
 				problem.MenuItemIDs = append(problem.MenuItemIDs, refused.MenuItemIDs...)
 			}

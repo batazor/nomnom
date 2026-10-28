@@ -15,6 +15,7 @@ type Status string
 const (
 	StatusReceived       Status = "RECEIVED"
 	StatusPaid           Status = "PAID"
+	StatusScheduled      Status = "SCHEDULED"
 	StatusConfirmed      Status = "CONFIRMED"
 	StatusPreparing      Status = "PREPARING"
 	StatusReadyForPickup Status = "READY_FOR_PICKUP"
@@ -82,6 +83,8 @@ type OrderView struct {
 	// Tracking is the live tracking of the courier (FR-663); nil without an
 	// assigned or picked up delivery and in the order history.
 	Tracking *Tracking
+	// DeliveryWindow is set only for a scheduled Order.
+	DeliveryWindow *DeliveryWindow
 }
 
 // Tracking is the live tracking of the delivery of an Order: the Tracking
@@ -180,6 +183,10 @@ func status(order OrderSnapshot) (Status, error) {
 			return StatusReadyForPickup, nil
 		case has("preparation_started"):
 			return StatusPreparing, nil
+		// A confirmed scheduled Order waits for the start the plan gave it
+		// (FR-685): the kitchen starts it for its window, not now.
+		case order.DeliveryWindow != nil:
+			return StatusScheduled, nil
 		default:
 			return StatusConfirmed, nil
 		}

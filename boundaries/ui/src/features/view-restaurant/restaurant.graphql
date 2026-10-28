@@ -3,6 +3,17 @@ query ViewRestaurant($id: ID!) {
     id
     name
     acceptingOrders
+    # Opened by its owner but outside its opening hours: the start of the next
+    # period, shown on the wall clock of the restaurant (FR-702).
+    timeZone
+    nextOpeningAt
+    # Delivery windows of scheduled orders in the time of the Market (FR-686);
+    # empty when the restaurant takes none.
+    scheduledSlots {
+      start
+      end
+      available
+    }
     waitTime {
       elevated
       expectedWaitMinutes

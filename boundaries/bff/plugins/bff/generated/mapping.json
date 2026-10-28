@@ -102,6 +102,13 @@
     },
     {
       "type": "OPERATION_TYPE_MUTATION",
+      "original": "setOpeningHours",
+      "mapped": "MutationSetOpeningHours",
+      "request": "MutationSetOpeningHoursRequest",
+      "response": "MutationSetOpeningHoursResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
       "original": "applyKitchenAction",
       "mapped": "MutationApplyKitchenAction",
       "request": "MutationApplyKitchenActionRequest",
@@ -372,6 +379,20 @@
           ]
         },
         {
+          "original": "setOpeningHours",
+          "mapped": "set_opening_hours",
+          "argumentMappings": [
+            {
+              "original": "restaurantId",
+              "mapped": "restaurant_id"
+            },
+            {
+              "original": "openingHours",
+              "mapped": "opening_hours"
+            }
+          ]
+        },
+        {
           "original": "applyKitchenAction",
           "mapped": "apply_kitchen_action",
           "argumentMappings": [
@@ -600,6 +621,69 @@
         {
           "original": "premiumFee",
           "mapped": "premium_fee"
+        },
+        {
+          "original": "timeZone",
+          "mapped": "time_zone"
+        },
+        {
+          "original": "openingHours",
+          "mapped": "opening_hours"
+        },
+        {
+          "original": "nextOpeningAt",
+          "mapped": "next_opening_at"
+        },
+        {
+          "original": "scheduledSlots",
+          "mapped": "scheduled_slots"
+        }
+      ]
+    },
+    {
+      "type": "OpeningInterval",
+      "fieldMappings": [
+        {
+          "original": "dayOfWeek",
+          "mapped": "day_of_week"
+        },
+        {
+          "original": "opens",
+          "mapped": "opens"
+        },
+        {
+          "original": "closes",
+          "mapped": "closes"
+        }
+      ]
+    },
+    {
+      "type": "DeliveryWindow",
+      "fieldMappings": [
+        {
+          "original": "start",
+          "mapped": "start"
+        },
+        {
+          "original": "end",
+          "mapped": "end"
+        },
+        {
+          "original": "available",
+          "mapped": "available"
+        }
+      ]
+    },
+    {
+      "type": "OrderDeliveryWindow",
+      "fieldMappings": [
+        {
+          "original": "start",
+          "mapped": "start"
+        },
+        {
+          "original": "end",
+          "mapped": "end"
         }
       ]
     },
@@ -841,6 +925,10 @@
         {
           "original": "tracking",
           "mapped": "tracking"
+        },
+        {
+          "original": "deliveryWindow",
+          "mapped": "delivery_window"
         }
       ]
     },
@@ -1039,6 +1127,39 @@
         {
           "original": "priority",
           "mapped": "priority"
+        },
+        {
+          "original": "deliveryWindow",
+          "mapped": "delivery_window"
+        }
+      ]
+    },
+    {
+      "type": "ScheduledKitchenOrder",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "orderId",
+          "mapped": "order_id"
+        },
+        {
+          "original": "items",
+          "mapped": "items"
+        },
+        {
+          "original": "priority",
+          "mapped": "priority"
+        },
+        {
+          "original": "deliveryWindow",
+          "mapped": "delivery_window"
+        },
+        {
+          "original": "plannedReadyAt",
+          "mapped": "planned_ready_at"
         }
       ]
     },
@@ -1119,6 +1240,10 @@
         {
           "original": "cookPool",
           "mapped": "cook_pool"
+        },
+        {
+          "original": "scheduledOrders",
+          "mapped": "scheduled_orders"
         }
       ]
     },
@@ -1331,6 +1456,10 @@
         {
           "original": "priority",
           "mapped": "priority"
+        },
+        {
+          "original": "deliveryWindowStart",
+          "mapped": "delivery_window_start"
         }
       ]
     },
@@ -1344,6 +1473,10 @@
         {
           "original": "menuItemIds",
           "mapped": "menu_item_ids"
+        },
+        {
+          "original": "alternativeWindows",
+          "mapped": "alternative_windows"
         }
       ]
     },
@@ -1411,6 +1544,36 @@
           "mapped": "changed"
         }
       ]
+    },
+    {
+      "type": "OpeningIntervalInput",
+      "fieldMappings": [
+        {
+          "original": "dayOfWeek",
+          "mapped": "day_of_week"
+        },
+        {
+          "original": "opens",
+          "mapped": "opens"
+        },
+        {
+          "original": "closes",
+          "mapped": "closes"
+        }
+      ]
+    },
+    {
+      "type": "SetOpeningHoursPayload",
+      "fieldMappings": [
+        {
+          "original": "restaurant",
+          "mapped": "restaurant"
+        },
+        {
+          "original": "changed",
+          "mapped": "changed"
+        }
+      ]
     }
   ],
   "enumMappings": [
@@ -1437,6 +1600,10 @@
         {
           "original": "PAID",
           "mapped": "ORDER_STATUS_PAID"
+        },
+        {
+          "original": "SCHEDULED",
+          "mapped": "ORDER_STATUS_SCHEDULED"
         },
         {
           "original": "CONFIRMED",
@@ -1713,6 +1880,14 @@
         {
           "original": "PREMIUM_UNAVAILABLE",
           "mapped": "PLACE_ORDER_PROBLEM_CODE_PREMIUM_UNAVAILABLE"
+        },
+        {
+          "original": "SLOT_UNAVAILABLE",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_SLOT_UNAVAILABLE"
+        },
+        {
+          "original": "SCHEDULED_ORDERS_UNAVAILABLE",
+          "mapped": "PLACE_ORDER_PROBLEM_CODE_SCHEDULED_ORDERS_UNAVAILABLE"
         }
       ]
     },
@@ -1745,6 +1920,21 @@
           "mapped": "ORDER_CANCELLATION_PROBLEM_CODE_ORDER_ALREADY_FINAL"
         }
       ]
+    }
+  ],
+  "resolveMappings": [
+    {
+      "type": "LOOKUP_TYPE_RESOLVE",
+      "lookupMapping": {
+        "type": "Restaurant",
+        "fieldMapping": {
+          "original": "scheduledSlots",
+          "mapped": "scheduled_slots"
+        }
+      },
+      "rpc": "ResolveRestaurantScheduledSlots",
+      "request": "ResolveRestaurantScheduledSlotsRequest",
+      "response": "ResolveRestaurantScheduledSlotsResponse"
     }
   ]
 }

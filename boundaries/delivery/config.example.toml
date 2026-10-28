@@ -105,3 +105,23 @@ persist_interval = "15s"
 # Valkey потока позиций курьеров (pub/sub, FR-661). Обязательно: пусто или недоступный
 # Valkey завершают startup. Не храните URL с паролем в файле: задавайте VALKEY__URL из Secret.
 url = ""
+
+[kafka]
+# Kafka consumer процесса (ADR 4, ADR 11): группа читает собственный стрим
+# delivery.v1.delivery-events и ведёт Delivery Duration Statistics (FR-676). Обязательно,
+# значений по умолчанию нет: пустые brokers или consumer_group и неизвестный initial_offset
+# завершают startup. Переменные: KAFKA__BROKERS, KAFKA__CONSUMER_GROUP, KAFKA__INITIAL_OFFSET.
+brokers = "localhost:9092"
+consumer_group = "delivery"
+# С какого конца читает группа без committed offset: oldest или newest.
+initial_offset = "oldest"
+
+[delivery_estimate]
+# Delivery Duration Estimate (FR-691): медианы последних sample_size длительностей Market
+# Create Delivery → Pickup (courier_lead) и Pickup → вручение (transit); пока выборка не
+# набрана — базовые значения. Обязательно, значений по умолчанию нет: пустое, нечисловое или
+# нулевое значение завершает startup. Переменные: DELIVERY_ESTIMATE__SAMPLE_SIZE,
+# DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD, DELIVERY_ESTIMATE__BASELINE_TRANSIT.
+sample_size = 50
+baseline_courier_lead = "15m"
+baseline_transit = "20m"

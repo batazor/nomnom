@@ -19,3 +19,36 @@ mutation CloseRestaurant($restaurantId: ID!) {
     }
   }
 }
+
+# Weekly opening hours of a restaurant for its owner (FR-701).
+fragment ManagedOpeningHours on Restaurant {
+  id
+  timeZone
+  acceptingOrders
+  nextOpeningAt
+  openingHours {
+    dayOfWeek
+    opens
+    closes
+  }
+}
+
+query ManageOpeningHours($restaurantId: ID!) {
+  restaurant(id: $restaurantId) {
+    ...ManagedOpeningHours
+  }
+}
+
+# Replaces the whole schedule; overlapping intervals are an INVALID_ARGUMENT
+# error naming the day and the interval (FR-700).
+mutation SetOpeningHours(
+  $restaurantId: ID!
+  $openingHours: [OpeningIntervalInput!]!
+) {
+  setOpeningHours(restaurantId: $restaurantId, openingHours: $openingHours) {
+    changed
+    restaurant {
+      ...ManagedOpeningHours
+    }
+  }
+}

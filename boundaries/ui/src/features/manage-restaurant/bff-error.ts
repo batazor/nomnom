@@ -24,3 +24,43 @@ export function openingErrorKind(error: CombinedError): OpeningErrorKind {
   }
   return "failed";
 }
+
+// Interval of a schedule restaurants rejected, as BFF names it in the
+// INVALID_ARGUMENT of setOpeningHours (FR-700): "invalid opening hours:
+// <reason> at day <day> <opens>-<closes>".
+export type InvalidInterval = Readonly<{
+  reason: "overlap" | "invalid_time" | "empty_interval" | "invalid_day";
+  day: number;
+  opens: string;
+  closes: string;
+}>;
+
+const invalidHours =
+  /^invalid opening hours: (overlap|invalid_time|empty_interval|invalid_day) at day (-?\d+) (\S*)-(\S*)$/;
+
+type NestedErrors = { errors?: { message?: unknown }[] };
+
+export function invalidOpeningHours(
+  error: CombinedError,
+): InvalidInterval | null {
+  if (!bffErrorCodes(error).includes("InvalidArgument")) return null;
+  for (const graphqlError of error.graphQLErrors) {
+    const nested = (graphqlError.extensions as NestedErrors).errors ?? [];
+    for (const message of [
+      graphqlError.message,
+      ...nested.map((inner) => inner.message),
+    ]) {
+      const match =
+        typeof message === "string" ? invalidHours.exec(message) : null;
+      if (match) {
+        return {
+          reason: match[1] as InvalidInterval["reason"],
+          day: Number(match[2]),
+          opens: match[3],
+          closes: match[4],
+        };
+      }
+    }
+  }
+  return null;
+}

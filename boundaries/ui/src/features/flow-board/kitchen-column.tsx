@@ -15,9 +15,14 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
+import {
+  useZonedFormatters,
+  type ZonedFormatters,
+} from "../../shared/i18n/zoned-time";
+import { useMarketTimeZone } from "../../shared/market/market";
 import { AsRole } from "../../shared/session/roles";
 import { Button } from "../../shared/ui";
-import { RestaurantOpening } from "../manage-restaurant";
+import { OpeningHours, RestaurantOpening } from "../manage-restaurant";
 import { useDragSource } from "./board-dnd";
 import { CookPoolPanel } from "./cook-pool";
 import { useCourierOf } from "./courier-pool";
@@ -25,6 +30,9 @@ import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
 type KitchenOrder = NonNullable<BoardKitchenQuery["kitchen"]>["orders"][number];
+type ScheduledOrder = NonNullable<
+  BoardKitchenQuery["kitchen"]
+>["scheduledOrders"][number];
 
 const stageLabel: Record<KitchenOrderStage, MessageKey> = {
   RECEIVED: "board.kitchen.stage.RECEIVED",
@@ -110,6 +118,10 @@ export function KitchenColumn({
           return (
             <>
               <RestaurantOpening key={restaurantId} restaurant={restaurant} />
+              <OpeningHours
+                key={`hours-${restaurantId}`}
+                restaurantId={restaurantId}
+              />
               <AsRole as="kitchen">
                 <KitchenOrders
                   onOpenOrder={onOpenOrder}
@@ -175,6 +187,7 @@ function KitchenOrders({
   onOpenOrder: (orderId: string) => void;
 }) {
   const { t, formatters } = useI18n();
+  const zoned = useZonedFormatters(useMarketTimeZone());
   const [{ data, error }] = useQuery({
     query: BoardKitchenDocument,
     variables: { restaurantId },
@@ -193,7 +206,9 @@ function KitchenOrders({
       </p>
     );
   }
-  if (!data) return <p className="board-empty">{t("board.loading")}</p>;
+  if (!data || zoned === null) {
+    return <p className="board-empty">{t("board.loading")}</p>;
+  }
   if (!kitchen) {
     return <p className="board-empty">{t("board.kitchen.notPermitted")}</p>;
   }
@@ -210,7 +225,7 @@ function KitchenOrders({
       restaurantId={restaurantId}
     />
   );
-  if (kitchen.orders.length === 0) {
+  if (kitchen.orders.length === 0 && kitchen.scheduledOrders.length === 0) {
     return (
       <>
         {pool}
@@ -229,24 +244,49 @@ function KitchenOrders({
         {/* Orders arrive with kitchenChanged: new ones slide in, finished
           ones fade out, and the rest move to their new place. */}
         <AnimatePresence initial={false}>
-          {kitchen.orders.map((order) => (
-            <m.li
-              key={order.id}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              initial={{ opacity: 0, y: -8 }}
-              layout
-              layoutId={orderCardId("kitchen", order.orderId)}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-            >
-              <KitchenOrderCard
-                onOpen={() => onOpenOrder(order.orderId)}
-                order={order}
-                restaurantId={restaurantId}
-                selected={order.orderId === selectedOrderId}
-              />
-            </m.li>
-          ))}
+          {[
+            ...kitchen.orders.filter((order) => order.stage === "RECEIVED"),
+            // Between the incoming orders and the queue: the scheduled ones
+            // waiting for their start (FR-688).
+            ...(kitchen.scheduledOrders.length > 0
+              ? ["scheduled" as const]
+              : []),
+            ...kitchen.orders.filter((order) => order.stage !== "RECEIVED"),
+          ].map((order) =>
+            order === "scheduled" ? (
+              <m.li
+                className="board-scheduled"
+                key="scheduled"
+                layout
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <ScheduledOrders
+                  onOpenOrder={onOpenOrder}
+                  orders={kitchen.scheduledOrders}
+                  selectedOrderId={selectedOrderId}
+                  zoned={zoned}
+                />
+              </m.li>
+            ) : (
+              <m.li
+                key={order.id}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                initial={{ opacity: 0, y: -8 }}
+                layout
+                layoutId={orderCardId("kitchen", order.orderId)}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <KitchenOrderCard
+                  onOpen={() => onOpenOrder(order.orderId)}
+                  order={order}
+                  restaurantId={restaurantId}
+                  selected={order.orderId === selectedOrderId}
+                  zoned={zoned}
+                />
+              </m.li>
+            ),
+          )}
         </AnimatePresence>
       </ul>
     </>
@@ -302,16 +342,94 @@ function TakeNext({
   );
 }
 
+// Accepted scheduled orders waiting for their start: the window and the
+// moment they must be ready, no command — at the start restaurants queues
+// them and kitchenChanged moves the card to the queue (FR-688, ADR 36).
+function ScheduledOrders({
+  orders,
+  selectedOrderId,
+  onOpenOrder,
+  zoned,
+}: {
+  orders: readonly ScheduledOrder[];
+  selectedOrderId: string | null;
+  onOpenOrder: (orderId: string) => void;
+  zoned: ZonedFormatters;
+}) {
+  const { t } = useI18n();
+  return (
+    <section
+      aria-labelledby="board-scheduled-title"
+      className="board-scheduled-section"
+    >
+      <h3 className="board-scheduled-title" id="board-scheduled-title">
+        {t("board.kitchen.scheduled")}
+      </h3>
+      <ul aria-labelledby="board-scheduled-title" className="board-cards">
+        {orders.map((order) => {
+          const window = zoned.window(
+            order.deliveryWindow.start,
+            order.deliveryWindow.end,
+          );
+          return (
+            <li key={order.id}>
+              <article
+                className="board-card"
+                data-selected={order.orderId === selectedOrderId}
+                data-stage="SCHEDULED"
+              >
+                <button
+                  className="board-card-head"
+                  onClick={() => onOpenOrder(order.orderId)}
+                  type="button"
+                >
+                  <span className="board-card-title">
+                    {t("board.kitchen.scheduledOrder", { window })}
+                  </span>
+                  {order.priority === "PREMIUM" ? (
+                    <span className="board-badge" data-priority="premium">
+                      {t("board.kitchen.premium")}
+                    </span>
+                  ) : null}
+                </button>
+                <ul className="board-card-items">
+                  {order.items.map((item, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: stable order lines
+                    <li key={`${item.name}-${index}`}>
+                      {item.name || t("order.unnamedItem")} ×{item.quantity}
+                    </li>
+                  ))}
+                </ul>
+                <div className="board-card-actions">
+                  <span className="board-card-wait">
+                    {t("board.kitchen.plannedReady", {
+                      time: zoned.time(order.plannedReadyAt),
+                    })}
+                    {" · "}
+                    {t("board.kitchen.waitStart")}
+                  </span>
+                </div>
+              </article>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function KitchenOrderCard({
   order,
   restaurantId,
   selected,
   onOpen,
+  zoned,
 }: {
   order: KitchenOrder;
   restaurantId: string;
   selected: boolean;
   onOpen: () => void;
+  zoned: ZonedFormatters;
 }) {
   const { t, formatters } = useI18n();
   const [{ fetching }, apply] = useMutation(ApplyKitchenActionDocument);
@@ -356,6 +474,16 @@ function KitchenOrderCard({
         {order.priority === "PREMIUM" ? (
           <span className="board-badge" data-priority="premium">
             {t("board.kitchen.premium")}
+          </span>
+        ) : null}
+        {order.deliveryWindow ? (
+          <span className="board-badge" data-scheduled="true">
+            {t("board.kitchen.window", {
+              window: zoned.window(
+                order.deliveryWindow.start,
+                order.deliveryWindow.end,
+              ),
+            })}
           </span>
         ) : null}
       </button>

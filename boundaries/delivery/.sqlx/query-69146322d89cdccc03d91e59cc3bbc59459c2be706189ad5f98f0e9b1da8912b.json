@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH expired AS (\n                 DELETE FROM delivery_inbox WHERE (consumer, event_id) IN (\n                     SELECT consumer, event_id FROM delivery_inbox\n                     WHERE processed_at < now() - interval '7 days'\n                     FOR UPDATE SKIP LOCKED))\n             INSERT INTO delivery_inbox (consumer, event_id, event_type)\n             VALUES ($1, $2, $3)\n             ON CONFLICT (consumer, event_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69146322d89cdccc03d91e59cc3bbc59459c2be706189ad5f98f0e9b1da8912b"
+}

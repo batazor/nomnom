@@ -95,7 +95,18 @@ resources:
 # TRACKING__CITY_ORIGIN_LONGITUDE, TRACKING__CITY_BLOCKS, TRACKING__BLOCK_METERS и
 # TRACKING__PERSIST_INTERVAL (FR-658): без них процесс не стартует, значения задаёт окружение
 # (kind: 5s, 30s, 2m, 1s; Virtual City 12 × 12 по 150 м у демо-курьеров, 15s).
-env: {}
+# KAFKA__BROKERS обязателен (ADR 11): адрес брокеров задаёт окружение.
+env:
+  # Kafka consumer собственных фактов Delivery (delivery.v1.delivery-events) для Delivery
+  # Duration Statistics (FR-676): группа delivery; новая группа читает стрим с начала.
+  KAFKA__CONSUMER_GROUP: delivery
+  KAFKA__INITIAL_OFFSET: oldest
+  # Delivery Duration Estimate (FR-691): медианы последних SAMPLE_SIZE длительностей Market,
+  # до набора выборки — базовые courier_lead (Create Delivery → Pickup) и transit
+  # (Pickup → вручение). Пустое, нечисловое или нулевое значение завершает startup.
+  DELIVERY_ESTIMATE__SAMPLE_SIZE: "50"
+  DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD: 15m
+  DELIVERY_ESTIMATE__BASELINE_TRANSIT: 20m
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
 # envFrom:

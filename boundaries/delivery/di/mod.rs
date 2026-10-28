@@ -4,7 +4,8 @@
 //! - [`infrastructure`] — порты слайсов и их реализации ([`InfrastructureModule`]);
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы;
 //! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
-//!   Offers, Dispatch Deliveries и демо Simulator ([`server::ServerModule`]); схему PostgreSQL
+//!   Offers, Dispatch Deliveries, демо Simulator и consumer Delivery Duration
+//!   Statistics ([`server::ServerModule`]); схему PostgreSQL
 //!   процесс мигрирует сам при старте ([`server::store`]).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
@@ -14,6 +15,7 @@
 //! (`infrastructure::repository::test_support`); статическая авторизация,
 //! locator и запись relationships для них — `infrastructure::memory`.
 
+mod consuming_worker;
 mod dispatch_worker;
 mod http_worker;
 pub mod infrastructure;
@@ -23,6 +25,7 @@ pub mod server;
 pub mod service;
 mod simulator_worker;
 
+pub use consuming_worker::ConsumingWorker;
 pub use dispatch_worker::{DispatchDeliveries, DispatchSchedule, DispatchWorker};
 pub use http_worker::HttpWorker;
 pub use infrastructure::{

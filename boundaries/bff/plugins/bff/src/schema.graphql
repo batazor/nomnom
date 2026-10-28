@@ -64,7 +64,8 @@ type Restaurant {
   """
   name: String!
   """
-  Whether the restaurant accepts new orders now
+  Whether the restaurant accepts new orders now: opened by its owner and inside its
+  opening hours
   """
   acceptingOrders: Boolean!
   """
@@ -79,6 +80,75 @@ type Restaurant {
   Fee of Premium Priority, null when the restaurant offers no premium
   """
   premiumFee: Money
+  """
+  IANA time zone of the restaurant, for example "Europe/Berlin"
+  """
+  timeZone: String!
+  """
+  Weekly opening hours on the wall clock of the restaurant; empty when no schedule is
+  set, then the restaurant accepts no orders
+  """
+  openingHours: [OpeningInterval!]!
+  """
+  Start of the next period of the opening hours in RFC 3339; set only when the restaurant
+  is opened by its owner and outside its opening hours now
+  """
+  nextOpeningAt: String
+  """
+  Delivery windows of scheduled orders by start, available or full; empty when the
+  restaurant takes no scheduled orders or does not accept orders now. Read only when asked
+  """
+  scheduledSlots: [DeliveryWindow!]! @connect__fieldResolver(context: "id")
+}
+
+"""
+Interval of the weekly opening hours on the wall clock of the restaurant
+"""
+type OpeningInterval {
+  """
+  ISO day of week: 1 Monday … 7 Sunday
+  """
+  dayOfWeek: Int!
+  """
+  Local opening time "HH:MM"
+  """
+  opens: String!
+  """
+  Local closing time "HH:MM"; not after opens means closing on the next day
+  """
+  closes: String!
+}
+
+"""
+Delivery window of a scheduled order a customer can choose
+"""
+type DeliveryWindow {
+  """
+  Start of the window in RFC 3339; sent as PlaceOrderInput.deliveryWindowStart
+  """
+  start: String!
+  """
+  End of the window in RFC 3339, exclusive
+  """
+  end: String!
+  """
+  False when the window is full
+  """
+  available: Boolean!
+}
+
+"""
+Delivery window chosen for a scheduled order
+"""
+type OrderDeliveryWindow {
+  """
+  Start of the window in RFC 3339
+  """
+  start: String!
+  """
+  End of the window in RFC 3339, exclusive
+  """
+  end: String!
 }
 
 """
@@ -205,6 +275,10 @@ enum OrderStatus {
   Payment is authorized and the order waits for the restaurant
   """
   PAID
+  """
+  Scheduled order is confirmed and waits for the kitchen to start it for its delivery window
+  """
+  SCHEDULED
   """
   Order is confirmed and waits for the kitchen
   """
@@ -430,6 +504,10 @@ type Order @key(fields: "id") {
   Live tracking of the courier, null unless the delivery is assigned or picked up
   """
   tracking: OrderTracking
+  """
+  Delivery window of a scheduled order, null for an order delivered as soon as possible
+  """
+  deliveryWindow: OrderDeliveryWindow
 }
 
 """
@@ -663,6 +741,41 @@ type KitchenOrder {
   Premium Priority of the order: premium orders are taken first
   """
   priority: OrderPriority!
+  """
+  Delivery window of a scheduled order, null for an order delivered as soon as possible
+  """
+  deliveryWindow: OrderDeliveryWindow
+}
+
+"""
+Accepted scheduled order of a restaurant that waits for its start; the kitchen has no
+command over it
+"""
+type ScheduledKitchenOrder {
+  """
+  Restaurant order identifier
+  """
+  id: ID!
+  """
+  Customer order identifier
+  """
+  orderId: ID!
+  """
+  Ordered items
+  """
+  items: [KitchenOrderItem!]!
+  """
+  Premium Priority of the order
+  """
+  priority: OrderPriority!
+  """
+  Delivery window chosen by the customer
+  """
+  deliveryWindow: OrderDeliveryWindow!
+  """
+  Moment the kitchen has to have the order ready in RFC 3339, before the window
+  """
+  plannedReadyAt: String!
 }
 
 """
@@ -769,6 +882,11 @@ type Kitchen @key(fields: "restaurantId") {
   kitchenChanged too
   """
   cookPool: CookPool!
+  """
+  Accepted scheduled orders waiting for their start by plannedReadyAt; at the start an
+  order moves to orders as QUEUED and kitchenChanged pushes the change
+  """
+  scheduledOrders: [ScheduledKitchenOrder!]!
 }
 
 """
@@ -1141,6 +1259,11 @@ input PlaceOrderInput {
   STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee
   """
   priority: OrderPriority!
+  """
+  Start of the chosen delivery window (DeliveryWindow.start) in RFC 3339 for a scheduled
+  order; null delivers as soon as possible
+  """
+  deliveryWindowStart: String
 }
 
 """
@@ -1167,6 +1290,14 @@ enum PlaceOrderProblemCode {
   Restaurant offers no Premium Priority
   """
   PREMIUM_UNAVAILABLE
+  """
+  The chosen delivery window is full; alternativeWindows lists the nearest available ones
+  """
+  SLOT_UNAVAILABLE
+  """
+  Restaurant takes no scheduled orders or does not accept orders now
+  """
+  SCHEDULED_ORDERS_UNAVAILABLE
 }
 
 type PlaceOrderProblem {
@@ -1178,6 +1309,10 @@ type PlaceOrderProblem {
   Menu items the problem refers to, empty if it refers to the whole order
   """
   menuItemIds: [ID!]!
+  """
+  Nearest available delivery windows, set only for SLOT_UNAVAILABLE
+  """
+  alternativeWindows: [DeliveryWindow!]!
 }
 
 type PlaceOrderPayload {
@@ -1270,6 +1405,36 @@ type RestaurantOpeningPayload {
   changed: Boolean!
 }
 
+input OpeningIntervalInput {
+  """
+  ISO day of week: 1 Monday … 7 Sunday
+  """
+  dayOfWeek: Int!
+  """
+  Local opening time "HH:MM"
+  """
+  opens: String!
+  """
+  Local closing time "HH:MM"; not after opens means closing on the next day
+  """
+  closes: String!
+}
+
+"""
+Result of replacing the opening hours of a restaurant by its owner
+"""
+type SetOpeningHoursPayload {
+  """
+  Restaurant after the command, read again: acceptingOrders and nextOpeningAt follow the
+  new opening hours
+  """
+  restaurant: Restaurant!
+  """
+  False when the restaurant already had these opening hours
+  """
+  changed: Boolean!
+}
+
 type Mutation {
   """
   Place an order for the current customer
@@ -1287,6 +1452,11 @@ type Mutation {
   Close a restaurant of the current user for new orders; repeating it changes nothing
   """
   closeRestaurant(restaurantId: ID!): RestaurantOpeningPayload!
+  """
+  Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+  intervals are an INVALID_ARGUMENT error naming the day and the interval
+  """
+  setOpeningHours(restaurantId: ID!, openingHours: [OpeningIntervalInput!]!): SetOpeningHoursPayload!
   """
   Apply a kitchen command to a restaurant order; repeating MARK_READY changes nothing
   """

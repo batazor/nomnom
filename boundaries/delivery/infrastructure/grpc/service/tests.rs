@@ -249,6 +249,47 @@ async fn courier_pool_requires_a_market() {
     running.stop().await;
 }
 
+/// FR-691, AC-905: `orders` reads the baselines of a Market without a full
+/// sample as protobuf Durations; the Market is required.
+#[tokio::test]
+async fn estimate_delivery_duration_answers_the_baselines_of_a_new_market() {
+    let mut running = start_with_courier("courier-1").await;
+
+    let estimate = running
+        .client
+        .estimate_delivery_duration(EstimateDeliveryDurationRequest {
+            market_id: "berlin".to_owned(),
+        })
+        .await
+        .expect("estimate")
+        .into_inner();
+    assert_eq!(
+        estimate,
+        EstimateDeliveryDurationResponse {
+            courier_lead: Some(prost_types::Duration {
+                seconds: 15 * 60,
+                nanos: 0
+            }),
+            transit: Some(prost_types::Duration {
+                seconds: 20 * 60,
+                nanos: 0
+            }),
+        }
+    );
+    for market in ["", "Berlin"] {
+        let invalid = running
+            .client
+            .estimate_delivery_duration(EstimateDeliveryDurationRequest {
+                market_id: market.to_owned(),
+            })
+            .await
+            .expect_err("invalid market");
+        assert_eq!(invalid.code(), tonic::Code::InvalidArgument, "{market:?}");
+    }
+
+    running.stop().await;
+}
+
 #[tokio::test]
 async fn replan_offers_the_candidate_or_nothing() {
     let mut running = start_with_courier("courier-1").await;

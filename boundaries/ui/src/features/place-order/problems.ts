@@ -11,6 +11,8 @@ const orderProblemMessage: Record<PlaceOrderProblemCode, MessageKey> = {
   RESTAURANT_NOT_ACCEPTING_ORDERS:
     "checkout.problem.RESTAURANT_NOT_ACCEPTING_ORDERS",
   PREMIUM_UNAVAILABLE: "checkout.problem.PREMIUM_UNAVAILABLE",
+  SLOT_UNAVAILABLE: "checkout.problem.SLOT_UNAVAILABLE",
+  SCHEDULED_ORDERS_UNAVAILABLE: "checkout.problem.SCHEDULED_ORDERS_UNAVAILABLE",
 };
 
 const itemProblemMessage: Record<PlaceOrderProblemCode, MessageKey> = {
@@ -19,6 +21,8 @@ const itemProblemMessage: Record<PlaceOrderProblemCode, MessageKey> = {
   ORDER_TOTAL_ABOVE_MAXIMUM: "checkout.itemProblem.other",
   RESTAURANT_NOT_ACCEPTING_ORDERS: "checkout.itemProblem.other",
   PREMIUM_UNAVAILABLE: "checkout.itemProblem.other",
+  SLOT_UNAVAILABLE: "checkout.itemProblem.other",
+  SCHEDULED_ORDERS_UNAVAILABLE: "checkout.itemProblem.other",
 };
 
 // A problem with menuItemIds belongs next to those cart lines; one without

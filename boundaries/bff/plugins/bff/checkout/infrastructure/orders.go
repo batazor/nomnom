@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
@@ -41,6 +42,9 @@ func (o *Orders) PlaceOrder(ctx context.Context, input applications.Input) (stri
 		RestaurantId:   input.RestaurantID,
 		Priority:       priority,
 	}
+	if start := input.DeliveryWindowStart; start != nil {
+		request.DeliveryWindowStart = timestamppb.New(*start)
+	}
 	for _, line := range input.Lines {
 		request.Items = append(request.Items, &ordersv1.PlaceOrderItem{
 			MenuItemId: line.MenuItemID,
@@ -62,10 +66,15 @@ func placeOrderError(err error) error {
 	switch status.Code(err) {
 	case codes.FailedPrecondition:
 		if hasInfo {
+			alternatives, err := slotAlternatives(err)
+			if err != nil {
+				return err
+			}
 			return applications.PlacementRefused{
-				Reason:      reason,
-				Codes:       grpcerr.List(metadata["codes"]),
-				MenuItemIDs: grpcerr.List(metadata["menu_item_ids"]),
+				Reason:       reason,
+				Codes:        grpcerr.List(metadata["codes"]),
+				MenuItemIDs:  grpcerr.List(metadata["menu_item_ids"]),
+				Alternatives: alternatives,
 			}
 		}
 	case codes.NotFound:
@@ -76,4 +85,25 @@ func placeOrderError(err error) error {
 		return fmt.Errorf("%w: %s", applications.ErrInvalidOrder, status.Convert(err).Message())
 	}
 	return fmt.Errorf("place order: %w", err)
+}
+
+// slotAlternatives reads the SlotUnavailable detail of SLOT_UNAVAILABLE (FR-692):
+// the nearest available windows; none without the detail. A window without
+// bounds is an error, not a window at the epoch.
+func slotAlternatives(err error) ([]applications.Window, error) {
+	for _, detail := range status.Convert(err).Details() {
+		slot, ok := detail.(*ordersv1.SlotUnavailable)
+		if !ok {
+			continue
+		}
+		windows := make([]applications.Window, 0, len(slot.GetAlternatives()))
+		for _, window := range slot.GetAlternatives() {
+			if window.GetStart() == nil || window.GetEnd() == nil {
+				return nil, fmt.Errorf("place order: alternative window without bounds: %w", err)
+			}
+			windows = append(windows, applications.Window{Start: window.GetStart().AsTime(), End: window.GetEnd().AsTime()})
+		}
+		return windows, nil
+	}
+	return nil, nil
 }

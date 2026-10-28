@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
@@ -25,6 +27,8 @@ import (
 
 const fixtures = "../../../../../../tests/identity/fixtures"
 
+var nextOpening = time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+
 type restaurantsServer struct {
 	restaurantsv1.UnimplementedRestaurantsServiceServer
 	listed        *restaurantsv1.ListRestaurantsRequest
@@ -32,8 +36,18 @@ type restaurantsServer struct {
 	menuErr       error
 	// withoutWaitTime answers GetRestaurant like a restaurants without FR-204.
 	withoutWaitTime bool
+	// withoutTimeZone answers GetRestaurant like a restaurants without FR-201.
+	withoutTimeZone bool
 	seenMD          metadata.MD
 	menusOf         []string
+	slotsOf         string
+	slots           []*restaurantsv1.ScheduledSlot
+}
+
+func (s *restaurantsServer) ListScheduledSlots(ctx context.Context, request *restaurantsv1.ListScheduledSlotsRequest) (*restaurantsv1.ListScheduledSlotsResponse, error) {
+	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	s.slotsOf = request.GetRestaurantId()
+	return &restaurantsv1.ListScheduledSlotsResponse{Slots: s.slots}, nil
 }
 
 func (s *restaurantsServer) ListRestaurants(ctx context.Context, request *restaurantsv1.ListRestaurantsRequest) (*restaurantsv1.ListRestaurantsResponse, error) {
@@ -41,8 +55,10 @@ func (s *restaurantsServer) ListRestaurants(ctx context.Context, request *restau
 	s.listed = request
 	return &restaurantsv1.ListRestaurantsResponse{
 		Restaurants: []*restaurantsv1.Restaurant{{
-			RestaurantId: "restaurant-1", Name: "Pho Bar", IsOpen: true,
-			WaitTime: &restaurantsv1.RestaurantWaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+			RestaurantId: "restaurant-1", Name: "Pho Bar", IsOpen: true, AcceptingOrders: true,
+			WaitTime:     &restaurantsv1.RestaurantWaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+			TimeZone:     "Europe/Berlin",
+			OpeningHours: []*restaurantsv1.OpeningInterval{{DayOfWeek: 5, Opens: "18:00", Closes: "02:00"}},
 		}},
 		NextPageToken: "restaurant-1",
 	}, nil
@@ -53,12 +69,20 @@ func (s *restaurantsServer) GetRestaurant(ctx context.Context, request *restaura
 	if s.restaurantErr != nil {
 		return nil, s.restaurantErr
 	}
+	if s.withoutTimeZone {
+		return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
+			RestaurantId: request.GetRestaurantId(), Name: "Pho Bar",
+			WaitTime: &restaurantsv1.RestaurantWaitTime{ExpectedWaitMinutes: 20},
+		}}, nil
+	}
 	if s.withoutWaitTime {
 		return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{RestaurantId: request.GetRestaurantId(), Name: "Pho Bar"}}, nil
 	}
 	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{
-		RestaurantId: request.GetRestaurantId(), Name: "Pho Bar", IsOpen: false,
-		WaitTime: &restaurantsv1.RestaurantWaitTime{ExpectedWaitMinutes: 20},
+		RestaurantId: request.GetRestaurantId(), Name: "Pho Bar", IsOpen: true, AcceptingOrders: false,
+		WaitTime:      &restaurantsv1.RestaurantWaitTime{ExpectedWaitMinutes: 20},
+		TimeZone:      "Europe/Berlin",
+		NextOpeningAt: timestamppb.New(nextOpening),
 	}}, nil
 }
 
@@ -127,8 +151,10 @@ func TestListAsksForOpenRestaurantsWithoutUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, applications.Page{
 		Restaurants: []applications.Restaurant{{
-			ID: "restaurant-1", Name: "Pho Bar", IsOpen: true,
-			WaitTime: applications.WaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+			ID: "restaurant-1", Name: "Pho Bar", AcceptingOrders: true,
+			WaitTime:     applications.WaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+			TimeZone:     "Europe/Berlin",
+			OpeningHours: []applications.OpeningInterval{{Day: 5, Opens: "18:00", Closes: "02:00"}},
 		}},
 		NextCursor: "restaurant-1",
 	}, page)
@@ -157,9 +183,14 @@ func TestRestaurantAndMenuMapPublicData(t *testing.T) {
 
 	restaurant, err := restaurants.Restaurant(customerContext(), "restaurant-1")
 	require.NoError(t, err)
+	// AC-949: opened by the flag but before its opening hours — not accepting,
+	// with the start of the next period.
 	assert.Equal(t, applications.Restaurant{
 		ID: "restaurant-1", Name: "Pho Bar",
-		WaitTime: applications.WaitTime{ExpectedWaitMinutes: 20},
+		WaitTime:      applications.WaitTime{ExpectedWaitMinutes: 20},
+		TimeZone:      "Europe/Berlin",
+		OpeningHours:  []applications.OpeningInterval{},
+		NextOpeningAt: &nextOpening,
 	}, restaurant)
 	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata))
 
@@ -210,4 +241,38 @@ func TestRestaurantWithoutWaitTimeIsAnError(t *testing.T) {
 	_, err := connect(t, &restaurantsServer{withoutWaitTime: true}).Restaurant(customerContext(), "restaurant-1")
 
 	require.ErrorContains(t, err, "no wait_time")
+}
+
+// The windows are the public ListScheduledSlots without a user, by start.
+func TestScheduledSlotsReadTheWindowsWithoutUser(t *testing.T) {
+	start := time.Date(2026, 10, 28, 17, 0, 0, 0, time.UTC)
+	server := &restaurantsServer{slots: []*restaurantsv1.ScheduledSlot{
+		{Window: &restaurantsv1.DeliveryWindow{Start: timestamppb.New(start), End: timestamppb.New(start.Add(15 * time.Minute))}, Available: true},
+		{Window: &restaurantsv1.DeliveryWindow{Start: timestamppb.New(start.Add(15 * time.Minute)), End: timestamppb.New(start.Add(30 * time.Minute))}},
+	}}
+
+	slots, err := connect(t, server).ScheduledSlots(customerContext(), "restaurant-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, []applications.Slot{
+		{Start: start, End: start.Add(15 * time.Minute), Available: true},
+		{Start: start.Add(15 * time.Minute), End: start.Add(30 * time.Minute)},
+	}, slots)
+	assert.Equal(t, "restaurant-1", server.slotsOf)
+	assert.Empty(t, server.seenMD.Get(identity.AssertionMetadata), "public read carries no user")
+}
+
+func TestScheduledSlotWithoutBoundsIsAnError(t *testing.T) {
+	server := &restaurantsServer{slots: []*restaurantsv1.ScheduledSlot{{Available: true}}}
+
+	_, err := connect(t, server).ScheduledSlots(customerContext(), "restaurant-1")
+
+	require.ErrorContains(t, err, "without bounds")
+}
+
+// restaurants FR-201: a restaurant without time_zone breaks the contract.
+func TestRestaurantWithoutTimeZoneIsAnError(t *testing.T) {
+	_, err := connect(t, &restaurantsServer{withoutTimeZone: true}).Restaurant(customerContext(), "restaurant-1")
+
+	require.ErrorContains(t, err, "no time_zone")
 }

@@ -31,6 +31,9 @@ var (
 	receivedAt      = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	acceptedAt      = receivedAt.Add(time.Minute)
 	expectedReadyAt = receivedAt.Add(16 * time.Minute)
+	windowStart     = receivedAt.Add(2 * time.Hour)
+	windowEnd       = windowStart.Add(15 * time.Minute)
+	plannedReadyAt  = windowStart.Add(-20 * time.Minute)
 )
 
 // restaurantsServer answers the kitchen board and commands and records which
@@ -86,8 +89,25 @@ func (s *restaurantsServer) ListActiveRestaurantOrders(ctx context.Context, requ
 			RestaurantOrderId: "ro-received", OrderId: "order-received", RestaurantId: request.GetRestaurantId(),
 			State:    restaurantsv1.RestaurantOrderState_RESTAURANT_ORDER_STATE_RECEIVED,
 			Priority: restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
+			Schedule: &restaurantsv1.OrderSchedule{
+				WindowStart: timestamppb.New(windowStart), WindowEnd: timestamppb.New(windowEnd),
+			},
 		},
 		ReceivedAt: timestamppb.New(receivedAt),
+	}}}, nil
+}
+
+func (s *restaurantsServer) ListScheduledOrders(ctx context.Context, request *restaurantsv1.ListScheduledOrdersRequest) (*restaurantsv1.ListScheduledOrdersResponse, error) {
+	if err := s.record(ctx, "ListScheduledOrders:"+request.GetRestaurantId()); err != nil {
+		return nil, err
+	}
+	return &restaurantsv1.ListScheduledOrdersResponse{Orders: []*restaurantsv1.ScheduledRestaurantOrder{{
+		RestaurantOrderId: "ro-scheduled", OrderId: "order-scheduled",
+		Items:    []*restaurantsv1.OrderRequestItem{{MenuItemId: "menu-pho", Quantity: 1}},
+		Priority: restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD,
+		Schedule: &restaurantsv1.OrderSchedule{
+			WindowStart: timestamppb.New(windowStart), WindowEnd: timestamppb.New(windowEnd), PlannedReadyAt: timestamppb.New(plannedReadyAt),
+		},
 	}}}, nil
 }
 
@@ -209,10 +229,20 @@ func TestBoardCarriesTheUserAndPublicReadsDoNot(t *testing.T) {
 		Priority:        applications.PriorityStandard,
 	}, {
 		ID: "ro-received", OrderID: "order-received", Stage: applications.StageReceived,
-		Lines:      []applications.ActiveOrderLine{},
-		ReceivedAt: receivedAt,
-		Priority:   applications.PriorityPremium,
+		Lines:          []applications.ActiveOrderLine{},
+		ReceivedAt:     receivedAt,
+		Priority:       applications.PriorityPremium,
+		DeliveryWindow: &applications.Window{Start: windowStart, End: windowEnd},
 	}}, orders, "an order before Acceptance has neither acceptedAt nor expectedReadyAt")
+	scheduled, err := restaurants.ScheduledOrders(cookContext(), "restaurant-1")
+	require.NoError(t, err)
+	assert.Equal(t, []applications.ScheduledOrder{{
+		ID: "ro-scheduled", OrderID: "order-scheduled",
+		Lines:          []applications.ActiveOrderLine{{MenuItemID: "menu-pho", Quantity: 1}},
+		Priority:       applications.PriorityStandard,
+		DeliveryWindow: applications.Window{Start: windowStart, End: windowEnd},
+		PlannedReadyAt: plannedReadyAt,
+	}}, scheduled)
 	queue, err := restaurants.QueueOrder(cookContext(), "restaurant-1")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ro-2", "ro-3"}, queue)
@@ -226,6 +256,7 @@ func TestBoardCarriesTheUserAndPublicReadsDoNot(t *testing.T) {
 	assert.Equal(t, map[string]bool{
 		"ListActiveRestaurantOrders:restaurant-1": true,
 		"GetKitchenQueue:restaurant-1":            true,
+		"ListScheduledOrders:restaurant-1":        true,
 		"GetRestaurant":                           false,
 		"GetMenu":                                 false,
 	}, server.assertions)
@@ -239,6 +270,8 @@ func TestBoardHidesMissingAndForbiddenKitchens(t *testing.T) {
 		_, err := restaurants.ActiveOrders(cookContext(), "restaurant-1")
 		assert.ErrorIs(t, err, applications.ErrKitchenNotFound, code)
 		_, err = restaurants.QueueOrder(cookContext(), "restaurant-1")
+		assert.ErrorIs(t, err, applications.ErrKitchenNotFound, code)
+		_, err = restaurants.ScheduledOrders(cookContext(), "restaurant-1")
 		assert.ErrorIs(t, err, applications.ErrKitchenNotFound, code)
 	}
 	server.err = status.Error(codes.NotFound, "no restaurant")

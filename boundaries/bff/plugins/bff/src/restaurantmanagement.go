@@ -7,12 +7,17 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	catalogapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
 type openingHandler interface {
 	Handle(ctx context.Context, restaurantID string) (applications.OpeningResult, error)
+}
+
+type setOpeningHoursHandler interface {
+	Handle(ctx context.Context, restaurantID string, hours []catalogapp.OpeningInterval) (applications.OpeningHoursResult, error)
 }
 
 type ownedRestaurantsHandler interface {
@@ -79,4 +84,44 @@ func (s *BffService) changeOpening(ctx context.Context, operation, restaurantID 
 		return nil, internalError(operation, err)
 	}
 	return restaurantOpeningPayload(result), nil
+}
+
+// MutationSetOpeningHours replaces the weekly opening hours on behalf of the
+// verified user, the same path as opening (FR-700). A rejected schedule is an
+// INVALID_ARGUMENT error that names the reason, the day and the interval, so
+// the owner screen shows it at that interval (AC-950).
+func (s *BffService) MutationSetOpeningHours(ctx context.Context, request *service.MutationSetOpeningHoursRequest) (*service.MutationSetOpeningHoursResponse, error) {
+	if request.GetRestaurantId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "restaurantId is required")
+	}
+	ctx, err := s.requireCustomer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hours := make([]catalogapp.OpeningInterval, 0, len(request.GetOpeningHours()))
+	for _, interval := range request.GetOpeningHours() {
+		hours = append(hours, catalogapp.OpeningInterval{
+			Day:    int(interval.GetDayOfWeek()),
+			Opens:  interval.GetOpens(),
+			Closes: interval.GetCloses(),
+		})
+	}
+	result, err := s.management.setOpeningHours.Handle(ctx, request.GetRestaurantId(), hours)
+	var invalid applications.InvalidOpeningHours
+	switch {
+	case errors.As(err, &invalid):
+		return nil, status.Error(codes.InvalidArgument, invalid.Error())
+	case errors.Is(err, applications.ErrRestaurantNotFound), errors.Is(err, catalogapp.ErrRestaurantNotFound):
+		return nil, status.Error(codes.NotFound, "restaurant not found")
+	case errors.Is(err, applications.ErrNotPermitted):
+		return nil, status.Error(codes.PermissionDenied, "restaurant management is not permitted")
+	case errors.Is(err, applications.ErrInvalidRestaurant):
+		return nil, status.Error(codes.InvalidArgument, "opening hours input is invalid")
+	case err != nil:
+		return nil, internalError("setOpeningHours", err)
+	}
+	return &service.MutationSetOpeningHoursResponse{SetOpeningHours: &service.SetOpeningHoursPayload{
+		Restaurant: restaurantWithMenu(result.Restaurant),
+		Changed:    result.Changed,
+	}}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
@@ -124,4 +125,54 @@ func TestPlaceOrderErrors(t *testing.T) {
 	request.Input.Priority = service.OrderPriority_ORDER_PRIORITY_UNSPECIFIED
 	_, err = svc.MutationPlaceOrder(ctx, request)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// AC-929, AC-928: a scheduled checkout carries the window start, PREMIUM with
+// it; a full window is a problem with the nearest available windows.
+func TestPlaceOrderCarriesTheWindowAndOffersAlternatives(t *testing.T) {
+	start := time.Date(2026, 10, 28, 17, 0, 0, 0, time.UTC)
+	alternative := applications.Window{Start: start.Add(15 * time.Minute), End: start.Add(30 * time.Minute)}
+	placeOrder := newMockPlaceOrderHandler(t)
+	placeOrder.EXPECT().Handle(mock.Anything, applications.Input{
+		RestaurantID: "restaurant-1", Lines: []applications.Line{{MenuItemID: "menu-pho", Quantity: 2}},
+		Priority: applications.PriorityPremium, IdempotencyKey: "attempt-1", DeliveryWindowStart: &start,
+	}).Return(applications.Result{Problems: []applications.Problem{
+		{Code: applications.ProblemSlotUnavailable, MenuItemIDs: []string{}, AlternativeWindows: []applications.Window{alternative}},
+	}}, nil).Once()
+	svc, ctx := checkoutService(t, placeOrder)
+	request := placeOrderRequest()
+	request.Input.Priority = service.OrderPriority_ORDER_PRIORITY_PREMIUM
+	request.Input.DeliveryWindowStart = wrapperspb.String("2026-10-28T17:00:00Z")
+
+	response, err := svc.MutationPlaceOrder(ctx, request)
+
+	require.NoError(t, err)
+	problems := response.GetPlaceOrder().GetProblems()
+	require.Len(t, problems, 1)
+	assert.Equal(t, service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_SLOT_UNAVAILABLE, problems[0].GetCode())
+	assert.Equal(t, []*service.DeliveryWindow{{Start: "2026-10-28T17:15:00Z", End: "2026-10-28T17:30:00Z", Available: true}}, problems[0].GetAlternativeWindows())
+
+	request.Input.DeliveryWindowStart = wrapperspb.String("tonight")
+	_, err = svc.MutationPlaceOrder(ctx, request)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// AC-927: a scheduled order waiting for its start is SCHEDULED with its window.
+func TestPlacedScheduledOrderShowsTheWindow(t *testing.T) {
+	start := time.Date(2026, 10, 28, 17, 0, 0, 0, time.UTC)
+	placeOrder := newMockPlaceOrderHandler(t)
+	placeOrder.EXPECT().Handle(mock.Anything, mock.Anything).Return(applications.Result{Order: &tracking.OrderView{
+		ID: "order-1", Status: tracking.StatusScheduled, PlacedAt: start.Add(-2 * time.Hour), Priority: tracking.PriorityStandard,
+		Restaurant:     tracking.Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true},
+		Total:          tracking.Money{Amount: "19.00", Currency: "EUR"},
+		DeliveryWindow: &tracking.DeliveryWindow{Start: start, End: start.Add(15 * time.Minute)},
+	}}, nil).Once()
+	svc, ctx := checkoutService(t, placeOrder)
+
+	response, err := svc.MutationPlaceOrder(ctx, placeOrderRequest())
+
+	require.NoError(t, err)
+	order := response.GetPlaceOrder().GetOrder()
+	assert.Equal(t, service.OrderStatus_ORDER_STATUS_SCHEDULED, order.GetStatus())
+	assert.Equal(t, &service.OrderDeliveryWindow{Start: "2026-10-28T17:00:00Z", End: "2026-10-28T17:15:00Z"}, order.GetDeliveryWindow())
 }

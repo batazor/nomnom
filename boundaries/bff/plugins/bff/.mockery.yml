@@ -6,6 +6,7 @@ packages:
       MenuBatchReader: {}
       RestaurantLister: {}
       RestaurantReader: {}
+      SlotReader: {}
   github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications:
     interfaces:
       OrderPlacer: {}
@@ -32,7 +33,9 @@ packages:
       OrderReader: {}
   github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications:
     interfaces:
+      OpeningHoursSetter: {}
       OwnedRestaurantLister: {}
+      RestaurantViews: {}
   github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications:
     interfaces:
       Simulator: {}
@@ -51,10 +54,12 @@ packages:
       kitchenActionHandler: {}
       listCustomerOrdersHandler: {}
       listRestaurantsHandler: {}
+      listScheduledSlotsHandler: {}
       openingHandler: {}
       ownedRestaurantsHandler: {}
       placeOrderHandler: {}
       requestCancellationHandler: {}
+      setOpeningHoursHandler: {}
       setAvailabilityHandler: {}
       setSimulatorEnabledHandler: {}
       startNextPreparationHandler: {}

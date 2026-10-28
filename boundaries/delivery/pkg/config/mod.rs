@@ -1,5 +1,7 @@
 pub mod database;
+mod estimate;
 mod infrastructure;
+mod kafka;
 mod load;
 mod simulator;
 mod tracking;
@@ -9,12 +11,20 @@ use std::time::Duration;
 use config::ConfigError;
 use serde::Deserialize;
 
+pub use estimate::{
+    DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
+    DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig,
+};
 pub use infrastructure::{OffersConfig, ReconcilerConfig, SpiceDbConfig};
+pub use kafka::{
+    InitialOffset, KAFKA_BROKERS_ENV, KAFKA_CONSUMER_GROUP_ENV, KAFKA_INITIAL_OFFSET_ENV,
+    KafkaConfig,
+};
 pub use load::load;
 #[cfg(test)]
 use load::{
-    configure_identity, configure_reconciler, configure_settings, configure_simulator,
-    configure_spicedb, configure_tracking, load_from,
+    configure_delivery_estimate, configure_identity, configure_kafka, configure_reconciler,
+    configure_settings, configure_simulator, configure_spicedb, configure_tracking, load_from,
 };
 pub use simulator::{
     SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV,
@@ -198,6 +208,8 @@ pub struct AppConfig {
     pub simulator: SimulatorConfig,
     pub tracking: TrackingConfig,
     pub valkey: ValkeyConfig,
+    pub kafka: KafkaConfig,
+    pub delivery_estimate: DeliveryEstimateConfig,
 }
 
 impl ShutdownConfig {

@@ -44,6 +44,7 @@ type PlaceOrderVariables = {
     items: { menuItemId: string; quantity: number }[];
     idempotencyKey: string;
     priority: string;
+    deliveryWindowStart?: string;
   };
 };
 
@@ -86,7 +87,121 @@ function cartLine(name: string) {
   return line;
 }
 
+// Windows of the checkout, by their radio inputs.
+function windowRadios() {
+  const windows = screen.getByRole("group", { name: "Окно доставки" });
+  return within(windows).getAllByRole("radio");
+}
+
 describe("place order", () => {
+  // AC-929: «Ко времени» lists the windows by day in the Market time; a full
+  // one is visible but cannot be chosen; PREMIUM goes with a window too.
+  it("places a scheduled order for the chosen window with priority", async () => {
+    storeCart([{ menuItemId: "menu-bao", quantity: 1 }]);
+    const requests = recordPlaceOrder();
+    const user = await openCheckout();
+
+    expect(
+      screen.queryByRole("group", { name: "Окно доставки" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Ко времени" }));
+    const radios = windowRadios();
+    expect(radios.length).toBeGreaterThan(3);
+    expect(radios[2]).toBeDisabled();
+    expect(radios[2].closest("label")).toHaveTextContent(/занято/);
+    expect(radios[0].closest("label")).toHaveTextContent(
+      /^\d\d:\d\d–\d\d:\d\d$/,
+    );
+    await user.click(radios[0]);
+    await user.click(
+      screen.getByRole("checkbox", { name: /Приоритет — приготовим первым/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+
+    expect(
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
+    ).toBeInTheDocument();
+    expect(requests).toEqual([
+      expect.objectContaining({
+        priority: "PREMIUM",
+        deliveryWindowStart: (radios[0] as HTMLInputElement).value,
+      }),
+    ]);
+  });
+
+  it("asks for a window before sending a scheduled order", async () => {
+    storeCart([{ menuItemId: "menu-bao", quantity: 1 }]);
+    const requests = recordPlaceOrder();
+    const user = await openCheckout();
+
+    await user.click(screen.getByRole("radio", { name: "Ко времени" }));
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Выберите окно доставки.",
+    );
+    expect(requests).toEqual([]);
+  });
+
+  // AC-928: a window taken meanwhile offers the nearest free ones; the cart
+  // stays and the next attempt goes for the chosen alternative.
+  it("offers the alternatives of a full window without clearing the cart", async () => {
+    storeCart([{ menuItemId: "menu-bao", quantity: 1 }]);
+    const user = await openCheckout();
+    await user.click(screen.getByRole("radio", { name: "Ко времени" }));
+    const [first, second, , fourth] = windowRadios() as HTMLInputElement[];
+    mockServer.use(
+      publicGraphql.mutation("PlaceOrder", () =>
+        HttpResponse.json({
+          data: {
+            placeOrder: {
+              order: null,
+              problems: [
+                {
+                  code: "SLOT_UNAVAILABLE",
+                  menuItemIds: [],
+                  alternativeWindows: [second, fourth].map((radio) => ({
+                    start: radio.value,
+                    end: new Date(
+                      Date.parse(radio.value) + 15 * 60_000,
+                    ).toISOString(),
+                    available: true,
+                  })),
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    );
+    // Recorded first, then answered by the refusal above.
+    const requests = recordPlaceOrder();
+    await user.click(first);
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/Это окно уже заняли/);
+    expect(cartLine("Бао с грибами")).toBeVisible();
+    const alternatives = within(alert).getAllByRole("button");
+    expect(alternatives).toHaveLength(2);
+
+    mockServer.resetHandlers();
+    const retried = recordPlaceOrder();
+    await user.click(alternatives[1]);
+    expect(fourth).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+
+    expect(
+      await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ }),
+    ).toBeInTheDocument();
+    expect(requests.map((request) => request.deliveryWindowStart)).toEqual([
+      first.value,
+    ]);
+    expect(retried.map((request) => request.deliveryWindowStart)).toEqual([
+      fourth.value,
+    ]);
+  });
+
   it("places the cart and shows the placed order on the board", async () => {
     storeCart([
       { menuItemId: "menu-tom-yum", quantity: 2 },
@@ -226,7 +341,11 @@ describe("place order", () => {
             placeOrder: {
               order: null,
               problems: [
-                { code: "RESTAURANT_NOT_ACCEPTING_ORDERS", menuItemIds: [] },
+                {
+                  code: "RESTAURANT_NOT_ACCEPTING_ORDERS",
+                  menuItemIds: [],
+                  alternativeWindows: [],
+                },
               ],
             },
           },
@@ -271,6 +390,38 @@ describe("place order", () => {
       "Войдите, чтобы оформить заказ. Корзина сохранится.",
     );
     expect(cartLine("Бао с грибами")).toBeVisible();
+  });
+
+  it("tells why the button waits while the order is sent", async () => {
+    storeCart([{ menuItemId: "menu-bao", quantity: 1 }]);
+    let answer: () => void = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    mockServer.use(
+      publicGraphql.mutation("PlaceOrder", async () => {
+        await answered;
+        return HttpResponse.error();
+      }),
+    );
+    const user = await openCheckout();
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+    const checkout = within(screen.getByRole("form", { name: "Доставка" }));
+
+    expect(checkout.getByRole("status")).toHaveTextContent(
+      /ресторан сверяет блюда и цены/,
+    );
+    expect(
+      await checkout.findByText(/Ответ задерживается/, undefined, {
+        timeout: 4000,
+      }),
+    ).toBeVisible();
+    answer();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Не удалось отправить заказ/,
+    );
+    expect(checkout.getByRole("status")).toHaveTextContent("");
   });
 
   it("retries by hand with the same idempotency key", async () => {

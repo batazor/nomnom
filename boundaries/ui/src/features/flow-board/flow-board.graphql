@@ -37,9 +37,30 @@ fragment KitchenBoardView on Kitchen {
       id
       name
     }
+    # Window of an incoming scheduled order (FR-688).
+    deliveryWindow {
+      start
+      end
+    }
   }
   cookPool {
     ...CookPoolView
+  }
+  # Accepted scheduled orders waiting for their start; at the start one moves
+  # to orders as QUEUED with kitchenChanged (FR-688).
+  scheduledOrders {
+    id
+    orderId
+    items {
+      name
+      quantity
+    }
+    priority
+    deliveryWindow {
+      start
+      end
+    }
+    plannedReadyAt
   }
 }
 

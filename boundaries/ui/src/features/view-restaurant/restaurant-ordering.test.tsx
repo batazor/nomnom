@@ -258,6 +258,28 @@ describe("view restaurant", () => {
     ).toBeDisabled();
   });
 
+  // AC-952: opened by its owner but before its hours — when it opens on its
+  // own clock, the menu to look at, no ordering.
+  it("says when a restaurant outside its hours opens", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-28T05:20:00Z"));
+    try {
+      renderRestaurant("restaurant-sunrise-bakery");
+
+      expect(await screen.findByText("Откроется в 08:00")).toBeVisible();
+      expect(
+        screen.getByRole("button", {
+          name: "Добавить в корзину: Булочка с корицей",
+        }),
+      ).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Оформить заказ" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says when the menu is not published yet", async () => {
     renderRestaurant("restaurant-corner-coffee");
     expect(

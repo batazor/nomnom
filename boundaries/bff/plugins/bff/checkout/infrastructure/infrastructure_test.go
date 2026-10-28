@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
@@ -141,4 +143,38 @@ func TestPlaceOrderCarriesPremiumAndNamesItsRefusal(t *testing.T) {
 	server = &ordersServer{err: refusal(codes.FailedPrecondition, "PREMIUM_UNAVAILABLE", nil)}
 	_, err = connect(t, server).PlaceOrder(customerContext(), premium)
 	assert.Equal(t, applications.PlacementRefused{Reason: "PREMIUM_UNAVAILABLE"}, err)
+}
+
+// FR-681: a scheduled checkout carries the start of the window, PREMIUM with it;
+// SLOT_UNAVAILABLE carries the alternatives of its SlotUnavailable detail.
+func TestPlaceOrderCarriesTheWindowAndReadsTheAlternatives(t *testing.T) {
+	start := time.Date(2026, 10, 28, 17, 0, 0, 0, time.UTC)
+	scheduled := input
+	scheduled.Priority = applications.PriorityPremium
+	scheduled.DeliveryWindowStart = &start
+	server := &ordersServer{}
+	_, err := connect(t, server).PlaceOrder(customerContext(), scheduled)
+	require.NoError(t, err)
+	assert.Equal(t, start, server.got.GetDeliveryWindowStart().AsTime())
+	assert.Equal(t, ordersv1.OrderPriority_ORDER_PRIORITY_PREMIUM, server.got.GetPriority())
+
+	asap := &ordersServer{}
+	_, err = connect(t, asap).PlaceOrder(customerContext(), input)
+	require.NoError(t, err)
+	assert.Nil(t, asap.got.GetDeliveryWindowStart(), "an ASAP order has no window")
+
+	st, _ := status.New(codes.FailedPrecondition, "slot unavailable").WithDetails(
+		&errdetails.ErrorInfo{Reason: "SLOT_UNAVAILABLE", Domain: "nomnom.orders.v1"},
+		&ordersv1.SlotUnavailable{Alternatives: []*ordersv1.DeliveryWindow{{
+			Start: timestamppb.New(start.Add(15 * time.Minute)), End: timestamppb.New(start.Add(30 * time.Minute)),
+		}}},
+	)
+	_, err = connect(t, &ordersServer{err: st.Err()}).PlaceOrder(customerContext(), scheduled)
+	assert.Equal(t, applications.PlacementRefused{
+		Reason:       "SLOT_UNAVAILABLE",
+		Alternatives: []applications.Window{{Start: start.Add(15 * time.Minute), End: start.Add(30 * time.Minute)}},
+	}, err)
+
+	_, err = connect(t, &ordersServer{err: refusal(codes.FailedPrecondition, "SCHEDULED_ORDERS_UNAVAILABLE", nil)}).PlaceOrder(customerContext(), scheduled)
+	assert.Equal(t, applications.PlacementRefused{Reason: "SCHEDULED_ORDERS_UNAVAILABLE"}, err)
 }

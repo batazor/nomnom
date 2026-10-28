@@ -34,3 +34,26 @@ func (s *BffService) QueryRestaurant(ctx context.Context, request *service.Query
 	}
 	return &service.QueryRestaurantResponse{Restaurant: restaurantWithMenu(view)}, nil
 }
+
+// ResolveRestaurantScheduledSlots resolves Restaurant.scheduledSlots of every
+// restaurant of the response in the order of the context; public like the
+// catalog. Only a query that asks for the field reads the windows.
+func (s *BffService) ResolveRestaurantScheduledSlots(ctx context.Context, request *service.ResolveRestaurantScheduledSlotsRequest) (*service.ResolveRestaurantScheduledSlotsResponse, error) {
+	restaurantIDs := make([]string, 0, len(request.GetContext()))
+	for _, restaurant := range request.GetContext() {
+		restaurantIDs = append(restaurantIDs, restaurant.GetId())
+	}
+	slots, err := s.catalog.listScheduledSlots.Handle(ctx, restaurantIDs)
+	if err != nil {
+		return nil, internalError("scheduledSlots", err)
+	}
+	response := &service.ResolveRestaurantScheduledSlotsResponse{Result: make([]*service.ResolveRestaurantScheduledSlotsResult, 0, len(slots))}
+	for _, windows := range slots {
+		result := &service.ResolveRestaurantScheduledSlotsResult{ScheduledSlots: make([]*service.DeliveryWindow, 0, len(windows))}
+		for _, slot := range windows {
+			result.ScheduledSlots = append(result.ScheduledSlots, deliveryWindowMessage(slot))
+		}
+		response.Result = append(response.Result, result)
+	}
+	return response, nil
+}

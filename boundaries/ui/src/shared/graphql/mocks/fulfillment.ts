@@ -32,6 +32,12 @@ type KitchenOrder = {
   cookId?: string;
   // Request of startNextPreparation that started the order.
   startRequestId?: string;
+  // Delivery window of a scheduled order (FR-683).
+  deliveryWindow?: { start: string; end: string };
+  // An accepted scheduled order waits for its start off the queue: it is
+  // queued at startAt to be ready at plannedReadyAt (FR-684).
+  waitingUntil?: string;
+  plannedReadyAt?: string;
 };
 
 type MockCook = {
@@ -207,7 +213,9 @@ export function createFulfillment({
       busy: cooks.filter((cook) => cook.currentKitchenOrderId !== null).length,
       queued: [...kitchenOrders.values()].filter(
         (order) =>
-          order.restaurantId === restaurantId && order.stage === "QUEUED",
+          order.restaurantId === restaurantId &&
+          order.stage === "QUEUED" &&
+          !waiting(order),
       ).length,
       cooks,
     };
@@ -288,12 +296,13 @@ export function createFulfillment({
 
   function received(order: MockOrder, stage: KitchenOrderStage = "RECEIVED") {
     const id = `kitchen-${order.id}`;
-    const kitchenOrder = {
+    const kitchenOrder: KitchenOrder = {
       id,
       orderId: order.id,
       restaurantId: order.restaurant.id,
       stage,
       receivedAt: order.placedAt,
+      ...(order.deliveryWindow ? { deliveryWindow: order.deliveryWindow } : {}),
     };
     kitchenOrders.set(id, kitchenOrder);
     if (holdingStages.has(stage)) assignCook(kitchenOrder);
@@ -322,6 +331,24 @@ export function createFulfillment({
     if (order.status === "PREPARING") received(order, "PREPARING");
   }
 
+  // Scheduled orders whose start has come join the queue, like
+  // QueueRestaurantOrder at start_at; the customer order stays SCHEDULED
+  // until preparation starts (FR-685).
+  function startDue() {
+    const now = clock().toISOString();
+    for (const order of kitchenOrders.values()) {
+      if (order.waitingUntil !== undefined && order.waitingUntil <= now) {
+        order.queuedAt = order.waitingUntil;
+        order.waitingUntil = undefined;
+        createDelivery(order);
+      }
+    }
+  }
+
+  function waiting(order: KitchenOrder): boolean {
+    return order.waitingUntil !== undefined;
+  }
+
   // Acceptance confirms the customer order and names its readiness, so the
   // kitchen reads both from it, delays included (FR-609, FR-611); before
   // Acceptance there is neither.
@@ -347,16 +374,39 @@ export function createFulfillment({
       expectedReadyAt: accepted ? placed.expectedReadyAt : null,
       cook: cook ? cookView(cook) : null,
       priority: placed.priority,
+      deliveryWindow: order.deliveryWindow ?? null,
+    };
+  }
+
+  function scheduledView(order: KitchenOrder) {
+    const placed = orders.get(order.orderId);
+    if (!placed || !order.deliveryWindow || !order.plannedReadyAt) {
+      throw new Error(`Scheduled order ${order.orderId} not found`);
+    }
+    return {
+      id: order.id,
+      orderId: order.orderId,
+      items: placed.items.map((item) => ({
+        name: item.menuItem.name,
+        quantity: item.quantity,
+      })),
+      priority: placed.priority,
+      deliveryWindow: order.deliveryWindow,
+      plannedReadyAt: order.plannedReadyAt,
     };
   }
 
   function kitchen(restaurantId: string) {
     const found = restaurant(restaurantId);
     if (!found) return null;
+    startDue();
     // QUEUED orders in the order of the Kitchen Queue, like the BFF.
     const queue = queueOf(restaurantId);
-    const active = [...kitchenOrders.values()]
-      .filter((order) => order.restaurantId === restaurantId)
+    const own = [...kitchenOrders.values()].filter(
+      (order) => order.restaurantId === restaurantId,
+    );
+    const active = own
+      .filter((order) => !waiting(order))
       .sort(
         (a, b) =>
           stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage) ||
@@ -368,6 +418,11 @@ export function createFulfillment({
       restaurant: restaurantSummary(found),
       orders: active.map(kitchenView),
       cookPool: cookPool(restaurantId),
+      // Waiting for their start by plannedReadyAt, like ListScheduledOrders.
+      scheduledOrders: own
+        .filter(waiting)
+        .map(scheduledView)
+        .sort((a, b) => a.plannedReadyAt.localeCompare(b.plannedReadyAt)),
     };
   }
 
@@ -402,6 +457,21 @@ export function createFulfillment({
       return { order: kitchenView(order), problem: "ORDER_STAGE_CONFLICT" };
     }
     order.stage = to;
+    if (action === "ACCEPT" && order.deliveryWindow) {
+      // The plan of a scheduled order: ready a delivery before the window,
+      // queued a preparation before that (FR-677). The kitchen names no time.
+      const plannedReadyAt =
+        Date.parse(order.deliveryWindow.start) - deliveryMs;
+      order.plannedReadyAt = new Date(plannedReadyAt).toISOString();
+      order.waitingUntil = new Date(
+        plannedReadyAt - preparationMs,
+      ).toISOString();
+      advanceOrder(order.orderId, "SCHEDULED", "CONFIRMED", {
+        expectedReadyAt: order.plannedReadyAt,
+      });
+      startDue();
+      return { order: null, problem: null };
+    }
     if (action === "ACCEPT") {
       order.queuedAt = clock().toISOString();
       advanceOrder(order.orderId, "CONFIRMED", "CONFIRMED", {
@@ -423,7 +493,9 @@ export function createFulfillment({
     return [...kitchenOrders.values()]
       .filter(
         (order) =>
-          order.restaurantId === restaurantId && order.stage === "QUEUED",
+          order.restaurantId === restaurantId &&
+          order.stage === "QUEUED" &&
+          !waiting(order),
       )
       .sort(
         (a, b) =>
@@ -443,6 +515,7 @@ export function createFulfillment({
         order.startRequestId === requestId,
     );
     if (repeated) return { order: kitchenView(repeated), problem: null };
+    startDue();
     const [head] = queueOf(restaurantId);
     if (!head) return { order: null, problem: null };
     if (!assignCook(head)) return { order: null, problem: "NO_COOK_AVAILABLE" };

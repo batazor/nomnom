@@ -624,6 +624,29 @@ button.board-card-head {
   color: var(--color-warning);
 }
 
+/* FR-688: a scheduled order shows its delivery window. */
+.board-badge[data-scheduled="true"] {
+  background: var(--color-primary-soft);
+  color: var(--color-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scheduled orders waiting for their start, between incoming and the queue. */
+.board-scheduled-section {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-control);
+}
+
+.board-scheduled-title {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
 .board-take-next {
   display: grid;
   gap: var(--space-2);

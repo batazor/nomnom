@@ -9,6 +9,8 @@ package restaurantsv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -32,9 +34,26 @@ type Restaurant struct {
 	WaitTime *RestaurantWaitTime `protobuf:"bytes,6,opt,name=wait_time,json=waitTime,proto3" json:"wait_time,omitempty"`
 	// Fee of Premium Priority in the currency of the restaurant (FR-202); unset
 	// when the restaurant offers no premium.
-	PremiumFee    *Money `protobuf:"bytes,7,opt,name=premium_fee,json=premiumFee,proto3" json:"premium_fee,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PremiumFee *Money `protobuf:"bytes,7,opt,name=premium_fee,json=premiumFee,proto3" json:"premium_fee,omitempty"`
+	// IANA time zone of the restaurant (FR-201); immutable.
+	TimeZone string `protobuf:"bytes,8,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
+	// Weekly opening hours on the wall clock of the restaurant (FR-696); empty
+	// when no schedule is set: the restaurant then accepts no orders.
+	OpeningHours []*OpeningInterval `protobuf:"bytes,9,rep,name=opening_hours,json=openingHours,proto3" json:"opening_hours,omitempty"`
+	// Opened by OpenRestaurant and inside the schedule at the time of the read
+	// (FR-699). Set by GetRestaurant, BatchGetRestaurants and ListRestaurants.
+	AcceptingOrders bool `protobuf:"varint,10,opt,name=accepting_orders,json=acceptingOrders,proto3" json:"accepting_orders,omitempty"`
+	// Start of the next schedule period; set only when the restaurant is opened
+	// by the flag and outside its schedule (FR-204).
+	NextOpeningAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=next_opening_at,json=nextOpeningAt,proto3" json:"next_opening_at,omitempty"`
+	// Scheduled orders of the restaurant (FR-672); unset when it takes none.
+	ScheduledOrders *ScheduledOrderSettings `protobuf:"bytes,12,opt,name=scheduled_orders,json=scheduledOrders,proto3" json:"scheduled_orders,omitempty"`
+	// Baseline preparation time of the Wait Time Statistics (median, or the
+	// configured preparation time until the sample is full). Set by
+	// GetRestaurant, BatchGetRestaurants and ListRestaurants.
+	BaselinePreparation *durationpb.Duration `protobuf:"bytes,13,opt,name=baseline_preparation,json=baselinePreparation,proto3" json:"baseline_preparation,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Restaurant) Reset() {
@@ -109,6 +128,230 @@ func (x *Restaurant) GetPremiumFee() *Money {
 	return nil
 }
 
+func (x *Restaurant) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
+	}
+	return ""
+}
+
+func (x *Restaurant) GetOpeningHours() []*OpeningInterval {
+	if x != nil {
+		return x.OpeningHours
+	}
+	return nil
+}
+
+func (x *Restaurant) GetAcceptingOrders() bool {
+	if x != nil {
+		return x.AcceptingOrders
+	}
+	return false
+}
+
+func (x *Restaurant) GetNextOpeningAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextOpeningAt
+	}
+	return nil
+}
+
+func (x *Restaurant) GetScheduledOrders() *ScheduledOrderSettings {
+	if x != nil {
+		return x.ScheduledOrders
+	}
+	return nil
+}
+
+func (x *Restaurant) GetBaselinePreparation() *durationpb.Duration {
+	if x != nil {
+		return x.BaselinePreparation
+	}
+	return nil
+}
+
+// Settings of scheduled orders, set together (FR-672, FR-703).
+type ScheduledOrderSettings struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Scheduled orders per delivery window, > 0.
+	SlotCapacity int32 `protobuf:"varint,1,opt,name=slot_capacity,json=slotCapacity,proto3" json:"slot_capacity,omitempty"`
+	// The first window of a period starts no earlier than opens_at + opening_lead.
+	OpeningLead *durationpb.Duration `protobuf:"bytes,2,opt,name=opening_lead,json=openingLead,proto3" json:"opening_lead,omitempty"`
+	// The last window of a period starts no later than closes_at + closing_grace.
+	ClosingGrace  *durationpb.Duration `protobuf:"bytes,3,opt,name=closing_grace,json=closingGrace,proto3" json:"closing_grace,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScheduledOrderSettings) Reset() {
+	*x = ScheduledOrderSettings{}
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScheduledOrderSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScheduledOrderSettings) ProtoMessage() {}
+
+func (x *ScheduledOrderSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScheduledOrderSettings.ProtoReflect.Descriptor instead.
+func (*ScheduledOrderSettings) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ScheduledOrderSettings) GetSlotCapacity() int32 {
+	if x != nil {
+		return x.SlotCapacity
+	}
+	return 0
+}
+
+func (x *ScheduledOrderSettings) GetOpeningLead() *durationpb.Duration {
+	if x != nil {
+		return x.OpeningLead
+	}
+	return nil
+}
+
+func (x *ScheduledOrderSettings) GetClosingGrace() *durationpb.Duration {
+	if x != nil {
+		return x.ClosingGrace
+	}
+	return nil
+}
+
+// Delivery window [start, end) of a scheduled order.
+type DeliveryWindow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliveryWindow) Reset() {
+	*x = DeliveryWindow{}
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliveryWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliveryWindow) ProtoMessage() {}
+
+func (x *DeliveryWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliveryWindow.ProtoReflect.Descriptor instead.
+func (*DeliveryWindow) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DeliveryWindow) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *DeliveryWindow) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+// One interval of the weekly schedule (FR-696). closes <= opens closes on the
+// next day.
+type OpeningInterval struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ISO day of week: 1 Monday … 7 Sunday.
+	DayOfWeek int32 `protobuf:"varint,1,opt,name=day_of_week,json=dayOfWeek,proto3" json:"day_of_week,omitempty"`
+	// Local time "HH:MM".
+	Opens string `protobuf:"bytes,2,opt,name=opens,proto3" json:"opens,omitempty"`
+	// Local time "HH:MM".
+	Closes        string `protobuf:"bytes,3,opt,name=closes,proto3" json:"closes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpeningInterval) Reset() {
+	*x = OpeningInterval{}
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpeningInterval) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpeningInterval) ProtoMessage() {}
+
+func (x *OpeningInterval) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpeningInterval.ProtoReflect.Descriptor instead.
+func (*OpeningInterval) Descriptor() ([]byte, []int) {
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OpeningInterval) GetDayOfWeek() int32 {
+	if x != nil {
+		return x.DayOfWeek
+	}
+	return 0
+}
+
+func (x *OpeningInterval) GetOpens() string {
+	if x != nil {
+		return x.Opens
+	}
+	return ""
+}
+
+func (x *OpeningInterval) GetCloses() string {
+	if x != nil {
+		return x.Closes
+	}
+	return ""
+}
+
 // Wait for a new order of the restaurant (Wait Time Statistics, FR-645).
 type RestaurantWaitTime struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -122,7 +365,7 @@ type RestaurantWaitTime struct {
 
 func (x *RestaurantWaitTime) Reset() {
 	*x = RestaurantWaitTime{}
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -134,7 +377,7 @@ func (x *RestaurantWaitTime) String() string {
 func (*RestaurantWaitTime) ProtoMessage() {}
 
 func (x *RestaurantWaitTime) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[1]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -147,7 +390,7 @@ func (x *RestaurantWaitTime) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestaurantWaitTime.ProtoReflect.Descriptor instead.
 func (*RestaurantWaitTime) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{1}
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RestaurantWaitTime) GetElevated() bool {
@@ -175,7 +418,7 @@ type Money struct {
 
 func (x *Money) Reset() {
 	*x = Money{}
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -187,7 +430,7 @@ func (x *Money) String() string {
 func (*Money) ProtoMessage() {}
 
 func (x *Money) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[2]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -200,7 +443,7 @@ func (x *Money) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Money.ProtoReflect.Descriptor instead.
 func (*Money) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{2}
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Money) GetAmount() string {
@@ -231,7 +474,7 @@ type MenuItem struct {
 
 func (x *MenuItem) Reset() {
 	*x = MenuItem{}
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[3]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +486,7 @@ func (x *MenuItem) String() string {
 func (*MenuItem) ProtoMessage() {}
 
 func (x *MenuItem) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[3]
+	mi := &file_nomnom_restaurants_v1_restaurants_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +499,7 @@ func (x *MenuItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuItem.ProtoReflect.Descriptor instead.
 func (*MenuItem) Descriptor() ([]byte, []int) {
-	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{3}
+	return file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MenuItem) GetMenuItemId() string {
@@ -298,7 +541,7 @@ var File_nomnom_restaurants_v1_restaurants_proto protoreflect.FileDescriptor
 
 const file_nomnom_restaurants_v1_restaurants_proto_rawDesc = "" +
 	"\n" +
-	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\"\x91\x02\n" +
+	"'nomnom/restaurants/v1/restaurants.proto\x12\x15nomnom.restaurants.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x92\x05\n" +
 	"\n" +
 	"Restaurant\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x12\n" +
@@ -307,7 +550,25 @@ const file_nomnom_restaurants_v1_restaurants_proto_rawDesc = "" +
 	"\tmarket_id\x18\x05 \x01(\tR\bmarketId\x12F\n" +
 	"\twait_time\x18\x06 \x01(\v2).nomnom.restaurants.v1.RestaurantWaitTimeR\bwaitTime\x12=\n" +
 	"\vpremium_fee\x18\a \x01(\v2\x1c.nomnom.restaurants.v1.MoneyR\n" +
-	"premiumFeeJ\x04\b\x04\x10\x05R\aaddress\"d\n" +
+	"premiumFee\x12\x1b\n" +
+	"\ttime_zone\x18\b \x01(\tR\btimeZone\x12K\n" +
+	"\ropening_hours\x18\t \x03(\v2&.nomnom.restaurants.v1.OpeningIntervalR\fopeningHours\x12)\n" +
+	"\x10accepting_orders\x18\n" +
+	" \x01(\bR\x0facceptingOrders\x12B\n" +
+	"\x0fnext_opening_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\rnextOpeningAt\x12X\n" +
+	"\x10scheduled_orders\x18\f \x01(\v2-.nomnom.restaurants.v1.ScheduledOrderSettingsR\x0fscheduledOrders\x12L\n" +
+	"\x14baseline_preparation\x18\r \x01(\v2\x19.google.protobuf.DurationR\x13baselinePreparationJ\x04\b\x04\x10\x05R\aaddress\"\xbb\x01\n" +
+	"\x16ScheduledOrderSettings\x12#\n" +
+	"\rslot_capacity\x18\x01 \x01(\x05R\fslotCapacity\x12<\n" +
+	"\fopening_lead\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\vopeningLead\x12>\n" +
+	"\rclosing_grace\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\fclosingGrace\"p\n" +
+	"\x0eDeliveryWindow\x120\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"_\n" +
+	"\x0fOpeningInterval\x12\x1e\n" +
+	"\vday_of_week\x18\x01 \x01(\x05R\tdayOfWeek\x12\x14\n" +
+	"\x05opens\x18\x02 \x01(\tR\x05opens\x12\x16\n" +
+	"\x06closes\x18\x03 \x01(\tR\x06closes\"d\n" +
 	"\x12RestaurantWaitTime\x12\x1a\n" +
 	"\belevated\x18\x01 \x01(\bR\belevated\x122\n" +
 	"\x15expected_wait_minutes\x18\x02 \x01(\x05R\x13expectedWaitMinutes\";\n" +
@@ -335,22 +596,35 @@ func file_nomnom_restaurants_v1_restaurants_proto_rawDescGZIP() []byte {
 	return file_nomnom_restaurants_v1_restaurants_proto_rawDescData
 }
 
-var file_nomnom_restaurants_v1_restaurants_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_nomnom_restaurants_v1_restaurants_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_nomnom_restaurants_v1_restaurants_proto_goTypes = []any{
-	(*Restaurant)(nil),         // 0: nomnom.restaurants.v1.Restaurant
-	(*RestaurantWaitTime)(nil), // 1: nomnom.restaurants.v1.RestaurantWaitTime
-	(*Money)(nil),              // 2: nomnom.restaurants.v1.Money
-	(*MenuItem)(nil),           // 3: nomnom.restaurants.v1.MenuItem
+	(*Restaurant)(nil),             // 0: nomnom.restaurants.v1.Restaurant
+	(*ScheduledOrderSettings)(nil), // 1: nomnom.restaurants.v1.ScheduledOrderSettings
+	(*DeliveryWindow)(nil),         // 2: nomnom.restaurants.v1.DeliveryWindow
+	(*OpeningInterval)(nil),        // 3: nomnom.restaurants.v1.OpeningInterval
+	(*RestaurantWaitTime)(nil),     // 4: nomnom.restaurants.v1.RestaurantWaitTime
+	(*Money)(nil),                  // 5: nomnom.restaurants.v1.Money
+	(*MenuItem)(nil),               // 6: nomnom.restaurants.v1.MenuItem
+	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),    // 8: google.protobuf.Duration
 }
 var file_nomnom_restaurants_v1_restaurants_proto_depIdxs = []int32{
-	1, // 0: nomnom.restaurants.v1.Restaurant.wait_time:type_name -> nomnom.restaurants.v1.RestaurantWaitTime
-	2, // 1: nomnom.restaurants.v1.Restaurant.premium_fee:type_name -> nomnom.restaurants.v1.Money
-	2, // 2: nomnom.restaurants.v1.MenuItem.price:type_name -> nomnom.restaurants.v1.Money
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4,  // 0: nomnom.restaurants.v1.Restaurant.wait_time:type_name -> nomnom.restaurants.v1.RestaurantWaitTime
+	5,  // 1: nomnom.restaurants.v1.Restaurant.premium_fee:type_name -> nomnom.restaurants.v1.Money
+	3,  // 2: nomnom.restaurants.v1.Restaurant.opening_hours:type_name -> nomnom.restaurants.v1.OpeningInterval
+	7,  // 3: nomnom.restaurants.v1.Restaurant.next_opening_at:type_name -> google.protobuf.Timestamp
+	1,  // 4: nomnom.restaurants.v1.Restaurant.scheduled_orders:type_name -> nomnom.restaurants.v1.ScheduledOrderSettings
+	8,  // 5: nomnom.restaurants.v1.Restaurant.baseline_preparation:type_name -> google.protobuf.Duration
+	8,  // 6: nomnom.restaurants.v1.ScheduledOrderSettings.opening_lead:type_name -> google.protobuf.Duration
+	8,  // 7: nomnom.restaurants.v1.ScheduledOrderSettings.closing_grace:type_name -> google.protobuf.Duration
+	7,  // 8: nomnom.restaurants.v1.DeliveryWindow.start:type_name -> google.protobuf.Timestamp
+	7,  // 9: nomnom.restaurants.v1.DeliveryWindow.end:type_name -> google.protobuf.Timestamp
+	5,  // 10: nomnom.restaurants.v1.MenuItem.price:type_name -> nomnom.restaurants.v1.Money
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_restaurants_v1_restaurants_proto_init() }
@@ -364,7 +638,7 @@ func file_nomnom_restaurants_v1_restaurants_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_restaurants_v1_restaurants_proto_rawDesc), len(file_nomnom_restaurants_v1_restaurants_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

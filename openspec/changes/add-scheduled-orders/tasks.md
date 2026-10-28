@@ -32,9 +32,9 @@
 
 ## 6. BFF и UI
 
-- [ ] 6.1 BFF: клиенты `restaurants` и `orders`, `Restaurant.scheduledSlots`, `PlaceOrderInput.deliveryWindowStart`, `Order.deliveryWindow`, `OrderStatus.SCHEDULED`, problems, kitchen-query запланированных; тесты (`FR-685`, `FR-690`, `AC-927`, `AC-928`).
-- [ ] 6.2 UI покупателя: выбор окна во времени Market, приоритет и для запланированного, альтернативы при отказе, экран запланированного заказа; i18n, generated types, моки, тесты (`FR-686`, `FR-687`, `AC-929`–`AC-931`).
-- [ ] 6.3 Флоу-борд: колонка «Запланированные» (`FR-688`, `AC-932`).
+- [x] 6.1 BFF: клиенты `restaurants` и `orders`, `Restaurant.scheduledSlots`, `PlaceOrderInput.deliveryWindowStart`, `Order.deliveryWindow`, `OrderStatus.SCHEDULED`, problems, kitchen-query запланированных; тесты (`FR-685`, `FR-690`, `AC-927`, `AC-928`).
+- [x] 6.2 UI покупателя: выбор окна во времени Market, приоритет и для запланированного, альтернативы при отказе, экран запланированного заказа; i18n, generated types, моки, тесты (`FR-686`, `FR-687`, `AC-929`–`AC-931`).
+- [x] 6.3 Флоу-борд: колонка «Запланированные» (`FR-688`, `AC-932`).
 
 ## 7. ops и документация
 

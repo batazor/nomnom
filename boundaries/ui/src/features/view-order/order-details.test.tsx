@@ -86,6 +86,20 @@ describe("view order", () => {
     ).not.toBeInTheDocument();
   });
 
+  // AC-931: a scheduled order the kitchen has not started: «Запланирован»,
+  // its window in the header in the Market time, no cooking bar.
+  it("shows a scheduled order with its window and without a cooking bar", async () => {
+    renderOrder("order-scheduled");
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Запланирован" }),
+    ).toBeVisible();
+    expect(
+      await screen.findByText(/^Доставка .+, \d\d:\d\d–\d\d:\d\d$/),
+    ).toBeVisible();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
   it("labels an item that is no longer in the menu", async () => {
     const money = { amount: "690.00", currency: "RUB" };
     mockServer.use(
@@ -107,6 +121,7 @@ describe("view order", () => {
               ],
               total: money,
               placedAt: "2026-10-25T12:00:00Z",
+              deliveryWindow: null,
               milestones: [
                 { kind: "PLACED", occurredAt: "2026-10-25T12:00:00Z" },
               ],

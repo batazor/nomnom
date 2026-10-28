@@ -1,5 +1,5 @@
 // Package infrastructure adapts the restaurant management ports to the
-// OpenRestaurant, CloseRestaurant and ListOwnedRestaurants RPCs of
+// OpenRestaurant, CloseRestaurant, SetOpeningHours and ListOwnedRestaurants RPCs of
 // restaurants.v1.RestaurantsService, called through the internal gateway with
 // the service token of BFF and the user assertion of the verified user
 // (ADR 32). restaurants authorizes restaurant#manage itself.
@@ -8,11 +8,14 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	catalog "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
@@ -30,6 +33,7 @@ func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
 var (
 	_ applications.RestaurantOpener      = (*Restaurants)(nil)
 	_ applications.OwnedRestaurantLister = (*Restaurants)(nil)
+	_ applications.OpeningHoursSetter    = (*Restaurants)(nil)
 )
 
 // ListOwned keeps the user of ctx: restaurants lists only that user's
@@ -73,6 +77,51 @@ func (r *Restaurants) Close(ctx context.Context, restaurantID string) (applicati
 		return applications.OpeningResult{}, openingError("close restaurant", err)
 	}
 	return openingResult(response.GetRestaurant(), response.GetChanged()), nil
+}
+
+// SetOpeningHours keeps the user of ctx: restaurants checks restaurant#manage.
+func (r *Restaurants) SetOpeningHours(ctx context.Context, restaurantID string, hours []catalog.OpeningInterval) (bool, error) {
+	request := &restaurantsv1.SetOpeningHoursRequest{
+		RestaurantId: restaurantID,
+		OpeningHours: make([]*restaurantsv1.OpeningInterval, 0, len(hours)),
+	}
+	for _, interval := range hours {
+		request.OpeningHours = append(request.OpeningHours, &restaurantsv1.OpeningInterval{
+			DayOfWeek: int32(interval.Day), // 1..7 is checked by restaurants
+			Opens:     interval.Opens,
+			Closes:    interval.Closes,
+		})
+	}
+	response, err := r.client.SetOpeningHours(ctx, request)
+	if err != nil {
+		if invalid, ok := invalidOpeningHours(err); ok {
+			return false, invalid
+		}
+		return false, openingError("set opening hours", err)
+	}
+	return response.GetChanged(), nil
+}
+
+// invalidHoursMessage is the text of InvalidOpeningHoursError of restaurants:
+// INVALID_ARGUMENT of SetOpeningHours carries no ErrorInfo, the day and the
+// interval are only in the message.
+var invalidHoursMessage = regexp.MustCompile(`^invalid opening hours: (invalid_day|invalid_time|empty_interval|overlap) at day (-?\d+) (\S*)-(\S*)$`)
+
+// invalidOpeningHours names the offending interval of a rejected schedule.
+func invalidOpeningHours(err error) (applications.InvalidOpeningHours, bool) {
+	st := status.Convert(err)
+	if st.Code() != codes.InvalidArgument {
+		return applications.InvalidOpeningHours{}, false
+	}
+	match := invalidHoursMessage.FindStringSubmatch(st.Message())
+	if match == nil {
+		return applications.InvalidOpeningHours{}, false
+	}
+	day, err := strconv.Atoi(match[2])
+	if err != nil {
+		return applications.InvalidOpeningHours{}, false
+	}
+	return applications.InvalidOpeningHours{Reason: match[1], Day: day, Opens: match[3], Closes: match[4]}, true
 }
 
 // openingError names the refusals of restaurants; UNAVAILABLE and the rest

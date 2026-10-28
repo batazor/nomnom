@@ -26,6 +26,7 @@ function order(
     priority: "STANDARD",
     premiumFee: null,
     placedAt: "2026-10-25T12:00:00Z",
+    deliveryWindow: null,
     milestones: [
       { kind: "PLACED", occurredAt: "2026-10-25T12:00:00Z" },
       ...milestones.map(([kind, occurredAt]) => ({ kind, occurredAt })),
@@ -148,12 +149,25 @@ describe("active step deadline", () => {
     ).toBeNull();
   });
 
-  it.each(["RECEIVED", "DELIVERED", "CANCELLED", "FAILED"] as const)(
-    "has no bar for a %s order",
-    (status) => {
-      expect(
-        activeStepEta(order(status, [accepted, assigned], allDeadlines)),
-      ).toBeNull();
-    },
-  );
+  // AC-931: a scheduled order the kitchen has not started shows no cooking
+  // bar and no header deadline, though the kitchen named its ready time.
+  it.each([
+    "RECEIVED",
+    "SCHEDULED",
+    "DELIVERED",
+    "CANCELLED",
+    "FAILED",
+  ] as const)("has no bar for a %s order", (status) => {
+    expect(
+      activeStepEta(order(status, [accepted, assigned], allDeadlines)),
+    ).toBeNull();
+  });
+});
+
+describe("scheduled order", () => {
+  it("has no header deadline before the kitchen starts it", () => {
+    expect(
+      headerEta(order("SCHEDULED", [accepted], { expectedReadyAt: ready })),
+    ).toBeNull();
+  });
 });

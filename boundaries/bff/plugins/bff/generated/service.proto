@@ -63,6 +63,11 @@ service BffService {
   rpc MutationSetCourierAvailability(MutationSetCourierAvailabilityRequest) returns (MutationSetCourierAvailabilityResponse) {}
   // Put a courier on line or take them off line; repeating it changes nothing
   rpc MutationSetCourierOnLine(MutationSetCourierOnLineRequest) returns (MutationSetCourierOnLineResponse) {}
+  /*
+   * Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+   * intervals are an INVALID_ARGUMENT error naming the day and the interval
+   */
+  rpc MutationSetOpeningHours(MutationSetOpeningHoursRequest) returns (MutationSetOpeningHoursResponse) {}
   // Switch the demo Simulator in orders, restaurants and delivery; requires the operator
   rpc MutationSetSimulatorEnabled(MutationSetSimulatorEnabledRequest) returns (MutationSetSimulatorEnabledResponse) {}
   /*
@@ -100,6 +105,11 @@ service BffService {
    * three; requires the operator (platform#operate_simulator)
    */
   rpc QuerySimulator(QuerySimulatorRequest) returns (QuerySimulatorResponse) {}
+  /*
+   * Delivery windows of scheduled orders by start, available or full; empty when the
+   * restaurant takes no scheduled orders or does not accept orders now. Read only when asked
+   */
+  rpc ResolveRestaurantScheduledSlots(ResolveRestaurantScheduledSlotsRequest) returns (ResolveRestaurantScheduledSlotsResponse) {}
 }
 
 // Key message for Order entity lookup
@@ -545,6 +555,41 @@ message MutationOfferDeliveryToCourierResponse {
    */
   CourierPoolPayload offer_delivery_to_courier = 1;
 }
+/*
+ * Request message for setOpeningHours operation: Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+ * intervals are an INVALID_ARGUMENT error naming the day and the interval.
+ */
+message MutationSetOpeningHoursRequest {
+  string restaurant_id = 1;
+  repeated OpeningIntervalInput opening_hours = 2;
+}
+/*
+ * Response message for setOpeningHours operation: Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+ * intervals are an INVALID_ARGUMENT error naming the day and the interval.
+ */
+message MutationSetOpeningHoursResponse {
+  /*
+   * Replace the whole weekly opening hours of a restaurant of the current user; overlapping
+   * intervals are an INVALID_ARGUMENT error naming the day and the interval
+   */
+  SetOpeningHoursPayload set_opening_hours = 1;
+}
+message ResolveRestaurantScheduledSlotsContext {
+  string id = 1;
+}
+
+message ResolveRestaurantScheduledSlotsRequest {
+  // context provides the resolver context for the field scheduledSlots of type Restaurant.
+  repeated ResolveRestaurantScheduledSlotsContext context = 1;
+}
+
+message ResolveRestaurantScheduledSlotsResult {
+  repeated DeliveryWindow scheduled_slots = 1;
+}
+
+message ResolveRestaurantScheduledSlotsResponse {
+  repeated ResolveRestaurantScheduledSlotsResult result = 1;
+}
 
 /*
  * Order of the current customer; the entity key lets the Router resolve
@@ -596,6 +641,8 @@ message Order {
   OrderPriority priority = 16;
   // Premium fee fixed at checkout, null for a standard order
   Money premium_fee = 17;
+  // Delivery window of a scheduled order, null for an order delivered as soon as possible
+  OrderDeliveryWindow delivery_window = 18;
 }
 
 /*
@@ -632,6 +679,11 @@ message Kitchen {
    * kitchenChanged too
    */
   CookPool cook_pool = 4;
+  /*
+   * Accepted scheduled orders waiting for their start by plannedReadyAt; at the start an
+   * order moves to orders as QUEUED and kitchenChanged pushes the change
+   */
+  repeated ScheduledKitchenOrder scheduled_orders = 5;
 }
 
 /*
@@ -689,7 +741,10 @@ message Restaurant {
   string id = 1;
   // Display name
   string name = 2;
-  // Whether the restaurant accepts new orders now
+  /*
+   * Whether the restaurant accepts new orders now: opened by its owner and inside its
+   * opening hours
+   */
   bool accepting_orders = 4;
   // Current menu, null if the restaurant has not published one
   Menu menu = 5;
@@ -697,6 +752,18 @@ message Restaurant {
   RestaurantWaitTime wait_time = 6;
   // Fee of Premium Priority, null when the restaurant offers no premium
   Money premium_fee = 7;
+  // IANA time zone of the restaurant, for example "Europe/Berlin"
+  string time_zone = 8;
+  /*
+   * Weekly opening hours on the wall clock of the restaurant; empty when no schedule is
+   * set, then the restaurant accepts no orders
+   */
+  repeated OpeningInterval opening_hours = 9;
+  /*
+   * Start of the next period of the opening hours in RFC 3339; set only when the restaurant
+   * is opened by its owner and outside its opening hours now
+   */
+  google.protobuf.StringValue next_opening_at = 10;
 }
 
 message OrderSummaryConnection {
@@ -729,6 +796,11 @@ message PlaceOrderInput {
   string idempotency_key = 4;
   // STANDARD or Premium Priority; PREMIUM needs a restaurant with a premium fee
   OrderPriority priority = 5;
+  /*
+   * Start of the chosen delivery window (DeliveryWindow.start) in RFC 3339 for a scheduled
+   * order; null delivers as soon as possible
+   */
+  google.protobuf.StringValue delivery_window_start = 6;
 }
 
 message PlaceOrderPayload {
@@ -799,6 +871,26 @@ message CourierPoolPayload {
   CourierPoolProblemCode problem = 2;
 }
 
+message OpeningIntervalInput {
+  // ISO day of week: 1 Monday … 7 Sunday
+  int32 day_of_week = 1;
+  // Local opening time "HH:MM"
+  string opens = 2;
+  // Local closing time "HH:MM"; not after opens means closing on the next day
+  string closes = 3;
+}
+
+// Result of replacing the opening hours of a restaurant by its owner
+message SetOpeningHoursPayload {
+  /*
+   * Restaurant after the command, read again: acceptingOrders and nextOpeningAt follow the
+   * new opening hours
+   */
+  Restaurant restaurant = 1;
+  // False when the restaurant already had these opening hours
+  bool changed = 2;
+}
+
 // Premium Priority of an order: a premium order is prepared first
 enum OrderPriority {
   ORDER_PRIORITY_UNSPECIFIED = 0;
@@ -822,6 +914,34 @@ message PageInfo {
   bool has_next_page = 1;
   // Cursor of the last returned item, null for an empty page
   google.protobuf.StringValue end_cursor = 2;
+}
+
+// Interval of the weekly opening hours on the wall clock of the restaurant
+message OpeningInterval {
+  // ISO day of week: 1 Monday … 7 Sunday
+  int32 day_of_week = 1;
+  // Local opening time "HH:MM"
+  string opens = 2;
+  // Local closing time "HH:MM"; not after opens means closing on the next day
+  string closes = 3;
+}
+
+// Delivery window of a scheduled order a customer can choose
+message DeliveryWindow {
+  // Start of the window in RFC 3339; sent as PlaceOrderInput.deliveryWindowStart
+  string start = 1;
+  // End of the window in RFC 3339, exclusive
+  string end = 2;
+  // False when the window is full
+  bool available = 3;
+}
+
+// Delivery window chosen for a scheduled order
+message OrderDeliveryWindow {
+  // Start of the window in RFC 3339
+  string start = 1;
+  // End of the window in RFC 3339, exclusive
+  string end = 2;
 }
 
 // Restaurant outside the catalog: of an order, of a kitchen or of its owner
@@ -897,6 +1017,8 @@ enum OrderStatus {
   ORDER_STATUS_FAILED = 8;
   // Payment is authorized and the order waits for the restaurant
   ORDER_STATUS_PAID = 9;
+  // Scheduled order is confirmed and waits for the kitchen to start it for its delivery window
+  ORDER_STATUS_SCHEDULED = 10;
 }
 
 // Why an order ended without delivery
@@ -1087,6 +1209,27 @@ message KitchenOrder {
   Cook cook = 8;
   // Premium Priority of the order: premium orders are taken first
   OrderPriority priority = 9;
+  // Delivery window of a scheduled order, null for an order delivered as soon as possible
+  OrderDeliveryWindow delivery_window = 10;
+}
+
+/*
+ * Accepted scheduled order of a restaurant that waits for its start; the kitchen has no
+ * command over it
+ */
+message ScheduledKitchenOrder {
+  // Restaurant order identifier
+  string id = 1;
+  // Customer order identifier
+  string order_id = 2;
+  // Ordered items
+  repeated KitchenOrderItem items = 3;
+  // Premium Priority of the order
+  OrderPriority priority = 4;
+  // Delivery window chosen by the customer
+  OrderDeliveryWindow delivery_window = 5;
+  // Moment the kitchen has to have the order ready in RFC 3339, before the window
+  string planned_ready_at = 6;
 }
 
 // Cook of the Cook Pool of a restaurant
@@ -1260,6 +1403,10 @@ enum PlaceOrderProblemCode {
   PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS = 4;
   // Restaurant offers no Premium Priority
   PLACE_ORDER_PROBLEM_CODE_PREMIUM_UNAVAILABLE = 5;
+  // The chosen delivery window is full; alternativeWindows lists the nearest available ones
+  PLACE_ORDER_PROBLEM_CODE_SLOT_UNAVAILABLE = 6;
+  // Restaurant takes no scheduled orders or does not accept orders now
+  PLACE_ORDER_PROBLEM_CODE_SCHEDULED_ORDERS_UNAVAILABLE = 7;
 }
 
 message PlaceOrderProblem {
@@ -1267,6 +1414,8 @@ message PlaceOrderProblem {
   PlaceOrderProblemCode code = 1;
   // Menu items the problem refers to, empty if it refers to the whole order
   repeated string menu_item_ids = 2;
+  // Nearest available delivery windows, set only for SLOT_UNAVAILABLE
+  repeated DeliveryWindow alternative_windows = 3;
 }
 
 // Accepted result of a cancellation request

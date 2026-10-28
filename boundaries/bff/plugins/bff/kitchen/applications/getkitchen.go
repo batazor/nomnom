@@ -30,6 +30,10 @@ func (h GetKitchen) Handle(ctx context.Context, restaurantID string) (KitchenVie
 	if err != nil {
 		return KitchenView{}, err
 	}
+	scheduled, err := h.board.ScheduledOrders(ctx, restaurantID)
+	if err != nil {
+		return KitchenView{}, err
+	}
 	restaurant, err := h.catalog.Restaurant(ctx, restaurantID)
 	if err != nil {
 		return KitchenView{}, err
@@ -48,7 +52,18 @@ func (h GetKitchen) Handle(ctx context.Context, restaurantID string) (KitchenVie
 	for _, order := range ordered {
 		orders = append(orders, orderView(order, names, cooks))
 	}
-	return KitchenView{Restaurant: restaurant, Orders: orders, CookPool: pool}, nil
+	waiting := make([]ScheduledOrderView, 0, len(scheduled))
+	for _, order := range scheduled {
+		waiting = append(waiting, ScheduledOrderView{
+			ID:             order.ID,
+			OrderID:        order.OrderID,
+			Items:          itemViews(order.Lines, names),
+			Priority:       order.Priority,
+			DeliveryWindow: order.DeliveryWindow,
+			PlannedReadyAt: order.PlannedReadyAt,
+		})
+	}
+	return KitchenView{Restaurant: restaurant, Orders: orders, CookPool: pool, Scheduled: waiting}, nil
 }
 
 // boardOrder puts RECEIVED orders first by ReceivedAt, then the QUEUED ones in

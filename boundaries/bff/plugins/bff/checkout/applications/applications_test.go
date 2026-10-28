@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -16,6 +17,11 @@ var input = Input{
 	RestaurantID:   "restaurant-1",
 	Lines:          []Line{{MenuItemID: "menu-pho", Quantity: 2}},
 	IdempotencyKey: "attempt-1",
+}
+
+var alternative = Window{
+	Start: time.Date(2026, 10, 28, 17, 15, 0, 0, time.UTC),
+	End:   time.Date(2026, 10, 28, 17, 30, 0, 0, time.UTC),
 }
 
 // AC-570: a placed Order comes back as the order tracking view.
@@ -41,23 +47,32 @@ func TestPlaceOrderTurnsRefusalsIntoProblems(t *testing.T) {
 	}{
 		"unavailable item": {
 			PlacementRefused{Reason: "ORDER_NOT_ORDERABLE", Codes: []string{"ORDER_ITEM_UNAVAILABLE"}, MenuItemIDs: []string{"menu-gyoza"}},
-			[]Problem{{Code: ProblemOrderItemUnavailable, MenuItemIDs: []string{"menu-gyoza"}}},
+			[]Problem{{Code: ProblemOrderItemUnavailable, MenuItemIDs: []string{"menu-gyoza"}, AlternativeWindows: []Window{}}},
 		},
 		"item and total": {
 			PlacementRefused{Reason: "ORDER_NOT_ORDERABLE", Codes: []string{"ORDER_ITEM_UNAVAILABLE", "ORDER_TOTAL_BELOW_MINIMUM", "SOMETHING_NEW"}, MenuItemIDs: []string{"menu-gyoza", "menu-tea"}},
 			[]Problem{
-				{Code: ProblemOrderItemUnavailable, MenuItemIDs: []string{"menu-gyoza", "menu-tea"}},
-				{Code: ProblemOrderTotalBelowMinimum, MenuItemIDs: []string{}},
+				{Code: ProblemOrderItemUnavailable, MenuItemIDs: []string{"menu-gyoza", "menu-tea"}, AlternativeWindows: []Window{}},
+				{Code: ProblemOrderTotalBelowMinimum, MenuItemIDs: []string{}, AlternativeWindows: []Window{}},
 			},
 		},
 		"closed restaurant": {
 			PlacementRefused{Reason: "RESTAURANT_NOT_ACCEPTING_ORDERS"},
-			[]Problem{{Code: ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}}},
+			[]Problem{{Code: ProblemRestaurantNotAcceptingOrders, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}},
 		},
 		// AC-863: the restaurant offers no Premium Priority.
 		"no premium": {
 			PlacementRefused{Reason: "PREMIUM_UNAVAILABLE"},
-			[]Problem{{Code: ProblemPremiumUnavailable, MenuItemIDs: []string{}}},
+			[]Problem{{Code: ProblemPremiumUnavailable, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}},
+		},
+		// AC-928: a full window comes with the nearest available ones.
+		"full window": {
+			PlacementRefused{Reason: "SLOT_UNAVAILABLE", Alternatives: []Window{alternative}},
+			[]Problem{{Code: ProblemSlotUnavailable, MenuItemIDs: []string{}, AlternativeWindows: []Window{alternative}}},
+		},
+		"no scheduled orders": {
+			PlacementRefused{Reason: "SCHEDULED_ORDERS_UNAVAILABLE"},
+			[]Problem{{Code: ProblemScheduledOrdersUnavailable, MenuItemIDs: []string{}, AlternativeWindows: []Window{}}},
 		},
 	}
 	for name, tc := range cases {

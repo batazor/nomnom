@@ -10,7 +10,9 @@ import type { ViewedOrder } from "./use-order-updates";
 
 type Milestones = ViewedOrder["milestones"];
 
-const finalStatuses = new Set<ViewedOrder["status"]>([
+// A scheduled order waiting for its start shows its window, not a deadline.
+const withoutHeaderEta = new Set<ViewedOrder["status"]>([
+  "SCHEDULED",
   "DELIVERED",
   "CANCELLED",
   "FAILED",
@@ -32,7 +34,7 @@ export type HeaderEta = { kind: HeaderEtaKind; deadline: number };
 // The best known deadline of an order on its way: delivery, else pickup,
 // else readiness. Stages are not summed; no deadline, no line.
 export function headerEta(order: ViewedOrder): HeaderEta | null {
-  if (finalStatuses.has(order.status)) return null;
+  if (withoutHeaderEta.has(order.status)) return null;
   if (order.expectedDeliveredAt !== null) {
     return {
       kind: "delivered",
@@ -103,6 +105,8 @@ export function activeStepEta(order: ViewedOrder): StepEta | null {
         lastMoment(milestones, "PICKED_UP"),
         order.expectedDeliveredAt,
       );
+    // No cooking bar before the kitchen starts a scheduled order (FR-687).
+    case "SCHEDULED":
     case "RECEIVED":
     case "PAID":
     case "DELIVERED":

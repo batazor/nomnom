@@ -41,7 +41,14 @@ function writeMarketId(marketId: string): void {
   }
 }
 
-export type Market = Readonly<{ id: string; name: string; currency: string }>;
+// timeZone is the IANA zone of the Market: windows and deadlines of its orders
+// are shown in it, not in the zone of the browser.
+export type Market = Readonly<{
+  id: string;
+  name: string;
+  currency: string;
+  timeZone: string;
+}>;
 
 export type MarketList =
   | { kind: "loading" }
@@ -68,7 +75,8 @@ function isMarketList(body: unknown): body is { markets: Market[] } {
       (market) =>
         typeof market?.id === "string" &&
         typeof market?.name === "string" &&
-        typeof market?.currency === "string",
+        typeof market?.currency === "string" &&
+        typeof market?.timeZone === "string",
     )
   );
 }
@@ -130,4 +138,15 @@ export function useMarketSelection(): MarketSelection {
   const selection = useContext(MarketContext);
   if (!selection) throw new Error("useMarketSelection needs MarketProvider");
   return selection;
+}
+
+// Time zone of the chosen Market; null while the list of Markets loads.
+// Market-scoped screens render behind MarketGate, so a loaded list without
+// the chosen Market is a defect, not a state to show.
+export function useMarketTimeZone(): string | null {
+  const { marketId, markets } = useMarketSelection();
+  if (markets.kind !== "loaded") return null;
+  const market = markets.markets.find((candidate) => candidate.id === marketId);
+  if (!market) throw new Error("useMarketTimeZone needs a chosen Market");
+  return market.timeZone;
 }

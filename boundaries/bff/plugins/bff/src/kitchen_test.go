@@ -183,3 +183,35 @@ func TestStartNextPreparationPayload(t *testing.T) {
 	_, err = svc.MutationStartNextPreparation(ctx, &service.MutationStartNextPreparationRequest{RestaurantId: "restaurant-1"})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err), "requestId is required")
 }
+
+// AC-932: the scheduled orders are their own column with the window and the
+// planned ready time; an incoming scheduled order carries its window.
+func TestKitchenShowsTheScheduledOrders(t *testing.T) {
+	window := applications.Window{Start: kitchenReceivedAt.Add(2 * time.Hour), End: kitchenReceivedAt.Add(2*time.Hour + 15*time.Minute)}
+	incoming := received
+	incoming.DeliveryWindow = &window
+	get := newMockGetKitchenHandler(t)
+	get.EXPECT().Handle(mock.Anything, "restaurant-1").Return(applications.KitchenView{
+		Restaurant: applications.Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true},
+		Orders:     []applications.OrderView{incoming},
+		Scheduled: []applications.ScheduledOrderView{{
+			ID: "ro-scheduled", OrderID: "order-scheduled", Priority: applications.PriorityPremium,
+			Items:          []applications.ItemView{{Name: "Фо бо", Quantity: 1}},
+			DeliveryWindow: window, PlannedReadyAt: window.Start.Add(-20 * time.Minute),
+		}},
+	}, nil).Once()
+	svc, ctx := kitchenService(t, get, newMockKitchenActionHandler(t))
+
+	response, err := svc.QueryKitchen(ctx, &service.QueryKitchenRequest{RestaurantId: "restaurant-1"})
+
+	require.NoError(t, err)
+	kitchenMessage := response.GetKitchen()
+	assert.Equal(t, &service.OrderDeliveryWindow{Start: "2026-10-25T14:00:00Z", End: "2026-10-25T14:15:00Z"}, kitchenMessage.GetOrders()[0].GetDeliveryWindow())
+	require.Len(t, kitchenMessage.GetScheduledOrders(), 1)
+	scheduled := kitchenMessage.GetScheduledOrders()[0]
+	assert.Equal(t, "ro-scheduled", scheduled.GetId())
+	assert.Equal(t, service.OrderPriority_ORDER_PRIORITY_PREMIUM, scheduled.GetPriority())
+	assert.Equal(t, "2026-10-25T13:40:00Z", scheduled.GetPlannedReadyAt())
+	assert.Equal(t, "2026-10-25T14:00:00Z", scheduled.GetDeliveryWindow().GetStart())
+	assert.Equal(t, "Фо бо", scheduled.GetItems()[0].GetName())
+}

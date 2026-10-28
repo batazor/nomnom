@@ -1,3 +1,4 @@
+mod duration_estimate;
 mod errors;
 mod events;
 mod fsm;
@@ -9,6 +10,7 @@ mod repository;
 mod tracking;
 mod vo;
 
+pub use duration_estimate::*;
 pub use errors::*;
 pub use events::*;
 pub use fsm::*;

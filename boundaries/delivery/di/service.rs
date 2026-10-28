@@ -4,6 +4,7 @@
 //! над тестовым PostgreSQL.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use shaku::{HasComponent, module};
 
@@ -18,7 +19,7 @@ use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
-use crate::slices::delivery::domains::delivery::VirtualCity;
+use crate::slices::delivery::domains::delivery::{DeliveryEstimatePolicy, VirtualCity};
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
@@ -108,6 +109,18 @@ pub(crate) fn test_tracking() -> ProcessTracking {
     }
 }
 
+/// Delivery Duration Estimate тестовых графов: значения kind (выборка 50,
+/// 15m и 20m).
+#[must_use]
+pub(crate) fn test_estimate_policy() -> DeliveryEstimatePolicy {
+    DeliveryEstimatePolicy::new(
+        50,
+        Duration::from_secs(15 * 60),
+        Duration::from_secs(20 * 60),
+    )
+    .expect("test estimate policy")
+}
+
 /// Тестовый граф над заданными хранилищами (PostgreSQL в integration-тестах)
 /// с UUID id, пустым locator и выбранной авторизацией.
 #[must_use]
@@ -122,6 +135,7 @@ pub fn build_over(
         authorization,
         Box::new(RecordingRelationships::new()),
         test_tracking(),
+        test_estimate_policy(),
     ))
 }
 
@@ -139,6 +153,7 @@ pub(crate) fn build_with_locator(
         Box::new(local_authorization()),
         Box::new(RecordingRelationships::new()),
         test_tracking(),
+        test_estimate_policy(),
     ))
 }
 
@@ -160,6 +175,7 @@ pub(crate) fn build_over_store(
         authorization,
         relationships,
         test_tracking(),
+        test_estimate_policy(),
     ))
 }
 

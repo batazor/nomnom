@@ -83,6 +83,13 @@ func (r *Restaurants) ActiveOrders(ctx context.Context, restaurantID string) ([]
 			CookID:          order.GetRestaurantOrder().GetCookId(),
 			Priority:        priority,
 		}
+		if schedule := order.GetRestaurantOrder().GetSchedule(); schedule != nil {
+			window, err := windowOf(order.GetRestaurantOrder().GetRestaurantOrderId(), schedule)
+			if err != nil {
+				return nil, err
+			}
+			active.DeliveryWindow = &window
+		}
 		if order.GetReceivedAt() != nil {
 			active.ReceivedAt = order.GetReceivedAt().AsTime()
 		}
@@ -101,6 +108,52 @@ func (r *Restaurants) QueueOrder(ctx context.Context, restaurantID string) ([]st
 		ids = append(ids, entry.GetRestaurantOrder().GetRestaurantOrderId())
 	}
 	return ids, nil
+}
+
+// ScheduledOrders keeps the user of ctx: restaurants checks
+// restaurant#operate_kitchen, like the rest of the board.
+func (r *Restaurants) ScheduledOrders(ctx context.Context, restaurantID string) ([]applications.ScheduledOrder, error) {
+	response, err := r.client.ListScheduledOrders(ctx, &restaurantsv1.ListScheduledOrdersRequest{RestaurantId: restaurantID})
+	if err != nil {
+		return nil, boardError("list scheduled orders", err)
+	}
+	orders := make([]applications.ScheduledOrder, 0, len(response.GetOrders()))
+	for _, order := range response.GetOrders() {
+		priority, ok := priorities[order.GetPriority()]
+		if !ok {
+			return nil, fmt.Errorf("scheduled order %s has unexpected priority %s", order.GetRestaurantOrderId(), order.GetPriority())
+		}
+		schedule := order.GetSchedule()
+		if schedule == nil || schedule.GetPlannedReadyAt() == nil {
+			return nil, fmt.Errorf("scheduled order %s has no schedule", order.GetRestaurantOrderId())
+		}
+		window, err := windowOf(order.GetRestaurantOrderId(), schedule)
+		if err != nil {
+			return nil, err
+		}
+		lines := make([]applications.ActiveOrderLine, 0, len(order.GetItems()))
+		for _, item := range order.GetItems() {
+			lines = append(lines, applications.ActiveOrderLine{MenuItemID: item.GetMenuItemId(), Quantity: int(item.GetQuantity())})
+		}
+		orders = append(orders, applications.ScheduledOrder{
+			ID:             order.GetRestaurantOrderId(),
+			OrderID:        order.GetOrderId(),
+			Lines:          lines,
+			Priority:       priority,
+			DeliveryWindow: window,
+			PlannedReadyAt: schedule.GetPlannedReadyAt().AsTime(),
+		})
+	}
+	return orders, nil
+}
+
+// windowOf requires both bounds of the window: a schedule without them breaks
+// the contract of restaurants.
+func windowOf(restaurantOrderID string, schedule *restaurantsv1.OrderSchedule) (applications.Window, error) {
+	if schedule.GetWindowStart() == nil || schedule.GetWindowEnd() == nil {
+		return applications.Window{}, fmt.Errorf("restaurant order %s has a window without bounds", restaurantOrderID)
+	}
+	return applications.Window{Start: schedule.GetWindowStart().AsTime(), End: schedule.GetWindowEnd().AsTime()}, nil
 }
 
 // CookPool keeps the user of ctx: restaurants checks restaurant#view_orders.

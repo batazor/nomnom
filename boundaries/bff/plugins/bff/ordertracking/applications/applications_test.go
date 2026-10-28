@@ -25,6 +25,11 @@ func snapshot(state string, facts ...Fact) OrderSnapshot {
 }
 
 func TestStatusFollowsStateAndFacts(t *testing.T) {
+	scheduled := func(facts ...Fact) OrderSnapshot {
+		order := snapshot("confirmed", facts...)
+		order.DeliveryWindow = &DeliveryWindow{Start: at(120), End: at(135)}
+		return order
+	}
 	cancelled := func(outcome string) OrderSnapshot {
 		order := snapshot("cancelled")
 		order.Cancellation = &Cancellation{Outcome: outcome, ReasonCode: "customer_requested", CancelledAt: at(2)}
@@ -40,6 +45,14 @@ func TestStatusFollowsStateAndFacts(t *testing.T) {
 		{"paid", snapshot("placed", Fact{"payment_authorized", at(1)}), StatusPaid},
 		{"confirmed", snapshot("confirmed"), StatusConfirmed},
 		{"preparing", snapshot("confirmed", Fact{"preparation_started", at(3)}), StatusPreparing},
+		// AC-927: a confirmed scheduled Order without Preparation Started.
+		{"scheduled", scheduled(Fact{"restaurant_accepted", at(2)}), StatusScheduled},
+		{"scheduled preparing", scheduled(Fact{"preparation_started", at(100)}), StatusPreparing},
+		{"scheduled paid", func() OrderSnapshot {
+			order := scheduled(Fact{"payment_authorized", at(1)})
+			order.State = "placed"
+			return order
+		}(), StatusPaid},
 		{"ready", snapshot("confirmed", Fact{"preparation_started", at(3)}, Fact{"ready_for_pickup", at(9)}), StatusReadyForPickup},
 		{"picked up", snapshot("confirmed", Fact{"ready_for_pickup", at(9)}, Fact{"picked_up", at(12)}), StatusPickedUp},
 		{"completed", snapshot("completed"), StatusDelivered},

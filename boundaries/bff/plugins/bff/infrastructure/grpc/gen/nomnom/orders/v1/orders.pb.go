@@ -446,9 +446,11 @@ type Order struct {
 	Priority OrderPriority `protobuf:"varint,16,opt,name=priority,proto3,enum=nomnom.orders.v1.OrderPriority" json:"priority,omitempty"`
 	// Fee of Premium Priority fixed at Place Order and included in total; unset
 	// for a standard Order.
-	PremiumFee    *Money `protobuf:"bytes,17,opt,name=premium_fee,json=premiumFee,proto3" json:"premium_fee,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PremiumFee *Money `protobuf:"bytes,17,opt,name=premium_fee,json=premiumFee,proto3" json:"premium_fee,omitempty"`
+	// Delivery window of a scheduled Order (FR-681); unset for an ASAP Order.
+	DeliveryWindow *DeliveryWindow `protobuf:"bytes,18,opt,name=delivery_window,json=deliveryWindow,proto3" json:"delivery_window,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
@@ -593,6 +595,112 @@ func (x *Order) GetPremiumFee() *Money {
 	return nil
 }
 
+func (x *Order) GetDeliveryWindow() *DeliveryWindow {
+	if x != nil {
+		return x.DeliveryWindow
+	}
+	return nil
+}
+
+// Delivery window [start, end) of a scheduled Order.
+type DeliveryWindow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliveryWindow) Reset() {
+	*x = DeliveryWindow{}
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliveryWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliveryWindow) ProtoMessage() {}
+
+func (x *DeliveryWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliveryWindow.ProtoReflect.Descriptor instead.
+func (*DeliveryWindow) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeliveryWindow) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *DeliveryWindow) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+// Error detail of PlaceOrder FAILED_PRECONDITION with reason SLOT_UNAVAILABLE
+// (FR-692): the nearest available windows of the restaurant.
+type SlotUnavailable struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alternatives  []*DeliveryWindow      `protobuf:"bytes,1,rep,name=alternatives,proto3" json:"alternatives,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SlotUnavailable) Reset() {
+	*x = SlotUnavailable{}
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SlotUnavailable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SlotUnavailable) ProtoMessage() {}
+
+func (x *SlotUnavailable) ProtoReflect() protoreflect.Message {
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SlotUnavailable.ProtoReflect.Descriptor instead.
+func (*SlotUnavailable) Descriptor() ([]byte, []int) {
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SlotUnavailable) GetAlternatives() []*DeliveryWindow {
+	if x != nil {
+		return x.Alternatives
+	}
+	return nil
+}
+
 type OrderSummary struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	OrderId      string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -611,7 +719,7 @@ type OrderSummary struct {
 
 func (x *OrderSummary) Reset() {
 	*x = OrderSummary{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -623,7 +731,7 @@ func (x *OrderSummary) String() string {
 func (*OrderSummary) ProtoMessage() {}
 
 func (x *OrderSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -636,7 +744,7 @@ func (x *OrderSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderSummary.ProtoReflect.Descriptor instead.
 func (*OrderSummary) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{6}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *OrderSummary) GetOrderId() string {
@@ -715,7 +823,7 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
 	"\x12CancellationWindow\x125\n" +
 	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
-	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xb0\a\n" +
+	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xfb\a\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -735,7 +843,13 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\tmarket_id\x18\x0f \x01(\tR\bmarketId\x12;\n" +
 	"\bpriority\x18\x10 \x01(\x0e2\x1f.nomnom.orders.v1.OrderPriorityR\bpriority\x128\n" +
 	"\vpremium_fee\x18\x11 \x01(\v2\x17.nomnom.orders.v1.MoneyR\n" +
-	"premiumFeeJ\x04\b\x05\x10\x06R\x10delivery_address\"\xb1\x02\n" +
+	"premiumFee\x12I\n" +
+	"\x0fdelivery_window\x18\x12 \x01(\v2 .nomnom.orders.v1.DeliveryWindowR\x0edeliveryWindowJ\x04\b\x05\x10\x06R\x10delivery_address\"p\n" +
+	"\x0eDeliveryWindow\x120\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"W\n" +
+	"\x0fSlotUnavailable\x12D\n" +
+	"\falternatives\x18\x01 \x03(\v2 .nomnom.orders.v1.DeliveryWindowR\falternatives\"\xb1\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x122\n" +
@@ -770,7 +884,7 @@ func file_nomnom_orders_v1_orders_proto_rawDescGZIP() []byte {
 }
 
 var file_nomnom_orders_v1_orders_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_nomnom_orders_v1_orders_proto_goTypes = []any{
 	(OrderPriority)(0),            // 0: nomnom.orders.v1.OrderPriority
 	(OrderState)(0),               // 1: nomnom.orders.v1.OrderState
@@ -780,36 +894,42 @@ var file_nomnom_orders_v1_orders_proto_goTypes = []any{
 	(*Cancellation)(nil),          // 5: nomnom.orders.v1.Cancellation
 	(*CancellationWindow)(nil),    // 6: nomnom.orders.v1.CancellationWindow
 	(*Order)(nil),                 // 7: nomnom.orders.v1.Order
-	(*OrderSummary)(nil),          // 8: nomnom.orders.v1.OrderSummary
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*DeliveryWindow)(nil),        // 8: nomnom.orders.v1.DeliveryWindow
+	(*SlotUnavailable)(nil),       // 9: nomnom.orders.v1.SlotUnavailable
+	(*OrderSummary)(nil),          // 10: nomnom.orders.v1.OrderSummary
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_nomnom_orders_v1_orders_proto_depIdxs = []int32{
 	2,  // 0: nomnom.orders.v1.OrderItem.unit_price:type_name -> nomnom.orders.v1.Money
-	9,  // 1: nomnom.orders.v1.FulfillmentFact.occurred_at:type_name -> google.protobuf.Timestamp
-	9,  // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
-	9,  // 3: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
-	9,  // 4: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
+	11, // 1: nomnom.orders.v1.FulfillmentFact.occurred_at:type_name -> google.protobuf.Timestamp
+	11, // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
+	11, // 3: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
+	11, // 4: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
 	3,  // 5: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
 	2,  // 6: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
 	1,  // 7: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
-	9,  // 8: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
+	11, // 8: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
 	4,  // 9: nomnom.orders.v1.Order.fulfillment_facts:type_name -> nomnom.orders.v1.FulfillmentFact
 	5,  // 10: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
 	6,  // 11: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
-	9,  // 12: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
-	9,  // 13: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
-	9,  // 14: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	11, // 12: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
+	11, // 13: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	11, // 14: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
 	0,  // 15: nomnom.orders.v1.Order.priority:type_name -> nomnom.orders.v1.OrderPriority
 	2,  // 16: nomnom.orders.v1.Order.premium_fee:type_name -> nomnom.orders.v1.Money
-	1,  // 17: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
-	2,  // 18: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
-	9,  // 19: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
-	7,  // 20: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
-	21, // [21:21] is the sub-list for method output_type
-	21, // [21:21] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	8,  // 17: nomnom.orders.v1.Order.delivery_window:type_name -> nomnom.orders.v1.DeliveryWindow
+	11, // 18: nomnom.orders.v1.DeliveryWindow.start:type_name -> google.protobuf.Timestamp
+	11, // 19: nomnom.orders.v1.DeliveryWindow.end:type_name -> google.protobuf.Timestamp
+	8,  // 20: nomnom.orders.v1.SlotUnavailable.alternatives:type_name -> nomnom.orders.v1.DeliveryWindow
+	1,  // 21: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
+	2,  // 22: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
+	11, // 23: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
+	7,  // 24: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_orders_proto_init() }
@@ -823,7 +943,7 @@ func file_nomnom_orders_v1_orders_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_orders_v1_orders_proto_rawDesc), len(file_nomnom_orders_v1_orders_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

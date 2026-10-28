@@ -201,6 +201,12 @@
 }
 
 /* The best known deadline under the status. */
+.order-status .order-window {
+  color: var(--color-foreground);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .order-status .order-header-eta {
   color: var(--color-foreground);
   font-weight: 600;

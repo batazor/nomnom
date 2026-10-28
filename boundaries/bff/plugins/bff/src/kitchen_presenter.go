@@ -44,8 +44,23 @@ func kitchenMessage(view applications.KitchenView) (*service.Kitchen, error) {
 			Name:            view.Restaurant.Name,
 			AcceptingOrders: view.Restaurant.IsOpen,
 		},
-		Orders:   make([]*service.KitchenOrder, 0, len(view.Orders)),
-		CookPool: cookPoolMessage(view.CookPool),
+		Orders:          make([]*service.KitchenOrder, 0, len(view.Orders)),
+		CookPool:        cookPoolMessage(view.CookPool),
+		ScheduledOrders: make([]*service.ScheduledKitchenOrder, 0, len(view.Scheduled)),
+	}
+	for _, order := range view.Scheduled {
+		priority, err := enumValue(kitchenPriorities, "scheduled order priority", order.Priority)
+		if err != nil {
+			return nil, err
+		}
+		message.ScheduledOrders = append(message.ScheduledOrders, &service.ScheduledKitchenOrder{
+			Id:             order.ID,
+			OrderId:        order.OrderID,
+			Items:          kitchenItems(order.Items),
+			Priority:       priority,
+			DeliveryWindow: kitchenWindow(order.DeliveryWindow),
+			PlannedReadyAt: timestamp(order.PlannedReadyAt),
+		})
 	}
 	for _, order := range view.Orders {
 		kitchenOrder, err := kitchenOrderMessage(order)
@@ -66,15 +81,11 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 	if err != nil {
 		return nil, err
 	}
-	items := make([]*service.KitchenOrderItem, 0, len(order.Items))
-	for _, item := range order.Items {
-		items = append(items, &service.KitchenOrderItem{Name: item.Name, Quantity: int32(item.Quantity)})
-	}
 	message := &service.KitchenOrder{
 		Id:              order.ID,
 		OrderId:         order.OrderID,
 		Stage:           stage,
-		Items:           items,
+		Items:           kitchenItems(order.Items),
 		ReceivedAt:      timestamp(order.ReceivedAt),
 		AcceptedAt:      deadline(order.AcceptedAt),
 		ExpectedReadyAt: deadline(order.ExpectedReadyAt),
@@ -83,7 +94,22 @@ func kitchenOrderMessage(order applications.OrderView) (*service.KitchenOrder, e
 	if order.Cook != nil {
 		message.Cook = cookMessage(*order.Cook)
 	}
+	if order.DeliveryWindow != nil {
+		message.DeliveryWindow = kitchenWindow(*order.DeliveryWindow)
+	}
 	return message, nil
+}
+
+func kitchenItems(items []applications.ItemView) []*service.KitchenOrderItem {
+	result := make([]*service.KitchenOrderItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, &service.KitchenOrderItem{Name: item.Name, Quantity: int32(item.Quantity)})
+	}
+	return result
+}
+
+func kitchenWindow(window applications.Window) *service.OrderDeliveryWindow {
+	return &service.OrderDeliveryWindow{Start: timestamp(window.Start), End: timestamp(window.End)}
 }
 
 func cookMessage(cook applications.Cook) *service.Cook {

@@ -7,6 +7,8 @@ import {
   liveOrderAt,
   liveOrderId,
   liveOrderStepCount,
+  type MockDeliveryWindow,
+  type MockOpeningInterval,
   type MockOrder,
   type MockRestaurant,
   type MockRestaurantSummary,
@@ -16,6 +18,9 @@ import {
   preparationDelayed,
   restaurantFixtures,
   restaurantSummary,
+  scheduledRestaurantIds,
+  slotCapacity,
+  sunriseBakery,
   withFee,
 } from "./fixtures";
 import { createFulfillment, mockCourierId } from "./fulfillment";
@@ -38,12 +43,35 @@ type PlaceOrderInput = {
   items: { menuItemId: string; quantity: number }[];
   idempotencyKey: string;
   priority: "STANDARD" | "PREMIUM";
+  deliveryWindowStart?: string | null;
+};
+
+type PlaceOrderProblem = {
+  code: string;
+  menuItemIds: string[];
+  alternativeWindows: MockDeliveryWindow[];
 };
 
 type PlaceOrderPayload = {
   order: MockOrder | null;
-  problems: { code: string; menuItemIds: string[] }[];
+  problems: PlaceOrderProblem[];
 };
+
+function problem(
+  code: string,
+  menuItemIds: string[] = [],
+  alternativeWindows: MockDeliveryWindow[] = [],
+): PlaceOrderProblem {
+  return { code, menuItemIds, alternativeWindows };
+}
+
+// Windows of scheduled orders: SCHEDULED_SLOT__WIDTH on a UTC grid, from the
+// minimum lead over the horizon, like restaurants lists them (FR-673).
+const slotWidthMs = 15 * 60_000;
+const slotLeadMs = 60 * 60_000;
+const slotHorizonMs = 4 * 60 * 60_000;
+// The third window of the horizon is already full, so the list shows one.
+const fullSlotIndex = 2;
 
 type CancellationInput = {
   orderId: string;
@@ -57,6 +85,56 @@ type CancellationPayload = {
 };
 
 type OpeningPayload = { restaurant: MockRestaurantSummary; changed: boolean };
+
+type OpeningHoursPayload = { restaurant: MockRestaurant; changed: boolean };
+
+const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// Like Set Opening Hours of restaurants (FR-697): the offending interval is
+// named in the INVALID_ARGUMENT the BFF passes on.
+function validateOpeningHours(hours: readonly MockOpeningInterval[]): void {
+  const reject = (reason: string, interval: MockOpeningInterval) => {
+    throw bffError(
+      "InvalidArgument",
+      `invalid opening hours: ${reason} at day ${interval.dayOfWeek} ${interval.opens}-${interval.closes}`,
+    );
+  };
+  const day = 24 * 60;
+  const week = 7 * day;
+  const spans = hours.map((interval) => {
+    if (
+      !Number.isInteger(interval.dayOfWeek) ||
+      interval.dayOfWeek < 1 ||
+      interval.dayOfWeek > 7
+    ) {
+      reject("invalid_day", interval);
+    }
+    const opens = hhmm.exec(interval.opens);
+    const closes = hhmm.exec(interval.closes);
+    if (!opens || !closes) return reject("invalid_time", interval);
+    const from = Number(opens[1]) * 60 + Number(opens[2]);
+    const to = Number(closes[1]) * 60 + Number(closes[2]);
+    if (from === to) reject("empty_interval", interval);
+    const start = (interval.dayOfWeek - 1) * day + from;
+    return {
+      interval,
+      start,
+      end: start + (to > from ? to - from : day - from + to),
+    };
+  });
+  spans.sort((a, b) => a.start - b.start);
+  for (const [i, a] of spans.entries()) {
+    for (const b of spans.slice(i + 1)) {
+      if (
+        [-week, 0, week].some(
+          (shift) => a.start < b.end + shift && b.start + shift < a.end,
+        )
+      ) {
+        reject("overlap", b.interval);
+      }
+    }
+  }
+}
 
 // The error shape Cosmo Router gives for a gRPC error of the BFF plugin: the
 // code sits under extensions.errors[].extensions.code.
@@ -98,6 +176,10 @@ function initialState(now: Date) {
     cancellations: new Map<string, CancellationPayload>(),
     // Opening state changed by openRestaurant/closeRestaurant, by restaurant id.
     opening: new Map<string, boolean>(),
+    // Opening hours replaced by setOpeningHours, by restaurant id.
+    openingHours: new Map<string, MockOpeningInterval[]>(),
+    // Reserved places of scheduled orders by "<restaurantId> <window start>".
+    reservations: new Map<string, number>(),
     // The mock user is the operator; the Simulator starts off like a new service.
     simulatorEnabled: false,
   };
@@ -190,12 +272,76 @@ export function createMockStore({
   }
 
   function currentRestaurant(id: string): MockRestaurant | undefined {
-    const restaurant = restaurantFixtures.find((r) => r.id === id);
-    if (!restaurant) return undefined;
+    const fixture = restaurantFixtures.find((r) => r.id === id);
+    if (!fixture) return undefined;
     const open = state.opening.get(id);
-    return open === undefined
-      ? restaurant
-      : { ...restaurant, acceptingOrders: open };
+    const restaurant: MockRestaurant = {
+      ...fixture,
+      acceptingOrders: open ?? fixture.acceptingOrders,
+      openingHours: state.openingHours.get(id) ?? fixture.openingHours,
+    };
+    // Opened by its owner before its hours: it opens on the next full hour
+    // after two hours of the clock; closed by the owner, it names nothing.
+    if (id === sunriseBakery.id && open !== false) {
+      const opensAt = new Date(clock().getTime() + 2 * 60 * 60_000);
+      opensAt.setUTCMinutes(0, 0, 0);
+      restaurant.acceptingOrders = false;
+      restaurant.nextOpeningAt = opensAt.toISOString();
+    }
+    restaurant.scheduledSlots = scheduledSlots(restaurant);
+    return restaurant;
+  }
+
+  // Empty for a restaurant without scheduled orders or not accepting now,
+  // like ListScheduledSlots.
+  function scheduledSlots(restaurant: MockRestaurant): MockDeliveryWindow[] {
+    if (
+      !scheduledRestaurantIds.has(restaurant.id) ||
+      !restaurant.acceptingOrders
+    ) {
+      return [];
+    }
+    const first =
+      Math.ceil((clock().getTime() + slotLeadMs) / slotWidthMs) * slotWidthMs;
+    return Array.from({ length: slotHorizonMs / slotWidthMs }, (_, index) => {
+      const start = new Date(first + index * slotWidthMs).toISOString();
+      const reserved = state.reservations.get(`${restaurant.id} ${start}`) ?? 0;
+      return {
+        start,
+        end: new Date(first + (index + 1) * slotWidthMs).toISOString(),
+        available: index !== fullSlotIndex && reserved < slotCapacity,
+      };
+    });
+  }
+
+  // Like Set Opening Hours through the BFF: only the owner, the whole
+  // schedule, the restaurant read again.
+  function setOpeningHours(
+    restaurantId: string,
+    hours: MockOpeningInterval[],
+  ): OpeningHoursPayload {
+    const restaurant = currentRestaurant(restaurantId);
+    if (!restaurant) throw bffError("NotFound", "restaurant not found");
+    if (!managedRestaurantIds.has(restaurantId)) {
+      throw bffError(
+        "PermissionDenied",
+        "restaurant management is not permitted",
+      );
+    }
+    validateOpeningHours(hours);
+    const changed =
+      JSON.stringify(restaurant.openingHours) !== JSON.stringify(hours);
+    state.openingHours.set(
+      restaurantId,
+      hours.map(({ dayOfWeek, opens, closes }) => ({
+        dayOfWeek,
+        opens,
+        closes,
+      })),
+    );
+    const saved = currentRestaurant(restaurantId);
+    if (!saved) throw bffError("NotFound", "restaurant not found");
+    return { restaurant: saved, changed };
   }
 
   function currentRestaurants(): MockRestaurant[] {
@@ -261,9 +407,7 @@ export function createMockStore({
     if (!restaurant.acceptingOrders) {
       return {
         order: null,
-        problems: [
-          { code: "RESTAURANT_NOT_ACCEPTING_ORDERS", menuItemIds: [] },
-        ],
+        problems: [problem("RESTAURANT_NOT_ACCEPTING_ORDERS")],
       };
     }
     const menu = restaurant.menu?.items ?? [];
@@ -275,9 +419,7 @@ export function createMockStore({
     if (unavailable.length > 0) {
       return {
         order: null,
-        problems: [
-          { code: "ORDER_ITEM_UNAVAILABLE", menuItemIds: unavailable },
-        ],
+        problems: [problem("ORDER_ITEM_UNAVAILABLE", unavailable)],
       };
     }
 
@@ -288,8 +430,35 @@ export function createMockStore({
     if (priority === "PREMIUM" && !premiumFee) {
       return {
         order: null,
-        problems: [{ code: "PREMIUM_UNAVAILABLE", menuItemIds: [] }],
+        problems: [problem("PREMIUM_UNAVAILABLE")],
       };
+    }
+    // A scheduled order reserves its window (FR-681); a full one offers the
+    // nearest available windows (FR-692). PREMIUM goes with a window too.
+    const windowStart = input.deliveryWindowStart ?? null;
+    let deliveryWindow: MockOrder["deliveryWindow"] = null;
+    if (windowStart !== null) {
+      if (!scheduledRestaurantIds.has(restaurant.id)) {
+        return {
+          order: null,
+          problems: [problem("SCHEDULED_ORDERS_UNAVAILABLE")],
+        };
+      }
+      const slots = restaurant.scheduledSlots;
+      const chosen = slots.find((slot) => slot.start === windowStart);
+      if (!chosen) throw bffError("InvalidArgument", "window is off the grid");
+      if (!chosen.available) {
+        const later = slots.filter(
+          (slot) => slot.available && slot.start > windowStart,
+        );
+        return {
+          order: null,
+          problems: [problem("SLOT_UNAVAILABLE", [], later.slice(0, 3))],
+        };
+      }
+      const key = `${restaurant.id} ${windowStart}`;
+      state.reservations.set(key, (state.reservations.get(key) ?? 0) + 1);
+      deliveryWindow = { start: chosen.start, end: chosen.end };
     }
     const placedAt = clock();
     const items = input.items.map((line) => {
@@ -318,6 +487,7 @@ export function createMockStore({
       expectedReadyAt: null,
       expectedPickupAt: null,
       expectedDeliveredAt: null,
+      deliveryWindow,
     };
     state.orders.set(order.id, order);
     fulfillment.paid(order);
@@ -418,6 +588,13 @@ export function createMockStore({
       setOpening(restaurantId, true),
     closeRestaurant: ({ restaurantId }: { restaurantId: string }) =>
       setOpening(restaurantId, false),
+    setOpeningHours: ({
+      restaurantId,
+      openingHours,
+    }: {
+      restaurantId: string;
+      openingHours: MockOpeningInterval[];
+    }) => setOpeningHours(restaurantId, openingHours),
     // Like BFF: the Simulator of the three contexts, switched together.
     simulator: () => ({ enabled: state.simulatorEnabled }),
     setSimulatorEnabled: ({ enabled }: { enabled: boolean }) => {

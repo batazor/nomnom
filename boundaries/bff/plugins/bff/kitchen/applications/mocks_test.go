@@ -581,6 +581,74 @@ func (_c *MockKitchenBoard_QueueOrder_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ScheduledOrders provides a mock function for the type MockKitchenBoard
+func (_mock *MockKitchenBoard) ScheduledOrders(ctx context.Context, restaurantID string) ([]ScheduledOrder, error) {
+	ret := _mock.Called(ctx, restaurantID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ScheduledOrders")
+	}
+
+	var r0 []ScheduledOrder
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]ScheduledOrder, error)); ok {
+		return returnFunc(ctx, restaurantID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []ScheduledOrder); ok {
+		r0 = returnFunc(ctx, restaurantID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]ScheduledOrder)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, restaurantID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKitchenBoard_ScheduledOrders_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScheduledOrders'
+type MockKitchenBoard_ScheduledOrders_Call struct {
+	*mock.Call
+}
+
+// ScheduledOrders is a helper method to define mock.On call
+//   - ctx context.Context
+//   - restaurantID string
+func (_e *MockKitchenBoard_Expecter) ScheduledOrders(ctx any, restaurantID any) *MockKitchenBoard_ScheduledOrders_Call {
+	return &MockKitchenBoard_ScheduledOrders_Call{Call: _e.mock.On("ScheduledOrders", ctx, restaurantID)}
+}
+
+func (_c *MockKitchenBoard_ScheduledOrders_Call) Run(run func(ctx context.Context, restaurantID string)) *MockKitchenBoard_ScheduledOrders_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKitchenBoard_ScheduledOrders_Call) Return(scheduledOrders []ScheduledOrder, err error) *MockKitchenBoard_ScheduledOrders_Call {
+	_c.Call.Return(scheduledOrders, err)
+	return _c
+}
+
+func (_c *MockKitchenBoard_ScheduledOrders_Call) RunAndReturn(run func(ctx context.Context, restaurantID string) ([]ScheduledOrder, error)) *MockKitchenBoard_ScheduledOrders_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockKitchenCommands creates a new instance of MockKitchenCommands. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockKitchenCommands(t interface {

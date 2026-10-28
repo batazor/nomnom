@@ -27,6 +27,11 @@ const (
 	RestaurantsService_ListOwnedRestaurants_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/ListOwnedRestaurants"
 	RestaurantsService_ReceiveOrderRequest_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/ReceiveOrderRequest"
 	RestaurantsService_CancelRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/CancelRestaurantOrder"
+	RestaurantsService_QueueRestaurantOrder_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/QueueRestaurantOrder"
+	RestaurantsService_ListScheduledSlots_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/ListScheduledSlots"
+	RestaurantsService_ReserveScheduledSlot_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/ReserveScheduledSlot"
+	RestaurantsService_ConfirmScheduledSlot_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/ConfirmScheduledSlot"
+	RestaurantsService_ReleaseScheduledSlot_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/ReleaseScheduledSlot"
 	RestaurantsService_AcceptRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/AcceptRestaurantOrder"
 	RestaurantsService_RejectRestaurantOrder_FullMethodName        = "/nomnom.restaurants.v1.RestaurantsService/RejectRestaurantOrder"
 	RestaurantsService_StartNextPreparation_FullMethodName         = "/nomnom.restaurants.v1.RestaurantsService/StartNextPreparation"
@@ -36,9 +41,12 @@ const (
 	RestaurantsService_ReportPreparationFailure_FullMethodName     = "/nomnom.restaurants.v1.RestaurantsService/ReportPreparationFailure"
 	RestaurantsService_GetKitchenQueue_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/GetKitchenQueue"
 	RestaurantsService_ListIncomingOrders_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/ListIncomingOrders"
+	RestaurantsService_ListScheduledOrders_FullMethodName          = "/nomnom.restaurants.v1.RestaurantsService/ListScheduledOrders"
 	RestaurantsService_ListActiveRestaurantOrders_FullMethodName   = "/nomnom.restaurants.v1.RestaurantsService/ListActiveRestaurantOrders"
 	RestaurantsService_RegisterRestaurant_FullMethodName           = "/nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant"
 	RestaurantsService_UpdateRestaurant_FullMethodName             = "/nomnom.restaurants.v1.RestaurantsService/UpdateRestaurant"
+	RestaurantsService_SetOpeningHours_FullMethodName              = "/nomnom.restaurants.v1.RestaurantsService/SetOpeningHours"
+	RestaurantsService_SetScheduledOrderSettings_FullMethodName    = "/nomnom.restaurants.v1.RestaurantsService/SetScheduledOrderSettings"
 	RestaurantsService_AssignStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/AssignStaff"
 	RestaurantsService_RevokeStaff_FullMethodName                  = "/nomnom.restaurants.v1.RestaurantsService/RevokeStaff"
 	RestaurantsService_OpenRestaurant_FullMethodName               = "/nomnom.restaurants.v1.RestaurantsService/OpenRestaurant"
@@ -86,6 +94,23 @@ type RestaurantsServiceClient interface {
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(ctx context.Context, in *ReceiveOrderRequestRequest, opts ...grpc.CallOption) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(ctx context.Context, in *CancelRestaurantOrderRequest, opts ...grpc.CallOption) (*CancelRestaurantOrderResponse, error)
+	// Moves an ACCEPTED scheduled order to the Kitchen Queue at its planned
+	// start (FR-224); service identity of orders only. A repeat for a QUEUED
+	// order succeeds without changes.
+	QueueRestaurantOrder(ctx context.Context, in *QueueRestaurantOrderRequest, opts ...grpc.CallOption) (*QueueRestaurantOrderResponse, error)
+	// Delivery windows of scheduled orders (FR-673..FR-675, FR-695, FR-703).
+	// ListScheduledSlots is public, like GetRestaurant. Reserve, Confirm and
+	// Release are called by the service identity of orders.
+	ListScheduledSlots(ctx context.Context, in *ListScheduledSlotsRequest, opts ...grpc.CallOption) (*ListScheduledSlotsResponse, error)
+	// A full window is a business result (slot_unavailable with alternatives);
+	// a window off the grid, before now + MIN_LEAD, beyond the horizon or
+	// outside the schedule is INVALID_ARGUMENT; a restaurant without settings
+	// or not accepting orders now is FAILED_PRECONDITION
+	// SCHEDULED_ORDERS_UNAVAILABLE. A repeat with the same order_id returns the
+	// same reservation.
+	ReserveScheduledSlot(ctx context.Context, in *ReserveScheduledSlotRequest, opts ...grpc.CallOption) (*ReserveScheduledSlotResponse, error)
+	ConfirmScheduledSlot(ctx context.Context, in *ConfirmScheduledSlotRequest, opts ...grpc.CallOption) (*ConfirmScheduledSlotResponse, error)
+	ReleaseScheduledSlot(ctx context.Context, in *ReleaseScheduledSlotRequest, opts ...grpc.CallOption) (*ReleaseScheduledSlotResponse, error)
 	// Kitchen commands of restaurant staff over one Restaurant Order addressed by
 	// restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
 	// an order of another restaurant is NOT_FOUND, a forbidden transition is
@@ -116,6 +141,9 @@ type RestaurantsServiceClient interface {
 	// awaiting Accept or Reject, by ascending received_at, then by id. Requires
 	// restaurant#operate_kitchen. An accepted order leaves this list.
 	ListIncomingOrders(ctx context.Context, in *ListIncomingOrdersRequest, opts ...grpc.CallOption) (*ListIncomingOrdersResponse, error)
+	// Accepted scheduled orders waiting for their start, by planned_ready_at
+	// (FR-684); requires restaurant#operate_kitchen.
+	ListScheduledOrders(ctx context.Context, in *ListScheduledOrdersRequest, opts ...grpc.CallOption) (*ListScheduledOrdersResponse, error)
 	// Active orders of a restaurant's kitchen board: Restaurant Orders in
 	// RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
 	// ascending received_at, then by id. Requires restaurant#operate_kitchen.
@@ -128,6 +156,13 @@ type RestaurantsServiceClient interface {
 	// Name and premium fee of a restaurant (FR-202, FR-649); requires
 	// restaurant#manage. Publishes no business fact.
 	UpdateRestaurant(ctx context.Context, in *UpdateRestaurantRequest, opts ...grpc.CallOption) (*UpdateRestaurantResponse, error)
+	// Replaces the weekly opening hours (FR-696, FR-697); requires
+	// restaurant#manage. Overlapping or empty intervals are INVALID_ARGUMENT.
+	// Publishes no business fact.
+	SetOpeningHours(ctx context.Context, in *SetOpeningHoursRequest, opts ...grpc.CallOption) (*SetOpeningHoursResponse, error)
+	// Settings of scheduled orders (FR-672); requires restaurant#manage.
+	// Publishes no business fact.
+	SetScheduledOrderSettings(ctx context.Context, in *SetScheduledOrderSettingsRequest, opts ...grpc.CallOption) (*SetScheduledOrderSettingsResponse, error)
 	AssignStaff(ctx context.Context, in *AssignStaffRequest, opts ...grpc.CallOption) (*AssignStaffResponse, error)
 	RevokeStaff(ctx context.Context, in *RevokeStaffRequest, opts ...grpc.CallOption) (*RevokeStaffResponse, error)
 	// Opening of a restaurant for new Restaurant Orders (FR-203). Both require
@@ -256,6 +291,56 @@ func (c *restaurantsServiceClient) CancelRestaurantOrder(ctx context.Context, in
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) QueueRestaurantOrder(ctx context.Context, in *QueueRestaurantOrderRequest, opts ...grpc.CallOption) (*QueueRestaurantOrderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueueRestaurantOrderResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_QueueRestaurantOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ListScheduledSlots(ctx context.Context, in *ListScheduledSlotsRequest, opts ...grpc.CallOption) (*ListScheduledSlotsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListScheduledSlotsResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ListScheduledSlots_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ReserveScheduledSlot(ctx context.Context, in *ReserveScheduledSlotRequest, opts ...grpc.CallOption) (*ReserveScheduledSlotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReserveScheduledSlotResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ReserveScheduledSlot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ConfirmScheduledSlot(ctx context.Context, in *ConfirmScheduledSlotRequest, opts ...grpc.CallOption) (*ConfirmScheduledSlotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmScheduledSlotResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ConfirmScheduledSlot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) ReleaseScheduledSlot(ctx context.Context, in *ReleaseScheduledSlotRequest, opts ...grpc.CallOption) (*ReleaseScheduledSlotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseScheduledSlotResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ReleaseScheduledSlot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *restaurantsServiceClient) AcceptRestaurantOrder(ctx context.Context, in *AcceptRestaurantOrderRequest, opts ...grpc.CallOption) (*AcceptRestaurantOrderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AcceptRestaurantOrderResponse)
@@ -346,6 +431,16 @@ func (c *restaurantsServiceClient) ListIncomingOrders(ctx context.Context, in *L
 	return out, nil
 }
 
+func (c *restaurantsServiceClient) ListScheduledOrders(ctx context.Context, in *ListScheduledOrdersRequest, opts ...grpc.CallOption) (*ListScheduledOrdersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListScheduledOrdersResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_ListScheduledOrders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *restaurantsServiceClient) ListActiveRestaurantOrders(ctx context.Context, in *ListActiveRestaurantOrdersRequest, opts ...grpc.CallOption) (*ListActiveRestaurantOrdersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListActiveRestaurantOrdersResponse)
@@ -370,6 +465,26 @@ func (c *restaurantsServiceClient) UpdateRestaurant(ctx context.Context, in *Upd
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateRestaurantResponse)
 	err := c.cc.Invoke(ctx, RestaurantsService_UpdateRestaurant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) SetOpeningHours(ctx context.Context, in *SetOpeningHoursRequest, opts ...grpc.CallOption) (*SetOpeningHoursResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetOpeningHoursResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_SetOpeningHours_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *restaurantsServiceClient) SetScheduledOrderSettings(ctx context.Context, in *SetScheduledOrderSettingsRequest, opts ...grpc.CallOption) (*SetScheduledOrderSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetScheduledOrderSettingsResponse)
+	err := c.cc.Invoke(ctx, RestaurantsService_SetScheduledOrderSettings_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -556,6 +671,23 @@ type RestaurantsServiceServer interface {
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	ReceiveOrderRequest(context.Context, *ReceiveOrderRequestRequest) (*ReceiveOrderRequestResponse, error)
 	CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error)
+	// Moves an ACCEPTED scheduled order to the Kitchen Queue at its planned
+	// start (FR-224); service identity of orders only. A repeat for a QUEUED
+	// order succeeds without changes.
+	QueueRestaurantOrder(context.Context, *QueueRestaurantOrderRequest) (*QueueRestaurantOrderResponse, error)
+	// Delivery windows of scheduled orders (FR-673..FR-675, FR-695, FR-703).
+	// ListScheduledSlots is public, like GetRestaurant. Reserve, Confirm and
+	// Release are called by the service identity of orders.
+	ListScheduledSlots(context.Context, *ListScheduledSlotsRequest) (*ListScheduledSlotsResponse, error)
+	// A full window is a business result (slot_unavailable with alternatives);
+	// a window off the grid, before now + MIN_LEAD, beyond the horizon or
+	// outside the schedule is INVALID_ARGUMENT; a restaurant without settings
+	// or not accepting orders now is FAILED_PRECONDITION
+	// SCHEDULED_ORDERS_UNAVAILABLE. A repeat with the same order_id returns the
+	// same reservation.
+	ReserveScheduledSlot(context.Context, *ReserveScheduledSlotRequest) (*ReserveScheduledSlotResponse, error)
+	ConfirmScheduledSlot(context.Context, *ConfirmScheduledSlotRequest) (*ConfirmScheduledSlotResponse, error)
+	ReleaseScheduledSlot(context.Context, *ReleaseScheduledSlotRequest) (*ReleaseScheduledSlotResponse, error)
 	// Kitchen commands of restaurant staff over one Restaurant Order addressed by
 	// restaurant_id and restaurant_order_id. They require restaurant#operate_kitchen;
 	// an order of another restaurant is NOT_FOUND, a forbidden transition is
@@ -586,6 +718,9 @@ type RestaurantsServiceServer interface {
 	// awaiting Accept or Reject, by ascending received_at, then by id. Requires
 	// restaurant#operate_kitchen. An accepted order leaves this list.
 	ListIncomingOrders(context.Context, *ListIncomingOrdersRequest) (*ListIncomingOrdersResponse, error)
+	// Accepted scheduled orders waiting for their start, by planned_ready_at
+	// (FR-684); requires restaurant#operate_kitchen.
+	ListScheduledOrders(context.Context, *ListScheduledOrdersRequest) (*ListScheduledOrdersResponse, error)
 	// Active orders of a restaurant's kitchen board: Restaurant Orders in
 	// RECEIVED, QUEUED, PREPARING, ASSEMBLED and READY with their items, by
 	// ascending received_at, then by id. Requires restaurant#operate_kitchen.
@@ -598,6 +733,13 @@ type RestaurantsServiceServer interface {
 	// Name and premium fee of a restaurant (FR-202, FR-649); requires
 	// restaurant#manage. Publishes no business fact.
 	UpdateRestaurant(context.Context, *UpdateRestaurantRequest) (*UpdateRestaurantResponse, error)
+	// Replaces the weekly opening hours (FR-696, FR-697); requires
+	// restaurant#manage. Overlapping or empty intervals are INVALID_ARGUMENT.
+	// Publishes no business fact.
+	SetOpeningHours(context.Context, *SetOpeningHoursRequest) (*SetOpeningHoursResponse, error)
+	// Settings of scheduled orders (FR-672); requires restaurant#manage.
+	// Publishes no business fact.
+	SetScheduledOrderSettings(context.Context, *SetScheduledOrderSettingsRequest) (*SetScheduledOrderSettingsResponse, error)
 	AssignStaff(context.Context, *AssignStaffRequest) (*AssignStaffResponse, error)
 	RevokeStaff(context.Context, *RevokeStaffRequest) (*RevokeStaffResponse, error)
 	// Opening of a restaurant for new Restaurant Orders (FR-203). Both require
@@ -670,6 +812,21 @@ func (UnimplementedRestaurantsServiceServer) ReceiveOrderRequest(context.Context
 func (UnimplementedRestaurantsServiceServer) CancelRestaurantOrder(context.Context, *CancelRestaurantOrderRequest) (*CancelRestaurantOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelRestaurantOrder not implemented")
 }
+func (UnimplementedRestaurantsServiceServer) QueueRestaurantOrder(context.Context, *QueueRestaurantOrderRequest) (*QueueRestaurantOrderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueueRestaurantOrder not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ListScheduledSlots(context.Context, *ListScheduledSlotsRequest) (*ListScheduledSlotsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListScheduledSlots not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ReserveScheduledSlot(context.Context, *ReserveScheduledSlotRequest) (*ReserveScheduledSlotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReserveScheduledSlot not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ConfirmScheduledSlot(context.Context, *ConfirmScheduledSlotRequest) (*ConfirmScheduledSlotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmScheduledSlot not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) ReleaseScheduledSlot(context.Context, *ReleaseScheduledSlotRequest) (*ReleaseScheduledSlotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReleaseScheduledSlot not implemented")
+}
 func (UnimplementedRestaurantsServiceServer) AcceptRestaurantOrder(context.Context, *AcceptRestaurantOrderRequest) (*AcceptRestaurantOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AcceptRestaurantOrder not implemented")
 }
@@ -697,6 +854,9 @@ func (UnimplementedRestaurantsServiceServer) GetKitchenQueue(context.Context, *G
 func (UnimplementedRestaurantsServiceServer) ListIncomingOrders(context.Context, *ListIncomingOrdersRequest) (*ListIncomingOrdersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListIncomingOrders not implemented")
 }
+func (UnimplementedRestaurantsServiceServer) ListScheduledOrders(context.Context, *ListScheduledOrdersRequest) (*ListScheduledOrdersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListScheduledOrders not implemented")
+}
 func (UnimplementedRestaurantsServiceServer) ListActiveRestaurantOrders(context.Context, *ListActiveRestaurantOrdersRequest) (*ListActiveRestaurantOrdersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListActiveRestaurantOrders not implemented")
 }
@@ -705,6 +865,12 @@ func (UnimplementedRestaurantsServiceServer) RegisterRestaurant(context.Context,
 }
 func (UnimplementedRestaurantsServiceServer) UpdateRestaurant(context.Context, *UpdateRestaurantRequest) (*UpdateRestaurantResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateRestaurant not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) SetOpeningHours(context.Context, *SetOpeningHoursRequest) (*SetOpeningHoursResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetOpeningHours not implemented")
+}
+func (UnimplementedRestaurantsServiceServer) SetScheduledOrderSettings(context.Context, *SetScheduledOrderSettingsRequest) (*SetScheduledOrderSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetScheduledOrderSettings not implemented")
 }
 func (UnimplementedRestaurantsServiceServer) AssignStaff(context.Context, *AssignStaffRequest) (*AssignStaffResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AssignStaff not implemented")
@@ -916,6 +1082,96 @@ func _RestaurantsService_CancelRestaurantOrder_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_QueueRestaurantOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueueRestaurantOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).QueueRestaurantOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_QueueRestaurantOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).QueueRestaurantOrder(ctx, req.(*QueueRestaurantOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ListScheduledSlots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListScheduledSlotsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ListScheduledSlots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ListScheduledSlots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ListScheduledSlots(ctx, req.(*ListScheduledSlotsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ReserveScheduledSlot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReserveScheduledSlotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ReserveScheduledSlot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ReserveScheduledSlot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ReserveScheduledSlot(ctx, req.(*ReserveScheduledSlotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ConfirmScheduledSlot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmScheduledSlotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ConfirmScheduledSlot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ConfirmScheduledSlot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ConfirmScheduledSlot(ctx, req.(*ConfirmScheduledSlotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_ReleaseScheduledSlot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseScheduledSlotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ReleaseScheduledSlot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ReleaseScheduledSlot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ReleaseScheduledSlot(ctx, req.(*ReleaseScheduledSlotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RestaurantsService_AcceptRestaurantOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AcceptRestaurantOrderRequest)
 	if err := dec(in); err != nil {
@@ -1078,6 +1334,24 @@ func _RestaurantsService_ListIncomingOrders_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RestaurantsService_ListScheduledOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListScheduledOrdersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).ListScheduledOrders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_ListScheduledOrders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).ListScheduledOrders(ctx, req.(*ListScheduledOrdersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RestaurantsService_ListActiveRestaurantOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListActiveRestaurantOrdersRequest)
 	if err := dec(in); err != nil {
@@ -1128,6 +1402,42 @@ func _RestaurantsService_UpdateRestaurant_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RestaurantsServiceServer).UpdateRestaurant(ctx, req.(*UpdateRestaurantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_SetOpeningHours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetOpeningHoursRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).SetOpeningHours(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_SetOpeningHours_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).SetOpeningHours(ctx, req.(*SetOpeningHoursRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RestaurantsService_SetScheduledOrderSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetScheduledOrderSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RestaurantsServiceServer).SetScheduledOrderSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RestaurantsService_SetScheduledOrderSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RestaurantsServiceServer).SetScheduledOrderSettings(ctx, req.(*SetScheduledOrderSettingsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1442,6 +1752,26 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RestaurantsService_CancelRestaurantOrder_Handler,
 		},
 		{
+			MethodName: "QueueRestaurantOrder",
+			Handler:    _RestaurantsService_QueueRestaurantOrder_Handler,
+		},
+		{
+			MethodName: "ListScheduledSlots",
+			Handler:    _RestaurantsService_ListScheduledSlots_Handler,
+		},
+		{
+			MethodName: "ReserveScheduledSlot",
+			Handler:    _RestaurantsService_ReserveScheduledSlot_Handler,
+		},
+		{
+			MethodName: "ConfirmScheduledSlot",
+			Handler:    _RestaurantsService_ConfirmScheduledSlot_Handler,
+		},
+		{
+			MethodName: "ReleaseScheduledSlot",
+			Handler:    _RestaurantsService_ReleaseScheduledSlot_Handler,
+		},
+		{
 			MethodName: "AcceptRestaurantOrder",
 			Handler:    _RestaurantsService_AcceptRestaurantOrder_Handler,
 		},
@@ -1478,6 +1808,10 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RestaurantsService_ListIncomingOrders_Handler,
 		},
 		{
+			MethodName: "ListScheduledOrders",
+			Handler:    _RestaurantsService_ListScheduledOrders_Handler,
+		},
+		{
 			MethodName: "ListActiveRestaurantOrders",
 			Handler:    _RestaurantsService_ListActiveRestaurantOrders_Handler,
 		},
@@ -1488,6 +1822,14 @@ var RestaurantsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateRestaurant",
 			Handler:    _RestaurantsService_UpdateRestaurant_Handler,
+		},
+		{
+			MethodName: "SetOpeningHours",
+			Handler:    _RestaurantsService_SetOpeningHours_Handler,
+		},
+		{
+			MethodName: "SetScheduledOrderSettings",
+			Handler:    _RestaurantsService_SetScheduledOrderSettings_Handler,
 		},
 		{
 			MethodName: "AssignStaff",

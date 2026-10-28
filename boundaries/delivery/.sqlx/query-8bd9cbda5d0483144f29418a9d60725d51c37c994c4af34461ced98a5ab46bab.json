@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM delivery_duration_samples\n             WHERE market_id = $1 AND kind = $2 AND position NOT IN (\n                 SELECT position FROM delivery_duration_samples\n                 WHERE market_id = $1 AND kind = $2\n                 ORDER BY position DESC LIMIT $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8bd9cbda5d0483144f29418a9d60725d51c37c994c4af34461ced98a5ab46bab"
+}

@@ -168,6 +168,12 @@ func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 			CancelledAt: cancellation.GetCancelledAt().AsTime(),
 		}
 	}
+	if window := order.GetDeliveryWindow(); window != nil {
+		result.DeliveryWindow = &applications.DeliveryWindow{
+			Start: window.GetStart().AsTime(),
+			End:   window.GetEnd().AsTime(),
+		}
+	}
 	if window := order.GetCancellationWindow(); window != nil {
 		result.Window = &applications.CancellationWindow{
 			OpensAt:  window.GetOpensAt().AsTime(),

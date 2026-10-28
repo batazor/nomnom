@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	catalogapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
@@ -149,4 +150,57 @@ func TestMyRestaurantsMapsErrors(t *testing.T) {
 	_, err = svc.QueryMyRestaurants(ctx, &service.QueryMyRestaurantsRequest{First: 10})
 	assert.Equal(t, codes.Unavailable, status.Code(err))
 	assert.NotContains(t, err.Error(), "restaurants is down")
+}
+
+// AC-951: the owner saves the whole schedule on their own behalf and gets the
+// restaurant read again.
+func TestSetOpeningHoursSendsTheWholeSchedule(t *testing.T) {
+	hours := []catalogapp.OpeningInterval{{Day: 1, Opens: "10:00", Closes: "22:00"}, {Day: 5, Opens: "18:00", Closes: "02:00"}}
+	saved := catalogapp.Restaurant{ID: nightBakery.ID, Name: nightBakery.Name, TimeZone: "Europe/Berlin", OpeningHours: hours}
+	set := newMockSetOpeningHoursHandler(t)
+	set.EXPECT().Handle(mock.MatchedBy(func(ctx context.Context) bool { user, ok := identity.UserFrom(ctx); return ok && user.ID != "" }), nightBakery.ID, hours).
+		Return(applications.OpeningHoursResult{Restaurant: catalogapp.RestaurantView{Restaurant: saved}, Changed: true}, nil).Once()
+	svc, ctx := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
+	svc.management.setOpeningHours = set
+
+	response, err := svc.MutationSetOpeningHours(ctx, &service.MutationSetOpeningHoursRequest{
+		RestaurantId: nightBakery.ID,
+		OpeningHours: []*service.OpeningIntervalInput{{DayOfWeek: 1, Opens: "10:00", Closes: "22:00"}, {DayOfWeek: 5, Opens: "18:00", Closes: "02:00"}},
+	})
+
+	require.NoError(t, err)
+	payload := response.GetSetOpeningHours()
+	assert.True(t, payload.GetChanged())
+	assert.Equal(t, "Europe/Berlin", payload.GetRestaurant().GetTimeZone())
+	assert.Equal(t, []*service.OpeningInterval{{DayOfWeek: 1, Opens: "10:00", Closes: "22:00"}, {DayOfWeek: 5, Opens: "18:00", Closes: "02:00"}}, payload.GetRestaurant().GetOpeningHours())
+}
+
+// AC-950: overlapping intervals are INVALID_ARGUMENT naming the day and the
+// interval; the other refusals are errors like those of opening.
+func TestSetOpeningHoursMapsRefusalsToErrors(t *testing.T) {
+	svc, ctx := managementService(t, newMockOpeningHandler(t), newMockOpeningHandler(t))
+	_, err := svc.MutationSetOpeningHours(context.Background(), &service.MutationSetOpeningHoursRequest{RestaurantId: nightBakery.ID})
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = svc.MutationSetOpeningHours(ctx, &service.MutationSetOpeningHoursRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	overlap := applications.InvalidOpeningHours{Reason: "overlap", Day: 6, Opens: "01:00", Closes: "03:00"}
+	for refusal, want := range map[error]codes.Code{
+		overlap:                            codes.InvalidArgument,
+		applications.ErrRestaurantNotFound: codes.NotFound,
+		applications.ErrNotPermitted:       codes.PermissionDenied,
+		errors.New("spicedb down"):         codes.Unavailable,
+	} {
+		set := newMockSetOpeningHoursHandler(t)
+		set.EXPECT().Handle(mock.Anything, nightBakery.ID, []catalogapp.OpeningInterval{}).Return(applications.OpeningHoursResult{}, refusal).Once()
+		svc.management.setOpeningHours = set
+
+		_, err := svc.MutationSetOpeningHours(ctx, &service.MutationSetOpeningHoursRequest{RestaurantId: nightBakery.ID})
+
+		assert.Equal(t, want, status.Code(err), refusal)
+		assert.NotContains(t, status.Convert(err).Message(), "spicedb")
+		if refusal == error(overlap) {
+			assert.Equal(t, "invalid opening hours: overlap at day 6 01:00-03:00", status.Convert(err).Message())
+		}
+	}
 }

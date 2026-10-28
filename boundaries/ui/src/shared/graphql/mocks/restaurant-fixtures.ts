@@ -16,8 +16,18 @@ export const bffInfoFixture = Object.freeze({
 
 // Markets of GET /markets of the public gateway: by name, then by id.
 export const marketFixtures = Object.freeze([
-  Object.freeze({ id: "berlin", name: "Берлин", currency: "EUR" }),
-  Object.freeze({ id: "hamburg", name: "Гамбург", currency: "EUR" }),
+  Object.freeze({
+    id: "berlin",
+    name: "Берлин",
+    currency: "EUR",
+    timeZone: "Europe/Berlin",
+  }),
+  Object.freeze({
+    id: "hamburg",
+    name: "Гамбург",
+    currency: "EUR",
+    timeZone: "Europe/Berlin",
+  }),
 ]);
 
 export type MockMoney = { amount: string; currency: string };
@@ -32,6 +42,18 @@ export type MockMenuItem = {
 
 export type MockWaitTime = { elevated: boolean; expectedWaitMinutes: number };
 
+export type MockOpeningInterval = {
+  dayOfWeek: number;
+  opens: string;
+  closes: string;
+};
+
+export type MockDeliveryWindow = {
+  start: string;
+  end: string;
+  available: boolean;
+};
+
 export type MockRestaurant = {
   id: string;
   name: string;
@@ -40,6 +62,15 @@ export type MockRestaurant = {
   waitTime: MockWaitTime;
   // Fee of Premium Priority, null when the restaurant offers none (FR-652).
   premiumFee: MockMoney | null;
+  // IANA zone of the restaurant, the one of its Market (FR-201).
+  timeZone: string;
+  // Weekly opening hours on the wall clock of the restaurant (FR-696).
+  openingHours: MockOpeningInterval[];
+  // Start of the next period while opened but outside the hours (FR-204).
+  nextOpeningAt: string | null;
+  // Windows of scheduled orders; the store lists them at the time of the
+  // read, the fixtures have none (FR-685).
+  scheduledSlots: MockDeliveryWindow[];
 };
 
 // Restaurant outside the catalog: of an order, a kitchen or its owner (FR-670).
@@ -58,6 +89,26 @@ export function restaurantSummary({
 
 // A kitchen working at its usual pace.
 const usualWait: MockWaitTime = { elevated: false, expectedWaitMinutes: 20 };
+
+// Every mock restaurant is in Market berlin.
+const berlinTime = "Europe/Berlin";
+
+// The same interval every day of the week.
+function dailyHours(opens: string, closes: string): MockOpeningInterval[] {
+  return [1, 2, 3, 4, 5, 6, 7].map((dayOfWeek) => ({
+    dayOfWeek,
+    opens,
+    closes,
+  }));
+}
+
+// The schedule fields of a restaurant inside its hours.
+const daily = {
+  timeZone: berlinTime,
+  openingHours: dailyHours("10:00", "23:00"),
+  nextOpeningAt: null,
+  scheduledSlots: [],
+} satisfies Partial<MockRestaurant>;
 
 export type MockOrderItem = {
   menuItem: { id: string; name: string };
@@ -94,6 +145,8 @@ export type MockOrder = {
   // Live tracking while the courier is assigned and the order is active,
   // null otherwise (FR-663); absent where the BFF leaves it null.
   tracking?: MockTracking | null;
+  // Delivery window of a scheduled order (FR-687); absent or null for ASAP.
+  deliveryWindow?: { start: string; end: string } | null;
 };
 
 const currency = "RUB";
@@ -121,6 +174,7 @@ export const kitchenEight: MockRestaurant = {
   waitTime: { elevated: true, expectedWaitMinutes: 42 },
   // Offers Premium Priority (FR-653); the other restaurants do not.
   premiumFee: { amount: "99.00", currency: "RUB" },
+  ...daily,
   menu: {
     items: [
       {
@@ -161,6 +215,14 @@ export const nightBakery: MockRestaurant = {
   acceptingOrders: false,
   waitTime: usualWait,
   premiumFee: null,
+  timeZone: berlinTime,
+  // Opens at night: Friday and Saturday into the next morning.
+  openingHours: [
+    { dayOfWeek: 5, opens: "22:00", closes: "06:00" },
+    { dayOfWeek: 6, opens: "22:00", closes: "06:00" },
+  ],
+  nextOpeningAt: null,
+  scheduledSlots: [],
   menu: {
     items: [
       {
@@ -192,6 +254,7 @@ const moreRestaurants: MockRestaurant[] = [
     acceptingOrders: true,
     waitTime: usualWait,
     premiumFee: null,
+    ...daily,
     menu: {
       items: [
         item(
@@ -210,6 +273,7 @@ const moreRestaurants: MockRestaurant[] = [
     acceptingOrders: true,
     waitTime: usualWait,
     premiumFee: null,
+    ...daily,
     menu: {
       items: [
         item("menu-khachapuri", "Хачапури по-аджарски", "520.00"),
@@ -223,6 +287,7 @@ const moreRestaurants: MockRestaurant[] = [
     acceptingOrders: true,
     waitTime: usualWait,
     premiumFee: null,
+    ...daily,
     menu: {
       items: [item("menu-shoyu", "Сёю рамен", "640.00", "Курица, яйцо, нори")],
     },
@@ -233,6 +298,7 @@ const moreRestaurants: MockRestaurant[] = [
     acceptingOrders: true,
     waitTime: usualWait,
     premiumFee: null,
+    ...daily,
     menu: {
       items: [item("menu-buddha-bowl", "Боул с киноа", "480.50")],
     },
@@ -243,6 +309,7 @@ const moreRestaurants: MockRestaurant[] = [
     acceptingOrders: true,
     waitTime: usualWait,
     premiumFee: null,
+    ...daily,
     menu: {
       items: [item("menu-margherita", "Маргарита", "560.00")],
     },
@@ -253,21 +320,47 @@ const moreRestaurants: MockRestaurant[] = [
     acceptingOrders: true,
     waitTime: usualWait,
     premiumFee: null,
+    ...daily,
     menu: null,
   },
 ];
+
+// Opened by its owner but before its hours (FR-702): the store names the next
+// opening on the clock of the read; the catalog does not list it.
+export const sunriseBakery: MockRestaurant = {
+  id: "restaurant-sunrise-bakery",
+  name: "Пекарня «Рассвет»",
+  acceptingOrders: false,
+  waitTime: usualWait,
+  premiumFee: null,
+  timeZone: berlinTime,
+  openingHours: dailyHours("07:00", "11:00"),
+  nextOpeningAt: null,
+  scheduledSlots: [],
+  menu: {
+    items: [item("menu-cinnamon-roll", "Булочка с корицей", "190.00")],
+  },
+};
 
 export const restaurantFixtures: readonly MockRestaurant[] = [
   kitchenEight,
   nightBakery,
   ...moreRestaurants,
+  sunriseBakery,
 ];
+
+// Restaurants that take scheduled orders (FR-672): one window holds this many.
+export const scheduledRestaurantIds: ReadonlySet<string> = new Set([
+  kitchenEight.id,
+]);
+export const slotCapacity = 2;
 
 // Restaurants the mock user owns: openRestaurant and closeRestaurant succeed
 // for them, any other existing restaurant answers PermissionDenied.
 export const managedRestaurantIds: ReadonlySet<string> = new Set([
   kitchenEight.id,
   nightBakery.id,
+  sunriseBakery.id,
 ]);
 
 export function orderLine(item: MockMenuItem, quantity: number): MockOrderItem {

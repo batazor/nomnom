@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	catalog "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
 	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
@@ -34,6 +35,7 @@ type restaurantsServer struct {
 	got    string
 	market string
 	seenMD metadata.MD
+	hours  []*restaurantsv1.OpeningInterval
 }
 
 func (s *restaurantsServer) restaurant() *restaurantsv1.Restaurant {
@@ -73,6 +75,16 @@ func (s *restaurantsServer) ListOwnedRestaurants(ctx context.Context, request *r
 		Restaurants:   []*restaurantsv1.Restaurant{{RestaurantId: "restaurant-2", Name: "Пельменная"}},
 		NextPageToken: "restaurant-2",
 	}, nil
+}
+
+func (s *restaurantsServer) SetOpeningHours(ctx context.Context, request *restaurantsv1.SetOpeningHoursRequest) (*restaurantsv1.SetOpeningHoursResponse, error) {
+	s.seenMD, _ = metadata.FromIncomingContext(ctx)
+	s.got = request.GetRestaurantId()
+	s.hours = request.GetOpeningHours()
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &restaurantsv1.SetOpeningHoursResponse{Restaurant: s.restaurant(), Version: 4, Changed: true}, nil
 }
 
 func connect(t *testing.T, server *restaurantsServer) *Restaurants {
@@ -170,4 +182,32 @@ func TestListOwnedCarriesUserAssertion(t *testing.T) {
 	server.err = status.Error(codes.Unavailable, "down")
 	_, err = restaurants.ListOwned(ownerContext(), 1, "")
 	assert.Equal(t, codes.Unavailable, status.Code(errors.Unwrap(err)))
+}
+
+// FR-700: the whole schedule goes on behalf of the user; the rejected interval
+// named by restaurants reaches the scenario.
+func TestSetOpeningHoursCarriesTheScheduleAndNamesTheRejectedInterval(t *testing.T) {
+	server := &restaurantsServer{}
+	restaurants := connect(t, server)
+	hours := []catalog.OpeningInterval{{Day: 5, Opens: "18:00", Closes: "02:00"}, {Day: 6, Opens: "01:00", Closes: "03:00"}}
+
+	changed, err := restaurants.SetOpeningHours(ownerContext(), "restaurant-1", hours)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	require.Len(t, server.hours, 2)
+	assert.Equal(t, int32(6), server.hours[1].GetDayOfWeek())
+	assert.Equal(t, "01:00", server.hours[1].GetOpens())
+	assert.Len(t, server.seenMD.Get(identity.AssertionMetadata), 1)
+
+	server.err = status.Error(codes.InvalidArgument, "invalid opening hours: overlap at day 6 01:00-03:00")
+	_, err = restaurants.SetOpeningHours(ownerContext(), "restaurant-1", hours)
+	assert.Equal(t, applications.InvalidOpeningHours{Reason: "overlap", Day: 6, Opens: "01:00", Closes: "03:00"}, err)
+
+	server.err = status.Error(codes.InvalidArgument, "restaurant_id is required")
+	_, err = restaurants.SetOpeningHours(ownerContext(), "", hours)
+	assert.ErrorIs(t, err, applications.ErrInvalidRestaurant)
+
+	server.err = status.Error(codes.PermissionDenied, "not the owner")
+	_, err = restaurants.SetOpeningHours(ownerContext(), "restaurant-1", hours)
+	assert.ErrorIs(t, err, applications.ErrNotPermitted)
 }

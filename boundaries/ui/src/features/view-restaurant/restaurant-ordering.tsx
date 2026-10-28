@@ -13,6 +13,7 @@ import {
   type ViewRestaurantQuery,
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
+import { useZonedFormatters } from "../../shared/i18n/zoned-time";
 import { Button, useToast } from "../../shared/ui";
 import { checkoutFormId, type ItemProblems, PlaceOrder } from "../place-order";
 import { useCart } from "./cart";
@@ -153,7 +154,14 @@ function RestaurantView({
         </m.h3>
         {restaurant.acceptingOrders ? null : (
           <p className="restaurant-closed" role="status">
-            {t("restaurant.closed")}
+            {restaurant.nextOpeningAt ? (
+              <OpensAt
+                nextOpeningAt={restaurant.nextOpeningAt}
+                timeZone={restaurant.timeZone}
+              />
+            ) : (
+              t("restaurant.closed")
+            )}
           </p>
         )}
         {restaurant.waitTime?.elevated ? (
@@ -200,6 +208,7 @@ function RestaurantView({
                 <PlaceOrder
                   expectedWaitMinutes={restaurant.waitTime?.expectedWaitMinutes}
                   premium={premium}
+                  slots={restaurant.scheduledSlots}
                   lines={entries.map(({ line }) => line)}
                   onItemProblems={setItemProblems}
                   onPlaced={(orderId) => {
@@ -221,6 +230,24 @@ function RestaurantView({
       )}
     </article>
   );
+}
+
+// A restaurant opened by its owner but outside its opening hours (FR-702):
+// when it opens, on its own wall clock; the day is named unless it is today.
+function OpensAt({
+  nextOpeningAt,
+  timeZone,
+}: {
+  nextOpeningAt: string;
+  timeZone: string;
+}) {
+  const { t } = useI18n();
+  const zoned = useZonedFormatters(timeZone);
+  if (zoned === null) return null;
+  const time = zoned.time(nextOpeningAt);
+  return zoned.dateKey(nextOpeningAt) === zoned.dateKey(Date.now())
+    ? t("restaurant.opensAt", { time })
+    : t("restaurant.opensOn", { day: zoned.day(nextOpeningAt), time });
 }
 
 function RestaurantMessage({

@@ -109,5 +109,6 @@ func compose(order OrderSnapshot, restaurant Restaurant, now time.Time) (OrderVi
 		Milestones:     milestones(order),
 		AvailableUntil: availableUntil(order, current, now),
 		Deadlines:      order.Deadlines,
+		DeliveryWindow: order.DeliveryWindow,
 	}, nil
 }

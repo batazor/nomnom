@@ -33,6 +33,11 @@ fragment ViewedOrder on Order {
     currency
   }
   placedAt
+  # Delivery window of a scheduled order, null for an ASAP one (FR-687).
+  deliveryWindow {
+    start
+    end
+  }
   milestones {
     kind
     occurredAt

@@ -18,7 +18,8 @@ import (
 )
 
 // Restaurants implements applications.RestaurantLister,
-// applications.RestaurantReader and applications.MenuBatchReader.
+// applications.RestaurantReader, applications.MenuBatchReader and
+// applications.SlotReader.
 type Restaurants struct {
 	client restaurantsv1.RestaurantsServiceClient
 }
@@ -31,6 +32,7 @@ var (
 	_ applications.RestaurantLister = (*Restaurants)(nil)
 	_ applications.RestaurantReader = (*Restaurants)(nil)
 	_ applications.MenuBatchReader  = (*Restaurants)(nil)
+	_ applications.SlotReader       = (*Restaurants)(nil)
 )
 
 // List asks for open restaurants of the Market of the request only:
@@ -102,6 +104,28 @@ func (r *Restaurants) Menus(ctx context.Context, restaurantIDs []string) (map[st
 	return menus, nil
 }
 
+// ScheduledSlots reads the public ListScheduledSlots without the user. A
+// window without start or end is an error, not a window at the epoch.
+func (r *Restaurants) ScheduledSlots(ctx context.Context, restaurantID string) ([]applications.Slot, error) {
+	response, err := r.client.ListScheduledSlots(identity.WithoutUser(ctx), &restaurantsv1.ListScheduledSlotsRequest{RestaurantId: restaurantID})
+	if err != nil {
+		return nil, fmt.Errorf("list scheduled slots: %w", err)
+	}
+	slots := make([]applications.Slot, 0, len(response.GetSlots()))
+	for _, slot := range response.GetSlots() {
+		window := slot.GetWindow()
+		if window.GetStart() == nil || window.GetEnd() == nil {
+			return nil, fmt.Errorf("list scheduled slots: restaurant %s has a window without bounds", restaurantID)
+		}
+		slots = append(slots, applications.Slot{
+			Start:     window.GetStart().AsTime(),
+			End:       window.GetEnd().AsTime(),
+			Available: slot.GetAvailable(),
+		})
+	}
+	return slots, nil
+}
+
 func menuItemsOf(items []*restaurantsv1.MenuItem) []applications.MenuItem {
 	result := make([]applications.MenuItem, 0, len(items))
 	for _, item := range items {
@@ -116,21 +140,39 @@ func menuItemsOf(items []*restaurantsv1.MenuItem) []applications.MenuItem {
 	return result
 }
 
-// restaurantOf requires wait_time: GetRestaurant and ListRestaurants always
-// set it (restaurants FR-204).
+// restaurantOf requires wait_time and time_zone: GetRestaurant and
+// ListRestaurants always set them (restaurants FR-201, FR-204).
+// acceptingOrders is accepting_orders — the flag and the opening hours at the
+// read — not the flag is_open alone (FR-699).
 func restaurantOf(restaurant *restaurantsv1.Restaurant) (applications.Restaurant, error) {
 	waitTime := restaurant.GetWaitTime()
 	if waitTime == nil {
 		return applications.Restaurant{}, fmt.Errorf("restaurant %s has no wait_time", restaurant.GetRestaurantId())
 	}
+	if restaurant.GetTimeZone() == "" {
+		return applications.Restaurant{}, fmt.Errorf("restaurant %s has no time_zone", restaurant.GetRestaurantId())
+	}
 	view := applications.Restaurant{
-		ID:     restaurant.GetRestaurantId(),
-		Name:   restaurant.GetName(),
-		IsOpen: restaurant.GetIsOpen(),
+		ID:              restaurant.GetRestaurantId(),
+		Name:            restaurant.GetName(),
+		AcceptingOrders: restaurant.GetAcceptingOrders(),
 		WaitTime: applications.WaitTime{
 			Elevated:            waitTime.GetElevated(),
 			ExpectedWaitMinutes: int(waitTime.GetExpectedWaitMinutes()),
 		},
+		TimeZone:     restaurant.GetTimeZone(),
+		OpeningHours: make([]applications.OpeningInterval, 0, len(restaurant.GetOpeningHours())),
+	}
+	for _, interval := range restaurant.GetOpeningHours() {
+		view.OpeningHours = append(view.OpeningHours, applications.OpeningInterval{
+			Day:    int(interval.GetDayOfWeek()),
+			Opens:  interval.GetOpens(),
+			Closes: interval.GetCloses(),
+		})
+	}
+	if next := restaurant.GetNextOpeningAt(); next != nil {
+		at := next.AsTime()
+		view.NextOpeningAt = &at
 	}
 	if fee := restaurant.GetPremiumFee(); fee != nil {
 		view.PremiumFee = &applications.Money{Amount: fee.GetAmount(), Currency: fee.GetCurrency()}

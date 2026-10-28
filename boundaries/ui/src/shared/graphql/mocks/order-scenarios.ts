@@ -6,10 +6,10 @@ import type {
 import { mockTracking } from "./courier-tracks";
 import {
   kitchenEight,
-  restaurantSummary,
   type MockOrder,
   orderLine,
   orderTotal,
+  restaurantSummary,
 } from "./restaurant-fixtures";
 
 // Fixed snapshots of the order lifecycle served by the mock BFF.
@@ -35,6 +35,9 @@ type ScenarioSpec = {
   deadlines?: Readonly<{ ready?: number; pickup?: number; delivered?: number }>;
   // Name of the assigned courier (FR-626); no courier when unset.
   courier?: string;
+  // Minutes from now to the start of the delivery window of a scheduled
+  // order; ASAP when unset.
+  windowInMinutes?: number;
 };
 
 // Statuses with a courier on the way once one is assigned.
@@ -75,6 +78,13 @@ function buildOrder(spec: ScenarioSpec, now: Date): MockOrder {
     expectedPickupAt: deadline(now, placed, spec.deadlines?.pickup),
     expectedDeliveredAt: deadline(now, placed, spec.deadlines?.delivered),
     courier: spec.courier ? { name: spec.courier } : null,
+    deliveryWindow:
+      spec.windowInMinutes === undefined
+        ? null
+        : {
+            start: at(now, spec.windowInMinutes),
+            end: at(now, spec.windowInMinutes + 15),
+          },
     tracking:
       assigned && trackedStatuses.has(spec.status)
         ? mockTracking(spec.id, spec.status === "PICKED_UP", now)
@@ -131,6 +141,20 @@ export function preparationDelayed(order: MockOrder): MockOrder {
 }
 
 const scenarios: readonly ScenarioSpec[] = [
+  {
+    // Accepted for a window in two hours; the kitchen has not started it
+    // (FR-687): no cooking bar, the window in the header.
+    id: "order-scheduled",
+    status: "SCHEDULED",
+    placedMinutesAgo: 10,
+    milestones: [
+      ["PAID", 0],
+      ["CONFIRMED", 1],
+    ],
+    cancellableForMinutes: 90,
+    deadlines: { ready: 115 },
+    windowInMinutes: 120,
+  },
   {
     id: "order-received",
     status: "RECEIVED",

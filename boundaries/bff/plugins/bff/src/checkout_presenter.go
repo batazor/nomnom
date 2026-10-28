@@ -11,6 +11,8 @@ var placeOrderProblemCodes = map[applications.ProblemCode]service.PlaceOrderProb
 	applications.ProblemOrderTotalAboveMaximum:       service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_ORDER_TOTAL_ABOVE_MAXIMUM,
 	applications.ProblemRestaurantNotAcceptingOrders: service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_RESTAURANT_NOT_ACCEPTING_ORDERS,
 	applications.ProblemPremiumUnavailable:           service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_PREMIUM_UNAVAILABLE,
+	applications.ProblemSlotUnavailable:              service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_SLOT_UNAVAILABLE,
+	applications.ProblemScheduledOrdersUnavailable:   service.PlaceOrderProblemCode_PLACE_ORDER_PROBLEM_CODE_SCHEDULED_ORDERS_UNAVAILABLE,
 }
 
 // placeOrderPayload carries the placed Order or the problems.
@@ -21,10 +23,18 @@ func placeOrderPayload(result applications.Result) (*service.PlaceOrderPayload, 
 		if err != nil {
 			return nil, err
 		}
-		payload.Problems = append(payload.Problems, &service.PlaceOrderProblem{
-			Code:        code,
-			MenuItemIds: problem.MenuItemIDs,
-		})
+		message := &service.PlaceOrderProblem{
+			Code:               code,
+			MenuItemIds:        problem.MenuItemIDs,
+			AlternativeWindows: make([]*service.DeliveryWindow, 0, len(problem.AlternativeWindows)),
+		}
+		// orders offers only windows that still have room.
+		for _, window := range problem.AlternativeWindows {
+			message.AlternativeWindows = append(message.AlternativeWindows, &service.DeliveryWindow{
+				Start: timestamp(window.Start), End: timestamp(window.End), Available: true,
+			})
+		}
+		payload.Problems = append(payload.Problems, message)
 	}
 	if result.Order != nil {
 		order, err := orderMessage(*result.Order)

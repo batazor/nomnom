@@ -28,6 +28,7 @@ use crate::slices::courier::domains::courier::{Courier, CourierId, CourierReposi
 use crate::slices::delivery::applications::dispatch_deliveries::{
     DeliveryPosition, WaitingDeliveries,
 };
+use crate::slices::delivery::applications::estimate_delivery_duration::DeliveryDurationSamples;
 use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
@@ -43,9 +44,12 @@ use crate::slices::delivery::applications::list_available_delivery_offers::{
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
+use crate::slices::delivery::applications::record_delivery_duration::{
+    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
+};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
-    DeliveryRepository, DeliveryTracking, Intersection, OrderId, TrackingChannel,
+    DeliveryRepository, DeliveryTracking, DurationKind, Intersection, OrderId, TrackingChannel,
 };
 use crate::slices::simulator::applications::work::{
     ActiveDeliveryWork, PendingOfferWork, SimulatorWork,
@@ -349,6 +353,59 @@ impl DeliveryOutbox for TestStore {
         DeliveryOutbox::add(self.available()?, message.clone())?;
         self.messages().push(message);
         Ok(())
+    }
+}
+
+impl DeliveryInbox for TestStore {
+    fn claim(
+        &self,
+        consumer: &str,
+        event_id: &str,
+        event_type: &str,
+    ) -> Result<bool, RepositoryError> {
+        self.available()?.claim(consumer, event_id, event_type)
+    }
+}
+
+impl DeliveryDurationStatistics for TestStore {
+    fn open_transit(
+        &self,
+        delivery_id: &DeliveryId,
+        market_id: &MarketId,
+        picked_up_at_ms: i64,
+    ) -> Result<(), RepositoryError> {
+        self.available()?
+            .open_transit(delivery_id, market_id, picked_up_at_ms)
+    }
+
+    fn close_transit(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Option<OpenTransit>, RepositoryError> {
+        self.available()?.close_transit(delivery_id)
+    }
+
+    fn record_duration(
+        &self,
+        market_id: &MarketId,
+        kind: DurationKind,
+        delivery_id: &DeliveryId,
+        duration: Duration,
+        keep: u32,
+    ) -> Result<(), RepositoryError> {
+        self.available()?
+            .record_duration(market_id, kind, delivery_id, duration, keep)
+    }
+}
+
+impl DeliveryDurationSamples for TestStore {
+    fn latest_durations(
+        &self,
+        market_id: &MarketId,
+        kind: DurationKind,
+        limit: u32,
+    ) -> Result<Vec<Duration>, RepositoryError> {
+        self.available()?.latest_durations(market_id, kind, limit)
     }
 }
 

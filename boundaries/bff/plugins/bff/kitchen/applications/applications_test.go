@@ -50,6 +50,7 @@ func TestKitchenOrdersFollowTheBoardOrder(t *testing.T) {
 		active("received-2", StageReceived, 6),
 	}, nil).Once()
 	board.EXPECT().QueueOrder(mock.Anything, "restaurant-1").Return([]string{"queued-first", "queued-late"}, nil).Once()
+	board.EXPECT().ScheduledOrders(mock.Anything, "restaurant-1").Return(nil, nil).Once()
 	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(CookPool{}, nil).Once()
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
@@ -176,6 +177,37 @@ func TestOtherKitchenRefusalsStayErrors(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUnknownAction)
 }
 
+// AC-932: the scheduled orders waiting for their start are a column of their
+// own with the window and the planned ready time; an incoming scheduled order
+// carries its window.
+func TestKitchenShowsTheScheduledOrders(t *testing.T) {
+	window := Window{Start: at(120), End: at(135)}
+	incoming := active("ro-incoming", StageReceived, 0)
+	incoming.DeliveryWindow = &window
+	board := NewMockKitchenBoard(t)
+	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return([]ActiveOrder{incoming}, nil).Once()
+	board.EXPECT().QueueOrder(mock.Anything, "restaurant-1").Return(nil, nil).Once()
+	board.EXPECT().ScheduledOrders(mock.Anything, "restaurant-1").Return([]ScheduledOrder{{
+		ID: "ro-scheduled", OrderID: "order-scheduled", Priority: PriorityPremium,
+		Lines:          []ActiveOrderLine{{MenuItemID: "menu-pho", Quantity: 2}},
+		DeliveryWindow: window, PlannedReadyAt: at(110),
+	}}, nil).Once()
+	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(CookPool{}, nil).Once()
+	catalog := NewMockCatalog(t)
+	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()
+	catalog.EXPECT().MenuItemNames(mock.Anything, "restaurant-1").Return(menuNames, nil).Once()
+
+	view, err := NewGetKitchen(board, catalog).Handle(context.Background(), "restaurant-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, []ScheduledOrderView{{
+		ID: "ro-scheduled", OrderID: "order-scheduled", Priority: PriorityPremium,
+		Items:          []ItemView{{Name: "Фо бо", Quantity: 2}},
+		DeliveryWindow: window, PlannedReadyAt: at(110),
+	}}, view.Scheduled)
+	assert.Equal(t, &window, view.Orders[0].DeliveryWindow)
+}
+
 // AC-800: an order shows its cook from the Cook Pool; the pool is on the screen.
 func TestKitchenShowsTheCookPoolAndTheCookOfAnOrder(t *testing.T) {
 	preparing := active("ro-1", StagePreparing, 0)
@@ -187,6 +219,7 @@ func TestKitchenShowsTheCookPoolAndTheCookOfAnOrder(t *testing.T) {
 	board := NewMockKitchenBoard(t)
 	board.EXPECT().ActiveOrders(mock.Anything, "restaurant-1").Return([]ActiveOrder{preparing, retired, active("ro-3", StageQueued, 2)}, nil).Once()
 	board.EXPECT().QueueOrder(mock.Anything, "restaurant-1").Return(nil, nil).Once()
+	board.EXPECT().ScheduledOrders(mock.Anything, "restaurant-1").Return(nil, nil).Once()
 	board.EXPECT().CookPool(mock.Anything, "restaurant-1").Return(pool, nil).Once()
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().Restaurant(mock.Anything, "restaurant-1").Return(Restaurant{ID: "restaurant-1", Name: "Кухня №8", IsOpen: true}, nil).Once()

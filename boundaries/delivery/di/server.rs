@@ -1,9 +1,11 @@
 //! Composition root процесса `delivery` (`cmd/delivery`): gRPC API, фоновый
-//! reconciliation relationships, фоновое истечение Delivery Offers и
-//! Dispatch Deliveries.
+//! reconciliation relationships, фоновое истечение Delivery Offers,
+//! Dispatch Deliveries и consumer собственных фактов Delivery для Delivery
+//! Duration Statistics (FR-676).
 //!
 //! [`compose`] выбирает реализации портов и открывает общие клиенты процесса
-//! (fail fast: SpiceDB, PostgreSQL, Valkey потока позиций, service identity), собирает граф use cases
+//! (fail fast: SpiceDB, PostgreSQL, Valkey потока позиций, Kafka consumer,
+//! service identity, политика Delivery Duration Estimate), собирает граф use cases
 //! ([`super::service`]) и итоговый [`ServerModule`]. Worker процесса создаёт
 //! provider [`DeliveryWorkerProvider`] уже после открытия технического порта:
 //! бизнес-порт открывается последним (ADR 17).
@@ -24,21 +26,29 @@ use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, m
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
+use crate::infrastructure::messaging::{EventConsumer, MessageHandler};
 use crate::infrastructure::random::SystemRandomSource;
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
-use crate::infrastructure::repository::{Store, migrate};
+use crate::infrastructure::repository::{OUTBOX_TOPIC, Store, migrate};
 use crate::infrastructure::spicedb::{
     CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
 };
 use crate::infrastructure::tracks::ValkeyPositionPublisher;
 use crate::pkg::config::{
-    AppConfig, OffersConfig, SimulatorConfig, SpiceDbConfig, TrackingConfig, ValkeyConfig, database,
+    AppConfig, DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
+    DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig, KafkaConfig, OffersConfig,
+    SimulatorConfig, SpiceDbConfig, TrackingConfig, ValkeyConfig, database,
 };
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
-use crate::slices::delivery::domains::delivery::{DeliveryRepository, VirtualCity};
-use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
+use crate::slices::delivery::applications::record_delivery_duration::CONSUMER;
+use crate::slices::delivery::domains::delivery::{
+    DeliveryEstimatePolicy, DeliveryRepository, DurationKind, InvalidEstimatePolicy, VirtualCity,
+};
+use crate::slices::delivery::infrastructure::{
+    DeliveryIntegrationEvents, duration_input, handling_error,
+};
 use crate::slices::simulator::di::SimulatorStore;
 
 use super::infrastructure::{
@@ -46,9 +56,9 @@ use super::infrastructure::{
 };
 use super::service::{ServiceModule, service};
 use super::{
-    DispatchDeliveries, DispatchSchedule, DispatchWorker, ExpireOffers, ExpirySchedule,
-    OfferExpiryWorker, ReconcilingWorker, Simulator, SimulatorSchedule, SimulatorWorker,
-    SystemRandomness, UseCaseCourierActions,
+    ConsumingWorker, DispatchDeliveries, DispatchSchedule, DispatchWorker, ExpireOffers,
+    ExpirySchedule, OfferExpiryWorker, ReconcilingWorker, Simulator, SimulatorSchedule,
+    SimulatorWorker, SystemRandomness, UseCaseCourierActions,
 };
 
 /// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
@@ -121,6 +131,34 @@ pub fn virtual_city(config: &TrackingConfig) -> Result<VirtualCity, String> {
         config.block_meters,
     )
     .map_err(|error| error.to_string())
+}
+
+/// Политика Delivery Duration Estimate процесса (FR-691): нулевой размер
+/// выборки или нулевая базовая длительность — ошибка startup.
+pub fn estimate_policy(config: &DeliveryEstimateConfig) -> Result<DeliveryEstimatePolicy, String> {
+    DeliveryEstimatePolicy::new(
+        config.sample_size,
+        config.baseline_courier_lead,
+        config.baseline_transit,
+    )
+    .map_err(|error| {
+        let name = match error {
+            InvalidEstimatePolicy::SampleSize => DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV,
+            InvalidEstimatePolicy::Baseline(DurationKind::CourierLead) => {
+                DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV
+            }
+            InvalidEstimatePolicy::Baseline(DurationKind::Transit) => {
+                DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV
+            }
+        };
+        format!("{name}: {error}")
+    })
+}
+
+/// Consumer собственных фактов Delivery (`delivery.v1.delivery-events`) для
+/// Delivery Duration Statistics в группе `KAFKA__CONSUMER_GROUP`.
+pub fn duration_statistics_consumer(config: &KafkaConfig) -> Result<EventConsumer, String> {
+    EventConsumer::subscribe(config, OUTBOX_TOPIC, CONSUMER)
 }
 
 /// Live tracking процесса: Virtual City, поток позиций в Valkey и
@@ -316,10 +354,51 @@ impl DemoSimulator for UseCaseDemoSimulator {
     }
 }
 
+/// Consumer Delivery Duration Statistics (FR-676) над use cases процесса.
+pub trait DurationStatistics: Interface {
+    /// Consumer и обработчик его сообщений; consumer отдаётся один раз —
+    /// единственному worker процесса.
+    fn consumer(&self) -> Result<(EventConsumer, MessageHandler), String>;
+}
+
+#[derive(Component)]
+#[shaku(interface = DurationStatistics)]
+pub struct KafkaDurationStatistics {
+    /// Тот же граф use cases, что у gRPC-транспорта.
+    use_cases: Arc<ServiceModule>,
+    /// `None` после передачи worker.
+    consumer: Mutex<Option<EventConsumer>>,
+}
+
+impl DurationStatistics for KafkaDurationStatistics {
+    fn consumer(&self) -> Result<(EventConsumer, MessageHandler), String> {
+        let consumer = self
+            .consumer
+            .lock()
+            .map_err(|_| "duration statistics consumer lock poisoned".to_owned())?
+            .take()
+            .ok_or_else(|| "duration statistics consumer is already running".to_owned())?;
+        let use_cases = Arc::clone(&self.use_cases);
+        let handler: MessageHandler = Arc::new(move |envelope, payload| {
+            let Some(input) = duration_input(envelope, payload)? else {
+                return Ok(());
+            };
+            use_cases
+                .deliveries()
+                .record_delivery_duration(input)
+                .map(drop)
+                .map_err(|error| handling_error(&error))
+        });
+        Ok((consumer, handler))
+    }
+}
+
 /// Worker процесса: gRPC, фоновый reconciliation, истечение offers,
-/// Dispatch Deliveries и Simulator под одним сигналом.
-pub type DeliveryWorker =
-    ReconcilingWorker<SimulatorWorker<DispatchWorker<OfferExpiryWorker<GrpcWorker>>>>;
+/// Dispatch Deliveries, Simulator и consumer Delivery Duration Statistics
+/// под одним сигналом.
+pub type DeliveryWorker = ConsumingWorker<
+    ReconcilingWorker<SimulatorWorker<DispatchWorker<OfferExpiryWorker<GrpcWorker>>>>,
+>;
 
 /// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers, цикл
 /// истечения offers и цикл Dispatch Deliveries.
@@ -332,7 +411,8 @@ where
         + HasComponent<dyn RelationshipReconciliation>
         + HasComponent<dyn OfferExpiry>
         + HasComponent<dyn DeliveryDispatch>
-        + HasComponent<dyn DemoSimulator>,
+        + HasComponent<dyn DemoSimulator>
+        + HasComponent<dyn DurationStatistics>,
 {
     type Interface = DeliveryWorker;
 
@@ -342,6 +422,8 @@ where
         let expiry: &dyn OfferExpiry = module.resolve_ref();
         let dispatch: &dyn DeliveryDispatch = module.resolve_ref();
         let simulator: &dyn DemoSimulator = module.resolve_ref();
+        let statistics: &dyn DurationStatistics = module.resolve_ref();
+        let (consumer, handler) = statistics.consumer()?;
         let worker = transport
             .bind()
             .map_err(|error| format!("listen :{}: {error}", transport.port()))?;
@@ -353,11 +435,12 @@ where
             simulator.interval(),
             simulator.track_interval(),
         );
-        Ok(Box::new(ReconcilingWorker::new(
+        let worker = ReconcilingWorker::new(
             worker,
             reconciliation.reconcilers(),
             reconciliation.schedule(),
-        )))
+        );
+        Ok(Box::new(ConsumingWorker::new(worker, consumer, handler)))
     }
 }
 
@@ -395,6 +478,7 @@ module! {
             UseCaseOfferExpiry,
             UseCaseDeliveryDispatch,
             UseCaseDemoSimulator,
+            KafkaDurationStatistics,
             OtlpServerTelemetry
         ],
         providers = [DeliveryWorkerProvider]
@@ -437,6 +521,10 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // ошибка startup.
     let tracking = tracking(&config.tracking, &config.valkey)?;
     let city = tracking.city;
+    // Нулевая выборка или базовая длительность Delivery Duration Estimate —
+    // ошибка startup; невалидная конфигурация Kafka consumer — тоже.
+    let estimate = estimate_policy(&config.delivery_estimate)?;
+    let consumer = duration_statistics_consumer(&config.kafka)?;
     let infrastructure = infrastructure(
         ProcessStores::over(&store),
         ids,
@@ -444,6 +532,7 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
         Box::new(spicedb_authorization(spicedb, Arc::clone(&store))),
         Box::new(SpiceDbRelationships::new(Arc::clone(&graph))),
         tracking,
+        estimate,
     );
     let use_cases = Arc::new(service(Arc::clone(&infrastructure)));
     Ok(ServerModule::builder()
@@ -460,6 +549,10 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
             store: Arc::clone(&store) as _,
             config: config.simulator,
             city,
+        })
+        .with_component_parameters::<KafkaDurationStatistics>(KafkaDurationStatisticsParameters {
+            use_cases: Arc::clone(&use_cases),
+            consumer: Mutex::new(Some(consumer)),
         })
         .with_component_parameters::<TonicTransport>(TonicTransportParameters {
             use_cases,
@@ -535,6 +628,7 @@ mod tests {
             Box::new(local_authorization()),
             Box::new(RecordingRelationships::new()),
             crate::di::service::test_tracking(),
+            crate::di::service::test_estimate_policy(),
         ))
     }
 
@@ -657,6 +751,38 @@ mod tests {
         assert_eq!(output.offered.len(), 1);
         assert_eq!(output.offered[0].delivery_id, created.delivery_id);
         assert_eq!(output.offered[0].courier_id.as_str(), "courier-1");
+    }
+
+    /// FR-691: a zero `DELIVERY_ESTIMATE__*` stops the process before ports
+    /// open; the error names the variable.
+    #[test]
+    fn zero_delivery_estimate_fails_startup() {
+        let minutes = |value: u64| Duration::from_secs(value * 60);
+        let config = |sample_size, courier_lead, transit| DeliveryEstimateConfig {
+            sample_size,
+            baseline_courier_lead: courier_lead,
+            baseline_transit: transit,
+        };
+        assert!(estimate_policy(&config(50, minutes(15), minutes(20))).is_ok());
+        for (name, config) in [
+            (
+                DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV,
+                config(0, minutes(15), minutes(20)),
+            ),
+            (
+                DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV,
+                config(50, Duration::ZERO, minutes(20)),
+            ),
+            (
+                DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
+                config(50, minutes(15), Duration::ZERO),
+            ),
+        ] {
+            let Err(error) = estimate_policy(&config) else {
+                panic!("{name} = 0 must fail startup");
+            };
+            assert!(error.contains(name), "{error}");
+        }
     }
 
     #[test]

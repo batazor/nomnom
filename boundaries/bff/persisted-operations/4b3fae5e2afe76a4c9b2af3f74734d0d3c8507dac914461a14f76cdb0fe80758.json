@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "query ViewRestaurant($id: ID!) { restaurant(id: $id) { acceptingOrders id menu { items { available description id name price { amount currency } } } name nextOpeningAt premiumFee { amount currency } scheduledSlots { available end start } timeZone waitTime { elevated expectedWaitMinutes } } }"
+}

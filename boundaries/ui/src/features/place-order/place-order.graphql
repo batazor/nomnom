@@ -6,6 +6,12 @@ mutation PlaceOrder($input: PlaceOrderInput!) {
     problems {
       code
       menuItemIds
+      # Nearest available windows of SLOT_UNAVAILABLE (FR-690).
+      alternativeWindows {
+        start
+        end
+        available
+      }
     }
   }
 }

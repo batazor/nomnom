@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -11,8 +12,8 @@ import (
 )
 
 var (
-	pho   = Restaurant{ID: "restaurant-1", Name: "Pho Bar", IsOpen: true}
-	ramen = Restaurant{ID: "restaurant-2", Name: "Ramen Bar", IsOpen: true}
+	pho   = Restaurant{ID: "restaurant-1", Name: "Pho Bar", AcceptingOrders: true}
+	ramen = Restaurant{ID: "restaurant-2", Name: "Ramen Bar", AcceptingOrders: true}
 )
 
 func TestListRestaurantsPassesTheCursorThrough(t *testing.T) {
@@ -136,4 +137,27 @@ func TestListRestaurantsFailsWhenAMenuCannotBeRead(t *testing.T) {
 	_, err := NewListRestaurants(restaurants, menus).Handle(context.Background(), 10, "")
 
 	require.ErrorIs(t, err, broken)
+}
+
+func TestListScheduledSlotsReadsEachRestaurantInOrder(t *testing.T) {
+	start := time.Date(2026, 10, 28, 17, 0, 0, 0, time.UTC)
+	window := Slot{Start: start, End: start.Add(15 * time.Minute), Available: true}
+	slots := NewMockSlotReader(t)
+	slots.EXPECT().ScheduledSlots(mock.Anything, "restaurant-1").Return([]Slot{window}, nil).Once()
+	slots.EXPECT().ScheduledSlots(mock.Anything, "restaurant-2").Return([]Slot{}, nil).Once()
+
+	result, err := NewListScheduledSlots(slots).Handle(context.Background(), []string{"restaurant-1", "restaurant-2"})
+
+	require.NoError(t, err)
+	assert.Equal(t, [][]Slot{{window}, {}}, result)
+}
+
+func TestListScheduledSlotsFailsWhenARestaurantCannotBeRead(t *testing.T) {
+	down := errors.New("restaurants unavailable")
+	slots := NewMockSlotReader(t)
+	slots.EXPECT().ScheduledSlots(mock.Anything, "restaurant-1").Return(nil, down).Once()
+
+	_, err := NewListScheduledSlots(slots).Handle(context.Background(), []string{"restaurant-1", "restaurant-2"})
+
+	require.ErrorIs(t, err, down)
 }

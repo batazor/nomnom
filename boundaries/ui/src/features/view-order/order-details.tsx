@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
+import { useZonedFormatters } from "../../shared/i18n/zoned-time";
+import { useMarketTimeZone } from "../../shared/market/market";
 import { Button, Illustration } from "../../shared/ui";
 import { CancelOrder } from "./cancel-order";
 import { CourierMap } from "./courier-map";
@@ -83,6 +85,9 @@ function OrderView({
           <div>
             <h3 id="order-title">{t(status.label)}</h3>
             <p>{t(status.detail)}</p>
+            {order.deliveryWindow ? (
+              <DeliveryWindow window={order.deliveryWindow} />
+            ) : null}
             <HeaderEta order={order} />
             <p className="order-placed">
               {t("order.placedAt", { time: time(order.placedAt) })}
@@ -246,6 +251,25 @@ function OrderProgress({
         })}
       </ol>
     </section>
+  );
+}
+
+// The window a scheduled order is delivered in, in the Market time (FR-687).
+function DeliveryWindow({
+  window,
+}: {
+  window: NonNullable<ViewedOrder["deliveryWindow"]>;
+}) {
+  const { t } = useI18n();
+  const zoned = useZonedFormatters(useMarketTimeZone());
+  if (zoned === null) return null;
+  return (
+    <p className="order-window">
+      {t("order.deliveryWindow", {
+        day: zoned.day(window.start),
+        window: zoned.window(window.start, window.end),
+      })}
+    </p>
   );
 }
 

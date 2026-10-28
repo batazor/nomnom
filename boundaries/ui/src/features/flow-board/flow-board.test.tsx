@@ -190,6 +190,61 @@ describe("flow board", () => {
     expect(within(courier).getByText("На линии")).toBeVisible();
   }, 15_000);
 
+  // AC-932: an accepted scheduled order waits in «Запланированные» between
+  // the incoming orders and the queue, with its window and the time it must be
+  // ready, and no command; at its start it moves to the queue by
+  // kitchenChanged, without polling.
+  it("keeps a scheduled order apart until its start", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить в корзину: Манго и клейкий рис",
+      }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Ко времени" }));
+    const windows = screen.getByRole("group", { name: "Окно доставки" });
+    const [first] = within(windows).getAllByRole("radio");
+    await user.click(first);
+    await user.click(screen.getByRole("button", { name: "Оформить заказ" }));
+    await screen.findByRole("button", { name: /Кухня №8.*Оплачен/ });
+
+    // The incoming order carries its window.
+    const incoming = await waitFor(selectedKitchenCard);
+    expect(
+      within(incoming).getByText(/^К \d\d:\d\d–\d\d:\d\d$/),
+    ).toBeInTheDocument();
+    await user.click(within(incoming).getByRole("button", { name: "Принять" }));
+
+    const scheduled = await within(column("Кухня")).findByRole("list", {
+      name: "Запланированные",
+    });
+    const [card] = within(scheduled).getAllByRole("article");
+    expect(card).toHaveTextContent(/Заказ на \d\d:\d\d–\d\d:\d\d/);
+    expect(card).toHaveTextContent(/Приготовить к \d\d:\d\d/);
+    expect(within(card).getAllByRole("button")).toHaveLength(1);
+    expect(
+      await screen.findByText("Дальше: Кухня — «Готовится»"),
+    ).toBeVisible();
+
+    // The start comes: the next change of the kitchen, here another order
+    // accepted, brings the scheduled one into the queue.
+    mockStore.setClock(() => new Date(Date.now() + 2 * 60 * 60_000));
+    const other = column("Кухня").querySelector<HTMLElement>(
+      '.board-card[data-stage="RECEIVED"]',
+    );
+    if (!other) throw new Error("No other incoming order");
+    await user.click(within(other).getByRole("button", { name: "Принять" }));
+    await waitFor(() =>
+      expect(
+        within(column("Кухня")).queryByRole("list", {
+          name: "Запланированные",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+  }, 15_000);
+
   it("places the order when the cart is dragged to the kitchen", async () => {
     const user = userEvent.setup();
     renderBoard();

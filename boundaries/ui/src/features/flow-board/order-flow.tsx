@@ -152,7 +152,14 @@ function OrderChip({
   );
 }
 
+// A scheduled order the kitchen accepted stands on the step of acceptance
+// until the kitchen starts it for its window (FR-687).
+function flowStatus(status: OrderStatus): OrderStatus {
+  return status === "SCHEDULED" ? "CONFIRMED" : status;
+}
+
 function statusLabel(status: OrderStatus): MessageKey {
+  if (status === "SCHEDULED") return "board.step.scheduled";
   return (
     flowSteps.find((step) => step.status === status)?.label ??
     (status === "CANCELLED" ? "board.step.cancelled" : "board.step.failed")
@@ -173,7 +180,9 @@ export function OrderTimeline({
   if (!order) {
     return <p className="board-timeline-empty">{t("board.orders.loading")}</p>;
   }
-  const reached = flowSteps.findIndex((step) => step.status === order.status);
+  const reached = flowSteps.findIndex(
+    (step) => step.status === flowStatus(order.status),
+  );
   const ended = order.status === "CANCELLED" || order.status === "FAILED";
   const next = reached >= 0 ? flowSteps[reached + 1] : undefined;
 

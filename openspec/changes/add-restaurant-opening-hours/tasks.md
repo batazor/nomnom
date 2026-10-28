@@ -9,8 +9,8 @@
 
 ## 2. BFF и UI
 
-- [ ] 2.1 BFF: `Restaurant.timeZone`, `openingHours`, `acceptingOrders`, `nextOpeningAt`, mutation `setOpeningHours`; тесты (`FR-700`, `AC-949`, `AC-950`).
-- [ ] 2.2 UI: редактор расписания на экране управления, «Откроется в …» в каталоге; i18n, моки, generated types, тесты (`FR-701`, `FR-702`, `AC-951`, `AC-952`).
+- [x] 2.1 BFF: `Restaurant.timeZone`, `openingHours`, `acceptingOrders`, `nextOpeningAt`, mutation `setOpeningHours`; тесты (`FR-700`, `AC-949`, `AC-950`).
+- [x] 2.2 UI: редактор расписания на экране управления, «Откроется в …» в каталоге; i18n, моки, generated types, тесты (`FR-701`, `FR-702`, `AC-951`, `AC-952`).
 
 ## 3. ops и документация
 

@@ -93,7 +93,9 @@ describe("GraphQL client", () => {
 
     const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
     expect(requestUrl.searchParams.get("query")).toBeNull();
-    expect(JSON.parse(requestUrl.searchParams.get("extensions") ?? "{}")).toEqual({
+    expect(
+      JSON.parse(requestUrl.searchParams.get("extensions") ?? "{}"),
+    ).toEqual({
       persistedQuery: {
         version: 1,
         // The hex SHA-256 of the operation text, as in the BFF manifest.

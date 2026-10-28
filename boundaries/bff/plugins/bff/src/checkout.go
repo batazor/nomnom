@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,11 +36,20 @@ func (s *BffService) MutationPlaceOrder(ctx context.Context, request *service.Mu
 	default:
 		return nil, status.Error(codes.InvalidArgument, "priority is required")
 	}
+	var windowStart *time.Time
+	if value := input.GetDeliveryWindowStart(); value != nil {
+		start, err := time.Parse(time.RFC3339, value.GetValue())
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "deliveryWindowStart must be an RFC 3339 moment")
+		}
+		windowStart = &start
+	}
 	result, err := s.checkout.placeOrder.Handle(ctx, applications.Input{
-		RestaurantID:   input.GetRestaurantId(),
-		Lines:          lines,
-		Priority:       priority,
-		IdempotencyKey: input.GetIdempotencyKey(),
+		RestaurantID:        input.GetRestaurantId(),
+		Lines:               lines,
+		Priority:            priority,
+		IdempotencyKey:      input.GetIdempotencyKey(),
+		DeliveryWindowStart: windowStart,
 	})
 	switch {
 	case errors.Is(err, applications.ErrRestaurantNotFound):

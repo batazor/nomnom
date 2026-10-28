@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,8 +18,10 @@ import (
 )
 
 var phoBar = applications.Restaurant{
-	ID: "restaurant-1", Name: "Pho Bar", IsOpen: true,
-	WaitTime: applications.WaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+	ID: "restaurant-1", Name: "Pho Bar", AcceptingOrders: true,
+	WaitTime:     applications.WaitTime{Elevated: true, ExpectedWaitMinutes: 42},
+	TimeZone:     "Europe/Berlin",
+	OpeningHours: []applications.OpeningInterval{{Day: 5, Opens: "18:00", Closes: "02:00"}},
 }
 
 // Catalog resolvers need no BFF identity in the service and no access token.
@@ -109,4 +112,61 @@ func TestQueryRestaurantMissingIsNullAndWithoutMenuHasNullMenu(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, response.GetRestaurant())
 	assert.Nil(t, response.GetRestaurant().GetMenu())
+}
+
+// AC-949: a restaurant opened by its owner before its opening hours does not
+// accept orders and names the start of the next period; its schedule and time
+// zone are public.
+func TestQueryRestaurantMapsTheOpeningHours(t *testing.T) {
+	opensAt := time.Date(2026, 10, 30, 17, 0, 0, 0, time.UTC)
+	closed := phoBar
+	closed.AcceptingOrders = false
+	closed.NextOpeningAt = &opensAt
+	get := newMockGetRestaurantHandler(t)
+	get.EXPECT().Handle(mock.Anything, "restaurant-1").Return(applications.RestaurantView{Restaurant: closed}, nil).Once()
+
+	response, err := catalogService(newMockListRestaurantsHandler(t), get).QueryRestaurant(context.Background(), &service.QueryRestaurantRequest{Id: "restaurant-1"})
+
+	require.NoError(t, err)
+	restaurant := response.GetRestaurant()
+	assert.False(t, restaurant.GetAcceptingOrders())
+	assert.Equal(t, "2026-10-30T17:00:00Z", restaurant.GetNextOpeningAt().GetValue())
+	assert.Equal(t, "Europe/Berlin", restaurant.GetTimeZone())
+	assert.Equal(t, []*service.OpeningInterval{{DayOfWeek: 5, Opens: "18:00", Closes: "02:00"}}, restaurant.GetOpeningHours())
+
+	get.EXPECT().Handle(mock.Anything, "restaurant-1").Return(applications.RestaurantView{Restaurant: phoBar}, nil).Once()
+	response, err = catalogService(newMockListRestaurantsHandler(t), get).QueryRestaurant(context.Background(), &service.QueryRestaurantRequest{Id: "restaurant-1"})
+	require.NoError(t, err)
+	assert.Nil(t, response.GetRestaurant().GetNextOpeningAt(), "an accepting restaurant has no next opening")
+}
+
+// FR-685: the windows of each restaurant of the response, in its order.
+func TestResolveScheduledSlotsKeepsTheOrderOfTheContext(t *testing.T) {
+	start := time.Date(2026, 10, 28, 17, 0, 0, 0, time.UTC)
+	slots := newMockListScheduledSlotsHandler(t)
+	slots.EXPECT().Handle(mock.Anything, []string{"restaurant-1", "restaurant-2"}).Return([][]applications.Slot{
+		{{Start: start, End: start.Add(15 * time.Minute), Available: true}, {Start: start.Add(15 * time.Minute), End: start.Add(30 * time.Minute)}},
+		{},
+	}, nil).Once()
+	svc := &BffService{catalog: &restaurantCatalog{listScheduledSlots: slots}}
+
+	response, err := svc.ResolveRestaurantScheduledSlots(context.Background(), &service.ResolveRestaurantScheduledSlotsRequest{
+		Context: []*service.ResolveRestaurantScheduledSlotsContext{{Id: "restaurant-1"}, {Id: "restaurant-2"}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, response.GetResult(), 2)
+	assert.Equal(t, []*service.DeliveryWindow{
+		{Start: "2026-10-28T17:00:00Z", End: "2026-10-28T17:15:00Z", Available: true},
+		{Start: "2026-10-28T17:15:00Z", End: "2026-10-28T17:30:00Z"},
+	}, response.GetResult()[0].GetScheduledSlots())
+	assert.Empty(t, response.GetResult()[1].GetScheduledSlots())
+
+	broken := newMockListScheduledSlotsHandler(t)
+	broken.EXPECT().Handle(mock.Anything, []string{"restaurant-1"}).Return(nil, errors.New("down")).Once()
+	svc.catalog.listScheduledSlots = broken
+	_, err = svc.ResolveRestaurantScheduledSlots(context.Background(), &service.ResolveRestaurantScheduledSlotsRequest{
+		Context: []*service.ResolveRestaurantScheduledSlotsContext{{Id: "restaurant-1"}},
+	})
+	assert.Equal(t, codes.Unavailable, status.Code(err))
 }

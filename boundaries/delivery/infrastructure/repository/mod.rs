@@ -1,7 +1,8 @@
 //! PostgreSQL storage of the `delivery` bounded context (ADR 8, ADR 31,
 //! ADR 0001 of the context) on `sqlx`: repositories with optimistic
-//! concurrency, the Transactional Outbox (ADR 13, ADR 31), the courier
-//! location store, read models, the Unit of Work and the reconciliation reads.
+//! concurrency, the Transactional Outbox (ADR 13, ADR 31), the Transactional
+//! Inbox (ADR 11), the courier location store, read models, the Delivery
+//! Duration Statistics, the Unit of Work and the reconciliation reads.
 //! Every statement is a compile-time checked `sqlx` macro; `.sqlx` holds the
 //! query cache for builds without a database (`make sqlx-prepare`).
 //!
@@ -237,6 +238,7 @@ macro_rules! sql {
 }
 
 // The port implementations use `sql!`, so they are declared after it.
+mod duration_statistics;
 mod outbox;
 mod read_models;
 mod repositories;

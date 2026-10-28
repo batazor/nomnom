@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO delivery_duration_samples (market_id, kind, delivery_id, duration_ms)\n             VALUES ($1, $2, $3, $4)\n             ON CONFLICT (kind, delivery_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2e276d7456a2caa61ecd6bab1e80af2f1d3c01b37e69b053f8ff9f222bb10406"
+}

@@ -17,7 +17,7 @@ fn loads_port_from_toml() {
     fs::write(
         &path,
         format!(
-            "[server]\nport = 9003\n{DATABASE_TOML}{SIMULATOR_TOML}{TRACKING_TOML}{VALKEY_TOML}"
+            "[server]\nport = 9003\n{DATABASE_TOML}{SIMULATOR_TOML}{TRACKING_TOML}{VALKEY_TOML}{KAFKA_TOML}{DELIVERY_ESTIMATE_TOML}"
         ),
     )
     .expect("write config");
@@ -40,13 +40,20 @@ const TRACKING_TOML: &str = "\n[tracking]\ncity_origin_latitude = 52.515\ncity_o
 /// Обязательный URL Valkey потока позиций (FR-666) тестовых конфигов.
 const VALKEY_TOML: &str = "\n[valkey]\nurl = \"redis://delivery:p@valkey:6379\"\n";
 
+/// Обязательный Kafka consumer (ADR 11) тестовых конфигов.
+const KAFKA_TOML: &str = "\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\n";
+
+/// Обязательная секция Delivery Duration Estimate (FR-691) тестовых конфигов.
+const DELIVERY_ESTIMATE_TOML: &str = "\n[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n";
+
 /// Обязательный URI PostgreSQL тестовых конфигов.
 const DATABASE_TOML: &str = "\n[database]\nuri = \"postgresql://u:p@db:5432/delivery\"\n";
 
 /// Пишет TOML во временный файл с уникальным именем и загружает его; без
-/// своих секций `[database]`, `[simulator]`, `[tracking]` и `[valkey]` к нему
-/// добавляются [`DATABASE_TOML`], [`SIMULATOR_TOML`], [`TRACKING_TOML`] и
-/// [`VALKEY_TOML`].
+/// своих секций `[database]`, `[simulator]`, `[tracking]`, `[valkey]`,
+/// `[kafka]` и `[delivery_estimate]` к нему добавляются [`DATABASE_TOML`],
+/// [`SIMULATOR_TOML`], [`TRACKING_TOML`], [`VALKEY_TOML`], [`KAFKA_TOML`] и
+/// [`DELIVERY_ESTIMATE_TOML`].
 fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
     let path = std::env::temp_dir().join(format!(
         "nomnom-delivery-{name}-{}.toml",
@@ -58,6 +65,8 @@ fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
         ("[simulator]", SIMULATOR_TOML),
         ("[tracking]", TRACKING_TOML),
         ("[valkey]", VALKEY_TOML),
+        ("[kafka]", KAFKA_TOML),
+        ("[delivery_estimate]", DELIVERY_ESTIMATE_TOML),
     ] {
         if !contents.contains(section) {
             contents.push_str(toml);
@@ -719,5 +728,134 @@ fn tracking_env_sets_values() {
     assert_eq!(
         config.get_string("valkey.url").expect("valkey url"),
         "redis://valkey:6379"
+    );
+}
+
+#[test]
+fn loads_kafka_and_delivery_estimate_from_toml() {
+    let config = load_toml("estimate", "").expect("load config");
+
+    assert_eq!(
+        config.kafka,
+        KafkaConfig {
+            brokers: "kafka:9092".to_owned(),
+            consumer_group: "delivery".to_owned(),
+            initial_offset: InitialOffset::Oldest,
+        }
+    );
+    assert_eq!(
+        config.delivery_estimate,
+        DeliveryEstimateConfig {
+            sample_size: 50,
+            baseline_courier_lead: Duration::from_secs(15 * 60),
+            baseline_transit: Duration::from_secs(20 * 60),
+        }
+    );
+}
+
+/// FR-691: an empty or invalid `DELIVERY_ESTIMATE__*` stops the process at
+/// startup; a zero value is rejected by the estimate policy when the process
+/// is composed (`di::server::estimate_policy`).
+#[test]
+fn missing_or_invalid_delivery_estimate_fails_startup() {
+    for (name, contents) in [
+        ("estimate-missing", "[delivery_estimate]\n"),
+        (
+            "estimate-no-transit",
+            "[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\n",
+        ),
+        (
+            "estimate-negative-sample",
+            "[delivery_estimate]\nsample_size = -1\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n",
+        ),
+        (
+            "estimate-malformed-sample",
+            "[delivery_estimate]\nsample_size = \"many\"\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n",
+        ),
+        (
+            "estimate-malformed-lead",
+            "[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"soon\"\nbaseline_transit = \"20m\"\n",
+        ),
+        (
+            "estimate-empty-transit",
+            "[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"\"\n",
+        ),
+    ] {
+        assert!(load_toml(name, contents).is_err(), "{name}");
+    }
+}
+
+#[test]
+fn delivery_estimate_env_sets_values() {
+    let builder = configure_delivery_estimate(ConfigLoader::builder(), |name| match name {
+        DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV => Some("30".to_owned()),
+        DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV => Some("10m".to_owned()),
+        DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV => Some("25m".to_owned()),
+        _ => None,
+    })
+    .expect("configure delivery estimate");
+    let config = builder.build().expect("build config");
+
+    assert_eq!(
+        config
+            .get_string("delivery_estimate.sample_size")
+            .expect("sample size"),
+        "30"
+    );
+    assert_eq!(
+        config
+            .get_string("delivery_estimate.baseline_transit")
+            .expect("baseline transit"),
+        "25m"
+    );
+}
+
+#[test]
+fn missing_or_invalid_kafka_fails_startup() {
+    for (name, contents, env) in [
+        ("kafka-missing", "[kafka]\n", None),
+        (
+            "kafka-empty-brokers",
+            "[kafka]\nbrokers = \" \"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\n",
+            Some(KAFKA_BROKERS_ENV),
+        ),
+        (
+            "kafka-empty-group",
+            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"\"\ninitial_offset = \"oldest\"\n",
+            Some(KAFKA_CONSUMER_GROUP_ENV),
+        ),
+        (
+            "kafka-unknown-offset",
+            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"middle\"\n",
+            None,
+        ),
+    ] {
+        let Err(error) = load_toml(name, contents) else {
+            panic!("{name} must fail startup");
+        };
+        if let Some(env) = env {
+            assert!(error.to_string().contains(env), "{name}: {error}");
+        }
+    }
+}
+
+#[test]
+fn kafka_env_sets_values() {
+    let builder = configure_kafka(ConfigLoader::builder(), |name| match name {
+        KAFKA_BROKERS_ENV => Some("kafka.nomnom-infra:9092".to_owned()),
+        KAFKA_CONSUMER_GROUP_ENV => Some("delivery".to_owned()),
+        KAFKA_INITIAL_OFFSET_ENV => Some("newest".to_owned()),
+        _ => None,
+    })
+    .expect("configure kafka");
+    let config = builder.build().expect("build config");
+
+    assert_eq!(
+        config.get_string("kafka.brokers").expect("brokers"),
+        "kafka.nomnom-infra:9092"
+    );
+    assert_eq!(
+        config.get_string("kafka.initial_offset").expect("offset"),
+        "newest"
     );
 }

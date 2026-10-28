@@ -2,13 +2,13 @@ import { m } from "motion/react";
 import { useMemo } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
+import { type GridPoint, toGrid } from "../../shared/virtual-city";
 import {
   cityBlocks,
   type OrderTracking,
   type TrackedPosition,
   useCourierTrack,
 } from "./courier-track";
-import { type GridPoint, toGrid } from "../../shared/virtual-city";
 
 // Gap of the streets between blocks, in blocks.
 const street = 0.16;

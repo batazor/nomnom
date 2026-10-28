@@ -4,7 +4,10 @@
 // reach it (BFF ADR 2).
 package applications
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 var (
 	// ErrRestaurantNotFound is a restaurant unknown to restaurants.
@@ -26,12 +29,30 @@ type Money struct {
 
 // Restaurant is the public restaurant data of restaurants.
 type Restaurant struct {
-	ID       string
-	Name     string
-	IsOpen   bool
-	WaitTime WaitTime
+	ID   string
+	Name string
+	// AcceptingOrders is opened by the owner and inside the opening hours at
+	// the time of the read (restaurants FR-699).
+	AcceptingOrders bool
+	WaitTime        WaitTime
 	// PremiumFee is nil when the restaurant offers no Premium Priority.
 	PremiumFee *Money
+	// TimeZone is the IANA time zone of the restaurant.
+	TimeZone string
+	// OpeningHours is empty when no schedule is set.
+	OpeningHours []OpeningInterval
+	// NextOpeningAt is set only for a restaurant opened by the owner and
+	// outside its opening hours.
+	NextOpeningAt *time.Time
+}
+
+// OpeningInterval is one interval of the weekly opening hours on the wall
+// clock of the restaurant: Day is ISO (1 Monday … 7 Sunday), Opens and Closes
+// are "HH:MM"; Closes not after Opens closes on the next day.
+type OpeningInterval struct {
+	Day    int
+	Opens  string
+	Closes string
 }
 
 // WaitTime is the wait for an order placed now (restaurants FR-645): an

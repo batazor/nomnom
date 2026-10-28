@@ -20,6 +20,7 @@ var (
 	orderStatuses = map[applications.Status]service.OrderStatus{
 		applications.StatusReceived:       service.OrderStatus_ORDER_STATUS_RECEIVED,
 		applications.StatusPaid:           service.OrderStatus_ORDER_STATUS_PAID,
+		applications.StatusScheduled:      service.OrderStatus_ORDER_STATUS_SCHEDULED,
 		applications.StatusConfirmed:      service.OrderStatus_ORDER_STATUS_CONFIRMED,
 		applications.StatusPreparing:      service.OrderStatus_ORDER_STATUS_PREPARING,
 		applications.StatusReadyForPickup: service.OrderStatus_ORDER_STATUS_READY_FOR_PICKUP,
@@ -66,8 +67,8 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 		return nil, err
 	}
 	order := &service.Order{
-		Id:     view.ID,
-		Status: status,
+		Id:         view.ID,
+		Status:     status,
 		Restaurant: orderRestaurant(view.Restaurant),
 		Total:      money(view.Total),
 		PlacedAt:   timestamp(view.PlacedAt),
@@ -110,6 +111,9 @@ func orderMessage(view applications.OrderView) (*service.Order, error) {
 	}
 	if view.Tracking != nil {
 		order.Tracking = trackingMessage(*view.Tracking)
+	}
+	if window := view.DeliveryWindow; window != nil {
+		order.DeliveryWindow = &service.OrderDeliveryWindow{Start: timestamp(window.Start), End: timestamp(window.End)}
 	}
 	return order, nil
 }

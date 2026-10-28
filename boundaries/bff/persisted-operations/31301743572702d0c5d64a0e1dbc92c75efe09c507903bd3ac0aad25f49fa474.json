@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "body": "fragment CourierTripView on Order { expectedDeliveredAt expectedPickupAt id milestones { kind occurredAt } } query BoardCourierTrip($id: ID!) { order(id: $id) { ...CourierTripView } }"
+}

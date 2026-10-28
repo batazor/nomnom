@@ -44,11 +44,26 @@ func restaurantWithMenu(view applications.RestaurantView) *service.Restaurant {
 }
 
 func restaurantMessage(restaurant applications.Restaurant) *service.Restaurant {
-	return &service.Restaurant{
+	message := &service.Restaurant{
 		Id:              restaurant.ID,
 		Name:            restaurant.Name,
-		AcceptingOrders: restaurant.IsOpen,
+		AcceptingOrders: restaurant.AcceptingOrders,
+		TimeZone:        restaurant.TimeZone,
+		OpeningHours:    make([]*service.OpeningInterval, 0, len(restaurant.OpeningHours)),
+		NextOpeningAt:   deadline(restaurant.NextOpeningAt),
 	}
+	for _, interval := range restaurant.OpeningHours {
+		message.OpeningHours = append(message.OpeningHours, &service.OpeningInterval{
+			DayOfWeek: int32(interval.Day),
+			Opens:     interval.Opens,
+			Closes:    interval.Closes,
+		})
+	}
+	return message
+}
+
+func deliveryWindowMessage(slot applications.Slot) *service.DeliveryWindow {
+	return &service.DeliveryWindow{Start: timestamp(slot.Start), End: timestamp(slot.End), Available: slot.Available}
 }
 
 func menuItemMessage(item applications.MenuItem) *service.MenuItem {

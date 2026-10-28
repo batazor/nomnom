@@ -84,6 +84,27 @@ type ActiveOrder struct {
 	// CookID is the cook assigned at the start of preparation; empty before.
 	CookID   string
 	Priority Priority
+	// DeliveryWindow is set only for a scheduled order (restaurants FR-683).
+	DeliveryWindow *Window
+}
+
+// Window is the delivery window [Start, End) of a scheduled order.
+type Window struct {
+	Start time.Time
+	End   time.Time
+}
+
+// ScheduledOrder is an accepted scheduled order that waits for its start
+// (restaurants FR-684): no kitchen command applies to it.
+type ScheduledOrder struct {
+	ID             string
+	OrderID        string
+	Lines          []ActiveOrderLine
+	Priority       Priority
+	DeliveryWindow Window
+	// PlannedReadyAt is before the window: the kitchen has the order ready
+	// by then.
+	PlannedReadyAt time.Time
 }
 
 // KitchenBoard reads the kitchen board of restaurants on behalf of the user
@@ -96,6 +117,9 @@ type KitchenBoard interface {
 	// QueueOrder returns the ids of the QUEUED orders in the recommended
 	// order of the Kitchen Queue.
 	QueueOrder(ctx context.Context, restaurantID string) ([]string, error)
+	// ScheduledOrders lists the accepted scheduled orders waiting for their
+	// start by PlannedReadyAt.
+	ScheduledOrders(ctx context.Context, restaurantID string) ([]ScheduledOrder, error)
 	CookPoolReader
 }
 
@@ -141,6 +165,19 @@ type OrderView struct {
 	// the pool.
 	Cook     *Cook
 	Priority Priority
+	// DeliveryWindow is set only for a scheduled order.
+	DeliveryWindow *Window
+}
+
+// ScheduledOrderView is a scheduled order waiting for its start as the
+// kitchen screen shows it.
+type ScheduledOrderView struct {
+	ID             string
+	OrderID        string
+	Items          []ItemView
+	Priority       Priority
+	DeliveryWindow Window
+	PlannedReadyAt time.Time
 }
 
 // KitchenView is the kitchen screen of one restaurant.
@@ -148,13 +185,21 @@ type KitchenView struct {
 	Restaurant Restaurant
 	Orders     []OrderView
 	CookPool   CookPool
+	// Scheduled are the scheduled orders waiting for their start, by
+	// PlannedReadyAt.
+	Scheduled []ScheduledOrderView
+}
+
+func itemViews(lines []ActiveOrderLine, names map[string]string) []ItemView {
+	items := make([]ItemView, 0, len(lines))
+	for _, line := range lines {
+		items = append(items, ItemView{Name: names[line.MenuItemID], Quantity: line.Quantity})
+	}
+	return items
 }
 
 func orderView(order ActiveOrder, names map[string]string, cooks map[string]Cook) OrderView {
-	items := make([]ItemView, 0, len(order.Lines))
-	for _, line := range order.Lines {
-		items = append(items, ItemView{Name: names[line.MenuItemID], Quantity: line.Quantity})
-	}
+	items := itemViews(order.Lines, names)
 	view := OrderView{
 		ID:              order.ID,
 		OrderID:         order.OrderID,
@@ -164,6 +209,7 @@ func orderView(order ActiveOrder, names map[string]string, cooks map[string]Cook
 		AcceptedAt:      order.AcceptedAt,
 		ExpectedReadyAt: order.ExpectedReadyAt,
 		Priority:        order.Priority,
+		DeliveryWindow:  order.DeliveryWindow,
 	}
 	if cook, ok := cooks[order.CookID]; ok {
 		view.Cook = &cook

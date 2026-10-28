@@ -139,10 +139,15 @@ type getRestaurantHandler interface {
 	Handle(ctx context.Context, restaurantID string) (catalogapp.RestaurantView, error)
 }
 
+type listScheduledSlotsHandler interface {
+	Handle(ctx context.Context, restaurantIDs []string) ([][]catalogapp.Slot, error)
+}
+
 // restaurantCatalog holds the scenarios of the catalog screens.
 type restaurantCatalog struct {
-	listRestaurants listRestaurantsHandler
-	getRestaurant   getRestaurantHandler
+	listRestaurants    listRestaurantsHandler
+	getRestaurant      getRestaurantHandler
+	listScheduledSlots listScheduledSlotsHandler
 }
 
 type placeOrderHandler interface {
@@ -159,6 +164,7 @@ type restaurantManagement struct {
 	openRestaurant       openingHandler
 	closeRestaurant      openingHandler
 	listOwnedRestaurants ownedRestaurantsHandler
+	setOpeningHours      setOpeningHoursHandler
 }
 
 type getKitchenHandler interface {
@@ -275,7 +281,8 @@ func newBffService(cfg config, dial dialFunc) (*BffService, error) {
 	service.catalog = newRestaurantCatalog(restaurants)
 	// The payload of checkout reuses the GetOrder scenario of order tracking.
 	service.checkout = newCheckout(orders, service.tracking.getOrder)
-	service.management = newRestaurantManagement(restaurants)
+	// The payload of setOpeningHours reuses the GetRestaurant scenario of the catalog.
+	service.management = newRestaurantManagement(restaurants, service.catalog.getRestaurant)
 	service.kitchen = newKitchen(restaurants)
 	service.courier = newCourier(delivery)
 	service.courierPool = newCourierPool(delivery, courierStart)
@@ -336,8 +343,9 @@ func newCourier(delivery grpc.ClientConnInterface) *courier {
 func newRestaurantCatalog(restaurants grpc.ClientConnInterface) *restaurantCatalog {
 	restaurantsAPI := cataloginfra.NewRestaurants(restaurants)
 	return &restaurantCatalog{
-		listRestaurants: catalogapp.NewListRestaurants(restaurantsAPI, restaurantsAPI),
-		getRestaurant:   catalogapp.NewGetRestaurant(restaurantsAPI),
+		listRestaurants:    catalogapp.NewListRestaurants(restaurantsAPI, restaurantsAPI),
+		getRestaurant:      catalogapp.NewGetRestaurant(restaurantsAPI),
+		listScheduledSlots: catalogapp.NewListScheduledSlots(restaurantsAPI),
 	}
 }
 
@@ -345,12 +353,13 @@ func newCheckout(orders grpc.ClientConnInterface, views checkoutapp.OrderViews) 
 	return &checkout{placeOrder: checkoutapp.NewPlaceOrder(checkoutinfra.NewOrders(orders), views)}
 }
 
-func newRestaurantManagement(restaurants grpc.ClientConnInterface) *restaurantManagement {
+func newRestaurantManagement(restaurants grpc.ClientConnInterface, views managementapp.RestaurantViews) *restaurantManagement {
 	restaurantsAPI := managementinfra.NewRestaurants(restaurants)
 	return &restaurantManagement{
 		openRestaurant:       managementapp.NewOpenRestaurant(restaurantsAPI),
 		closeRestaurant:      managementapp.NewCloseRestaurant(restaurantsAPI),
 		listOwnedRestaurants: managementapp.NewListOwnedRestaurants(restaurantsAPI),
+		setOpeningHours:      managementapp.NewSetOpeningHours(restaurantsAPI, views),
 	}
 }
 
