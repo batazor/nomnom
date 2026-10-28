@@ -52,7 +52,7 @@
         "VITE_PUBLIC_API_URL": "http://localhost:4180/api",
         "VITE_LOCALE": "ru",
         "VITE_ENABLE_MOCKS": "false",
-        "VITE_OIDC_ISSUER": "http://localhost:5556/dex",
+        "VITE_OIDC_ISSUER": "https://auth.nomnom.localhost:18085/dex",
         "VITE_DEPLOYMENT_ENVIRONMENT": "kind",
         "VITE_OIDC_CLIENT_ID": "nomnom-ui",
         "VITE_OIDC_AUDIENCE": "nomnom-bff",

@@ -14,6 +14,9 @@ serviceAccount:
 # базовыми политиками неймспейса (manifests/netpol/app-baseline).
 internalGateway:
   address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+  # Самый долгий вызов BFF — команда с записью в БД и Outbox; 5s с запасом покрывает его
+  # и повторы gateway (не более 2, в пределах этого deadline).
+  callTimeout: 5s
 
 # ADR 41: клиенты приходят через listener api публичного gateway (manifests/gateway/
 # public-gateway.yaml) по маршрутам Market, которые пишет control plane в nomnom-gateway.
@@ -41,14 +44,14 @@ tracks:
     key: url
 
 # ADR 32, ADR 35. ТОЛЬКО для kind: два identity provider из chart ops/kind/bootstrap —
-# Dex (вход в браузере, issuer — адрес port-forward на localhost) и тестовый test-idp
+# Dex (вход в браузере, issuer — адрес listener auth публичного gateway) и тестовый test-idp
 # (tests/identity/fixtures, ключ подписи лежит в репозитории; tokens выпускает
 # scripts/mint-jwt.py для e2e). JWKS обоих читаются по адресам Service в nomnom-data. Ключ
 # подписи user assertions (Secret bff-assertion-key) выпускает cert-manager один раз на
 # кластер: ECDSA P-256 в PKCS#8, ключ tls.key, rotationPolicy Never (ADR 34).
 identity:
   providers:
-    - issuer: http://localhost:5556/dex
+    - issuer: https://auth.nomnom.localhost:18085/dex
       jwksUrl: http://dex.nomnom-data.svc.cluster.local:5556/dex/keys
     - issuer: https://idp.nomnom.test
       jwksUrl: http://test-idp.nomnom-data.svc.cluster.local:8080/jwks.json

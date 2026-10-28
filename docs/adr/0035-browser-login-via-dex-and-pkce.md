@@ -23,11 +23,19 @@ Cosmo Router и BFF. Регистрация, восстановление пар
 
 ## Decision
 
-- **Identity provider — [Dex](https://dexidp.io)** со `staticPasswords` и storage `memory`.
-  Один stateless Deployment без базы; пользователи задаются в конфигурации. Issuer, JWKS
+- **Identity provider — [Dex](https://dexidp.io)** со `staticPasswords` и storage `sqlite3` на
+  PVC: ключи подписи и refresh tokens переживают перезапуск pod. Один Deployment без отдельной
+  базы; пользователи задаются в конфигурации. Issuer, JWKS
   (`/keys`) и discovery — стандартные OIDC. `sub` Dex — не `userID`, а его кодировка вместе с
   connector (`base64url(protobuf{userID, "local"})`, для `kind-owner` —
   `CgpraW5kLW93bmVyEgVsb2NhbA`); значение стабильно и служит subject пользователя.
+- **Issuer — публичный адрес Dex**, по которому его открывает браузер: в kind listener `auth`
+  публичного gateway, `https://auth.nomnom.localhost:<host-порт>/dex` (HTTPRoute `dex` в Service
+  `nomnom-data/dex`, TLS снимает gateway, сертификат — от локального CA). Адрес один для всех
+  клиентов — развёрнутого UI и dev server — и совпадает с `iss` токена и issuer провайдера BFF;
+  port-forward не нужен, браузер доверяет корню локального CA. CORS discovery и token endpoint
+  отвечает сам Dex (`web.allowedOrigins`). Router и BFF читают JWKS по адресу Service, не через
+  gateway.
 - Audience access token — `nomnom-bff`: UI (public client `nomnom-ui`) запрашивает scope
   `audience:server:client_id:nomnom-bff`, client `nomnom-bff` доверяет `nomnom-ui`
   (`trustedPeers`).
@@ -64,12 +72,15 @@ Cosmo Router и BFF. Регистрация, восстановление пар
 
 - Вход в kind поднимается одним небольшим Deployment; смена провайдера затрагивает только
   конфигурацию Router, BFF и UI.
+- Issuer содержит host-порт публичного gateway: другой порт меняет его в values Dex, BFF и UI.
+  Смена issuer делает недействительными выданные токены и refresh tokens — пользователи входят
+  заново.
 - Subjects пользователей Dex в SpiceDB (`ops/kind/authz/bootstrap-kind.yaml`, `ownerId` при
   регистрации ресторана) — закодированный `sub` Dex, а не `userID`. Демо-данные
   (`ops/kind/demo/files/seed.json`) и dev token issuer используют те же `sub`, поэтому вход через Dex
   и demo-токены действуют от одних пользователей: `customer|owner|kitchen|courier|operator@nomnom.test`,
   пароль `nomnom`.
-- Хранение пользователей в конфигурации и storage `memory` не подходят для production: при
+- Хранение пользователей в конфигурации и storage `sqlite3` на одном томе не подходят для production: при
   выходе за пределы тестового окружения провайдер выбирается заново, без изменений контекстов.
 - Refresh token в `sessionStorage` доступен скриптам страницы: XSS может его украсть. Риск
   ограничен вкладкой, ротацией и CSP; для production выбирается BFF-session с httpOnly cookie.

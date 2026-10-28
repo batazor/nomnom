@@ -39,7 +39,7 @@ CSP и `Connection-Allowlist` строит chart из тех же адресов
 
 ### kind
 
-Release `ui` в неймспейсе `nomnom-ui` (Skaffold, `ops/kind/values/ui.yaml`); listener `app` публичного gateway (`app.nomnom.localhost`, тот же сертификат локального CA) и HTTPRoute `ui` ведут в Service UI. Браузер открывает `https://app.nomnom.localhost:18085`. NetworkPolicy пускают в UI только public gateway. Dex разрешает redirect URI и origin этого адреса. Вход по-прежнему идёт через port-forward Dex (`localhost:5556`, ADR 35): issuer завязан на проверку tokens BFF, и его перенос — отдельное изменение. Profile `grafana-cloud` включает Faro (`values/ui-grafana-cloud.yaml`). Chainsaw-тест `ops/kind/e2e/ui` проверяет заголовки, SPA-фолбек, кеш и `/config.js`.
+Release `ui` в неймспейсе `nomnom-ui` (Skaffold, `ops/kind/values/ui.yaml`); listener `app` публичного gateway (`app.nomnom.localhost`, тот же сертификат локального CA) и HTTPRoute `ui` ведут в Service UI. Браузер открывает `https://app.nomnom.localhost:18085`. NetworkPolicy пускают в UI только public gateway. Dex разрешает redirect URI и origin этого адреса. Вход — через Dex на listener `auth` того же gateway (ADR 35), без port-forward. Profile `grafana-cloud` включает Faro (`values/ui-grafana-cloud.yaml`). Chainsaw-тест `ops/kind/e2e/ui` проверяет заголовки, SPA-фолбек, кеш и `/config.js`.
 
 ## Consequences
 

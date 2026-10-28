@@ -1,8 +1,9 @@
 # Вход в браузере (ADR 35). ТОЛЬКО для kind.
 #   - Dex: OIDC provider со staticPasswords и storage sqlite3 на PVC dex-data: ключи подписи
 #     и refresh tokens переживают перезапуск pod, входы и JWKS не сбрасываются. Issuer — адрес,
-#     по которому его видит браузер (port-forward svc/dex на localhost); Router и BFF берут JWKS по адресу
-#     Service. Ключи подписи Dex создаёт при старте и ротирует сам, поэтому JWKS читается по
+#     по которому его видит браузер: listener auth публичного gateway (HTTPRoute dex,
+#     manifests/gateway/public-gateway.yaml; TLS снимает gateway); Router и BFF берут JWKS по
+#     адресу Service. Ключи подписи Dex создаёт при старте и ротирует сам, поэтому JWKS читается по
 #     URL, а не из ConfigMap. oauth2.passwordConnector включает password grant: кнопка демо
 #     на доске входит под demo@nomnom.test одним запросом, без формы Dex.
 #   - test-idp: JWKS тестового identity provider из tests/identity/fixtures по HTTP. Им
@@ -136,6 +137,25 @@ spec:
     - name: http
       port: 5556
       targetPort: http
+---
+# HTTPRoute dex публичного gateway (nomnom-gateway) ведёт в Service Dex: браузер входит по
+# issuer https://auth.nomnom.localhost:<host-порт>/dex без port-forward.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: dex-public-gateway
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: nomnom-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: dex
 ---
 apiVersion: v1
 kind: ConfigMap

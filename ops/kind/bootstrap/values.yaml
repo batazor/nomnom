@@ -52,13 +52,14 @@ identity:
   # раздаёт test-idp (templates/dex.yaml).
   idpJwks: ""
 
-# ADR 35: Dex для входа в браузере (templates/dex.yaml). Браузер видит Dex через
-#   kubectl -n nomnom-data port-forward svc/dex 5556
-# поэтому issuer — localhost. Customer UI — Vite dev server на localhost:4173 (4180 —
+# ADR 35: Dex для входа в браузере (templates/dex.yaml). Браузер видит Dex через listener auth
+# публичного gateway, без port-forward; issuer — этот адрес, браузер доверяет корню
+# make kind-local-ca. Порт — host-порт gateway (WEBHOOKS_HOST_PORT, 18085): другой порт меняет и
+# issuer здесь, в values/bff.yaml и values/ui.yaml. Customer UI — Vite dev server на localhost:4173 (4180 —
 # второй dev server, когда 4173 занят, .claude/launch.json customer-ui-kind-login) и образ UI
 # за публичным gateway (https://app.nomnom.localhost:18085, values/ui.yaml).
 dex:
-  issuer: http://localhost:5556/dex
+  issuer: https://auth.nomnom.localhost:18085/dex
   allowedOrigins:
     - http://localhost:4173
     - http://localhost:4180

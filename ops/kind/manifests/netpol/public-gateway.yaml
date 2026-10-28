@@ -1,5 +1,5 @@
 # Политики Envoy Proxy public gateway: ingress из любого источника на HTTPS listener,
-# egress только к портам webhooks прикладных pod, nginx customer UI,
+# egress только к портам webhooks прикладных pod, nginx customer UI, Dex (ADR 35),
 # Cosmo Router BFF (публичный API, ADR 41),
 # faro.receiver Alloy, DNS и xDS controller.
 apiVersion: networking.k8s.io/v1
@@ -73,6 +73,16 @@ spec:
       ports:
         - protocol: TCP
           port: 3010
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nomnom-data
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dex
+      ports:
+        - protocol: TCP
+          port: 5556
     - to:
         - namespaceSelector:
             matchLabels:

@@ -181,7 +181,7 @@ deploy:
                 k -n nomnom-gateway wait gateway/public --for=condition=Programmed --timeout=300s
                 k -n nomnom-gateway wait httproute/payments-provider-webhooks --timeout=300s \
                   --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
-                k -n nomnom-gateway wait httproute/ui --timeout=300s \
+                k -n nomnom-gateway wait httproute/ui httproute/dex --timeout=300s \
                   --for=jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}'=True
                 k -n envoy-gateway-system wait deployment --for=condition=Available --timeout=300s \
                   -l gateway.envoyproxy.io/owning-gateway-name=public

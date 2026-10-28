@@ -1,5 +1,6 @@
 # Public gateway: входящие вызовы внешних систем (webhooks платёжного провайдера),
-# customer UI (app.nomnom.localhost, локальный ADR 2 UI),
+# customer UI (app.nomnom.localhost, локальный ADR 2 UI), вход в браузере через Dex
+# (auth.nomnom.localhost, ADR 35),
 # публичный API клиентов (api.nomnom.localhost — router ячеек, ADR 41) и browser telemetry
 # customer UI (telemetry.nomnom.localhost, route в manifests/observability/faro-route.yaml —
 # только с profile grafana-cloud).
@@ -9,7 +10,7 @@
 # Только HTTPS: TLS терминирует Envoy сертификатом, который cert-manager выпускает по
 # аннотации Gateway от локального CA (chart ops/kind/bootstrap, templates/certs.yaml) и продлевает сам.
 # kind: NodePort 30085 → host 127.0.0.1:${WEBHOOKS_HOST_PORT} (cluster.yaml); имена
-# webhooks.nomnom.localhost, app.nomnom.localhost и api.nomnom.localhost резолвятся в 127.0.0.1.
+# webhooks, app, auth и api.nomnom.localhost резолвятся в 127.0.0.1.
 #
 # Маршруты listener api (HTTPRoute market-<market_id> и список Market markets) пишет control
 # plane из своего реестра (server-side apply, ADR 41); здесь — только их политики.
@@ -106,6 +107,21 @@ spec:
         kinds:
           - group: gateway.networking.k8s.io
             kind: HTTPRoute
+    # Dex (ADR 35): issuer https://auth.nomnom.localhost:<host-порт>/dex, HTTPRoute dex.
+    - name: auth
+      protocol: HTTPS
+      port: 8443
+      hostname: auth.nomnom.localhost
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: public-gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
     - name: telemetry
       protocol: HTTPS
       port: 8443
@@ -138,6 +154,13 @@ spec:
 ---
 # Маршруты Market (метка nomnom.dev/route=market, ставит control plane) — без request timeout:
 # SSE-подписки (ADR 36) длятся, пока клиент открыт; политика маршрута сильнее политики Gateway.
+#
+# Rate limit публичного API (локальный ADR 3 BFF): у каждого маршрута Market свой счётчик,
+# то есть квота на Market — tenant Cell (ADR 41). Local: token bucket в каждой реплике Envoy,
+# без внешнего хранилища; при N репликах предел Market — N × requests. Подписка — один
+# долгий запрос и квоту не расходует. Сверх квоты Envoy отвечает 429 с
+# x-envoy-ratelimited, запрос до Router не доходит. Квота на клиента (IP, subject) требует
+# global rate limit с Redis — не введён.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
@@ -152,6 +175,12 @@ spec:
   timeout:
     http:
       requestTimeout: 0s
+  rateLimit:
+    local:
+      rules:
+        - limit:
+            requests: 100
+            unit: Second
 ---
 # Ограничение размера тела совпадает с MAX_BODY_BYTES payments (64 KiB); публичный API
 # клиентов (listener api) им не ограничен.
@@ -195,6 +224,27 @@ spec:
         - name: payments
           namespace: nomnom-payments
           port: 8085
+---
+# Dex (ADR 35): discovery, authorize, token и keys под /dex; CORS отвечает сам Dex
+# (web.allowedOrigins). ReferenceGrant — в chart ops/kind/bootstrap.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: dex
+  namespace: nomnom-gateway
+spec:
+  parentRefs:
+    - name: public
+      sectionName: auth
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dex
+      backendRefs:
+        - name: dex
+          namespace: nomnom-data
+          port: 5556
 ---
 # Customer UI: весь listener app — в nginx UI (SPA: любой путь отдаёт index.html).
 # ReferenceGrant — в chart UI.

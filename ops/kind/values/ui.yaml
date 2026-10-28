@@ -15,12 +15,11 @@ config:
   publicApiUrl: https://api.nomnom.localhost:18085
   locale: ru
   deploymentEnvironment: kind
-  # ADR 35. ТОЛЬКО для kind: Dex виден браузеру через
-  #   kubectl -n nomnom-data port-forward svc/dex 5556
-  # (issuer — localhost, на него завязана проверка tokens BFF); redirect URI и origin
-  # https://app.nomnom.localhost:18085 разрешены в chart ops/kind/bootstrap (dex).
+  # ADR 35. ТОЛЬКО для kind: Dex на listener auth публичного gateway (issuer совпадает с
+  # ops/kind/bootstrap и values/bff.yaml); redirect URI и origin https://app.nomnom.localhost:18085
+  # разрешены в chart ops/kind/bootstrap (dex).
   oidc:
-    issuer: http://localhost:5556/dex
+    issuer: https://auth.nomnom.localhost:18085/dex
     clientId: nomnom-ui
     audience: nomnom-bff
     demoEmailDomain: nomnom.test

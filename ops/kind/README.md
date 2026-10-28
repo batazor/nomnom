@@ -254,7 +254,11 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
 `reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и
-`reset-before-request`. Вызов незарегистрированного сервиса или метода получает 404 (gRPC
+`reset-before-request`. Обе политики сливаются с `internal-gateway-defaults`
+(`mergeType: StrategicMerge`): оттуда верхний предел 300s, circuit breaker (очередь к backend
+не больше 256, сверх — `UNAVAILABLE`; retry budget 20% активных запросов, минимум 3) и passive
+health check (5 подряд отказов соединения или сбросов stream — endpoint исключается от 30s, не
+больше половины endpoints). Вызов незарегистрированного сервиса или метода получает 404 (gRPC
 `UNIMPLEMENTED`). Новый бизнес-RPC публикуется так:
 
 1. Метод (`method.type: Exact`, полное имя сервиса и метод) — в route своего класса и
@@ -267,15 +271,13 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 ## Вход в браузере (Dex)
 
 [ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md): customer UI получает access token
-Dex через authorization code + PKCE. Браузер видит Dex через port-forward, а BFF — через
-публичный gateway (`https://api.nomnom.localhost:${WEBHOOKS_HOST_PORT}`, раздел «Public gateway и
-TLS»):
+Dex через authorization code + PKCE. Браузер видит и Dex, и BFF через публичный gateway
+(раздел «Public gateway и TLS»): Dex — listener `auth.nomnom.localhost`, BFF —
+`https://api.nomnom.localhost:${WEBHOOKS_HOST_PORT}`. Port-forward не нужен; браузер должен доверять
+корню `make kind-local-ca`.
 
-```bash
-kubectl -n nomnom-data port-forward svc/dex 5556
-```
-
-Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по адресу Service
+Issuer — `https://auth.nomnom.localhost:18085/dex` (порт — host-порт gateway; другой `WEBHOOKS_HOST_PORT` меняет issuer в
+`bootstrap/values.yaml`, `values/bff.yaml` и `values/ui.yaml`); Router и BFF читают JWKS по адресу Service
 (`values/bff.yaml`, `identity.providers`). `sub` пользователя Dex — закодированная пара
 (userID, connector), например `CgpraW5kLW93bmVyEgVsb2NhbA` для `owner@nomnom.test`; её же
 указывают как `ownerId` ресторана и subject в SpiceDB.
@@ -288,10 +290,12 @@ Issuer — `http://localhost:5556/dex`; Router и BFF читают JWKS по а�
 - `webhooks.nomnom.localhost` — только `POST /webhooks/provider` на порт `webhooks` payments;
 - `app.nomnom.localhost` — customer UI: весь listener в nginx release `ui` (неймспейс `nomnom-ui`,
   chart `boundaries/ui/ops/helm`, values `values/ui.yaml`); браузер открывает
-  `https://app.nomnom.localhost:18085`, вход — через port-forward Dex (ADR 35);
+  `https://app.nomnom.localhost:18085`;
+- `auth.nomnom.localhost` — Dex (ADR 35): `/dex` в Service `nomnom-data/dex`, issuer входа в браузере;
 - `api.nomnom.localhost` — router ячеек ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)):
   `GET /markets` и `/m/<market_id>/…` в Cosmo Router Cell Market. Маршруты пишет control plane;
-  здесь — их политика: без request timeout (SSE-подписки). CORS списка Market control plane ставит
+  здесь — их политика: без request timeout (SSE-подписки) и local rate limit 100 запросов в
+  секунду на Market в каждой реплике Envoy (сверх — `429`, `x-envoy-ratelimited: true`). CORS списка Market control plane ставит
   заголовками ответа маршрута `markets` (у direct response Envoy нет CORS-политики маршрута).
 
 Сертификат выпускает cert-manager (platform-модуль) по аннотации Gateway от локального CA
@@ -378,12 +382,12 @@ line in the run market» (GetCourierPool Market прогона) до оформ�
 
 Вход в UI — только через Dex (`customer-ui-kind-login` в `.claude/launch.json`, порт 4180). API —
 публичный gateway `https://api.nomnom.localhost:18085`, но браузер ходит в него через proxy
-dev-сервера Vite: `http://localhost:4180/api` (`NOMNOM_API_PROXY_TARGET`). Корень локального CA
-проверяет proxy (`NOMNOM_API_PROXY_CA`), в системное хранилище его добавлять не нужно:
+dev-сервера Vite: `http://localhost:4180/api` (`NOMNOM_API_PROXY_TARGET`, корень CA проверяет proxy,
+`NOMNOM_API_PROXY_CA`). Вход открывает Dex на `https://auth.nomnom.localhost:18085/dex`, поэтому
+корень локального CA должен быть в системном хранилище:
 
 ```bash
 make kind-local-ca
-kubectl -n nomnom-data port-forward svc/dex 5556
 ```
 
 ## Проверки

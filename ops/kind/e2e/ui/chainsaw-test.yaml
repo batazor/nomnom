@@ -10,7 +10,8 @@ spec:
   description: >
     index.html и любой путь SPA отдаются с Content-Security-Policy, connect-src которой
     разрешает публичный API и Dex окружения, и без кеша; hashed assets — immutable;
-    /config.js — окружение kind из ConfigMap, без кеша; список Market отвечает на CORS preflight.
+    /config.js — окружение kind из ConfigMap, без кеша; список Market отвечает на CORS preflight;
+    Dex отдаёт discovery публичного issuer на listener auth.
   steps:
     - name: policies applied
       use:
@@ -41,11 +42,11 @@ spec:
               done
               csp="$(header "$index" content-security-policy)"
               printf '%s' "$csp" | grep -q "script-src 'self';" || { echo "CSP: $csp" >&2; exit 1; }
-              printf '%s' "$csp" | grep -q "connect-src 'self' https://api.nomnom.localhost:18085 http://localhost:5556;" ||
+              printf '%s' "$csp" | grep -q "connect-src 'self' https://api.nomnom.localhost:18085 https://auth.nomnom.localhost:18085;" ||
                 { echo "CSP connect-src: $csp" >&2; exit 1; }
               printf '%s' "$csp" | grep -q "frame-ancestors 'none'" || { echo "CSP: $csp" >&2; exit 1; }
               allowlist="$(header "$index" connection-allowlist)"
-              [ "$allowlist" = '("https://api.nomnom.localhost:18085/*" "http://localhost:5556/*" response-origin)' ] ||
+              [ "$allowlist" = '("https://api.nomnom.localhost:18085/*" "https://auth.nomnom.localhost:18085/*" response-origin)' ] ||
                 { echo "Connection-Allowlist: $allowlist" >&2; exit 1; }
               [ "$(header "$index" cache-control)" = no-cache ] || { echo "index cache: $index" >&2; exit 1; }
               printf '%s' "$index" | grep -q '<script src="/config.js"></script>' || { echo "index: $index" >&2; exit 1; }
@@ -74,6 +75,21 @@ spec:
                   https://api.nomnom.localhost/markets
               ' "$ca")"
               [ "$(header "$markets" access-control-allow-origin)" = "*" ] || { echo "markets CORS: $markets" >&2; exit 1; }
+              # ADR 35: вход открывает Dex на listener auth того же gateway; discovery несёт
+              # issuer публичного адреса и отвечает странице UI по CORS (web.allowedOrigins).
+              discovery="$(kubectl -n nomnom-outsider exec deploy/net-probe -- sh -c '
+                printf "%s" "$0" > /tmp/nomnom-ca.crt
+                curl -sS --fail-with-body --max-time 10 --cacert /tmp/nomnom-ca.crt -D - \
+                  -H "Origin: https://app.nomnom.localhost:18085" \
+                  --connect-to auth.nomnom.localhost:443:public-gateway.envoy-gateway-system.svc.cluster.local:8443 \
+                  https://auth.nomnom.localhost/dex/.well-known/openid-configuration
+              ' "$ca")"
+              [ "$(header "$discovery" access-control-allow-origin)" = https://app.nomnom.localhost:18085 ] ||
+                { echo "Dex CORS: $discovery" >&2; exit 1; }
+              printf '%s' "$discovery" | tr -d '\r' | sed '1,/^$/d' |
+                jq -e '.issuer == "https://auth.nomnom.localhost:18085/dex" and
+                       .authorization_endpoint == "https://auth.nomnom.localhost:18085/dex/auth"' >/dev/null ||
+                { echo "Dex discovery: $discovery" >&2; exit 1; }
               echo "customer UI served: $asset"
             check:
               ($error): ~
