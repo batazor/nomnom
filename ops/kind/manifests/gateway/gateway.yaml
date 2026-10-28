@@ -186,6 +186,10 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: ListOwnedRestaurants
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ListScheduledSlots
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants
@@ -211,6 +215,22 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: CancelRestaurantOrder
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: QueueRestaurantOrder
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ReserveScheduledSlot
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ConfirmScheduledSlot
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ReleaseScheduledSlot
       backendRefs:
         - name: restaurants
           namespace: nomnom-restaurants
@@ -238,6 +258,14 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: UpdateRestaurant
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: SetOpeningHours
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: SetScheduledOrderSettings
         - method:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
@@ -325,6 +353,10 @@ spec:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
             method: GetKitchenQueue
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
+            method: ListScheduledOrders
         # Новые заказы (RECEIVED): Kitchen Queue показывает только принятые (QUEUED).
         - method:
             type: Exact

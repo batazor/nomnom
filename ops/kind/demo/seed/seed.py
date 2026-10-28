@@ -103,12 +103,17 @@ def owned_restaurants(driver: Driver, owner: str, market: str) -> dict:
             return found
 
 
+def market_time_zone(seed: dict) -> str:
+    return next(market["timeZone"] for market in seed["markets"] if market["id"] == seed["market"])
+
+
 def seed_restaurant(driver: Driver, seed: dict, spec: dict, existing: dict) -> dict:
     owner, kitchen = seed["owner"], seed["kitchen"]
     restaurant = existing.get(spec["name"])
     if restaurant is None:
         restaurant = driver.call("nomnom.restaurants", seed["operator"], RESTAURANTS + "RegisterRestaurant",
-                                 {"name": spec["name"], "ownerId": owner, "marketId": seed["market"]})["restaurant"]
+                                 {"name": spec["name"], "ownerId": owner, "marketId": seed["market"],
+                                  "timeZone": market_time_zone(seed)})["restaurant"]
         print(f"registered {spec['name']} ({restaurant['restaurantId']})")
     restaurant_id = restaurant["restaurantId"]
     driver.call("nomnom.restaurants", owner, RESTAURANTS + "AssignStaff",
@@ -131,6 +136,15 @@ def seed_restaurant(driver: Driver, seed: dict, spec: dict, existing: dict) -> d
         })
         print(f"  added {item['name']}")
     seed_cooks(driver, owner, restaurant_id, spec["cooks"])
+    # The demo restaurant works round the clock: two adjacent periods a day, because an
+    # interval may not open and close at the same time. Repeats answer changed = false.
+    driver.call("nomnom.restaurants", owner, RESTAURANTS + "SetOpeningHours",
+                {"restaurantId": restaurant_id, "openingHours": [
+                    {"dayOfWeek": interval["day"], "opens": interval["opens"], "closes": interval["closes"]}
+                    for interval in spec["openingHours"]]})
+    # Zero opening lead and closing grace: windows run on across the adjacent periods.
+    driver.call("nomnom.restaurants", owner, RESTAURANTS + "SetScheduledOrderSettings",
+                {"restaurantId": restaurant_id, "settings": spec["scheduledOrders"]})
     if not restaurant.get("isOpen"):
         driver.call("nomnom.restaurants", owner, RESTAURANTS + "OpenRestaurant", {"restaurantId": restaurant_id})
         print(f"  opened {spec['name']}")

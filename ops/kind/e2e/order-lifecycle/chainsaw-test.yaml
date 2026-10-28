@@ -134,7 +134,7 @@ spec:
             - {name: subject, value: $s.operator}
             - {name: method, value: nomnom.restaurants.v1.RestaurantsService/RegisterRestaurant}
             - name: request
-              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner, marketId: $s.market}'
+              value: '{name: ("Kind e2e " + $s.run), ownerId: $s.owner, marketId: $s.market, timeZone: "Europe/Berlin"}'
             - {name: save, value: '{restaurant_id: .restaurant.restaurantId}'}
     - name: operator registers courier
       use:
@@ -185,6 +185,18 @@ spec:
             - {name: subject, value: $s.owner}
             - {name: method, value: nomnom.restaurants.v1.RestaurantsService/OpenRestaurant}
             - {name: request, value: '{restaurantId: $s.restaurant_id}'}
+    # Без расписания ресторан не принимает заказы (FR-699): прогон идёт в любое время суток,
+    # поэтому сутки закрыты двумя соседними интервалами.
+    - name: owner sets opening hours
+      use:
+        template: ../templates/driver-call.yaml
+        with:
+          bindings:
+            - {name: audience, value: nomnom.restaurants}
+            - {name: subject, value: $s.owner}
+            - {name: method, value: nomnom.restaurants.v1.RestaurantsService/SetOpeningHours}
+            - name: request
+              value: '{restaurantId: $s.restaurant_id, openingHours: [{dayOfWeek: 1, opens: "00:00", closes: "12:00"}, {dayOfWeek: 1, opens: "12:00", closes: "00:00"}, {dayOfWeek: 2, opens: "00:00", closes: "12:00"}, {dayOfWeek: 2, opens: "12:00", closes: "00:00"}, {dayOfWeek: 3, opens: "00:00", closes: "12:00"}, {dayOfWeek: 3, opens: "12:00", closes: "00:00"}, {dayOfWeek: 4, opens: "00:00", closes: "12:00"}, {dayOfWeek: 4, opens: "12:00", closes: "00:00"}, {dayOfWeek: 5, opens: "00:00", closes: "12:00"}, {dayOfWeek: 5, opens: "12:00", closes: "00:00"}, {dayOfWeek: 6, opens: "00:00", closes: "12:00"}, {dayOfWeek: 6, opens: "12:00", closes: "00:00"}, {dayOfWeek: 7, opens: "00:00", closes: "12:00"}, {dayOfWeek: 7, opens: "12:00", closes: "00:00"}]}'
     # Start Preparation назначает свободного повара на линии (FR-225): без него заказ ждёт в очереди.
     - name: owner hires cook
       use:
