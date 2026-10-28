@@ -1,0 +1,32 @@
+{{- if eq .Values.component "worker" }}
+# ADR 5: Temporal Worker Controller creates a versioned Deployment per Build ID, registers the
+# Worker Deployment Version and routes new workflows to it; Pinned runs finish on their version.
+apiVersion: temporal.io/v1alpha1
+kind: Connection
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  labels:
+    {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+spec:
+  hostPort: {{ required "temporal.hostPort is required for the worker" .Values.temporal.hostPort | quote }}
+---
+apiVersion: temporal.io/v1alpha1
+kind: WorkerDeployment
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  labels:
+    {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+spec:
+  workerOptions:
+    connectionRef:
+      name: {{ include "common.names.fullname" . }}
+    temporalNamespace: {{ required "temporal.namespace is required for the worker" .Values.temporal.namespace | quote }}
+  rollout:
+    {{- toYaml .Values.workerDeployment.rollout | nindent 4 }}
+  sunset:
+    {{- toYaml .Values.workerDeployment.sunset | nindent 4 }}
+  deployment:
+    replicas: {{ .Values.replicaCount }}
+    template:
+      {{- include "orders.podTemplate" . | nindent 6 }}
+{{- end }}
