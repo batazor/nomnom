@@ -16,7 +16,7 @@ use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, confirm_pickup, list_available_delivery_offers,
+    accept_delivery_offer, advance_assignment, confirm_pickup, list_available_delivery_offers,
 };
 
 struct StaticSubjectResolver;
@@ -138,8 +138,9 @@ fn cancel_request(order: &str) -> CancelDeliveryRequest {
     }
 }
 
-/// Creates and replans the delivery over gRPC, then lets the offered
-/// courier accept it. Returns the delivery id.
+/// Creates the delivery over gRPC, lets the first step of its Assignment
+/// Workflow offer it and the offered courier accept it. Returns the delivery
+/// id.
 async fn assigned_over_grpc(running: &mut Running, order: &str, courier: &str) -> String {
     let delivery_id = running
         .client
@@ -148,16 +149,13 @@ async fn assigned_over_grpc(running: &mut Running, order: &str, courier: &str) -
         .expect("created")
         .into_inner()
         .delivery_id;
-    let replan = running
-        .client
-        .replan_delivery(ReplanDeliveryRequest {
-            order_id: order.to_owned(),
+    running
+        .module
+        .deliveries()
+        .advance_assignment(advance_assignment::Input {
+            delivery_id: delivery_id.clone(),
         })
-        .await
-        .expect("replanned")
-        .into_inner();
-    assert_eq!(replan.delivery_id, delivery_id);
-    assert_eq!(replan.offered_courier_id, courier);
+        .expect("offered");
 
     let courier_subject = Subject::User(courier.to_owned());
     let deliveries = running.module.deliveries();
@@ -286,48 +284,6 @@ async fn estimate_delivery_duration_answers_the_baselines_of_a_new_market() {
             .expect_err("invalid market");
         assert_eq!(invalid.code(), tonic::Code::InvalidArgument, "{market:?}");
     }
-
-    running.stop().await;
-}
-
-#[tokio::test]
-async fn replan_offers_the_candidate_or_nothing() {
-    let mut running = start_with_courier("courier-1").await;
-    running
-        .client
-        .create_delivery(create_request("order-1"))
-        .await
-        .expect("created");
-
-    let replan = running
-        .client
-        .replan_delivery(ReplanDeliveryRequest {
-            order_id: "order-1".to_owned(),
-        })
-        .await
-        .expect("replanned")
-        .into_inner();
-    assert_eq!(replan.offered_courier_id, "courier-1");
-
-    // The only candidate already has an offer of this delivery.
-    let again = running
-        .client
-        .replan_delivery(ReplanDeliveryRequest {
-            order_id: "order-1".to_owned(),
-        })
-        .await
-        .expect("replanned without candidate")
-        .into_inner();
-    assert_eq!(again.offered_courier_id, "");
-
-    let missing = running
-        .client
-        .replan_delivery(ReplanDeliveryRequest {
-            order_id: "missing".to_owned(),
-        })
-        .await
-        .expect_err("unknown order");
-    assert_eq!(missing.code(), tonic::Code::NotFound);
 
     running.stop().await;
 }

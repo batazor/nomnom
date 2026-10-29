@@ -1,5 +1,5 @@
 //! [`Worker`], который вместе с основным worker процесса читает стрим Kafka
-//! ([`EventConsumer`]). Lifecycle тот же, что у [`super::OfferExpiryWorker`]:
+//! ([`EventConsumer`]). Lifecycle тот же, что у [`super::ReconcilingWorker`]:
 //! consumer останавливается по сигналу остановки основного worker, начатое
 //! сообщение доводится до конца, его offset подтверждается после обработки.
 

@@ -13,11 +13,11 @@ Temporal Rust SDK вышел в GA 4 сентября 2026 (сейчас `tempor
 ## What Changes
 
 - **Workflow назначения в `delivery`.** Workflow `delivery:<delivery_id>` на Temporal Rust SDK запускается из Create Delivery после commit и живёт до Pickup или отмены доставки. Цикл: Find Courier и Offer Delivery → ожидание ответа курьера или таймер до `expiresAt` → Expire → следующий курьер. Принятый offer — ожидание Pickup; Reassign Courier возвращает доставку в поиск.
-- **Без кандидата — ожидание пробуждения.** Курьер, ставший кандидатом (Set Courier Availability, первая позиция available курьера, освобождение после Confirm Delivery, Report Delivery Failure, Reassign Courier, Cancel Delivery), будит самую старую ожидающую доставку своего Market, которой его ещё не предлагали. Таймеров перепроверки и polling нет.
+- **Без кандидата — ожидание пробуждения.** Курьер, ставший кандидатом (Set Courier Availability, сохранённая позиция available курьера, освобождение после Confirm Delivery, Report Delivery Failure, Reassign Courier, Cancel Delivery), будит самую старую ожидающую доставку своего Market, которой его ещё не предлагали. Таймеров перепроверки и polling нет.
 - **Signals после commit.** Use cases, меняющие ход назначения, после commit передают workflow signal. Ошибка signal — `UNAVAILABLE`, повтор вызова передаёт signal заново, даже если состояние уже не меняется.
 - **Удаляется:** `OfferExpiryWorker`, `DispatchWorker`, конфиг `OFFERS__EXPIRY_INTERVAL`, `OFFERS__EXPIRY_BATCH`, `OFFERS__DISPATCH_INTERVAL`, `OFFERS__DISPATCH_BATCH`, query-порты `ExpiredDeliveryOffers` и `WaitingDeliveries`, use case Replan Delivery, gRPC `ReplanDelivery` и право `ReplanDelivery`.
-- **Новая deployable role `delivery-worker`** с обязательным конфигом `TEMPORAL__*`: пустое или невалидное значение — падение на старте.
-- **OpenTelemetry 0.32 в `delivery`.** sdk-rust зависит от `opentelemetry` 0.32, PR на 0.33 в upstream закрыты без merge. `delivery` переходит на 0.32 с комментарием о причине у зависимостей.
+- **Новая deployable role `delivery-worker`** с обязательным конфигом `TEMPORAL__*` (у процесса `delivery` тоже): пустое или невалидное значение — падение на старте. Таймауты Activities и continue-as-new — в коде workflow, как в `orders`.
+- **OpenTelemetry не меняется.** sdk-rust тянет `opentelemetry` 0.32 только с feature `otel`/`opentelemetry`; SDK подключён без default features и с `vendored-protox`, поэтому `delivery` остаётся на 0.33 и сборке не нужен `protoc`.
 - **`orders` ждёт назначения без срока.** Из модели fulfillment удаляются `AssignmentTimeout`, `MaxReplans`, `OperatorDecisionTimeout`, шаг `ReplanDelivery`, stage `waiting_operator`, signal `OperatorDecision` и причина `operator_decision`. После Create Delivery workflow просто ждёт `CourierAssignedToDelivery`.
 
 Не входит:
@@ -49,7 +49,6 @@ Temporal Rust SDK вышел в GA 4 сентября 2026 (сейчас `tempor
   - use case Advance Assignment вместо Dispatch Deliveries, Expire Delivery Offer для одного offer вместо пачек;
   - query-порт выбора доставки для пробуждения;
   - удаление фоновых workers, Replan Delivery, `ReplanDelivery` из proto и SpiceDB mapping;
-  - `opentelemetry` 0.32;
   - Helm chart, kind, README, новый локальный ADR 2.
 - **`boundaries/orders`:** модель и Temporal-адаптер fulfillment без replan и эскалации, конфиг `FULFILLMENT__ASSIGNMENT_TIMEOUT`, `FULFILLMENT__MAX_REPLANS`, `FULFILLMENT__OPERATOR_DECISION_TIMEOUT` удаляется, клиент `ReplanDelivery`, README и ADR 5.
 - **`boundaries/bff`:** перегенерированные stubs `nomnom.delivery.v1` без `ReplanDelivery`.

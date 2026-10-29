@@ -630,103 +630,6 @@ func (x *CreateDeliveryResponse) GetCreated() bool {
 	return false
 }
 
-type ReplanDeliveryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReplanDeliveryRequest) Reset() {
-	*x = ReplanDeliveryRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReplanDeliveryRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReplanDeliveryRequest) ProtoMessage() {}
-
-func (x *ReplanDeliveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReplanDeliveryRequest.ProtoReflect.Descriptor instead.
-func (*ReplanDeliveryRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ReplanDeliveryRequest) GetOrderId() string {
-	if x != nil {
-		return x.OrderId
-	}
-	return ""
-}
-
-type ReplanDeliveryResponse struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	DeliveryId string                 `protobuf:"bytes,1,opt,name=delivery_id,json=deliveryId,proto3" json:"delivery_id,omitempty"`
-	// Courier offered the Delivery by this replan; empty when no candidate was found.
-	OfferedCourierId string `protobuf:"bytes,2,opt,name=offered_courier_id,json=offeredCourierId,proto3" json:"offered_courier_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *ReplanDeliveryResponse) Reset() {
-	*x = ReplanDeliveryResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReplanDeliveryResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReplanDeliveryResponse) ProtoMessage() {}
-
-func (x *ReplanDeliveryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReplanDeliveryResponse.ProtoReflect.Descriptor instead.
-func (*ReplanDeliveryResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ReplanDeliveryResponse) GetDeliveryId() string {
-	if x != nil {
-		return x.DeliveryId
-	}
-	return ""
-}
-
-func (x *ReplanDeliveryResponse) GetOfferedCourierId() string {
-	if x != nil {
-		return x.OfferedCourierId
-	}
-	return ""
-}
-
 type CancelDeliveryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -737,7 +640,7 @@ type CancelDeliveryRequest struct {
 
 func (x *CancelDeliveryRequest) Reset() {
 	*x = CancelDeliveryRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[13]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +652,7 @@ func (x *CancelDeliveryRequest) String() string {
 func (*CancelDeliveryRequest) ProtoMessage() {}
 
 func (x *CancelDeliveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[13]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +665,7 @@ func (x *CancelDeliveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelDeliveryRequest.ProtoReflect.Descriptor instead.
 func (*CancelDeliveryRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{13}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CancelDeliveryRequest) GetOrderId() string {
@@ -792,7 +695,7 @@ type CancelDeliveryResponse struct {
 
 func (x *CancelDeliveryResponse) Reset() {
 	*x = CancelDeliveryResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[14]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +707,7 @@ func (x *CancelDeliveryResponse) String() string {
 func (*CancelDeliveryResponse) ProtoMessage() {}
 
 func (x *CancelDeliveryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[14]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +720,7 @@ func (x *CancelDeliveryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelDeliveryResponse.ProtoReflect.Descriptor instead.
 func (*CancelDeliveryResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{14}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CancelDeliveryResponse) GetDeliveryId() string {
@@ -851,7 +754,7 @@ type EstimateDeliveryDurationRequest struct {
 
 func (x *EstimateDeliveryDurationRequest) Reset() {
 	*x = EstimateDeliveryDurationRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[15]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -863,7 +766,7 @@ func (x *EstimateDeliveryDurationRequest) String() string {
 func (*EstimateDeliveryDurationRequest) ProtoMessage() {}
 
 func (x *EstimateDeliveryDurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[15]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -876,7 +779,7 @@ func (x *EstimateDeliveryDurationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EstimateDeliveryDurationRequest.ProtoReflect.Descriptor instead.
 func (*EstimateDeliveryDurationRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{15}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EstimateDeliveryDurationRequest) GetMarketId() string {
@@ -900,7 +803,7 @@ type EstimateDeliveryDurationResponse struct {
 
 func (x *EstimateDeliveryDurationResponse) Reset() {
 	*x = EstimateDeliveryDurationResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[16]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +815,7 @@ func (x *EstimateDeliveryDurationResponse) String() string {
 func (*EstimateDeliveryDurationResponse) ProtoMessage() {}
 
 func (x *EstimateDeliveryDurationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[16]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +828,7 @@ func (x *EstimateDeliveryDurationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EstimateDeliveryDurationResponse.ProtoReflect.Descriptor instead.
 func (*EstimateDeliveryDurationResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{16}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EstimateDeliveryDurationResponse) GetCourierLead() *durationpb.Duration {
@@ -956,7 +859,7 @@ type RegisterCourierRequest struct {
 
 func (x *RegisterCourierRequest) Reset() {
 	*x = RegisterCourierRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[17]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -968,7 +871,7 @@ func (x *RegisterCourierRequest) String() string {
 func (*RegisterCourierRequest) ProtoMessage() {}
 
 func (x *RegisterCourierRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[17]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -981,7 +884,7 @@ func (x *RegisterCourierRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterCourierRequest.ProtoReflect.Descriptor instead.
 func (*RegisterCourierRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{17}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RegisterCourierRequest) GetCourierId() string {
@@ -1016,7 +919,7 @@ type RegisterCourierResponse struct {
 
 func (x *RegisterCourierResponse) Reset() {
 	*x = RegisterCourierResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[18]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1028,7 +931,7 @@ func (x *RegisterCourierResponse) String() string {
 func (*RegisterCourierResponse) ProtoMessage() {}
 
 func (x *RegisterCourierResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[18]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1041,7 +944,7 @@ func (x *RegisterCourierResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterCourierResponse.ProtoReflect.Descriptor instead.
 func (*RegisterCourierResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{18}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RegisterCourierResponse) GetCourierId() string {
@@ -1074,7 +977,7 @@ type RetireCourierRequest struct {
 
 func (x *RetireCourierRequest) Reset() {
 	*x = RetireCourierRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[19]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1086,7 +989,7 @@ func (x *RetireCourierRequest) String() string {
 func (*RetireCourierRequest) ProtoMessage() {}
 
 func (x *RetireCourierRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[19]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1099,7 +1002,7 @@ func (x *RetireCourierRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireCourierRequest.ProtoReflect.Descriptor instead.
 func (*RetireCourierRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{19}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RetireCourierRequest) GetCourierId() string {
@@ -1120,7 +1023,7 @@ type RetireCourierResponse struct {
 
 func (x *RetireCourierResponse) Reset() {
 	*x = RetireCourierResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[20]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +1035,7 @@ func (x *RetireCourierResponse) String() string {
 func (*RetireCourierResponse) ProtoMessage() {}
 
 func (x *RetireCourierResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[20]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +1048,7 @@ func (x *RetireCourierResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireCourierResponse.ProtoReflect.Descriptor instead.
 func (*RetireCourierResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{20}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RetireCourierResponse) GetCourierId() string {
@@ -1172,7 +1075,7 @@ type GetCourierPoolRequest struct {
 
 func (x *GetCourierPoolRequest) Reset() {
 	*x = GetCourierPoolRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[21]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1184,7 +1087,7 @@ func (x *GetCourierPoolRequest) String() string {
 func (*GetCourierPoolRequest) ProtoMessage() {}
 
 func (x *GetCourierPoolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[21]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1197,7 +1100,7 @@ func (x *GetCourierPoolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCourierPoolRequest.ProtoReflect.Descriptor instead.
 func (*GetCourierPoolRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{21}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetCourierPoolRequest) GetMarketId() string {
@@ -1227,7 +1130,7 @@ type PoolCourier struct {
 
 func (x *PoolCourier) Reset() {
 	*x = PoolCourier{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[22]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1239,7 +1142,7 @@ func (x *PoolCourier) String() string {
 func (*PoolCourier) ProtoMessage() {}
 
 func (x *PoolCourier) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[22]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1252,7 +1155,7 @@ func (x *PoolCourier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PoolCourier.ProtoReflect.Descriptor instead.
 func (*PoolCourier) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{22}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *PoolCourier) GetCourierId() string {
@@ -1321,7 +1224,7 @@ type GetCourierPoolResponse struct {
 
 func (x *GetCourierPoolResponse) Reset() {
 	*x = GetCourierPoolResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[23]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1333,7 +1236,7 @@ func (x *GetCourierPoolResponse) String() string {
 func (*GetCourierPoolResponse) ProtoMessage() {}
 
 func (x *GetCourierPoolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[23]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1346,7 +1249,7 @@ func (x *GetCourierPoolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCourierPoolResponse.ProtoReflect.Descriptor instead.
 func (*GetCourierPoolResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{23}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetCourierPoolResponse) GetSize() int64 {
@@ -1395,7 +1298,7 @@ type UpdateCourierLocationRequest struct {
 
 func (x *UpdateCourierLocationRequest) Reset() {
 	*x = UpdateCourierLocationRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[24]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1407,7 +1310,7 @@ func (x *UpdateCourierLocationRequest) String() string {
 func (*UpdateCourierLocationRequest) ProtoMessage() {}
 
 func (x *UpdateCourierLocationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[24]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1420,7 +1323,7 @@ func (x *UpdateCourierLocationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCourierLocationRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCourierLocationRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{24}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdateCourierLocationRequest) GetCourierId() string {
@@ -1457,7 +1360,7 @@ type UpdateCourierLocationResponse struct {
 
 func (x *UpdateCourierLocationResponse) Reset() {
 	*x = UpdateCourierLocationResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[25]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1469,7 +1372,7 @@ func (x *UpdateCourierLocationResponse) String() string {
 func (*UpdateCourierLocationResponse) ProtoMessage() {}
 
 func (x *UpdateCourierLocationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[25]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1482,7 +1385,7 @@ func (x *UpdateCourierLocationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCourierLocationResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCourierLocationResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{25}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdateCourierLocationResponse) GetCourierId() string {
@@ -1523,7 +1426,7 @@ type SetCourierAvailabilityRequest struct {
 
 func (x *SetCourierAvailabilityRequest) Reset() {
 	*x = SetCourierAvailabilityRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[26]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1535,7 +1438,7 @@ func (x *SetCourierAvailabilityRequest) String() string {
 func (*SetCourierAvailabilityRequest) ProtoMessage() {}
 
 func (x *SetCourierAvailabilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[26]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1548,7 +1451,7 @@ func (x *SetCourierAvailabilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCourierAvailabilityRequest.ProtoReflect.Descriptor instead.
 func (*SetCourierAvailabilityRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{26}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetCourierAvailabilityRequest) GetCourierId() string {
@@ -1577,7 +1480,7 @@ type SetCourierAvailabilityResponse struct {
 
 func (x *SetCourierAvailabilityResponse) Reset() {
 	*x = SetCourierAvailabilityResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[27]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1589,7 +1492,7 @@ func (x *SetCourierAvailabilityResponse) String() string {
 func (*SetCourierAvailabilityResponse) ProtoMessage() {}
 
 func (x *SetCourierAvailabilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[27]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1602,7 +1505,7 @@ func (x *SetCourierAvailabilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCourierAvailabilityResponse.ProtoReflect.Descriptor instead.
 func (*SetCourierAvailabilityResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{27}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetCourierAvailabilityResponse) GetCourierId() string {
@@ -1635,7 +1538,7 @@ type ListAvailableDeliveryOffersRequest struct {
 
 func (x *ListAvailableDeliveryOffersRequest) Reset() {
 	*x = ListAvailableDeliveryOffersRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[28]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1647,7 +1550,7 @@ func (x *ListAvailableDeliveryOffersRequest) String() string {
 func (*ListAvailableDeliveryOffersRequest) ProtoMessage() {}
 
 func (x *ListAvailableDeliveryOffersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[28]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1660,7 +1563,7 @@ func (x *ListAvailableDeliveryOffersRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ListAvailableDeliveryOffersRequest.ProtoReflect.Descriptor instead.
 func (*ListAvailableDeliveryOffersRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{28}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListAvailableDeliveryOffersRequest) GetCourierId() string {
@@ -1680,7 +1583,7 @@ type ListAvailableDeliveryOffersResponse struct {
 
 func (x *ListAvailableDeliveryOffersResponse) Reset() {
 	*x = ListAvailableDeliveryOffersResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[29]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1692,7 +1595,7 @@ func (x *ListAvailableDeliveryOffersResponse) String() string {
 func (*ListAvailableDeliveryOffersResponse) ProtoMessage() {}
 
 func (x *ListAvailableDeliveryOffersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[29]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1705,7 +1608,7 @@ func (x *ListAvailableDeliveryOffersResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ListAvailableDeliveryOffersResponse.ProtoReflect.Descriptor instead.
 func (*ListAvailableDeliveryOffersResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{29}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListAvailableDeliveryOffersResponse) GetCourierId() string {
@@ -1732,7 +1635,7 @@ type OfferDeliveryToCourierRequest struct {
 
 func (x *OfferDeliveryToCourierRequest) Reset() {
 	*x = OfferDeliveryToCourierRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[30]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1744,7 +1647,7 @@ func (x *OfferDeliveryToCourierRequest) String() string {
 func (*OfferDeliveryToCourierRequest) ProtoMessage() {}
 
 func (x *OfferDeliveryToCourierRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[30]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1757,7 +1660,7 @@ func (x *OfferDeliveryToCourierRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OfferDeliveryToCourierRequest.ProtoReflect.Descriptor instead.
 func (*OfferDeliveryToCourierRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{30}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *OfferDeliveryToCourierRequest) GetOrderId() string {
@@ -1786,7 +1689,7 @@ type OfferDeliveryToCourierResponse struct {
 
 func (x *OfferDeliveryToCourierResponse) Reset() {
 	*x = OfferDeliveryToCourierResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[31]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1798,7 +1701,7 @@ func (x *OfferDeliveryToCourierResponse) String() string {
 func (*OfferDeliveryToCourierResponse) ProtoMessage() {}
 
 func (x *OfferDeliveryToCourierResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[31]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1811,7 +1714,7 @@ func (x *OfferDeliveryToCourierResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OfferDeliveryToCourierResponse.ProtoReflect.Descriptor instead.
 func (*OfferDeliveryToCourierResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{31}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *OfferDeliveryToCourierResponse) GetOffer() *DeliveryOffer {
@@ -1847,7 +1750,7 @@ type AcceptDeliveryOfferRequest struct {
 
 func (x *AcceptDeliveryOfferRequest) Reset() {
 	*x = AcceptDeliveryOfferRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[32]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1859,7 +1762,7 @@ func (x *AcceptDeliveryOfferRequest) String() string {
 func (*AcceptDeliveryOfferRequest) ProtoMessage() {}
 
 func (x *AcceptDeliveryOfferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[32]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1872,7 +1775,7 @@ func (x *AcceptDeliveryOfferRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptDeliveryOfferRequest.ProtoReflect.Descriptor instead.
 func (*AcceptDeliveryOfferRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{32}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *AcceptDeliveryOfferRequest) GetOfferId() string {
@@ -1909,7 +1812,7 @@ type AcceptDeliveryOfferResponse struct {
 
 func (x *AcceptDeliveryOfferResponse) Reset() {
 	*x = AcceptDeliveryOfferResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[33]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1921,7 +1824,7 @@ func (x *AcceptDeliveryOfferResponse) String() string {
 func (*AcceptDeliveryOfferResponse) ProtoMessage() {}
 
 func (x *AcceptDeliveryOfferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[33]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1934,7 +1837,7 @@ func (x *AcceptDeliveryOfferResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptDeliveryOfferResponse.ProtoReflect.Descriptor instead.
 func (*AcceptDeliveryOfferResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{33}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *AcceptDeliveryOfferResponse) GetOfferId() string {
@@ -1975,7 +1878,7 @@ type RejectDeliveryOfferRequest struct {
 
 func (x *RejectDeliveryOfferRequest) Reset() {
 	*x = RejectDeliveryOfferRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[34]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1987,7 +1890,7 @@ func (x *RejectDeliveryOfferRequest) String() string {
 func (*RejectDeliveryOfferRequest) ProtoMessage() {}
 
 func (x *RejectDeliveryOfferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[34]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2000,7 +1903,7 @@ func (x *RejectDeliveryOfferRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectDeliveryOfferRequest.ProtoReflect.Descriptor instead.
 func (*RejectDeliveryOfferRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{34}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *RejectDeliveryOfferRequest) GetOfferId() string {
@@ -2029,7 +1932,7 @@ type RejectDeliveryOfferResponse struct {
 
 func (x *RejectDeliveryOfferResponse) Reset() {
 	*x = RejectDeliveryOfferResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[35]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2041,7 +1944,7 @@ func (x *RejectDeliveryOfferResponse) String() string {
 func (*RejectDeliveryOfferResponse) ProtoMessage() {}
 
 func (x *RejectDeliveryOfferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[35]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2054,7 +1957,7 @@ func (x *RejectDeliveryOfferResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectDeliveryOfferResponse.ProtoReflect.Descriptor instead.
 func (*RejectDeliveryOfferResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{35}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RejectDeliveryOfferResponse) GetOfferId() string {
@@ -2090,7 +1993,7 @@ type ConfirmPickupRequest struct {
 
 func (x *ConfirmPickupRequest) Reset() {
 	*x = ConfirmPickupRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[36]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2102,7 +2005,7 @@ func (x *ConfirmPickupRequest) String() string {
 func (*ConfirmPickupRequest) ProtoMessage() {}
 
 func (x *ConfirmPickupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[36]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2115,7 +2018,7 @@ func (x *ConfirmPickupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmPickupRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmPickupRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{36}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ConfirmPickupRequest) GetDeliveryId() string {
@@ -2151,7 +2054,7 @@ type ConfirmPickupResponse struct {
 
 func (x *ConfirmPickupResponse) Reset() {
 	*x = ConfirmPickupResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[37]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2163,7 +2066,7 @@ func (x *ConfirmPickupResponse) String() string {
 func (*ConfirmPickupResponse) ProtoMessage() {}
 
 func (x *ConfirmPickupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[37]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2176,7 +2079,7 @@ func (x *ConfirmPickupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmPickupResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmPickupResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{37}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ConfirmPickupResponse) GetDeliveryId() string {
@@ -2210,7 +2113,7 @@ type ConfirmDeliveryRequest struct {
 
 func (x *ConfirmDeliveryRequest) Reset() {
 	*x = ConfirmDeliveryRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[38]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2222,7 +2125,7 @@ func (x *ConfirmDeliveryRequest) String() string {
 func (*ConfirmDeliveryRequest) ProtoMessage() {}
 
 func (x *ConfirmDeliveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[38]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2235,7 +2138,7 @@ func (x *ConfirmDeliveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmDeliveryRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmDeliveryRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{38}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ConfirmDeliveryRequest) GetDeliveryId() string {
@@ -2264,7 +2167,7 @@ type ConfirmDeliveryResponse struct {
 
 func (x *ConfirmDeliveryResponse) Reset() {
 	*x = ConfirmDeliveryResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[39]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2276,7 +2179,7 @@ func (x *ConfirmDeliveryResponse) String() string {
 func (*ConfirmDeliveryResponse) ProtoMessage() {}
 
 func (x *ConfirmDeliveryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[39]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2289,7 +2192,7 @@ func (x *ConfirmDeliveryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmDeliveryResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmDeliveryResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{39}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ConfirmDeliveryResponse) GetDeliveryId() string {
@@ -2329,7 +2232,7 @@ type ReportDeliveryFailureRequest struct {
 
 func (x *ReportDeliveryFailureRequest) Reset() {
 	*x = ReportDeliveryFailureRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[40]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2341,7 +2244,7 @@ func (x *ReportDeliveryFailureRequest) String() string {
 func (*ReportDeliveryFailureRequest) ProtoMessage() {}
 
 func (x *ReportDeliveryFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[40]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2354,7 +2257,7 @@ func (x *ReportDeliveryFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportDeliveryFailureRequest.ProtoReflect.Descriptor instead.
 func (*ReportDeliveryFailureRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{40}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ReportDeliveryFailureRequest) GetDeliveryId() string {
@@ -2399,7 +2302,7 @@ type ReportDeliveryFailureResponse struct {
 
 func (x *ReportDeliveryFailureResponse) Reset() {
 	*x = ReportDeliveryFailureResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[41]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2411,7 +2314,7 @@ func (x *ReportDeliveryFailureResponse) String() string {
 func (*ReportDeliveryFailureResponse) ProtoMessage() {}
 
 func (x *ReportDeliveryFailureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[41]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2424,7 +2327,7 @@ func (x *ReportDeliveryFailureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportDeliveryFailureResponse.ProtoReflect.Descriptor instead.
 func (*ReportDeliveryFailureResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{41}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ReportDeliveryFailureResponse) GetDeliveryId() string {
@@ -2463,7 +2366,7 @@ type GetSimulatorRequest struct {
 
 func (x *GetSimulatorRequest) Reset() {
 	*x = GetSimulatorRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[42]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2475,7 +2378,7 @@ func (x *GetSimulatorRequest) String() string {
 func (*GetSimulatorRequest) ProtoMessage() {}
 
 func (x *GetSimulatorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[42]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2488,7 +2391,7 @@ func (x *GetSimulatorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSimulatorRequest.ProtoReflect.Descriptor instead.
 func (*GetSimulatorRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{42}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{40}
 }
 
 type GetSimulatorResponse struct {
@@ -2500,7 +2403,7 @@ type GetSimulatorResponse struct {
 
 func (x *GetSimulatorResponse) Reset() {
 	*x = GetSimulatorResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[43]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2512,7 +2415,7 @@ func (x *GetSimulatorResponse) String() string {
 func (*GetSimulatorResponse) ProtoMessage() {}
 
 func (x *GetSimulatorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[43]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2525,7 +2428,7 @@ func (x *GetSimulatorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSimulatorResponse.ProtoReflect.Descriptor instead.
 func (*GetSimulatorResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{43}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetSimulatorResponse) GetEnabled() bool {
@@ -2544,7 +2447,7 @@ type SetSimulatorEnabledRequest struct {
 
 func (x *SetSimulatorEnabledRequest) Reset() {
 	*x = SetSimulatorEnabledRequest{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[44]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2556,7 +2459,7 @@ func (x *SetSimulatorEnabledRequest) String() string {
 func (*SetSimulatorEnabledRequest) ProtoMessage() {}
 
 func (x *SetSimulatorEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[44]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2569,7 +2472,7 @@ func (x *SetSimulatorEnabledRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSimulatorEnabledRequest.ProtoReflect.Descriptor instead.
 func (*SetSimulatorEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{44}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SetSimulatorEnabledRequest) GetEnabled() bool {
@@ -2588,7 +2491,7 @@ type SetSimulatorEnabledResponse struct {
 
 func (x *SetSimulatorEnabledResponse) Reset() {
 	*x = SetSimulatorEnabledResponse{}
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[45]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2600,7 +2503,7 @@ func (x *SetSimulatorEnabledResponse) String() string {
 func (*SetSimulatorEnabledResponse) ProtoMessage() {}
 
 func (x *SetSimulatorEnabledResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[45]
+	mi := &file_nomnom_delivery_v1_service_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2613,7 +2516,7 @@ func (x *SetSimulatorEnabledResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSimulatorEnabledResponse.ProtoReflect.Descriptor instead.
 func (*SetSimulatorEnabledResponse) Descriptor() ([]byte, []int) {
-	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{45}
+	return file_nomnom_delivery_v1_service_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SetSimulatorEnabledResponse) GetEnabled() bool {
@@ -2666,13 +2569,7 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"\x16CreateDeliveryResponse\x12\x1f\n" +
 	"\vdelivery_id\x18\x01 \x01(\tR\n" +
 	"deliveryId\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"2\n" +
-	"\x15ReplanDeliveryRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"g\n" +
-	"\x16ReplanDeliveryResponse\x12\x1f\n" +
-	"\vdelivery_id\x18\x01 \x01(\tR\n" +
-	"deliveryId\x12,\n" +
-	"\x12offered_courier_id\x18\x02 \x01(\tR\x10offeredCourierId\"J\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"J\n" +
 	"\x15CancelDeliveryRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x82\x01\n" +
@@ -2817,12 +2714,11 @@ const file_nomnom_delivery_v1_service_proto_rawDesc = "" +
 	"\x1aSetSimulatorEnabledRequest\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\"7\n" +
 	"\x1bSetSimulatorEnabledResponse\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled2\xb5\x12\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled2\xcc\x11\n" +
 	"\x0fDeliveryService\x12\x88\x01\n" +
 	"\x19GetCourierCurrentDelivery\x124.nomnom.delivery.v1.GetCourierCurrentDeliveryRequest\x1a5.nomnom.delivery.v1.GetCourierCurrentDeliveryResponse\x12m\n" +
 	"\x10GetOrderDelivery\x12+.nomnom.delivery.v1.GetOrderDeliveryRequest\x1a,.nomnom.delivery.v1.GetOrderDeliveryResponse\x12g\n" +
 	"\x0eCreateDelivery\x12).nomnom.delivery.v1.CreateDeliveryRequest\x1a*.nomnom.delivery.v1.CreateDeliveryResponse\x12g\n" +
-	"\x0eReplanDelivery\x12).nomnom.delivery.v1.ReplanDeliveryRequest\x1a*.nomnom.delivery.v1.ReplanDeliveryResponse\x12g\n" +
 	"\x0eCancelDelivery\x12).nomnom.delivery.v1.CancelDeliveryRequest\x1a*.nomnom.delivery.v1.CancelDeliveryResponse\x12\x85\x01\n" +
 	"\x18EstimateDeliveryDuration\x123.nomnom.delivery.v1.EstimateDeliveryDurationRequest\x1a4.nomnom.delivery.v1.EstimateDeliveryDurationResponse\x12j\n" +
 	"\x0fRegisterCourier\x12*.nomnom.delivery.v1.RegisterCourierRequest\x1a+.nomnom.delivery.v1.RegisterCourierResponse\x12d\n" +
@@ -2853,7 +2749,7 @@ func file_nomnom_delivery_v1_service_proto_rawDescGZIP() []byte {
 	return file_nomnom_delivery_v1_service_proto_rawDescData
 }
 
-var file_nomnom_delivery_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_nomnom_delivery_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_nomnom_delivery_v1_service_proto_goTypes = []any{
 	(*GetOrderDeliveryRequest)(nil),             // 0: nomnom.delivery.v1.GetOrderDeliveryRequest
 	(*GetOrderDeliveryResponse)(nil),            // 1: nomnom.delivery.v1.GetOrderDeliveryResponse
@@ -2866,48 +2762,46 @@ var file_nomnom_delivery_v1_service_proto_goTypes = []any{
 	(*GetCourierCurrentDeliveryResponse)(nil),   // 8: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
 	(*CreateDeliveryRequest)(nil),               // 9: nomnom.delivery.v1.CreateDeliveryRequest
 	(*CreateDeliveryResponse)(nil),              // 10: nomnom.delivery.v1.CreateDeliveryResponse
-	(*ReplanDeliveryRequest)(nil),               // 11: nomnom.delivery.v1.ReplanDeliveryRequest
-	(*ReplanDeliveryResponse)(nil),              // 12: nomnom.delivery.v1.ReplanDeliveryResponse
-	(*CancelDeliveryRequest)(nil),               // 13: nomnom.delivery.v1.CancelDeliveryRequest
-	(*CancelDeliveryResponse)(nil),              // 14: nomnom.delivery.v1.CancelDeliveryResponse
-	(*EstimateDeliveryDurationRequest)(nil),     // 15: nomnom.delivery.v1.EstimateDeliveryDurationRequest
-	(*EstimateDeliveryDurationResponse)(nil),    // 16: nomnom.delivery.v1.EstimateDeliveryDurationResponse
-	(*RegisterCourierRequest)(nil),              // 17: nomnom.delivery.v1.RegisterCourierRequest
-	(*RegisterCourierResponse)(nil),             // 18: nomnom.delivery.v1.RegisterCourierResponse
-	(*RetireCourierRequest)(nil),                // 19: nomnom.delivery.v1.RetireCourierRequest
-	(*RetireCourierResponse)(nil),               // 20: nomnom.delivery.v1.RetireCourierResponse
-	(*GetCourierPoolRequest)(nil),               // 21: nomnom.delivery.v1.GetCourierPoolRequest
-	(*PoolCourier)(nil),                         // 22: nomnom.delivery.v1.PoolCourier
-	(*GetCourierPoolResponse)(nil),              // 23: nomnom.delivery.v1.GetCourierPoolResponse
-	(*UpdateCourierLocationRequest)(nil),        // 24: nomnom.delivery.v1.UpdateCourierLocationRequest
-	(*UpdateCourierLocationResponse)(nil),       // 25: nomnom.delivery.v1.UpdateCourierLocationResponse
-	(*SetCourierAvailabilityRequest)(nil),       // 26: nomnom.delivery.v1.SetCourierAvailabilityRequest
-	(*SetCourierAvailabilityResponse)(nil),      // 27: nomnom.delivery.v1.SetCourierAvailabilityResponse
-	(*ListAvailableDeliveryOffersRequest)(nil),  // 28: nomnom.delivery.v1.ListAvailableDeliveryOffersRequest
-	(*ListAvailableDeliveryOffersResponse)(nil), // 29: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse
-	(*OfferDeliveryToCourierRequest)(nil),       // 30: nomnom.delivery.v1.OfferDeliveryToCourierRequest
-	(*OfferDeliveryToCourierResponse)(nil),      // 31: nomnom.delivery.v1.OfferDeliveryToCourierResponse
-	(*AcceptDeliveryOfferRequest)(nil),          // 32: nomnom.delivery.v1.AcceptDeliveryOfferRequest
-	(*AcceptDeliveryOfferResponse)(nil),         // 33: nomnom.delivery.v1.AcceptDeliveryOfferResponse
-	(*RejectDeliveryOfferRequest)(nil),          // 34: nomnom.delivery.v1.RejectDeliveryOfferRequest
-	(*RejectDeliveryOfferResponse)(nil),         // 35: nomnom.delivery.v1.RejectDeliveryOfferResponse
-	(*ConfirmPickupRequest)(nil),                // 36: nomnom.delivery.v1.ConfirmPickupRequest
-	(*ConfirmPickupResponse)(nil),               // 37: nomnom.delivery.v1.ConfirmPickupResponse
-	(*ConfirmDeliveryRequest)(nil),              // 38: nomnom.delivery.v1.ConfirmDeliveryRequest
-	(*ConfirmDeliveryResponse)(nil),             // 39: nomnom.delivery.v1.ConfirmDeliveryResponse
-	(*ReportDeliveryFailureRequest)(nil),        // 40: nomnom.delivery.v1.ReportDeliveryFailureRequest
-	(*ReportDeliveryFailureResponse)(nil),       // 41: nomnom.delivery.v1.ReportDeliveryFailureResponse
-	(*GetSimulatorRequest)(nil),                 // 42: nomnom.delivery.v1.GetSimulatorRequest
-	(*GetSimulatorResponse)(nil),                // 43: nomnom.delivery.v1.GetSimulatorResponse
-	(*SetSimulatorEnabledRequest)(nil),          // 44: nomnom.delivery.v1.SetSimulatorEnabledRequest
-	(*SetSimulatorEnabledResponse)(nil),         // 45: nomnom.delivery.v1.SetSimulatorEnabledResponse
-	(*Delivery)(nil),                            // 46: nomnom.delivery.v1.Delivery
-	(CourierStatus)(0),                          // 47: nomnom.delivery.v1.CourierStatus
-	(*durationpb.Duration)(nil),                 // 48: google.protobuf.Duration
-	(CourierAvailability)(0),                    // 49: nomnom.delivery.v1.CourierAvailability
-	(*DeliveryOffer)(nil),                       // 50: nomnom.delivery.v1.DeliveryOffer
-	(*timestamppb.Timestamp)(nil),               // 51: google.protobuf.Timestamp
-	(DeliveryState)(0),                          // 52: nomnom.delivery.v1.DeliveryState
+	(*CancelDeliveryRequest)(nil),               // 11: nomnom.delivery.v1.CancelDeliveryRequest
+	(*CancelDeliveryResponse)(nil),              // 12: nomnom.delivery.v1.CancelDeliveryResponse
+	(*EstimateDeliveryDurationRequest)(nil),     // 13: nomnom.delivery.v1.EstimateDeliveryDurationRequest
+	(*EstimateDeliveryDurationResponse)(nil),    // 14: nomnom.delivery.v1.EstimateDeliveryDurationResponse
+	(*RegisterCourierRequest)(nil),              // 15: nomnom.delivery.v1.RegisterCourierRequest
+	(*RegisterCourierResponse)(nil),             // 16: nomnom.delivery.v1.RegisterCourierResponse
+	(*RetireCourierRequest)(nil),                // 17: nomnom.delivery.v1.RetireCourierRequest
+	(*RetireCourierResponse)(nil),               // 18: nomnom.delivery.v1.RetireCourierResponse
+	(*GetCourierPoolRequest)(nil),               // 19: nomnom.delivery.v1.GetCourierPoolRequest
+	(*PoolCourier)(nil),                         // 20: nomnom.delivery.v1.PoolCourier
+	(*GetCourierPoolResponse)(nil),              // 21: nomnom.delivery.v1.GetCourierPoolResponse
+	(*UpdateCourierLocationRequest)(nil),        // 22: nomnom.delivery.v1.UpdateCourierLocationRequest
+	(*UpdateCourierLocationResponse)(nil),       // 23: nomnom.delivery.v1.UpdateCourierLocationResponse
+	(*SetCourierAvailabilityRequest)(nil),       // 24: nomnom.delivery.v1.SetCourierAvailabilityRequest
+	(*SetCourierAvailabilityResponse)(nil),      // 25: nomnom.delivery.v1.SetCourierAvailabilityResponse
+	(*ListAvailableDeliveryOffersRequest)(nil),  // 26: nomnom.delivery.v1.ListAvailableDeliveryOffersRequest
+	(*ListAvailableDeliveryOffersResponse)(nil), // 27: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse
+	(*OfferDeliveryToCourierRequest)(nil),       // 28: nomnom.delivery.v1.OfferDeliveryToCourierRequest
+	(*OfferDeliveryToCourierResponse)(nil),      // 29: nomnom.delivery.v1.OfferDeliveryToCourierResponse
+	(*AcceptDeliveryOfferRequest)(nil),          // 30: nomnom.delivery.v1.AcceptDeliveryOfferRequest
+	(*AcceptDeliveryOfferResponse)(nil),         // 31: nomnom.delivery.v1.AcceptDeliveryOfferResponse
+	(*RejectDeliveryOfferRequest)(nil),          // 32: nomnom.delivery.v1.RejectDeliveryOfferRequest
+	(*RejectDeliveryOfferResponse)(nil),         // 33: nomnom.delivery.v1.RejectDeliveryOfferResponse
+	(*ConfirmPickupRequest)(nil),                // 34: nomnom.delivery.v1.ConfirmPickupRequest
+	(*ConfirmPickupResponse)(nil),               // 35: nomnom.delivery.v1.ConfirmPickupResponse
+	(*ConfirmDeliveryRequest)(nil),              // 36: nomnom.delivery.v1.ConfirmDeliveryRequest
+	(*ConfirmDeliveryResponse)(nil),             // 37: nomnom.delivery.v1.ConfirmDeliveryResponse
+	(*ReportDeliveryFailureRequest)(nil),        // 38: nomnom.delivery.v1.ReportDeliveryFailureRequest
+	(*ReportDeliveryFailureResponse)(nil),       // 39: nomnom.delivery.v1.ReportDeliveryFailureResponse
+	(*GetSimulatorRequest)(nil),                 // 40: nomnom.delivery.v1.GetSimulatorRequest
+	(*GetSimulatorResponse)(nil),                // 41: nomnom.delivery.v1.GetSimulatorResponse
+	(*SetSimulatorEnabledRequest)(nil),          // 42: nomnom.delivery.v1.SetSimulatorEnabledRequest
+	(*SetSimulatorEnabledResponse)(nil),         // 43: nomnom.delivery.v1.SetSimulatorEnabledResponse
+	(*Delivery)(nil),                            // 44: nomnom.delivery.v1.Delivery
+	(CourierStatus)(0),                          // 45: nomnom.delivery.v1.CourierStatus
+	(*durationpb.Duration)(nil),                 // 46: google.protobuf.Duration
+	(CourierAvailability)(0),                    // 47: nomnom.delivery.v1.CourierAvailability
+	(*DeliveryOffer)(nil),                       // 48: nomnom.delivery.v1.DeliveryOffer
+	(*timestamppb.Timestamp)(nil),               // 49: google.protobuf.Timestamp
+	(DeliveryState)(0),                          // 50: nomnom.delivery.v1.DeliveryState
 }
 var file_nomnom_delivery_v1_service_proto_depIdxs = []int32{
 	2,  // 0: nomnom.delivery.v1.GetOrderDeliveryResponse.courier:type_name -> nomnom.delivery.v1.OrderCourier
@@ -2917,63 +2811,61 @@ var file_nomnom_delivery_v1_service_proto_depIdxs = []int32{
 	5,  // 4: nomnom.delivery.v1.OrderTracking.dropoff:type_name -> nomnom.delivery.v1.GeoPoint
 	6,  // 5: nomnom.delivery.v1.OrderTracking.courier_position:type_name -> nomnom.delivery.v1.CourierLocation
 	5,  // 6: nomnom.delivery.v1.VirtualCity.origin:type_name -> nomnom.delivery.v1.GeoPoint
-	46, // 7: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.delivery:type_name -> nomnom.delivery.v1.Delivery
-	47, // 8: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.courier_status:type_name -> nomnom.delivery.v1.CourierStatus
-	48, // 9: nomnom.delivery.v1.EstimateDeliveryDurationResponse.courier_lead:type_name -> google.protobuf.Duration
-	48, // 10: nomnom.delivery.v1.EstimateDeliveryDurationResponse.transit:type_name -> google.protobuf.Duration
-	47, // 11: nomnom.delivery.v1.RegisterCourierResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
-	47, // 12: nomnom.delivery.v1.PoolCourier.status:type_name -> nomnom.delivery.v1.CourierStatus
-	22, // 13: nomnom.delivery.v1.GetCourierPoolResponse.couriers:type_name -> nomnom.delivery.v1.PoolCourier
-	49, // 14: nomnom.delivery.v1.SetCourierAvailabilityRequest.availability:type_name -> nomnom.delivery.v1.CourierAvailability
-	47, // 15: nomnom.delivery.v1.SetCourierAvailabilityResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
-	50, // 16: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse.offers:type_name -> nomnom.delivery.v1.DeliveryOffer
-	50, // 17: nomnom.delivery.v1.OfferDeliveryToCourierResponse.offer:type_name -> nomnom.delivery.v1.DeliveryOffer
-	51, // 18: nomnom.delivery.v1.AcceptDeliveryOfferRequest.expected_pickup_at:type_name -> google.protobuf.Timestamp
-	51, // 19: nomnom.delivery.v1.ConfirmPickupRequest.expected_delivered_at:type_name -> google.protobuf.Timestamp
-	52, // 20: nomnom.delivery.v1.ConfirmPickupResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
-	52, // 21: nomnom.delivery.v1.ConfirmDeliveryResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
+	44, // 7: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.delivery:type_name -> nomnom.delivery.v1.Delivery
+	45, // 8: nomnom.delivery.v1.GetCourierCurrentDeliveryResponse.courier_status:type_name -> nomnom.delivery.v1.CourierStatus
+	46, // 9: nomnom.delivery.v1.EstimateDeliveryDurationResponse.courier_lead:type_name -> google.protobuf.Duration
+	46, // 10: nomnom.delivery.v1.EstimateDeliveryDurationResponse.transit:type_name -> google.protobuf.Duration
+	45, // 11: nomnom.delivery.v1.RegisterCourierResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
+	45, // 12: nomnom.delivery.v1.PoolCourier.status:type_name -> nomnom.delivery.v1.CourierStatus
+	20, // 13: nomnom.delivery.v1.GetCourierPoolResponse.couriers:type_name -> nomnom.delivery.v1.PoolCourier
+	47, // 14: nomnom.delivery.v1.SetCourierAvailabilityRequest.availability:type_name -> nomnom.delivery.v1.CourierAvailability
+	45, // 15: nomnom.delivery.v1.SetCourierAvailabilityResponse.status:type_name -> nomnom.delivery.v1.CourierStatus
+	48, // 16: nomnom.delivery.v1.ListAvailableDeliveryOffersResponse.offers:type_name -> nomnom.delivery.v1.DeliveryOffer
+	48, // 17: nomnom.delivery.v1.OfferDeliveryToCourierResponse.offer:type_name -> nomnom.delivery.v1.DeliveryOffer
+	49, // 18: nomnom.delivery.v1.AcceptDeliveryOfferRequest.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	49, // 19: nomnom.delivery.v1.ConfirmPickupRequest.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	50, // 20: nomnom.delivery.v1.ConfirmPickupResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
+	50, // 21: nomnom.delivery.v1.ConfirmDeliveryResponse.state:type_name -> nomnom.delivery.v1.DeliveryState
 	7,  // 22: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:input_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryRequest
 	0,  // 23: nomnom.delivery.v1.DeliveryService.GetOrderDelivery:input_type -> nomnom.delivery.v1.GetOrderDeliveryRequest
 	9,  // 24: nomnom.delivery.v1.DeliveryService.CreateDelivery:input_type -> nomnom.delivery.v1.CreateDeliveryRequest
-	11, // 25: nomnom.delivery.v1.DeliveryService.ReplanDelivery:input_type -> nomnom.delivery.v1.ReplanDeliveryRequest
-	13, // 26: nomnom.delivery.v1.DeliveryService.CancelDelivery:input_type -> nomnom.delivery.v1.CancelDeliveryRequest
-	15, // 27: nomnom.delivery.v1.DeliveryService.EstimateDeliveryDuration:input_type -> nomnom.delivery.v1.EstimateDeliveryDurationRequest
-	17, // 28: nomnom.delivery.v1.DeliveryService.RegisterCourier:input_type -> nomnom.delivery.v1.RegisterCourierRequest
-	19, // 29: nomnom.delivery.v1.DeliveryService.RetireCourier:input_type -> nomnom.delivery.v1.RetireCourierRequest
-	21, // 30: nomnom.delivery.v1.DeliveryService.GetCourierPool:input_type -> nomnom.delivery.v1.GetCourierPoolRequest
-	30, // 31: nomnom.delivery.v1.DeliveryService.OfferDeliveryToCourier:input_type -> nomnom.delivery.v1.OfferDeliveryToCourierRequest
-	24, // 32: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:input_type -> nomnom.delivery.v1.UpdateCourierLocationRequest
-	26, // 33: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:input_type -> nomnom.delivery.v1.SetCourierAvailabilityRequest
-	28, // 34: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:input_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersRequest
-	32, // 35: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:input_type -> nomnom.delivery.v1.AcceptDeliveryOfferRequest
-	34, // 36: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:input_type -> nomnom.delivery.v1.RejectDeliveryOfferRequest
-	36, // 37: nomnom.delivery.v1.DeliveryService.ConfirmPickup:input_type -> nomnom.delivery.v1.ConfirmPickupRequest
-	38, // 38: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:input_type -> nomnom.delivery.v1.ConfirmDeliveryRequest
-	40, // 39: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:input_type -> nomnom.delivery.v1.ReportDeliveryFailureRequest
-	42, // 40: nomnom.delivery.v1.DeliveryService.GetSimulator:input_type -> nomnom.delivery.v1.GetSimulatorRequest
-	44, // 41: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:input_type -> nomnom.delivery.v1.SetSimulatorEnabledRequest
-	8,  // 42: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:output_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
-	1,  // 43: nomnom.delivery.v1.DeliveryService.GetOrderDelivery:output_type -> nomnom.delivery.v1.GetOrderDeliveryResponse
-	10, // 44: nomnom.delivery.v1.DeliveryService.CreateDelivery:output_type -> nomnom.delivery.v1.CreateDeliveryResponse
-	12, // 45: nomnom.delivery.v1.DeliveryService.ReplanDelivery:output_type -> nomnom.delivery.v1.ReplanDeliveryResponse
-	14, // 46: nomnom.delivery.v1.DeliveryService.CancelDelivery:output_type -> nomnom.delivery.v1.CancelDeliveryResponse
-	16, // 47: nomnom.delivery.v1.DeliveryService.EstimateDeliveryDuration:output_type -> nomnom.delivery.v1.EstimateDeliveryDurationResponse
-	18, // 48: nomnom.delivery.v1.DeliveryService.RegisterCourier:output_type -> nomnom.delivery.v1.RegisterCourierResponse
-	20, // 49: nomnom.delivery.v1.DeliveryService.RetireCourier:output_type -> nomnom.delivery.v1.RetireCourierResponse
-	23, // 50: nomnom.delivery.v1.DeliveryService.GetCourierPool:output_type -> nomnom.delivery.v1.GetCourierPoolResponse
-	31, // 51: nomnom.delivery.v1.DeliveryService.OfferDeliveryToCourier:output_type -> nomnom.delivery.v1.OfferDeliveryToCourierResponse
-	25, // 52: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:output_type -> nomnom.delivery.v1.UpdateCourierLocationResponse
-	27, // 53: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:output_type -> nomnom.delivery.v1.SetCourierAvailabilityResponse
-	29, // 54: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:output_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersResponse
-	33, // 55: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:output_type -> nomnom.delivery.v1.AcceptDeliveryOfferResponse
-	35, // 56: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:output_type -> nomnom.delivery.v1.RejectDeliveryOfferResponse
-	37, // 57: nomnom.delivery.v1.DeliveryService.ConfirmPickup:output_type -> nomnom.delivery.v1.ConfirmPickupResponse
-	39, // 58: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:output_type -> nomnom.delivery.v1.ConfirmDeliveryResponse
-	41, // 59: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:output_type -> nomnom.delivery.v1.ReportDeliveryFailureResponse
-	43, // 60: nomnom.delivery.v1.DeliveryService.GetSimulator:output_type -> nomnom.delivery.v1.GetSimulatorResponse
-	45, // 61: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:output_type -> nomnom.delivery.v1.SetSimulatorEnabledResponse
-	42, // [42:62] is the sub-list for method output_type
-	22, // [22:42] is the sub-list for method input_type
+	11, // 25: nomnom.delivery.v1.DeliveryService.CancelDelivery:input_type -> nomnom.delivery.v1.CancelDeliveryRequest
+	13, // 26: nomnom.delivery.v1.DeliveryService.EstimateDeliveryDuration:input_type -> nomnom.delivery.v1.EstimateDeliveryDurationRequest
+	15, // 27: nomnom.delivery.v1.DeliveryService.RegisterCourier:input_type -> nomnom.delivery.v1.RegisterCourierRequest
+	17, // 28: nomnom.delivery.v1.DeliveryService.RetireCourier:input_type -> nomnom.delivery.v1.RetireCourierRequest
+	19, // 29: nomnom.delivery.v1.DeliveryService.GetCourierPool:input_type -> nomnom.delivery.v1.GetCourierPoolRequest
+	28, // 30: nomnom.delivery.v1.DeliveryService.OfferDeliveryToCourier:input_type -> nomnom.delivery.v1.OfferDeliveryToCourierRequest
+	22, // 31: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:input_type -> nomnom.delivery.v1.UpdateCourierLocationRequest
+	24, // 32: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:input_type -> nomnom.delivery.v1.SetCourierAvailabilityRequest
+	26, // 33: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:input_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersRequest
+	30, // 34: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:input_type -> nomnom.delivery.v1.AcceptDeliveryOfferRequest
+	32, // 35: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:input_type -> nomnom.delivery.v1.RejectDeliveryOfferRequest
+	34, // 36: nomnom.delivery.v1.DeliveryService.ConfirmPickup:input_type -> nomnom.delivery.v1.ConfirmPickupRequest
+	36, // 37: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:input_type -> nomnom.delivery.v1.ConfirmDeliveryRequest
+	38, // 38: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:input_type -> nomnom.delivery.v1.ReportDeliveryFailureRequest
+	40, // 39: nomnom.delivery.v1.DeliveryService.GetSimulator:input_type -> nomnom.delivery.v1.GetSimulatorRequest
+	42, // 40: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:input_type -> nomnom.delivery.v1.SetSimulatorEnabledRequest
+	8,  // 41: nomnom.delivery.v1.DeliveryService.GetCourierCurrentDelivery:output_type -> nomnom.delivery.v1.GetCourierCurrentDeliveryResponse
+	1,  // 42: nomnom.delivery.v1.DeliveryService.GetOrderDelivery:output_type -> nomnom.delivery.v1.GetOrderDeliveryResponse
+	10, // 43: nomnom.delivery.v1.DeliveryService.CreateDelivery:output_type -> nomnom.delivery.v1.CreateDeliveryResponse
+	12, // 44: nomnom.delivery.v1.DeliveryService.CancelDelivery:output_type -> nomnom.delivery.v1.CancelDeliveryResponse
+	14, // 45: nomnom.delivery.v1.DeliveryService.EstimateDeliveryDuration:output_type -> nomnom.delivery.v1.EstimateDeliveryDurationResponse
+	16, // 46: nomnom.delivery.v1.DeliveryService.RegisterCourier:output_type -> nomnom.delivery.v1.RegisterCourierResponse
+	18, // 47: nomnom.delivery.v1.DeliveryService.RetireCourier:output_type -> nomnom.delivery.v1.RetireCourierResponse
+	21, // 48: nomnom.delivery.v1.DeliveryService.GetCourierPool:output_type -> nomnom.delivery.v1.GetCourierPoolResponse
+	29, // 49: nomnom.delivery.v1.DeliveryService.OfferDeliveryToCourier:output_type -> nomnom.delivery.v1.OfferDeliveryToCourierResponse
+	23, // 50: nomnom.delivery.v1.DeliveryService.UpdateCourierLocation:output_type -> nomnom.delivery.v1.UpdateCourierLocationResponse
+	25, // 51: nomnom.delivery.v1.DeliveryService.SetCourierAvailability:output_type -> nomnom.delivery.v1.SetCourierAvailabilityResponse
+	27, // 52: nomnom.delivery.v1.DeliveryService.ListAvailableDeliveryOffers:output_type -> nomnom.delivery.v1.ListAvailableDeliveryOffersResponse
+	31, // 53: nomnom.delivery.v1.DeliveryService.AcceptDeliveryOffer:output_type -> nomnom.delivery.v1.AcceptDeliveryOfferResponse
+	33, // 54: nomnom.delivery.v1.DeliveryService.RejectDeliveryOffer:output_type -> nomnom.delivery.v1.RejectDeliveryOfferResponse
+	35, // 55: nomnom.delivery.v1.DeliveryService.ConfirmPickup:output_type -> nomnom.delivery.v1.ConfirmPickupResponse
+	37, // 56: nomnom.delivery.v1.DeliveryService.ConfirmDelivery:output_type -> nomnom.delivery.v1.ConfirmDeliveryResponse
+	39, // 57: nomnom.delivery.v1.DeliveryService.ReportDeliveryFailure:output_type -> nomnom.delivery.v1.ReportDeliveryFailureResponse
+	41, // 58: nomnom.delivery.v1.DeliveryService.GetSimulator:output_type -> nomnom.delivery.v1.GetSimulatorResponse
+	43, // 59: nomnom.delivery.v1.DeliveryService.SetSimulatorEnabled:output_type -> nomnom.delivery.v1.SetSimulatorEnabledResponse
+	41, // [41:60] is the sub-list for method output_type
+	22, // [22:41] is the sub-list for method input_type
 	22, // [22:22] is the sub-list for extension type_name
 	22, // [22:22] is the sub-list for extension extendee
 	0,  // [0:22] is the sub-list for field type_name
@@ -2991,7 +2883,7 @@ func file_nomnom_delivery_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_delivery_v1_service_proto_rawDesc), len(file_nomnom_delivery_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   46,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

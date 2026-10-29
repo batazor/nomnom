@@ -35,7 +35,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-309, FR-310.
-- **Порты:** `DeliveryAuthorization` (`AcceptDeliveryOffer` над `Courier(id)`), `UnitOfWork`, `DeliveryOfferRepository`, `OffersOfDelivery` (id offers доставки для отзыва остальных; каждый загружается через репозиторий), `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `CourierLocator`, `Clock`, `AssignmentPolicy`.
+- **Порты:** `DeliveryAuthorization` (`AcceptDeliveryOffer` над `Courier(id)`), `UnitOfWork`, `DeliveryOfferRepository`, `OffersOfDelivery` (id offers доставки для отзыва остальных; каждый загружается через репозиторий), `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `CourierLocator`, `Clock`, `AssignmentPolicy`, `AssignmentProcess` (после commit).
 - **Транзакция:** UoW: offer + остальные pending offers (`withdrawn`) + `Delivery` + `Courier` + Outbox (`CourierAssignedToDelivery`); snapshot курьера и `now` получаются до транзакции. Повтор принятия тем же курьером — no-op без второго факта.
 - **Допущение:** Конкурентное принятие защищается unique constraint и версией в PostgreSQL.
 

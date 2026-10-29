@@ -20,7 +20,7 @@ use crate::slices::delivery::applications::{
     accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
     estimate_delivery_duration, get_courier_current_delivery, get_courier_pool, get_order_delivery,
     list_available_delivery_offers, offer_delivery_to_courier, reject_delivery_offer,
-    replan_delivery, report_delivery_failure,
+    report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;
@@ -39,11 +39,10 @@ use super::v1::{
     GetSimulatorResponse, ListAvailableDeliveryOffersRequest, ListAvailableDeliveryOffersResponse,
     OfferDeliveryToCourierRequest, OfferDeliveryToCourierResponse, OrderCourier, OrderTracking,
     PoolCourier, RegisterCourierRequest, RegisterCourierResponse, RejectDeliveryOfferRequest,
-    RejectDeliveryOfferResponse, ReplanDeliveryRequest, ReplanDeliveryResponse,
-    ReportDeliveryFailureRequest, ReportDeliveryFailureResponse, RetireCourierRequest,
-    RetireCourierResponse, SetCourierAvailabilityRequest, SetCourierAvailabilityResponse,
-    SetSimulatorEnabledRequest, SetSimulatorEnabledResponse, UpdateCourierLocationRequest,
-    UpdateCourierLocationResponse, VirtualCity,
+    RejectDeliveryOfferResponse, ReportDeliveryFailureRequest, ReportDeliveryFailureResponse,
+    RetireCourierRequest, RetireCourierResponse, SetCourierAvailabilityRequest,
+    SetCourierAvailabilityResponse, SetSimulatorEnabledRequest, SetSimulatorEnabledResponse,
+    UpdateCourierLocationRequest, UpdateCourierLocationResponse, VirtualCity,
 };
 
 mod status;
@@ -174,25 +173,6 @@ impl DeliveryService for DeliveryGrpcService {
         Ok(Response::new(EstimateDeliveryDurationResponse {
             courier_lead: Some(proto_duration(estimate.courier_lead)?),
             transit: Some(proto_duration(estimate.transit)?),
-        }))
-    }
-
-    async fn replan_delivery(
-        &self,
-        request: Request<ReplanDeliveryRequest>,
-    ) -> Result<Response<ReplanDeliveryResponse>, Status> {
-        let subject = self.subjects.resolve(request.metadata())?;
-        let order_id = request.into_inner().order_id;
-        let output = self
-            .deliveries()
-            .replan_delivery(&subject, replan_delivery::Input { order_id })
-            .map_err(delivery_transport_error)?;
-        Ok(Response::new(ReplanDeliveryResponse {
-            delivery_id: output.delivery_id.as_str().to_owned(),
-            offered_courier_id: output
-                .offer
-                .map(|offer| offer.courier_id.as_str().to_owned())
-                .unwrap_or_default(),
         }))
     }
 

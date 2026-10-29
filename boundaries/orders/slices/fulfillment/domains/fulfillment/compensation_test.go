@@ -12,13 +12,6 @@ import (
 // The Saga compensates confirmed steps in reverse order, skips steps closed by
 // their owner and ends by recording the negative outcome.
 func TestProcessPlansCompensation(t *testing.T) {
-	escalated := func(s *process) {
-		s.accepted()
-		s.fact(fulfillment.FactRestaurantOrderReady)
-		for s.expire() != fulfillment.ExpiryEscalation {
-			s.run()
-		}
-	}
 	for name, tc := range map[string]struct {
 		arrange func(*process)
 		outcome fulfillment.Outcome
@@ -64,18 +57,6 @@ func TestProcessPlansCompensation(t *testing.T) {
 			outcome: fulfillment.OutcomeFailure, reason: fulfillment.ReasonPreparationFailed,
 			saga: []fulfillment.StepKind{
 				fulfillment.StepCancelDelivery, fulfillment.StepCancelPaymentAuthorization, fulfillment.StepFailOrCancelOrder,
-			},
-		},
-		// AC-437
-		"operator cancels": {
-			arrange: func(s *process) {
-				escalated(s)
-				s.p.Decide(fulfillment.OperatorDecision{DecisionID: "decision-1", Choice: fulfillment.OperatorCancel})
-			},
-			outcome: fulfillment.OutcomeCancellation, reason: fulfillment.ReasonOperatorDecision,
-			saga: []fulfillment.StepKind{
-				fulfillment.StepCancelDelivery, fulfillment.StepCancelRestaurantOrder, fulfillment.StepCancelPaymentAuthorization,
-				fulfillment.StepFailOrCancelOrder,
 			},
 		},
 		// AC-439: after Capture the payment is refunded; the Delivery is closed by

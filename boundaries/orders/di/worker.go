@@ -173,9 +173,6 @@ func NewFulfillmentPolicy(cfg config.FulfillmentConfig) fulfillmenttemporal.Poli
 	return fulfillmenttemporal.Policy{
 		Policy: fulfillment.Policy{
 			AcceptanceTimeout:       cfg.AcceptanceTimeout,
-			AssignmentTimeout:       cfg.AssignmentTimeout,
-			MaxReplans:              cfg.MaxReplans,
-			OperatorDecisionTimeout: cfg.OperatorDecisionTimeout,
 			PreparationTimeout:      cfg.PreparationTimeout,
 			MaxPreparationExtension: cfg.MaxPreparationExtension,
 			PickupTimeout:           cfg.PickupTimeout,

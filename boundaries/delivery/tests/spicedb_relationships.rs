@@ -15,7 +15,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use delivery::infrastructure::memory::{ManualClock, StaticAuthorization, StaticCourierLocator};
+use delivery::infrastructure::memory::{
+    ManualClock, RecordingAssignment, StaticAuthorization, StaticCourierLocator,
+};
 use delivery::infrastructure::reconcile::Reconciler;
 use delivery::infrastructure::repository::Store;
 use delivery::infrastructure::spicedb::{
@@ -220,6 +222,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
             offer_ttl_seconds: 60,
         },
         relationships: &writer,
+        assignment: &RecordingAssignment::new(),
     }
     .execute(
         &user(&courier),
@@ -296,6 +299,8 @@ fn reassigned_courier_loses_act_as_courier() {
         couriers: &*world.store,
         outbox: &*world.store,
         relationships: &world.writer,
+        assignment: &RecordingAssignment::new(),
+        candidates: &RecordingAssignment::new(),
     }
     .execute(
         &user("dispatcher-1"),
@@ -322,6 +327,8 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
         couriers: &*world.store,
         outbox: &*world.store,
         relationships: &world.writer,
+        assignment: &RecordingAssignment::new(),
+        candidates: &RecordingAssignment::new(),
     }
     .execute(
         &Subject::Service("orders-worker".to_owned()),
@@ -342,6 +349,7 @@ fn pick_up(world: &Assigned) {
         deliveries: &*world.store,
         outbox: &*world.store,
         clock: &ManualClock::new(NOW),
+        assignment: &RecordingAssignment::new(),
     }
     .execute(
         &user(&world.courier),
@@ -369,6 +377,7 @@ fn delivered_courier_loses_act_as_courier() {
         couriers: &*world.store,
         outbox: &*world.store,
         relationships: &world.writer,
+        candidates: &RecordingAssignment::new(),
     }
     .execute(
         &user(&world.courier),
@@ -404,6 +413,8 @@ fn failed_delivery_courier_loses_act_as_courier() {
         couriers: &*world.store,
         outbox: &*world.store,
         relationships: &world.writer,
+        assignment: &RecordingAssignment::new(),
+        candidates: &RecordingAssignment::new(),
     }
     .execute(
         &user("dispatcher-1"),

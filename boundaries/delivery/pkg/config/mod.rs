@@ -4,6 +4,7 @@ mod infrastructure;
 mod kafka;
 mod load;
 mod simulator;
+mod temporal;
 mod tracking;
 
 use std::time::Duration;
@@ -15,20 +16,24 @@ pub use estimate::{
     DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
     DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig,
 };
-pub use infrastructure::{OffersConfig, ReconcilerConfig, SpiceDbConfig};
+pub use infrastructure::{ReconcilerConfig, SpiceDbConfig};
 pub use kafka::{
     InitialOffset, KAFKA_BROKERS_ENV, KAFKA_CONSUMER_GROUP_ENV, KAFKA_INITIAL_OFFSET_ENV,
     KafkaConfig,
 };
-pub use load::load;
 #[cfg(test)]
 use load::{
     configure_delivery_estimate, configure_identity, configure_kafka, configure_reconciler,
-    configure_settings, configure_simulator, configure_spicedb, configure_tracking, load_from,
+    configure_settings, configure_simulator, configure_spicedb, configure_temporal,
+    configure_tracking, load_from, load_worker_from,
 };
+pub use load::{load, load_worker};
 pub use simulator::{
     SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV,
     SIMULATOR_TRACK_INTERVAL_ENV, SimulatorConfig,
+};
+pub use temporal::{
+    TEMPORAL_CONNECT_TIMEOUT_ENV, TEMPORAL_HOST_PORT_ENV, TEMPORAL_NAMESPACE_ENV, TemporalConfig,
 };
 pub use tracking::{
     TRACKING_BLOCK_METERS_ENV, TRACKING_CITY_BLOCKS_ENV, TRACKING_CITY_ORIGIN_LATITUDE_ENV,
@@ -99,27 +104,6 @@ pub const RECONCILER_GRACE_ENV: &str = "RECONCILER__GRACE";
 pub const RECONCILER_PAGE_SIZE_ENV: &str = "RECONCILER__PAGE_SIZE";
 /// Максимум `ReadRelationships` limit SpiceDB по умолчанию.
 pub const MAX_RECONCILER_PAGE_SIZE: u32 = 1000;
-
-/// Истечение Delivery Offers (Expire Delivery Offers) и Dispatch Deliveries:
-/// ключ, переменная, значение по умолчанию.
-const OFFERS_SETTINGS: [(&str, &str, &str); 4] = [
-    ("offers.expiry_interval", OFFERS_EXPIRY_INTERVAL_ENV, "15s"),
-    ("offers.expiry_batch", OFFERS_EXPIRY_BATCH_ENV, "100"),
-    (
-        "offers.dispatch_interval",
-        OFFERS_DISPATCH_INTERVAL_ENV,
-        "2s",
-    ),
-    ("offers.dispatch_batch", OFFERS_DISPATCH_BATCH_ENV, "100"),
-];
-pub const OFFERS_EXPIRY_INTERVAL_ENV: &str = "OFFERS__EXPIRY_INTERVAL";
-pub const OFFERS_EXPIRY_BATCH_ENV: &str = "OFFERS__EXPIRY_BATCH";
-/// Верхняя граница пачки истечения offers.
-pub const MAX_OFFERS_EXPIRY_BATCH: u32 = 1000;
-pub const OFFERS_DISPATCH_INTERVAL_ENV: &str = "OFFERS__DISPATCH_INTERVAL";
-pub const OFFERS_DISPATCH_BATCH_ENV: &str = "OFFERS__DISPATCH_BATCH";
-/// Верхняя граница пачки Dispatch Deliveries.
-pub const MAX_OFFERS_DISPATCH_BATCH: u32 = 1000;
 
 /// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
 const DATABASE_SETTINGS: [(&str, &str, &str); 6] = [
@@ -203,13 +187,24 @@ pub struct AppConfig {
     pub identity: IdentityConfig,
     pub spicedb: SpiceDbConfig,
     pub reconciler: ReconcilerConfig,
-    pub offers: OffersConfig,
+    pub temporal: TemporalConfig,
     pub database: database::Config,
     pub simulator: SimulatorConfig,
     pub tracking: TrackingConfig,
     pub valkey: ValkeyConfig,
     pub kafka: KafkaConfig,
     pub delivery_estimate: DeliveryEstimateConfig,
+}
+
+/// Конфигурация `delivery-worker` (FR-708): технический порт, остановка,
+/// PostgreSQL и Temporal. gRPC API, SpiceDB, Valkey и Kafka процессу не нужны.
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkerConfig {
+    pub management: ManagementConfig,
+    pub shutdown: ShutdownConfig,
+    pub database: database::Config,
+    pub temporal: TemporalConfig,
 }
 
 impl ShutdownConfig {
@@ -224,12 +219,17 @@ impl ShutdownConfig {
 }
 
 impl ManagementConfig {
-    fn validate(&self, server: &ServerConfig) -> Result<(), ConfigError> {
+    fn validate_port(&self) -> Result<(), ConfigError> {
         if self.port == 0 {
             return Err(ConfigError::Message(
                 "management port must be between 1 and 65535".to_owned(),
             ));
         }
+        Ok(())
+    }
+
+    fn validate(&self, server: &ServerConfig) -> Result<(), ConfigError> {
+        self.validate_port()?;
         if self.port == server.port {
             return Err(ConfigError::Message(format!(
                 "management port must differ from server port {}",

@@ -37,7 +37,7 @@ fn delivery(
     DeliveryAuthorization::check(authorization, subject, permission, resource)
 }
 
-fn fulfillment_commands() -> [(DeliveryPermission, DeliveryResource); 3] {
+fn fulfillment_commands() -> [(DeliveryPermission, DeliveryResource); 2] {
     [
         (
             DeliveryPermission::CreateDelivery,
@@ -46,10 +46,6 @@ fn fulfillment_commands() -> [(DeliveryPermission, DeliveryResource); 3] {
         (
             DeliveryPermission::CancelDelivery,
             DeliveryResource::Order(OrderId::new("order-1")),
-        ),
-        (
-            DeliveryPermission::ReplanDelivery,
-            DeliveryResource::Delivery(DeliveryId::new("delivery-1")),
         ),
     ]
 }

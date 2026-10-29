@@ -321,19 +321,6 @@ pub struct CreateDeliveryResponse {
     pub created: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReplanDeliveryRequest {
-    #[prost(string, tag="1")]
-    pub order_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReplanDeliveryResponse {
-    #[prost(string, tag="1")]
-    pub delivery_id: ::prost::alloc::string::String,
-    /// Courier offered the Delivery by this replan; empty when no candidate was found.
-    #[prost(string, tag="2")]
-    pub offered_courier_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelDeliveryRequest {
     #[prost(string, tag="1")]
     pub order_id: ::prost::alloc::string::String,

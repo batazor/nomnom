@@ -1,11 +1,12 @@
 //! Composition root процесса `delivery` (`cmd/delivery`): gRPC API, фоновый
-//! reconciliation relationships, фоновое истечение Delivery Offers,
-//! Dispatch Deliveries и consumer собственных фактов Delivery для Delivery
-//! Duration Statistics (FR-676).
+//! reconciliation relationships и consumer собственных фактов Delivery для
+//! Delivery Duration Statistics (FR-676). Поиск курьера ведёт Assignment
+//! Workflow процесса `delivery-worker` ([`super::worker`]); use cases этого
+//! процесса запускают и будят его через Temporal (FR-707).
 //!
 //! [`compose`] выбирает реализации портов и открывает общие клиенты процесса
 //! (fail fast: SpiceDB, PostgreSQL, Valkey потока позиций, Kafka consumer,
-//! service identity, политика Delivery Duration Estimate), собирает граф use cases
+//! Temporal, service identity, политика Delivery Duration Estimate), собирает граф use cases
 //! ([`super::service`]) и итоговый [`ServerModule`]. Worker процесса создаёт
 //! provider [`DeliveryWorkerProvider`] уже после открытия технического порта:
 //! бизнес-порт открывается последним (ADR 17).
@@ -34,11 +35,12 @@ use crate::infrastructure::spicedb::{
     CheckMetrics, RelationshipGraph, RepositoryRevisions, RevisionReader, SpiceDbAuthorization,
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
 };
+use crate::infrastructure::temporal::TemporalAssignment;
 use crate::infrastructure::tracks::ValkeyPositionPublisher;
 use crate::pkg::config::{
     AppConfig, DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
-    DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig, KafkaConfig, OffersConfig,
-    SimulatorConfig, SpiceDbConfig, TrackingConfig, ValkeyConfig, database,
+    DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig, KafkaConfig, SimulatorConfig,
+    SpiceDbConfig, TemporalConfig, TrackingConfig, ValkeyConfig, database,
 };
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
@@ -52,13 +54,13 @@ use crate::slices::delivery::infrastructure::{
 use crate::slices::simulator::di::SimulatorStore;
 
 use super::infrastructure::{
-    ProcessIds, ProcessLocator, ProcessStores, ProcessTracking, SystemClock, infrastructure,
+    AssignmentAdapters, ProcessAssignment, ProcessStores, ProcessTracking, SystemClock,
+    infrastructure,
 };
 use super::service::{ServiceModule, service};
 use super::{
-    ConsumingWorker, DispatchDeliveries, DispatchSchedule, DispatchWorker, ExpireOffers,
-    ExpirySchedule, OfferExpiryWorker, ReconcilingWorker, Simulator, SimulatorSchedule,
-    SimulatorWorker, SystemRandomness, UseCaseCourierActions,
+    ConsumingWorker, ReconcilingWorker, Simulator, SimulatorSchedule, SimulatorWorker,
+    SystemRandomness, UseCaseCourierActions,
 };
 
 /// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
@@ -108,17 +110,19 @@ where
         .with_revisions(Arc::new(RepositoryRevisions(store)) as Arc<dyn RevisionReader>)
 }
 
-/// Идентификаторы и локатор курьеров процесса: UUIDv7, уникальный между
-/// перезапусками и репликами (FR-541), и кандидаты из сохранённых позиций
-/// доступных курьеров (FR-542).
+/// Адаптеры назначения процесса: UUIDv7, уникальный между перезапусками и
+/// репликами (FR-541), кандидаты из сохранённых позиций доступных курьеров
+/// (FR-542) и выбранный Assignment Workflow.
 #[must_use]
 pub fn assignment_adapters(
     positions: Arc<dyn CourierPositions>,
-) -> (Box<dyn ProcessIds>, Box<dyn ProcessLocator>) {
-    (
-        Box::new(UuidIdGenerator),
-        Box::new(StoredCourierLocator::new(positions)),
-    )
+    process: Arc<dyn ProcessAssignment>,
+) -> AssignmentAdapters {
+    AssignmentAdapters {
+        ids: Box::new(UuidIdGenerator),
+        locator: Box::new(StoredCourierLocator::new(positions)),
+        process,
+    }
 }
 
 /// Virtual City процесса (FR-658): рамка вне диапазонов широты и долготы —
@@ -159,6 +163,15 @@ pub fn estimate_policy(config: &DeliveryEstimateConfig) -> Result<DeliveryEstima
 /// Delivery Duration Statistics в группе `KAFKA__CONSUMER_GROUP`.
 pub fn duration_statistics_consumer(config: &KafkaConfig) -> Result<EventConsumer, String> {
     EventConsumer::subscribe(config, OUTBOX_TOPIC, CONSUMER)
+}
+
+/// Temporal-клиент Assignment Workflow (FR-707): недоступный frontend —
+/// ошибка startup. Courier Candidate будит доставку из выборки `store`.
+pub fn assignment(
+    config: &TemporalConfig,
+    store: Arc<Store>,
+) -> Result<TemporalAssignment, String> {
+    TemporalAssignment::connect(config, store)
 }
 
 /// Live tracking процесса: Virtual City, поток позиций в Valkey и
@@ -253,64 +266,6 @@ impl RelationshipReconciliation for SpiceDbReconciliation {
     }
 }
 
-/// Фоновое истечение Delivery Offers (Expire Delivery Offers) над use cases
-/// процесса.
-pub trait OfferExpiry: Interface {
-    fn expire(&self) -> ExpireOffers;
-    fn schedule(&self) -> ExpirySchedule;
-}
-
-#[derive(Component)]
-#[shaku(interface = OfferExpiry)]
-pub struct UseCaseOfferExpiry {
-    /// Тот же граф use cases, что у gRPC-транспорта.
-    use_cases: Arc<ServiceModule>,
-    config: OffersConfig,
-}
-
-impl OfferExpiry for UseCaseOfferExpiry {
-    fn expire(&self) -> ExpireOffers {
-        let use_cases = Arc::clone(&self.use_cases);
-        Arc::new(move |input| use_cases.deliveries().expire_delivery_offers(input))
-    }
-
-    fn schedule(&self) -> ExpirySchedule {
-        ExpirySchedule {
-            interval: self.config.expiry_interval,
-            batch_size: usize::try_from(self.config.expiry_batch).unwrap_or(usize::MAX),
-        }
-    }
-}
-
-/// Фоновый Dispatch Deliveries над use cases процесса: поиск курьера для
-/// ожидающих доставок начинается здесь, а не в Create Delivery.
-pub trait DeliveryDispatch: Interface {
-    fn dispatch(&self) -> DispatchDeliveries;
-    fn schedule(&self) -> DispatchSchedule;
-}
-
-#[derive(Component)]
-#[shaku(interface = DeliveryDispatch)]
-pub struct UseCaseDeliveryDispatch {
-    /// Тот же граф use cases, что у gRPC-транспорта.
-    use_cases: Arc<ServiceModule>,
-    config: OffersConfig,
-}
-
-impl DeliveryDispatch for UseCaseDeliveryDispatch {
-    fn dispatch(&self) -> DispatchDeliveries {
-        let use_cases = Arc::clone(&self.use_cases);
-        Arc::new(move |input| use_cases.deliveries().dispatch_deliveries(input))
-    }
-
-    fn schedule(&self) -> DispatchSchedule {
-        DispatchSchedule {
-            interval: self.config.dispatch_interval,
-            batch_size: usize::try_from(self.config.dispatch_batch).unwrap_or(usize::MAX),
-        }
-    }
-}
-
 /// Демо Simulator курьеров (FR-605, FR-662) над use cases процесса.
 pub trait DemoSimulator: Interface {
     fn simulator(&self) -> Simulator;
@@ -393,15 +348,12 @@ impl DurationStatistics for KafkaDurationStatistics {
     }
 }
 
-/// Worker процесса: gRPC, фоновый reconciliation, истечение offers,
-/// Dispatch Deliveries, Simulator и consumer Delivery Duration Statistics
-/// под одним сигналом.
-pub type DeliveryWorker = ConsumingWorker<
-    ReconcilingWorker<SimulatorWorker<DispatchWorker<OfferExpiryWorker<GrpcWorker>>>>,
->;
+/// Worker процесса: gRPC, фоновый reconciliation, Simulator и consumer
+/// Delivery Duration Statistics под одним сигналом.
+pub type DeliveryWorker = ConsumingWorker<ReconcilingWorker<SimulatorWorker<GrpcWorker>>>;
 
-/// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers, цикл
-/// истечения offers и цикл Dispatch Deliveries.
+/// Создаёт [`DeliveryWorker`]: открывает бизнес-порт, reconcilers и
+/// Simulator.
 pub struct DeliveryWorkerProvider;
 
 impl<M> Provider<M> for DeliveryWorkerProvider
@@ -409,8 +361,6 @@ where
     M: Module
         + HasComponent<dyn GrpcTransport>
         + HasComponent<dyn RelationshipReconciliation>
-        + HasComponent<dyn OfferExpiry>
-        + HasComponent<dyn DeliveryDispatch>
         + HasComponent<dyn DemoSimulator>
         + HasComponent<dyn DurationStatistics>,
 {
@@ -419,16 +369,12 @@ where
     fn provide(module: &M) -> Result<Box<DeliveryWorker>, Box<dyn Error>> {
         let transport: &dyn GrpcTransport = module.resolve_ref();
         let reconciliation: &dyn RelationshipReconciliation = module.resolve_ref();
-        let expiry: &dyn OfferExpiry = module.resolve_ref();
-        let dispatch: &dyn DeliveryDispatch = module.resolve_ref();
         let simulator: &dyn DemoSimulator = module.resolve_ref();
         let statistics: &dyn DurationStatistics = module.resolve_ref();
         let (consumer, handler) = statistics.consumer()?;
         let worker = transport
             .bind()
             .map_err(|error| format!("listen :{}: {error}", transport.port()))?;
-        let worker = OfferExpiryWorker::new(worker, expiry.expire(), expiry.schedule());
-        let worker = DispatchWorker::new(worker, dispatch.dispatch(), dispatch.schedule());
         let worker = SimulatorWorker::new(
             worker,
             simulator.simulator(),
@@ -475,8 +421,6 @@ module! {
         components = [
             TonicTransport,
             SpiceDbReconciliation,
-            UseCaseOfferExpiry,
-            UseCaseDeliveryDispatch,
             UseCaseDemoSimulator,
             KafkaDurationStatistics,
             OtlpServerTelemetry
@@ -516,7 +460,6 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // Delivery; checks читают их из того же хранилища (FR-447).
     // Каждая роль хранилища разрешается отдельно над одним `Store`.
     let store = Arc::new(store(&config.database)?);
-    let (ids, locator) = assignment_adapters(Arc::clone(&store) as _);
     // Valkey потока позиций обязателен; Virtual City вне диапазонов —
     // ошибка startup.
     let tracking = tracking(&config.tracking, &config.valkey)?;
@@ -525,10 +468,12 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // ошибка startup; невалидная конфигурация Kafka consumer — тоже.
     let estimate = estimate_policy(&config.delivery_estimate)?;
     let consumer = duration_statistics_consumer(&config.kafka)?;
+    // Temporal обязателен: Create Delivery и ответы курьеров запускают и
+    // будят Assignment Workflow.
+    let assignment = Arc::new(assignment(&config.temporal, Arc::clone(&store))?);
     let infrastructure = infrastructure(
         ProcessStores::over(&store),
-        ids,
-        locator,
+        assignment_adapters(Arc::clone(&store) as _, assignment),
         Box::new(spicedb_authorization(spicedb, Arc::clone(&store))),
         Box::new(SpiceDbRelationships::new(Arc::clone(&graph))),
         tracking,
@@ -536,14 +481,6 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     );
     let use_cases = Arc::new(service(Arc::clone(&infrastructure)));
     Ok(ServerModule::builder()
-        .with_component_parameters::<UseCaseOfferExpiry>(UseCaseOfferExpiryParameters {
-            use_cases: Arc::clone(&use_cases),
-            config: config.offers,
-        })
-        .with_component_parameters::<UseCaseDeliveryDispatch>(UseCaseDeliveryDispatchParameters {
-            use_cases: Arc::clone(&use_cases),
-            config: config.offers,
-        })
         .with_component_parameters::<UseCaseDemoSimulator>(UseCaseDemoSimulatorParameters {
             use_cases: Arc::clone(&use_cases),
             store: Arc::clone(&store) as _,
@@ -575,7 +512,7 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::RecordingRelationships;
+    use crate::infrastructure::memory::{RecordingAssignment, RecordingRelationships};
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::application::Subject;
     use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
@@ -583,7 +520,7 @@ mod tests {
         register_courier, set_courier_availability, update_courier_location,
     };
     use crate::slices::delivery::applications::{
-        create_delivery, dispatch_deliveries, find_courier,
+        advance_assignment, create_delivery, find_courier,
     };
 
     use super::super::infrastructure::local_authorization;
@@ -620,11 +557,9 @@ mod tests {
     /// Граф use cases с адаптерами процесса над тестовым PostgreSQL; новый
     /// граф над тем же хранилищем — перезапуск процесса.
     fn process(store: &Arc<TestStore>) -> ServiceModule {
-        let (ids, locator) = assignment_adapters(Arc::clone(store) as _);
         service(infrastructure(
             ProcessStores::over(store),
-            ids,
-            locator,
+            assignment_adapters(Arc::clone(store) as _, Arc::new(RecordingAssignment::new())),
             Box::new(local_authorization()),
             Box::new(RecordingRelationships::new()),
             crate::di::service::test_tracking(),
@@ -711,10 +646,10 @@ mod tests {
         ));
     }
 
-    /// AC-734: the courier search of a created Delivery starts on the next
-    /// dispatch pass of the process, over the stored courier positions.
+    /// AC-959: the first step of the Assignment Workflow offers a created
+    /// Delivery to a courier on line, over the stored courier positions.
     #[test]
-    fn dispatch_offers_a_created_delivery_to_a_courier_on_line() {
+    fn assignment_offers_a_created_delivery_to_a_courier_on_line() {
         let store = Arc::new(TestStore::new());
         let process = process(&store);
         let couriers = process.couriers();
@@ -742,15 +677,21 @@ mod tests {
 
         let output = process
             .deliveries()
-            .dispatch_deliveries(dispatch_deliveries::Input {
-                batch_size: 10,
-                after: None,
+            .advance_assignment(advance_assignment::Input {
+                delivery_id: created.delivery_id.as_str().to_owned(),
             })
-            .expect("dispatched");
+            .expect("advanced");
 
-        assert_eq!(output.offered.len(), 1);
-        assert_eq!(output.offered[0].delivery_id, created.delivery_id);
-        assert_eq!(output.offered[0].courier_id.as_str(), "courier-1");
+        let advance_assignment::Output::Offered { offer_id, .. } = output else {
+            panic!("the courier on line is offered the delivery, got {output:?}");
+        };
+        let offer = crate::slices::delivery::domains::delivery::DeliveryOfferRepository::get(
+            &*store, &offer_id,
+        )
+        .expect("read offer")
+        .expect("offer stored");
+        assert_eq!(offer.delivery_id(), &created.delivery_id);
+        assert_eq!(offer.courier_id().as_str(), "courier-1");
     }
 
     /// FR-691: a zero `DELIVERY_ESTIMATE__*` stops the process before ports

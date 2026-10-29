@@ -25,11 +25,8 @@ use crate::slices::courier::applications::update_courier_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, MarketId};
-use crate::slices::delivery::applications::dispatch_deliveries::{
-    DeliveryPosition, WaitingDeliveries,
-};
+use crate::slices::delivery::applications::assignment_process::CandidateDeliveries;
 use crate::slices::delivery::applications::estimate_delivery_duration::DeliveryDurationSamples;
-use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
@@ -337,17 +334,6 @@ impl OffersOfDelivery for TestStore {
     }
 }
 
-impl ExpiredDeliveryOffers for TestStore {
-    fn expired_pending_offer_ids(
-        &self,
-        now_epoch_seconds: i64,
-        limit: usize,
-    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
-        self.available()?
-            .expired_pending_offer_ids(now_epoch_seconds, limit)
-    }
-}
-
 impl DeliveryOutbox for TestStore {
     fn add(&self, message: OutboxMessage) -> Result<(), RepositoryError> {
         DeliveryOutbox::add(self.available()?, message.clone())?;
@@ -457,14 +443,12 @@ impl ActiveTrackingChannel for TestStore {
     }
 }
 
-impl WaitingDeliveries for TestStore {
-    fn list_waiting_without_pending_offer(
+impl CandidateDeliveries for TestStore {
+    fn oldest_waiting_for(
         &self,
-        after: Option<&DeliveryPosition>,
-        limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        self.available()?
-            .list_waiting_without_pending_offer(after, limit)
+        courier_id: &CourierId,
+    ) -> Result<Option<DeliveryId>, RepositoryError> {
+        self.available()?.oldest_waiting_for(courier_id)
     }
 }
 

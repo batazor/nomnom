@@ -108,7 +108,6 @@ const fn coordinates_delivery(permission: DeliveryPermission) -> bool {
             | DeliveryPermission::OfferDelivery
             | DeliveryPermission::ReassignCourier
             | DeliveryPermission::CancelDelivery
-            | DeliveryPermission::ReplanDelivery
             | DeliveryPermission::EstimateDeliveryDuration
     )
 }
@@ -180,7 +179,7 @@ mod tests {
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
 
-    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 15] = [
+    const ALL_DELIVERY_PERMISSIONS: [DeliveryPermission; 14] = [
         DeliveryPermission::CreateDelivery,
         DeliveryPermission::FindCourier,
         DeliveryPermission::OfferDelivery,
@@ -193,7 +192,6 @@ mod tests {
         DeliveryPermission::ReportDeliveryFailure,
         DeliveryPermission::ListAvailableDeliveryOffers,
         DeliveryPermission::CancelDelivery,
-        DeliveryPermission::ReplanDelivery,
         DeliveryPermission::ViewOrderDelivery,
         DeliveryPermission::EstimateDeliveryDuration,
     ];

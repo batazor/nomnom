@@ -5,10 +5,13 @@
 //! effect; after Pickup or a final state the cancellation is a business
 //! rejection, not an error. When a courier is released,
 //! `delivery:<id>#courier@user:<courier_id>` is deleted from the authorization
-//! graph before commit; a failed delete rolls the cancellation back.
+//! graph before commit; a failed delete rolls the cancellation back. After
+//! commit the cancellation ends the Assignment Workflow of the delivery, and
+//! the released courier wakes the search of its Market (FR-706).
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     CompoundState, DeliveryCancellationReason, DeliveryId, DeliveryRepository, OrderId, State,
@@ -16,6 +19,7 @@ use crate::slices::delivery::domains::delivery::{
 };
 
 use super::assignment::release_assignment;
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -74,6 +78,8 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
+    pub assignment: &'a dyn AssignmentProcess,
+    pub candidates: &'a dyn CandidateWake,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -90,8 +96,22 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &DeliveryResource::Order(order_id.clone()),
         )?;
 
-        self.unit_of_work
-            .run(|| self.cancel(&order_id, reason.clone()))
+        let output = self
+            .unit_of_work
+            .run(|| self.cancel(&order_id, reason.clone()))?;
+        if let Outcome::Cancelled {
+            released_courier_id,
+            ..
+        } = &output.outcome
+        {
+            // Also on a repeat: the wake of the first call may have been lost.
+            self.assignment
+                .wake(&output.delivery_id, WakeReason::DeliveryClosed)?;
+            if let Some(courier_id) = released_courier_id {
+                self.candidates.courier_available(courier_id)?;
+            }
+        }
+        Ok(output)
     }
 
     fn cancel(

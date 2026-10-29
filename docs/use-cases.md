@@ -57,7 +57,7 @@
 | `delivery` | Create Delivery | Command | Fulfillment process `orders` | invoked by Activity | no |
 | `delivery` | Find Courier | Command | Процесс назначения `delivery` | may be requested by workflow | no |
 | `delivery` | Offer Delivery | Command | Процесс назначения `delivery` | no | no |
-| `delivery` | Dispatch Deliveries | Command | Фоновая задача процесса `delivery` | no; Replan Delivery остаётся эскалацией workflow по таймауту назначения | Outbox: internal `DeliveryOffered` |
+| `delivery` | Advance Assignment | Command | Assignment Workflow `delivery-worker` | no; `orders` ждёт назначения без срока | Outbox: internal `DeliveryOffered`, `DeliveryOfferExpired` |
 | `delivery` | Accept Delivery Offer | Command | Курьер | workflow observes assignment asynchronously | Outbox: publishes assignment result |
 | `delivery` | Reject Delivery Offer | Command | Курьер | no | no |
 | `delivery` | Reassign Courier | Command | Процесс назначения или авторизованный диспетчер | may be invoked by Activity | Outbox: publishes result if assignment changes |
@@ -122,4 +122,4 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 
 Полный список открытых вопросов кухни — в [Kitchen](kitchen.md#открытые-вопросы).
 
-Момент начала поиска курьера решён Dispatch Deliveries ([change `close-order-lifecycle-in-kind`](../openspec/changes/archive/2026-10-25-close-order-lifecycle-in-kind/design.md), FR-582): фоновая задача процесса `delivery` предлагает ожидающую доставку без pending offer курьеру, которому её ещё не предлагали, — в течение `OFFERS__DISPATCH_INTERVAL` после Create Delivery и снова после отказа или истечения предложения. Create Delivery, Reject Delivery Offer и Reassign Courier сами Find Courier не вызывают; Replan Delivery из `orders` остаётся эскалацией по таймауту назначения.
+Поиск курьера ведёт Assignment Workflow `delivery` ([change `move-courier-assignment-to-temporal`](../openspec/changes/move-courier-assignment-to-temporal/design.md), FR-704…FR-708): Create Delivery после commit запускает workflow доставки, его шаг Advance Assignment сразу предлагает ожидающую доставку курьеру, которому её ещё не предлагали, а после отказа (Wake) или истечения по таймеру — следующему. Доставка без кандидата ждёт, пока освободившийся курьер её не разбудит. Create Delivery, Reject Delivery Offer и Reassign Courier сами Find Courier не вызывают; `orders` ждёт назначения без срока.

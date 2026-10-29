@@ -8,10 +8,7 @@ use crate::slices::courier::applications::update_courier_location::{
     ActiveTrackingChannel, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location, MarketId};
-use crate::slices::delivery::applications::dispatch_deliveries::{
-    DeliveryPosition, WaitingDeliveries,
-};
-use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
+use crate::slices::delivery::applications::assignment_process::CandidateDeliveries;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
@@ -26,13 +23,12 @@ use crate::slices::delivery::applications::list_available_delivery_offers::{
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::domains::delivery::{
-    CompoundState, Delivery, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
+    CompoundState, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
 };
 
 use super::rows::{
-    DeliveryRow, active_assignment_states, courier_name, courier_status, delivery_from_row,
-    delivery_state, delivery_tracking, market_id, offer_state, parse_courier_status,
-    parse_delivery_state,
+    active_assignment_states, courier_name, courier_status, delivery_state, delivery_tracking,
+    market_id, offer_state, parse_courier_status, parse_delivery_state,
 };
 use super::{Store, corrupt, domain_version, limit, storage_error};
 
@@ -201,36 +197,26 @@ impl ActiveTrackingChannel for Store {
     }
 }
 
-impl WaitingDeliveries for Store {
-    fn list_waiting_without_pending_offer(
+impl CandidateDeliveries for Store {
+    fn oldest_waiting_for(
         &self,
-        after: Option<&DeliveryPosition>,
-        limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        // Without a cursor every row is after (i64::MIN, ''): ids are "C"
-        // collated, so the empty string sorts first.
-        let (created_at, id) = after.map_or((i64::MIN, ""), DeliveryPosition::key);
-        sql!(self, "SELECT", |connection| sqlx::query_as!(
-            DeliveryRow,
-            "SELECT id, order_id, market_id, courier_id, state, failure_reason,
-                 failure_detail, authorization_revision, version, created_at,
-                 expected_pickup_at, expected_delivered_at,
-                 pickup_x, pickup_y, dropoff_x, dropoff_y, tracking_channel
-             FROM deliveries
-             WHERE state = $1 AND (COALESCE(created_at, 0), id) > ($2, $3)
+        courier_id: &CourierId,
+    ) -> Result<Option<DeliveryId>, RepositoryError> {
+        // A Delivery stored before created_at existed counts as created at 0;
+        // ids are "C" collated, as in the waiting index.
+        sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+            "SELECT d.id FROM deliveries d JOIN couriers c ON c.market_id = d.market_id
+             WHERE c.id = $1 AND d.state = $2
                AND NOT EXISTS (SELECT 1 FROM delivery_offers o
-                               WHERE o.delivery_id = deliveries.id AND o.state = $4)
-             ORDER BY COALESCE(created_at, 0), id LIMIT $5",
+                               WHERE o.delivery_id = d.id
+                                 AND (o.state = $3 OR o.courier_id = $1))
+             ORDER BY COALESCE(d.created_at, 0), d.id LIMIT 1",
+            courier_id.as_str(),
             delivery_state(State::Waiting),
-            created_at,
-            id,
-            offer_state(OfferState::Pending),
-            super::limit(limit)
+            offer_state(OfferState::Pending)
         )
-        .fetch_all(connection))?
-        .into_iter()
-        .map(delivery_from_row)
-        .collect()
+        .fetch_optional(connection))
+        .map(|id| id.map(DeliveryId::new))
     }
 }
 
@@ -243,27 +229,6 @@ impl OffersOfDelivery for Store {
             sqlx::query_scalar!(
                 "SELECT id FROM delivery_offers WHERE delivery_id = $1 ORDER BY position",
                 delivery_id.as_str()
-            )
-            .fetch_all(connection)
-        })
-        .map(|ids| ids.into_iter().map(DeliveryOfferId::new).collect())
-    }
-}
-
-impl ExpiredDeliveryOffers for Store {
-    fn expired_pending_offer_ids(
-        &self,
-        now_epoch_seconds: i64,
-        limit: usize,
-    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
-        sql!(self, "SELECT", |connection| {
-            sqlx::query_scalar!(
-                "SELECT id FROM delivery_offers
-                 WHERE state = $1 AND expires_at < $2
-                 ORDER BY expires_at, position LIMIT $3",
-                offer_state(OfferState::Pending),
-                now_epoch_seconds,
-                super::limit(limit)
             )
             .fetch_all(connection)
         })

@@ -86,10 +86,6 @@ resources:
 
 # Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
 # OpenTelemetry задаётся блоком telemetry, а не здесь.
-# Пример:
-# env:
-#   OFFERS__EXPIRY_INTERVAL: 30s
-#   OFFERS__DISPATCH_INTERVAL: 2s
 # SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY и SIMULATOR__TRACK_INTERVAL
 # обязательны (FR-606, FR-667), как и TRACKING__CITY_ORIGIN_LATITUDE,
 # TRACKING__CITY_ORIGIN_LONGITUDE, TRACKING__CITY_BLOCKS, TRACKING__BLOCK_METERS и
@@ -210,6 +206,15 @@ spicedb:
   presharedKeySecret:
     name: ""
     key: "preshared-key"
+
+# Temporal Assignment Workflow (FR-704…FR-708): процесс API запускает и будит workflow,
+# release worker (values-worker.yaml) его исполняет. Значений по умолчанию нет: адрес и
+# namespace задаёт окружение; пусто — chart не рендерится, процесс без них не стартует.
+temporal:
+  # host:port frontend, например temporal.nomnom-infra.svc.cluster.local:7233.
+  hostPort: ""
+  namespace: ""
+  connectTimeout: 10s
 
 # Поток позиций курьеров (FR-661, FR-666): Valkey pub/sub. VALKEY__URL берётся из Secret
 # valkey.urlSecret (secretKeyRef, URL ACL-пользователя, который только публикует в

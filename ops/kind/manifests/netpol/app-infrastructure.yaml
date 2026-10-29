@@ -132,7 +132,8 @@ spec:
         - protocol: TCP
           port: 50051
 ---
-# delivery: своя PostgreSQL (ADR 8), свой Valkey (поток позиций курьеров, FR-661), Kafka.
+# delivery: своя PostgreSQL (ADR 8), свой Valkey (поток позиций курьеров, FR-661), Kafka,
+# Temporal Server (Assignment Workflow: client API и delivery-worker, FR-708).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -184,6 +185,16 @@ spec:
       ports:
         - protocol: TCP
           port: 8083
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              nomnom.dev/tier: infra
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: temporal
+      ports:
+        - protocol: TCP
+          port: 7233
     # SpiceDB (ADR 18): authorization checks и relationship writes.
     - to:
         - namespaceSelector:

@@ -31,6 +31,7 @@ fn handler(world: &World) -> Handler<'_, TestStore> {
         clock: &world.clock,
         policy: world.policy,
         relationships: &world.relationships,
+        assignment: &world.assignment,
     }
 }
 

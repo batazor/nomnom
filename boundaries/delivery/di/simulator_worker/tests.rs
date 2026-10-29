@@ -7,7 +7,7 @@ use crate::infrastructure::memory::RecordingRelationships;
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
 use crate::slices::courier::applications::{register_courier, update_courier_location};
-use crate::slices::delivery::applications::{create_delivery, dispatch_deliveries};
+use crate::slices::delivery::applications::{advance_assignment, create_delivery};
 use crate::slices::delivery::domains::delivery::{ExpectedTime, Intersection, State};
 use crate::slices::simulator::applications::work::{
     ActiveDeliveryWork, DeliveryPoints, PendingOfferWork, SimulatorWork,
@@ -531,11 +531,10 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
         .expect("delivery created");
     use_cases
         .deliveries()
-        .dispatch_deliveries(dispatch_deliveries::Input {
-            batch_size: 10,
-            after: None,
+        .advance_assignment(advance_assignment::Input {
+            delivery_id: created.delivery_id.as_str().to_owned(),
         })
-        .expect("dispatched");
+        .expect("offered");
     store.set_enabled(true).expect("enable simulator");
     let clock = FakeClock::at(crate::di::infrastructure::SystemClock.now_epoch_seconds());
     let mut simulator = Simulator::new(

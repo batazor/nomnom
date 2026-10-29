@@ -40,7 +40,6 @@ const (
 	SignalDeliveryPickedUp          = "DeliveryPickedUp"
 	SignalDeliveryCompleted         = "DeliveryCompleted"
 	SignalDeliveryFailed            = "DeliveryFailed"
-	SignalOperatorDecision          = "OperatorDecision"
 
 	UpdateCancellationRequested = "CancellationRequested"
 )
@@ -55,7 +54,6 @@ const (
 	ActivityRequestRestaurantOrder     = "RequestRestaurantOrder"
 	ActivityCancelRestaurantOrder      = "CancelRestaurantOrder"
 	ActivityCreateDelivery             = "CreateDelivery"
-	ActivityReplanDelivery             = "ReplanDelivery"
 	ActivityCancelDelivery             = "CancelDelivery"
 	ActivityCompleteOrder              = "CompleteOrder"
 	ActivityFailOrCancelOrder          = "FailOrCancelOrder"
@@ -110,19 +108,6 @@ type Fact struct {
 	ExpectedReadyAt time.Time
 }
 
-type OperatorChoice = fulfillment.OperatorChoice
-
-const (
-	OperatorRetryAssignment = fulfillment.OperatorRetryAssignment
-	OperatorCancel          = fulfillment.OperatorCancel
-)
-
-// OperatorDecision is the payload of the OperatorDecision Signal.
-type OperatorDecision struct {
-	DecisionID string
-	Choice     OperatorChoice
-}
-
 // CancellationRequest is the argument of the CancellationRequested Update.
 type CancellationRequest struct {
 	RequestID   string
@@ -147,12 +132,10 @@ const (
 	ReasonRestaurantAcceptanceTimeout = fulfillment.ReasonRestaurantAcceptanceTimeout
 	ReasonPreparationFailed           = fulfillment.ReasonPreparationFailed
 	ReasonPreparationTimeout          = fulfillment.ReasonPreparationTimeout
-	ReasonCourierAssignmentExhausted  = fulfillment.ReasonCourierAssignmentExhausted
 	ReasonPickupTimeout               = fulfillment.ReasonPickupTimeout
 	ReasonDeliveryFailed              = fulfillment.ReasonDeliveryFailed
 	ReasonDeliveryTimeout             = fulfillment.ReasonDeliveryTimeout
 	ReasonCustomerRequested           = fulfillment.ReasonCustomerRequested
-	ReasonOperatorDecision            = fulfillment.ReasonOperatorDecision
 	ReasonSlotUnavailable             = fulfillment.ReasonSlotUnavailable
 )
 
@@ -164,7 +147,6 @@ const (
 	StageWaitingAcceptance  = fulfillment.StageWaitingAcceptance
 	StageScheduled          = fulfillment.StageScheduled
 	StagePreparing          = fulfillment.StagePreparing
-	StageWaitingOperator    = fulfillment.StageWaitingOperator
 	StageWaitingPickup      = fulfillment.StageWaitingPickup
 	StageDelivering         = fulfillment.StageDelivering
 	StageCompleting         = fulfillment.StageCompleting

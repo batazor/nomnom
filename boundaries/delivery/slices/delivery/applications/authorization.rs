@@ -19,7 +19,6 @@ pub enum DeliveryPermission {
     ReportDeliveryFailure,
     ListAvailableDeliveryOffers,
     CancelDelivery,
-    ReplanDelivery,
     /// The delivery of an order — its courier (FR-626) and live tracking
     /// with the Tracking Channel (FR-660) — for whoever may view the order.
     ViewOrderDelivery,

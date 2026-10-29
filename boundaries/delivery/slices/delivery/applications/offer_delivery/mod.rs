@@ -2,8 +2,9 @@
 //! available courier for a limited time. No Courier Assignment is created.
 //! The offer and its `DeliveryOffered` fact are written in one Unit of Work.
 //!
-//! [`make_offer`] is the application service without authorization; Replan
-//! Delivery and Dispatch Deliveries reuse it under their own Unit of Work.
+//! [`make_offer`] is the application service without authorization; Advance
+//! Assignment and Offer Delivery To Courier reuse it under their own Unit of
+//! Work.
 
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;

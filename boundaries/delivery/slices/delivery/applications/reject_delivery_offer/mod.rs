@@ -1,13 +1,15 @@
 //! Reject Delivery Offer: the addressee closes a current offer as rejected.
-//! No Courier Assignment is created and no new search is started. The offer
-//! and its `DeliveryOfferRejected` fact are written in one Unit of Work; a
-//! repeated rejection writes nothing.
+//! No Courier Assignment is created. The offer and its `DeliveryOfferRejected`
+//! fact are written in one Unit of Work; a repeated rejection writes nothing.
+//! After commit, and on a repeat, the Assignment Workflow of the delivery is
+//! woken and offers it to the next courier (FR-311, FR-707).
 
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, OfferState,
 };
 
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -33,6 +35,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub offers: &'a dyn DeliveryOfferRepository,
     pub outbox: &'a dyn DeliveryOutbox,
     pub clock: &'a dyn Clock,
+    pub assignment: &'a dyn AssignmentProcess,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -63,6 +66,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
             })?;
             true
         };
+        // Also on a repeat: the wake of the first call may have been lost.
+        self.assignment
+            .wake(offer.delivery_id(), WakeReason::OfferAnswered)?;
         Ok(Output {
             offer_id,
             delivery_id: offer.delivery_id().clone(),
@@ -74,7 +80,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::memory::{AssignmentCall, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierId;
     use crate::slices::courier::domains::courier::CourierStatus;
@@ -97,6 +103,7 @@ mod tests {
             offers: &world.store,
             outbox: &world.store,
             clock: &world.clock,
+            assignment: &world.assignment,
         }
     }
 
@@ -185,5 +192,34 @@ mod tests {
             Err(DeliveryApplicationError::PermissionDenied)
         );
         assert_eq!(world.offer_state("offer-1"), OfferState::Pending);
+    }
+
+    /// AC-966: the rejection is committed when Temporal is down; the repeat
+    /// passes the wake without changing state.
+    #[test]
+    fn rejection_wakes_the_workflow_also_on_repeat() {
+        let world = world();
+        world.assignment.set_failure(Some("temporal down"));
+
+        assert!(matches!(
+            handler(&world).execute(&subject("courier-1"), input("courier-1")),
+            Err(DeliveryApplicationError::DependencyUnavailable(_))
+        ));
+        assert_eq!(world.offer_state("offer-1"), OfferState::Rejected);
+
+        world.assignment.set_failure(None);
+        let repeat = handler(&world)
+            .execute(&subject("courier-1"), input("courier-1"))
+            .expect("repeat");
+
+        assert!(!repeat.changed);
+        assert_eq!(world.store.outbox_messages().len(), 1);
+        assert_eq!(
+            world.assignment.calls(),
+            vec![AssignmentCall::Wake(
+                DeliveryId::new("delivery-1"),
+                WakeReason::OfferAnswered
+            )]
+        );
     }
 }

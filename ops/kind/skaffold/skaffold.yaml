@@ -387,8 +387,7 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_controlplane}}"
           image.tag: "{{.IMAGE_TAG_nomnom_controlplane}}"
       # Customer UI (локальный ADR 2 UI): https://app.nomnom.localhost:18085, HTTPRoute ui —
-      # manifests/gateway/public-gateway.yaml. Последний release (индекс 12): индексы в
-      # patches профилей не меняются.
+      # manifests/gateway/public-gateway.yaml. Индекс 12 — в patches grafana-cloud.
       - name: ui
         chartPath: ../../../boundaries/ui/ops/helm
         namespace: nomnom-ui
@@ -397,6 +396,20 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_ui}}"
           image.tag: "{{.IMAGE_TAG_nomnom_ui}}"
+      # Temporal worker delivery (FR-708): Assignment Workflow, тот же образ и chart, command
+      # /usr/local/bin/delivery-worker. Схему мигрирует release delivery. Последний release
+      # (индекс 13): индексы в patches профилей не меняются.
+      - name: delivery-worker
+        chartPath: ../../../boundaries/delivery/ops/helm
+        namespace: nomnom-delivery
+        createNamespace: true
+        dependsOn: [delivery]
+        valuesFiles:
+          - ../../../boundaries/delivery/ops/helm/values-worker.yaml
+          - ../values/delivery-worker.yaml
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_delivery}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
   # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.
@@ -415,7 +428,7 @@ profiles:
           host:
             command: [sh, -c, 'helm uninstall e2e --kube-context "$SKAFFOLD_KUBE_CONTEXT" -n nomnom-bff --ignore-not-found']
   # make kind-deploy GRAFANA_CLOUD=1: метрики, traces и логи сервисов → Alloy → Grafana Cloud.
-  # Индексы releases 0–6 и 11 — все процессы orders, restaurants, delivery, payments и
+  # Индексы releases 0–6, 11 и 13 — все процессы orders, restaurants, delivery, payments и
   # controlplane (BFF — Cosmo, своя telemetry); при изменении порядка releases поправить patches.
   - name: grafana-cloud
     patches:
@@ -450,6 +463,10 @@ profiles:
       # controlplane (индекс 11).
       - op: add
         path: /deploy/helm/releases/11/valuesFiles/-
+        value: ../values/grafana-cloud.yaml
+      # delivery-worker (индекс 13).
+      - op: add
+        path: /deploy/helm/releases/13/valuesFiles/-
         value: ../values/grafana-cloud.yaml
       # BFF (Cosmo Router): свои переменные telemetry, не OTEL_* charts сервисов.
       - op: add

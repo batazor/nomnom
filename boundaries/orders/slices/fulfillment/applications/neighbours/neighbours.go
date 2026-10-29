@@ -115,7 +115,6 @@ type DeliveryRequest struct {
 // arrive later as Integration Events.
 type Delivery interface {
 	Create(ctx context.Context, request DeliveryRequest) error
-	Replan(ctx context.Context, request DeliveryRequest) error
 	Cancel(ctx context.Context, request DeliveryRequest) error
 }
 

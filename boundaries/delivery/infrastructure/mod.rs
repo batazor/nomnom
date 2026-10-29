@@ -7,4 +7,5 @@ pub mod random;
 pub mod reconcile;
 pub mod repository;
 pub mod spicedb;
+pub mod temporal;
 pub mod tracks;

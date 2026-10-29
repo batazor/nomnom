@@ -3,10 +3,13 @@
 //! the Delivery Completion fact is written to the Outbox in one Unit of Work.
 //! The assignment is over, so `delivery:<id>#courier@user:<courier_id>` is
 //! deleted before commit (AC-690); `Delivery.courier_id` stays as the fact of
-//! who carried it. A failed delete rolls the completion back (AC-692).
+//! who carried it. A failed delete rolls the completion back (AC-692). After
+//! commit the released courier wakes the courier search of its Market
+//! (FR-706).
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
@@ -39,6 +42,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
+    pub candidates: &'a dyn CandidateWake,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -55,36 +59,42 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &DeliveryResource::Courier(courier_id.clone()),
         )?;
 
-        self.unit_of_work.run(|| {
-            let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
-            match delivery.complete(&courier_id) {
-                Ok(_) => {}
-                Err(DeliveryError::Transition(TransitionError::AlreadyInState { .. }))
-                    if delivery.courier_id() == Some(&courier_id) =>
-                {
-                    return Ok(Output {
-                        delivery_id: delivery_id.clone(),
-                        state: delivery.state(),
-                        changed: false,
-                    });
+        let output = self
+            .unit_of_work
+            .run(|| -> Result<Output, DeliveryApplicationError> {
+                let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
+                match delivery.complete(&courier_id) {
+                    Ok(_) => {}
+                    Err(DeliveryError::Transition(TransitionError::AlreadyInState { .. }))
+                        if delivery.courier_id() == Some(&courier_id) =>
+                    {
+                        return Ok(Output {
+                            delivery_id: delivery_id.clone(),
+                            state: delivery.state(),
+                            changed: false,
+                        });
+                    }
+                    Err(error) => return Err(error.into()),
                 }
-                Err(error) => return Err(error.into()),
-            }
-            release_assignment(
-                &mut delivery,
-                &courier_id,
-                self.couriers,
-                self.relationships,
-            )?;
+                release_assignment(
+                    &mut delivery,
+                    &courier_id,
+                    self.couriers,
+                    self.relationships,
+                )?;
 
-            self.deliveries.save(&delivery)?;
-            publish(self.outbox, delivery.pull_events())?;
-            Ok(Output {
-                delivery_id: delivery_id.clone(),
-                state: delivery.state(),
-                changed: true,
-            })
-        })
+                self.deliveries.save(&delivery)?;
+                publish(self.outbox, delivery.pull_events())?;
+                Ok(Output {
+                    delivery_id: delivery_id.clone(),
+                    state: delivery.state(),
+                    changed: true,
+                })
+            })?;
+        // The released courier may take a waiting delivery (FR-706); also on
+        // a repeat.
+        self.candidates.courier_available(&courier_id)?;
+        Ok(output)
     }
 }
 
@@ -110,6 +120,7 @@ mod tests {
             couriers: &world.store,
             outbox: &world.store,
             relationships: &world.relationships,
+            candidates: &world.assignment,
         }
     }
 

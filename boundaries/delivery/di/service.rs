@@ -11,7 +11,8 @@ use shaku::{HasComponent, module};
 #[cfg(test)]
 use crate::infrastructure::memory::SequentialIdGenerator;
 use crate::infrastructure::memory::{
-    FixedRandomSource, RecordingPositionPublisher, RecordingRelationships, StaticCourierLocator,
+    FixedRandomSource, RecordingAssignment, RecordingPositionPublisher, RecordingRelationships,
+    StaticCourierLocator,
 };
 #[cfg(test)]
 use crate::infrastructure::repository::test_support::TestStore;
@@ -27,7 +28,8 @@ use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
 #[cfg(test)]
 use super::infrastructure::local_authorization;
 use super::infrastructure::{
-    InfrastructureModule, ProcessAuthorization, ProcessStores, ProcessTracking, infrastructure,
+    AssignmentAdapters, InfrastructureModule, ProcessAuthorization, ProcessStores, ProcessTracking,
+    infrastructure,
 };
 
 module! {
@@ -122,7 +124,8 @@ pub(crate) fn test_estimate_policy() -> DeliveryEstimatePolicy {
 }
 
 /// Тестовый граф над заданными хранилищами (PostgreSQL в integration-тестах)
-/// с UUID id, пустым locator и выбранной авторизацией.
+/// с UUID id, пустым locator, выбранной авторизацией и записывающим
+/// Assignment Workflow.
 #[must_use]
 pub fn build_over(
     stores: ProcessStores,
@@ -130,8 +133,11 @@ pub fn build_over(
 ) -> ServiceModule {
     service(infrastructure(
         stores,
-        Box::new(crate::infrastructure::ids::UuidIdGenerator),
-        Box::new(StaticCourierLocator::new(Vec::new())),
+        AssignmentAdapters {
+            ids: Box::new(crate::infrastructure::ids::UuidIdGenerator),
+            locator: Box::new(StaticCourierLocator::new(Vec::new())),
+            process: Arc::new(RecordingAssignment::new()),
+        },
         authorization,
         Box::new(RecordingRelationships::new()),
         test_tracking(),
@@ -148,8 +154,11 @@ pub(crate) fn build_with_locator(
 ) -> ServiceModule {
     service(infrastructure(
         ProcessStores::over(store),
-        Box::new(SequentialIdGenerator::new("delivery")),
-        Box::new(locator),
+        AssignmentAdapters {
+            ids: Box::new(SequentialIdGenerator::new("delivery")),
+            locator: Box::new(locator),
+            process: Arc::new(RecordingAssignment::new()),
+        },
         Box::new(local_authorization()),
         Box::new(RecordingRelationships::new()),
         test_tracking(),
@@ -168,10 +177,13 @@ pub(crate) fn build_over_store(
 ) -> ServiceModule {
     service(infrastructure(
         ProcessStores::over(store),
-        Box::new(SequentialIdGenerator::new("delivery")),
-        Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
-            Arc::clone(store) as _,
-        )),
+        AssignmentAdapters {
+            ids: Box::new(SequentialIdGenerator::new("delivery")),
+            locator: Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
+                Arc::clone(store) as _,
+            )),
+            process: Arc::new(RecordingAssignment::new()),
+        },
         authorization,
         relationships,
         test_tracking(),

@@ -50,7 +50,7 @@ Temporal не используется для:
 
 Дедупликация двухуровневая: Inbox по `(consumer, event_id)` защищает локальные эффекты consumer; workflow хранит обработанные `event_id` и превращает повтор Signal RPC в no-op. Имя Signal совпадает с именем Integration Event; перевод `fulfillment.Kind` в имя Signal выполняет адаптер.
 
-Положительное событие, которое текущий Workflow Stage не ожидает, логируется и игнорируется без падения workflow. Отрицательные факты (`RestaurantOrderRejected`, `PreparationFailed`, `DeliveryFailed`, `PaymentFailed`) в незавершённом workflow молча не игнорируются: они ведут в Saga или в эскалацию с диагностикой.
+Положительное событие, которое текущий Workflow Stage не ожидает, логируется и игнорируется без падения workflow. Отрицательные факты (`RestaurantOrderRejected`, `PreparationFailed`, `DeliveryFailed`, `PaymentFailed`) в незавершённом workflow молча не игнорируются: они ведут в Saga с диагностикой.
 
 ### Signal, Update, Query
 
@@ -74,7 +74,7 @@ Workflow и Activities одного `Order` делят task queue `orders`. Ко
 - **Fairness key — `restaurant_id`.** Каждое заведение работает независимо, поэтому ключ — ресторан, а не сеть или Market. Ключ задаётся при `SignalWithStart` из `Order`, который consumer читает в UoW старта; workflow tasks (Signals, Update `CancellationRequested`) и Activities наследуют его. Ресторан в пике — ASAP или запланированные заказы одного окна — получает свою долю worker'а и не задерживает задачи остальных. Веса у ресторанов одинаковые (1.0), переопределения весов не используются. Старт без `restaurant_id` — ошибка.
 - **Priority key — по Activity**, строго между уровнями, fairness — внутри уровня:
   - `1` — ждёт покупатель или его деньги: `AuthorizePayment`, `CancelPaymentAuthorization`, `RefundPayment`, `ConfirmSlotReservation`;
-  - `2` — ждут кухня или курьер, компенсации: `RequestRestaurantOrder`, `QueueRestaurantOrder`, `CreateDelivery`, `ReplanDelivery`, `CapturePayment`, `CancelRestaurantOrder`, `CancelDelivery`, `FailOrCancelOrder`, `RecordPaymentAuthorization`;
+  - `2` — ждут кухня или курьер, компенсации: `RequestRestaurantOrder`, `QueueRestaurantOrder`, `CreateDelivery`, `CapturePayment`, `CancelRestaurantOrder`, `CancelDelivery`, `FailOrCancelOrder`, `RecordPaymentAuthorization`;
   - `3` — учёт, планирование наперёд и очистка: `CompleteOrder`, `PlanSchedule`, `ReleaseSlotReservation`.
 
   Activity без уровня не регистрируется: worker не стартует. Workflow tasks отдельного приоритета не имеют — Update отмены идёт с приоритетом workflow, ускоряются её компенсации.
@@ -84,7 +84,9 @@ Fairness включается на сервере: dynamic config `matching.enab
 
 ### Ожидания и таймеры
 
-Ожидание ресторана, курьера и доставки — Signal плюс Temporal timer; polling запрещён. Timer выражает продуктовый срок и ведёт к бизнес-ветке (replan, escalation, cancellation, compensation, старт запланированного заказа). Workflow-level timeout не задаётся. `PreparationDelayed` продлевает таймер ожидания Preparation.
+Ожидание ресторана и доставки — Signal плюс Temporal timer; polling запрещён. Timer выражает продуктовый срок и ведёт к бизнес-ветке (cancellation, compensation, старт запланированного заказа). Workflow-level timeout не задаётся. `PreparationDelayed` продлевает таймер ожидания Preparation.
+
+Courier Assignment workflow ждёт без срока (FR-709): поиском курьера целиком владеет Assignment Workflow `delivery` ([локальный ADR 2 `delivery`](../../../delivery/docs/adr/0002-temporal-для-назначения-курьера.md)), курьер рано или поздно найдётся, а оператор доставку не выполнит. Перепланирования доставки по сроку, решения оператора (`OperatorDecision`, stage `waiting_operator`) и RPC `ReplanDelivery` нет.
 
 ### Запланированный заказ
 
@@ -103,7 +105,7 @@ AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → P
 - План считает use case Plan Schedule слайса `order` (чистая domain-политика `order.PlanSchedule` над UTC-моментами) по базовому времени ресторана и оценке доставки Market. Activity `PlanSchedule` возвращает план, workflow хранит его в Event History; `Order` план не хранит. Первый план фиксирует `planned_ready_at`, контрольная точка `replan_at` один раз пересчитывает `start_at` и `courier_request_at` с тем же `planned_ready_at`. План, сделанный уже после своей контрольной точки, не пересчитывается.
 - Таймеры — те же Temporal timers главного цикла: модель отдаёт ближайший момент плана в `NextDeadline`, наступивший момент делает шаг due (`Expire`), и цикл исполняет его как Activity. Момент в прошлом означает немедленный шаг, пересчёт плана заменяет таймеры следующим циклом. Polling не вводится.
 - Stage `scheduled` публикуется Search Attribute от `RestaurantOrderAccepted` до `QueueRestaurantOrder`.
-- Deadline Acceptance — как у ASAP. Deadline Preparation отсчитывается от `QueueRestaurantOrder`, Assignment — от `CreateDelivery`; в stage `scheduled` deadline `Policy` не действует. `PreparationDelayed` до `QueueRestaurantOrder` отклоняется (`not queued`).
+- Deadline Acceptance — как у ASAP. Deadline Preparation отсчитывается от `QueueRestaurantOrder`; Assignment срока не имеет; в stage `scheduled` deadline `Policy` не действует. `PreparationDelayed` до `QueueRestaurantOrder` отклоняется (`not queued`).
 - `RequestRestaurantOrder` запланированного заказа возвращает `restaurant_order_id`; workflow передаёт его в `QueueRestaurantOrder` (idempotency key `order_id + queue`). ASAP-маршрут результат этой Activity не читает.
 - Отмену запланированного заказа покупатель видит до `window_start − CANCELLATION__SCHEDULED_CUTOFF` (cancellation policy по данным `Order`); Update `CancellationRequested` в stage `scheduled` ведёт к `CancelRestaurantOrder`, `ReleaseSlotReservation`, `CancelPaymentAuthorization`.
 
@@ -151,7 +153,7 @@ API, Kafka consumer и Temporal worker — управляемые процесс
 
 Этот ADR не выбирает следующие решения; каждое принимается отдельным SDD change до реализации соответствующего шага:
 
-- продуктовые timeout Order Acceptance, Assignment, OperatorDecision, Preparation, Pickup и Delivery Completion и предел продления через `PreparationDelayed`;
+- продуктовые timeout Order Acceptance, Preparation, Pickup и Delivery Completion и предел продления через `PreparationDelayed`;
 - момент Capture и условия Refund вместо отмены Authorization (Authorization идёт до запроса ресторана, см. [Saga](#saga));
 - параллельный запуск Assignment относительно Acceptance или Preparation;
 - policy каждого события, пришедшего после завершения workflow;

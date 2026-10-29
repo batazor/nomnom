@@ -1,6 +1,9 @@
 //! Set Courier Availability: a courier or a dispatcher of the Courier Pool
 //! (FR-620) marks the courier available or unavailable for new assignments.
 //! The last known location is not touched; a retired courier stays off line.
+//! A courier who is available after the call wakes the courier search of its
+//! Market (FR-706), also on a repeat: the wake of the first call may have
+//! been lost.
 
 use crate::pkg::application::Subject;
 use crate::slices::courier::domains::courier::{
@@ -8,6 +11,7 @@ use crate::slices::courier::domains::courier::{
 };
 
 use super::authorization::{CourierAuthorization, CourierPermission, check_courier_or_dispatcher};
+use super::candidate_wake::CandidateWake;
 use super::courier_id;
 use super::error::CourierApplicationError;
 
@@ -34,6 +38,7 @@ pub struct Output {
 pub struct Handler<'a> {
     pub authorization: &'a dyn CourierAuthorization,
     pub couriers: &'a dyn CourierRepository,
+    pub wake: &'a dyn CandidateWake,
 }
 
 impl Handler<'_> {
@@ -66,6 +71,9 @@ impl Handler<'_> {
         if changed {
             self.couriers.save(&courier)?;
         }
+        if courier.status() == CourierStatus::Available {
+            self.wake.courier_available(&courier_id)?;
+        }
         Ok(Output {
             courier_id,
             status: courier.status(),
@@ -77,7 +85,7 @@ impl Handler<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::memory::{AssignmentCall, RecordingAssignment, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::applications::authorization::CourierResource;
     use crate::slices::courier::applications::update_courier_location::{
@@ -129,9 +137,11 @@ mod tests {
         };
         store.record(&position, 0).expect("seed position");
         let authorization = StaticAuthorization::allow_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         let output = handler
@@ -159,9 +169,11 @@ mod tests {
     fn unavailable_courier_returns_to_available() {
         let store = seeded(CourierStatus::Unavailable);
         let authorization = StaticAuthorization::allow_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         let output = handler
@@ -169,6 +181,13 @@ mod tests {
             .expect("availability changed");
         assert!(output.changed);
         assert_eq!(status(&store), CourierStatus::Available);
+        // FR-706: the courier on line wakes the courier search.
+        assert_eq!(
+            wake.calls(),
+            vec![AssignmentCall::CourierAvailable(CourierId::new(
+                "courier-1"
+            ))]
+        );
     }
 
     /// AC-305
@@ -176,9 +195,11 @@ mod tests {
     fn busy_courier_cannot_go_unavailable() {
         let store = seeded(CourierStatus::Busy);
         let authorization = StaticAuthorization::allow_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         assert_eq!(
@@ -195,9 +216,11 @@ mod tests {
     fn repeating_current_availability_is_a_no_op() {
         let store = seeded(CourierStatus::Available);
         let authorization = StaticAuthorization::allow_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         let output = handler
@@ -211,6 +234,13 @@ mod tests {
                 changed: false,
             }
         );
+        // The wake of the first call may have been lost: a repeat wakes again.
+        assert_eq!(
+            wake.calls(),
+            vec![AssignmentCall::CourierAvailable(CourierId::new(
+                "courier-1"
+            ))]
+        );
     }
 
     /// AC-300
@@ -218,9 +248,11 @@ mod tests {
     fn denied_subject_does_not_change_availability() {
         let store = seeded(CourierStatus::Available);
         let authorization = StaticAuthorization::deny_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         assert_eq!(
@@ -244,9 +276,11 @@ mod tests {
             CourierPermission::ManageCouriers,
             CourierResource::Platform,
         );
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         let output = handler
@@ -288,9 +322,11 @@ mod tests {
             )
             .expect("seed courier");
         let authorization = StaticAuthorization::allow_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
 
         assert_eq!(
@@ -306,9 +342,11 @@ mod tests {
     fn unknown_courier_is_not_found() {
         let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
+        let wake = RecordingAssignment::new();
         let handler = Handler {
             authorization: &authorization,
             couriers: &store,
+            wake: &wake,
         };
         assert_eq!(
             handler.execute(&courier_subject(), input(Availability::Unavailable)),

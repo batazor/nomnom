@@ -24,10 +24,7 @@ use delivery::slices::courier::applications::update_courier_location::{
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus, Location,
 };
-use delivery::slices::delivery::applications::dispatch_deliveries::{
-    DeliveryPosition, WaitingDeliveries,
-};
-use delivery::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
+use delivery::slices::delivery::applications::assignment_process::CandidateDeliveries;
 use delivery::slices::delivery::applications::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::delivery::applications::list_available_delivery_offers::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
@@ -1051,74 +1048,6 @@ async fn works_inside_a_current_thread_runtime() {
 }
 
 #[test]
-fn expired_pending_offers_are_listed_by_deadline_and_stored_as_expired() {
-    // The query scans every pending offer: other tests of the shared database
-    // add offers with past deadlines (see waiting_deliveries_*), so a LIMIT 1
-    // batch could return theirs.
-    let store = Store::connect(&support::own_database())
-        .expect("connect")
-        .with_outbox_mapper(Arc::new(TestMapper));
-    let courier_id = CourierId::new(unique("courier"));
-    let delivery = new_delivery(&unique("delivery"));
-    DeliveryRepository::add(&store, &delivery).expect("delivery");
-    let base = -2_000_000_000;
-    let offer = |deadline: i64| {
-        let offer = DeliveryOffer::new(
-            DeliveryOfferId::new(unique("offer")),
-            delivery.id().clone(),
-            courier_id.clone(),
-            base,
-            deadline,
-        )
-        .expect("offer");
-        DeliveryOfferRepository::add(&store, &offer).expect("add offer");
-        offer
-    };
-    let later = offer(base + 20);
-    let earlier = offer(base + 10);
-    let open = offer(base + 30);
-    let mine = [earlier.id().clone(), later.id().clone(), open.id().clone()];
-    let ours = |ids: Vec<DeliveryOfferId>| -> Vec<DeliveryOfferId> {
-        ids.into_iter().filter(|id| mine.contains(id)).collect()
-    };
-
-    // The deadline itself is not past: `open` (base + 30) is not listed.
-    let listed = store
-        .expired_pending_offer_ids(base + 30, 1000)
-        .expect("list");
-    assert_eq!(ours(listed), vec![earlier.id().clone(), later.id().clone()]);
-    assert_eq!(
-        ours(
-            store
-                .expired_pending_offer_ids(base + 30, 1)
-                .expect("limit")
-        )
-        .len(),
-        1
-    );
-
-    let mut expired = earlier.clone();
-    expired.expire(base + 30).expect("expire");
-    DeliveryOfferRepository::save(&store, &expired).expect("save expired");
-    assert_eq!(
-        DeliveryOfferRepository::get(&store, earlier.id())
-            .expect("get")
-            .expect("offer")
-            .state(),
-        OfferState::Expired
-    );
-    assert_eq!(
-        ours(
-            store
-                .expired_pending_offer_ids(base + 30, 1000)
-                .expect("list")
-        ),
-        vec![later.id().clone()]
-    );
-    assert!(open.is_open_at(base + 30));
-}
-
-#[test]
 fn failure_reason_code_and_detail_round_trip_and_legacy_text_reads_as_other() {
     let store = store();
     let courier = unique("courier");
@@ -1219,77 +1148,75 @@ fn expected_times_round_trip_and_reassignment_clears_pickup_time() {
 }
 
 #[test]
-fn waiting_deliveries_without_pending_offer_page_in_creation_order() {
+fn courier_candidate_wakes_the_oldest_waiting_delivery_not_offered_to_it() {
     let store = store();
-    // A creation time far in the past, unique per run, keeps the rows of
-    // other tests of a shared database before or after ours.
+    // A Market of its own keeps the deliveries of other tests out.
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
-    let base = -1_000_000_000 - i64::try_from(nanos % 1_000_000_000).expect("fits") * 4;
-    let prefix = unique("waiting");
-    let waiting = |suffix: &str, created_at: i64| {
-        let delivery =
-            new_delivery(&format!("{prefix}-{suffix}")).with_created_at(Some(created_at));
+    let market = MarketId::new(&format!("m{}", nanos % 1_000_000_000_000)).expect("market id");
+    let other_market =
+        MarketId::new(&format!("o{}", nanos % 1_000_000_000_000)).expect("market id");
+    let courier_id = CourierId::new(unique("courier"));
+    CourierRepository::add(
+        &store,
+        &Courier::new(
+            courier_id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+            market.clone(),
+        ),
+    )
+    .expect("courier");
+    let waiting = |market: &MarketId, created_at: i64| {
+        let delivery = Delivery::new(
+            DeliveryId::new(unique("delivery")),
+            OrderId::new(unique("order")),
+            market.clone(),
+        )
+        .with_created_at(Some(created_at));
         DeliveryRepository::add(&store, &delivery).expect("delivery");
         delivery
     };
-    let first = waiting("1", base + 1);
-    let offered = waiting("2", base + 2);
-    let third = waiting("3", base + 2);
-    let assigned_one = assigned(&waiting("4", base + 3), &unique("courier"));
-    DeliveryRepository::save(&store, &assigned_one).expect("assign");
-    let mut pending = DeliveryOffer::new(
-        DeliveryOfferId::new(unique("offer")),
-        offered.id().clone(),
-        CourierId::new(unique("courier")),
-        base,
-        base + 60,
-    )
-    .expect("offer");
-    DeliveryOfferRepository::add(&store, &pending).expect("pending offer");
-    let start = DeliveryPosition {
-        created_at_epoch_seconds: base,
-        delivery_id: DeliveryId::new(""),
+    let offer = |delivery: &Delivery, courier: &CourierId| {
+        let offer = DeliveryOffer::new(
+            DeliveryOfferId::new(unique("offer")),
+            delivery.id().clone(),
+            courier.clone(),
+            1_000,
+            1_060,
+        )
+        .expect("offer");
+        DeliveryOfferRepository::add(&store, &offer).expect("offer");
+        offer
     };
-    let ours = |deliveries: Vec<Delivery>| -> Vec<DeliveryId> {
-        deliveries
-            .into_iter()
-            .map(|delivery| delivery.id().clone())
-            .filter(|id| id.as_str().starts_with(&prefix))
-            .collect()
-    };
+    waiting(&other_market, 1);
+    let mut rejected = offer(&waiting(&market, 2), &courier_id);
+    rejected.reject(&courier_id, 1_000).expect("reject");
+    DeliveryOfferRepository::save(&store, &rejected).expect("rejected");
+    let pending_delivery = waiting(&market, 3);
+    let mut pending = offer(&pending_delivery, &CourierId::new(unique("courier")));
+    let oldest_free = waiting(&market, 4);
+    waiting(&market, 5);
 
-    let page = store
-        .list_waiting_without_pending_offer(Some(&start), 2)
-        .expect("first page");
+    // Offered to the courier before, an open offer and another Market are
+    // skipped.
     assert_eq!(
-        ours(page.clone()),
-        vec![first.id().clone(), third.id().clone()]
+        store.oldest_waiting_for(&courier_id),
+        Ok(Some(oldest_free.id().clone()))
     );
-    let next = DeliveryPosition::of(page.last().expect("full page"));
-    let rest = store
-        .list_waiting_without_pending_offer(Some(&next), 1000)
-        .expect("next page");
-    assert!(ours(rest).is_empty(), "assigned and offered are not listed");
 
     pending
-        .reject(&pending.courier_id().clone(), base)
+        .reject(&pending.courier_id().clone(), 1_000)
         .expect("reject");
     DeliveryOfferRepository::save(&store, &pending).expect("rejected");
     assert_eq!(
-        ours(
-            store
-                .list_waiting_without_pending_offer(Some(&start), 3)
-                .expect("after rejection")
-        ),
-        vec![first.id().clone(), offered.id().clone(), third.id().clone()]
+        store.oldest_waiting_for(&courier_id),
+        Ok(Some(pending_delivery.id().clone()))
     );
-    assert!(
-        !store
-            .list_waiting_without_pending_offer(None, 1)
-            .expect("no cursor")
-            .is_empty()
+    assert_eq!(
+        store.oldest_waiting_for(&CourierId::new(unique("courier"))),
+        Ok(None),
+        "an unknown courier has no Market"
     );
 }

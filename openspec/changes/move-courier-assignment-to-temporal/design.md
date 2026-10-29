@@ -34,16 +34,16 @@ Pending offer, у которого `expires_at` уже прошёл, use case с
 
 `ExpireDeliveryOffer` — Activity над Expire Delivery Offer для одного offer: `AlreadyApplied` и offer, уже принятый, отклонённый или отозванный, — успех без изменений.
 
-Signal один: `Wake` с полем `reason` (`offer_answered`, `courier_available`, `courier_unassigned`, `delivery_closed`) — только для диагностики, на ход workflow не влияет. Дедупликации не нужно: лишний Wake приводит к ещё одному чтению состояния.
+Signal один: `wake` с полем `reason` (`offer_made`, `offer_answered`, `courier_available`, `courier_unassigned`, `delivery_closed`) — только для диагностики, на ход workflow не влияет. Дедупликации не нужно: лишний Wake приводит к ещё одному чтению состояния.
 
-Event History растёт с каждой итерацией. После `ASSIGNMENT_WORKFLOW__CONTINUE_AS_NEW_AFTER` итераций workflow делает continue-as-new: состояния у него нет, поэтому переносить нечего.
+Event History растёт с каждой итерацией. Когда сервер подсказывает continue-as-new (`continue_as_new_suggested`), workflow продолжается новым run: состояния у него нет, поэтому переносить нечего.
 
 ## Запуск и signals после commit
 
 Temporal не входит в Unit of Work (`docs/unit-of-work.md`), поэтому start и signal выполняются после commit, через порт `AssignmentProcess` в `applications/` с адаптером в `infrastructure/temporal`.
 
 - **Create Delivery** после commit запускает workflow с политикой `WorkflowIdConflictPolicy::UseExisting`, и на первом вызове, и на повторе, который возвращает уже созданную `Delivery`. Ошибка запуска — `UNAVAILABLE`. Create Delivery вызывается Activity `orders`, и её retry повторяет вызов: потеря запуска закрывается без Outbox-relay.
-- **Accept, Reject Delivery Offer, Reassign Courier, Cancel Delivery, Confirm Pickup** после commit передают Wake своей доставки.
+- **Accept, Reject Delivery Offer, Offer Delivery To Courier, Reassign Courier, Cancel Delivery, Confirm Pickup, Report Delivery Failure** после commit передают Wake своей доставки.
 - **Ошибка signal — `UNAVAILABLE`.** Повтор вызова, который уже не меняет состояние (`AlreadyApplied`, повтор того же ответа), всё равно передаёт Wake. Для Accept и Reject потеря signal не блокирует процесс: таймер offer всё равно сработает. Для остальных повтор вызова обязателен, иначе workflow будет ждать.
 - Wake закрытому workflow (доставка уже завершила назначение) — не ошибка.
 
@@ -52,7 +52,7 @@ Temporal не входит в Unit of Work (`docs/unit-of-work.md`), поэто�
 Доставка без кандидата ждёт, пока появится Courier Candidate. Use cases, после которых курьер становится кандидатом:
 
 - Set Courier Availability → available при сохранённой позиции;
-- Update Courier Location: первая сохранённая позиция available курьера;
+- Update Courier Location: сохранённая позиция available курьера (запись прореживается `TRACKING__PERSIST_INTERVAL`; лишний Wake только перечитывает состояние);
 - освобождение курьера: Confirm Delivery, Report Delivery Failure, Reassign Courier, Cancel Delivery назначенной доставки.
 
 Register Courier не будит: у нового курьера нет позиции, кандидатом он станет на первом Update Courier Location.
@@ -91,13 +91,14 @@ Register Courier не будит: у нового курьера нет пози
 | `TEMPORAL__NAMESPACE` | namespace |
 | `TEMPORAL__CONNECT_TIMEOUT` | таймаут подключения, положительный |
 
-Только `delivery-worker`: `ASSIGNMENT_WORKFLOW__CONTINUE_AS_NEW_AFTER` (положительный), retry policy и таймауты Activities (`ASSIGNMENT_WORKFLOW__ACTIVITY_START_TO_CLOSE`). Пустое или невалидное значение — падение на старте. Подключение к Temporal при старте — fail fast, как у `orders`.
+Пустое или невалидное значение — падение на старте. Подключение к Temporal при старте — fail fast, как у `orders`. Таймауты и retry policy Activities (30 s start-to-close, backoff 1 s × 2 до 60 s) — константы кода workflow, как в `orders`; отдельного конфига нет. `delivery-worker` читает из `CONFIG_FILE` только `management`, `shutdown`, `database`, `temporal`.
 
 ## Temporal Rust SDK и OpenTelemetry
 
-- `temporalio-sdk`, `temporalio-client`, `temporalio-sdk-core` 1.1.0 / 0.10.0. MSRV 1.92.
-- SDK зависит от `opentelemetry` 0.32; PR на 0.33 в `temporalio/sdk-rust` (#1682, #1715) закрыты без merge. `delivery` переходит на `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp` 0.32 и оставляет у зависимостей в `Cargo.toml` комментарий: версия держится sdk-rust, вернуться на актуальную после обновления upstream.
-- Trace context переносится через Temporal headers: start и signal несут текущий span, Activity продолжает его. Встроенная трассировка SDK (`experimental` + `opentelemetry`) не включается, пока она experimental.
+- `temporalio-sdk`, `temporalio-client`, `temporalio-common` 1.1.0 (`temporalio-sdk-core` 0.10.0). MSRV 1.92.
+- SDK подключён без default features: `opentelemetry` 0.32 SDK тянет только с features `otel`/`opentelemetry`, поэтому `delivery` остаётся на своей версии 0.33 и понижать её не нужно. `vendored-protox` компилирует protos SDK без `protoc`.
+- Workflows SDK исполняет на не-`Send` futures, поэтому worker живёт в собственном потоке с current-thread runtime; lifecycle процесса видит сигнал остановки и завершение потока.
+- Spans и `nomnom.usecase.duration` шагов (`advance_assignment`, `expire_delivery_offer`) пишет `delivery-worker`. Trace context через Temporal headers не переносится: шаги идут часами после старта, общий trace с Create Delivery не нужен; встроенная трассировка SDK experimental.
 
 ## `orders`: ожидание назначения без срока
 

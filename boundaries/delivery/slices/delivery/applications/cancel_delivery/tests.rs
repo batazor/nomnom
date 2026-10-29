@@ -20,6 +20,8 @@ fn handler(world: &World) -> Handler<'_, TestStore> {
         couriers: &world.store,
         outbox: &world.store,
         relationships: &world.relationships,
+        assignment: &world.assignment,
+        candidates: &world.assignment,
     }
 }
 

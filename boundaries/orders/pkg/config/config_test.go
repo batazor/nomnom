@@ -99,7 +99,7 @@ func clearConfigEnvironment(t *testing.T) {
 		"CONFIG_FILE", EnvPort, "PORT", EnvManagementPort, EnvDrainTimeout, EnvReadinessDelay,
 		EnvKafkaBrokers, EnvKafkaClientID, EnvKafkaConsumerGroup,
 		EnvTemporalHostPort, EnvTemporalNamespace, EnvTemporalConnectTimeout, EnvTemporalRegisterSearchAttributes,
-		EnvFulfillment("acceptance_timeout"), EnvFulfillment("max_replans"),
+		EnvFulfillment("acceptance_timeout"), EnvFulfillment("pickup_timeout"),
 		EnvFulfillment("publish_stage"), EnvInternalGatewayAddr, EnvCancellationWindow,
 		EnvCatalogMinimumTotal, EnvCatalogMaximumTotal, EnvCatalogTimeout,
 		EnvSimulatorInterval, EnvSimulatorMinDelay, EnvSimulatorMaxDelay, EnvSimulatorCustomerID, EnvSimulatorMarketIDs,
@@ -135,9 +135,6 @@ func TestLoadUsesTemporalAndFulfillmentDefaults(t *testing.T) {
 	}, cfg.Temporal)
 	assert.Equal(t, FulfillmentConfig{
 		AcceptanceTimeout:       10 * time.Minute,
-		AssignmentTimeout:       15 * time.Minute,
-		MaxReplans:              2,
-		OperatorDecisionTimeout: 30 * time.Minute,
 		PreparationTimeout:      90 * time.Minute,
 		MaxPreparationExtension: 60 * time.Minute,
 		PickupTimeout:           60 * time.Minute,
@@ -152,7 +149,7 @@ func TestLoadReadsTemporalAndFulfillmentFromEnvironment(t *testing.T) {
 	t.Setenv(EnvTemporalNamespace, "orders-local")
 	t.Setenv(EnvTemporalRegisterSearchAttributes, "true")
 	t.Setenv(EnvFulfillment("acceptance_timeout"), "2m")
-	t.Setenv(EnvFulfillment("max_replans"), "0")
+	t.Setenv(EnvFulfillment("pickup_timeout"), "45m")
 	t.Setenv(EnvFulfillment("publish_stage"), "false")
 
 	cfg, err := Load()
@@ -161,7 +158,7 @@ func TestLoadReadsTemporalAndFulfillmentFromEnvironment(t *testing.T) {
 	assert.Equal(t, "orders-local", cfg.Temporal.Namespace)
 	assert.True(t, cfg.Temporal.RegisterSearchAttributes)
 	assert.Equal(t, 2*time.Minute, cfg.Fulfillment.AcceptanceTimeout)
-	assert.Zero(t, cfg.Fulfillment.MaxReplans)
+	assert.Equal(t, 45*time.Minute, cfg.Fulfillment.PickupTimeout)
 	assert.False(t, cfg.Fulfillment.PublishStage)
 }
 
@@ -169,7 +166,7 @@ func TestLoadReadsTemporalAndFulfillmentFromEnvironment(t *testing.T) {
 func TestLoadRejectsInvalidWorkerSettings(t *testing.T) {
 	tests := map[string]string{
 		EnvFulfillment("acceptance_timeout"): "0s",
-		EnvFulfillment("max_replans"):        "-1",
+		EnvFulfillment("pickup_timeout"):     "0s",
 		EnvTemporalNamespace:                 " ",
 		EnvTemporalConnectTimeout:            "0s",
 	}

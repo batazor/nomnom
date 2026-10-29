@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
 use delivery::infrastructure::repository::migrate;
-use delivery::pkg::config::{SpiceDbConfig, database};
+use delivery::pkg::config::{SpiceDbConfig, TemporalConfig, database};
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers_modules::testcontainers::runners::SyncRunner;
@@ -30,6 +30,11 @@ const LOOPBACK: &str = "127.0.0.1";
 static CONTAINERS: Mutex<Vec<Box<dyn Any + Send>>> = Mutex::new(Vec::new());
 static DATABASE: OnceLock<String> = OnceLock::new();
 static SPICEDB: OnceLock<String> = OnceLock::new();
+static TEMPORAL: OnceLock<String> = OnceLock::new();
+/// Temporal CLI dev server of `ops/kind/manifests/messaging/infrastructure.yaml`.
+const TEMPORAL_IMAGE: &str = "temporalio/temporal";
+const TEMPORAL_TAG: &str = "1.9.1";
+const TEMPORAL_GRPC: u16 = 7233;
 
 extern "C" fn remove_containers() {
     CONTAINERS
@@ -155,4 +160,35 @@ pub fn spicedb(timeout: Duration) -> SpiceDbConfig {
         insecure: true,
         timeout,
     }
+}
+
+/// Temporal dev server shared by the test binary, namespace `default`.
+pub fn temporal() -> TemporalConfig {
+    TemporalConfig {
+        host_port: TEMPORAL.get_or_init(|| off_runtime(start_temporal)).clone(),
+        namespace: "default".to_owned(),
+        connect_timeout: Duration::from_secs(10),
+    }
+}
+
+fn start_temporal() -> String {
+    let container = GenericImage::new(TEMPORAL_IMAGE, TEMPORAL_TAG)
+        .with_exposed_port(TEMPORAL_GRPC.tcp())
+        .with_wait_for(WaitFor::message_on_stdout("Server:"))
+        .with_cmd([
+            "server",
+            "start-dev",
+            "--ip",
+            "0.0.0.0",
+            "--namespace",
+            "default",
+            "--headless",
+        ])
+        .start()
+        .expect("start temporal");
+    let port = container
+        .get_host_port_ipv4(TEMPORAL_GRPC.tcp())
+        .expect("temporal port");
+    keep(container);
+    format!("{LOOPBACK}:{port}")
 }

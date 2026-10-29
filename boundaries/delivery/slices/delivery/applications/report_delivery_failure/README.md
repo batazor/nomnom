@@ -33,7 +33,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input` (`reason` — код каталога `customer_unreachable`, `address_not_found`, `no_access`, `customer_refused`, `order_damaged`, `courier_incident`, `other`; `detail` — необязательный свободный текст, не длиннее 500 символов), `Output`, `Handler::execute(subject, input)`; требования FR-317. Неизвестный или пустой код и слишком длинное пояснение — `InvalidRequest`, а не `other`.
-- **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `DeliveryRelationshipWriter`.
+- **Порты:** `DeliveryAuthorization` (`ReportDeliveryFailure` над `Courier(id)` для курьера или `Delivery(id)` для диспетчера), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `DeliveryRelationshipWriter`, `AssignmentProcess` (после commit), `CandidateWake` (порт слайса `courier`, после commit).
 - **Транзакция:** UoW: `Delivery` (`failed` с причиной) + освобождение `Courier` и DELETE `delivery#courier` до commit (`release_assignment`) + Outbox (`DeliveryFailed`).
 - **Relationship:** курьер теряет `delivery#act_as_courier` и `order#view` при отчёте курьера и диспетчера (AC-691); revision `DELETE` сохраняется (FR-447); неудачный `DELETE` откатывает UoW.
 - **Авторизация диспетчера:** `Delivery(id)` для `ReportDeliveryFailure` проверяется как `platform:nomnom#dispatch_delivery` (`operator`, AC-694), а не `delivery#act_as_courier`.

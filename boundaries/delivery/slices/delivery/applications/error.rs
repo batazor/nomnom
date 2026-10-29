@@ -4,12 +4,14 @@ use std::fmt::{Display, Formatter};
 use crate::pkg::application::{AuthorizationError, RelationshipWriteError, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
+use crate::slices::courier::applications::candidate_wake::CandidateWakeError;
 use crate::slices::courier::domains::courier::{CourierError, CourierId, MarketId, MarketIdError};
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryOfferError, DeliveryOfferId, DeliveryValidationError,
     OrderId, TransitionError,
 };
 
+use super::assignment_process::AssignmentProcessError;
 use super::courier_locator::LocatorError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -184,6 +186,18 @@ impl From<DeliveryValidationError> for DeliveryApplicationError {
 
 impl From<RelationshipWriteError> for DeliveryApplicationError {
     fn from(error: RelationshipWriteError) -> Self {
+        Self::DependencyUnavailable(error.to_string())
+    }
+}
+
+impl From<AssignmentProcessError> for DeliveryApplicationError {
+    fn from(error: AssignmentProcessError) -> Self {
+        Self::DependencyUnavailable(error.to_string())
+    }
+}
+
+impl From<CandidateWakeError> for DeliveryApplicationError {
+    fn from(error: CandidateWakeError) -> Self {
         Self::DependencyUnavailable(error.to_string())
     }
 }

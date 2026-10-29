@@ -173,14 +173,6 @@ func (a *Activities) CreateDelivery(ctx context.Context, in StepInput) error {
 	return classify(a.Delivery.Create(ctx, request))
 }
 
-func (a *Activities) ReplanDelivery(ctx context.Context, in StepInput) error {
-	request, err := a.delivery(ctx, in)
-	if err != nil {
-		return err
-	}
-	return classify(a.Delivery.Replan(ctx, request))
-}
-
 func (a *Activities) CancelDelivery(ctx context.Context, in StepInput) error {
 	request, err := a.delivery(ctx, in)
 	if err != nil {

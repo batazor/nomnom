@@ -1,5 +1,6 @@
 pub mod assignment;
 pub mod authorization;
+pub mod candidate_wake;
 pub mod error;
 pub mod register_courier;
 pub mod relationships;

@@ -11,11 +11,11 @@
 
 - **Владелец:** `delivery/slices/delivery`.
 - **Домен:** `domains/delivery`.
-- **Взаимодействие:** Поиск запускают Dispatch Deliveries (фоновая задача `delivery`) и Replan Delivery из оркестрации; алгоритм и eligibility принадлежат `delivery`.
+- **Взаимодействие:** Поиск выполняет шаг Advance Assignment Assignment Workflow (`delivery-worker`); алгоритм и eligibility принадлежат `delivery`.
 
 ## Реализация
 
-- **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-307. Без авторизации выбор выполняет сервис `select_candidate`, его же вызывает Replan Delivery.
+- **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-307. Без авторизации выбор выполняет сервис `select_candidate`, его же вызывает Advance Assignment.
 - **Порты:** `DeliveryAuthorization` (`FindCourier` над `Delivery(id)`), `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `OffersOfDelivery` (id offers доставки, каждый загружается через репозиторий), `CourierLocator`, `AssignmentPolicy`.
 - **Транзакция:** Только чтение: результат возвращается вызывающему процессу и не сохраняется.
 - **Допущение:** Выбирается минимальное расстояние до pickup, при равенстве — меньший `CourierId`; курьеры, уже получавшие offer этой доставки, исключаются.

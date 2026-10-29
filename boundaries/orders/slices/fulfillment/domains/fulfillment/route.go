@@ -1,9 +1,6 @@
 package fulfillment
 
-import (
-	"strconv"
-	"time"
-)
+import "time"
 
 // StepKind is one external operation of the route or of the Saga.
 type StepKind string
@@ -17,7 +14,6 @@ const (
 	StepRequestRestaurantOrder     StepKind = "request_restaurant_order"
 	StepCancelRestaurantOrder      StepKind = "cancel_restaurant_order"
 	StepCreateDelivery             StepKind = "create_delivery"
-	StepReplanDelivery             StepKind = "replan_delivery"
 	StepCancelDelivery             StepKind = "cancel_delivery"
 	StepCompleteOrder              StepKind = "complete_order"
 	StepFailOrCancelOrder          StepKind = "fail_or_cancel_order"
@@ -66,8 +62,6 @@ func (p *Process) Next() (step Step, ok bool) {
 		return routeStep(StepQueueRestaurantOrder), true
 	case p.accepted && !p.deliveryCreated && (p.schedule == nil || p.schedule.courierDue):
 		return routeStep(StepCreateDelivery), true
-	case p.replanDue && !p.assigned:
-		return Step{Kind: StepReplanDelivery, Key: string(StepReplanDelivery) + "_" + strconv.Itoa(p.replans+1)}, true
 	case p.pickedUp && !p.captured:
 		return routeStep(StepCapturePayment), true
 	case p.done:
@@ -104,11 +98,6 @@ func (p *Process) Confirm(step Step, approved bool, at time.Time) {
 		p.acceptanceDeadline = at.Add(p.policy.AcceptanceTimeout)
 	case StepCreateDelivery:
 		p.deliveryCreated = true
-		p.assignmentDeadline = at.Add(p.policy.AssignmentTimeout)
-	case StepReplanDelivery:
-		p.replans++
-		p.replanDue = false
-		p.assignmentDeadline = at.Add(p.policy.AssignmentTimeout)
 	case StepCapturePayment:
 		if !approved {
 			p.fail(OutcomeFailure, ReasonPaymentCaptureDeclined)

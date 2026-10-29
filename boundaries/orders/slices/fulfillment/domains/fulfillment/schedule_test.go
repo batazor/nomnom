@@ -133,8 +133,7 @@ func TestScheduledProcessArmsPreparationAtQueue(t *testing.T) {
 	require.Equal(t, fulfillment.StepQueueRestaurantOrder, s.steps[len(s.steps)-1].Kind)
 	assert.Equal(t, plan.CourierRequestAt, s.p.NextDeadline())
 	s.until(plan.CourierRequestAt)
-	assert.Equal(t, plan.CourierRequestAt.Add(fulfillment.DefaultPolicy().AssignmentTimeout), s.p.NextDeadline(),
-		"Assignment counts from CreateDelivery")
+	assert.True(t, s.p.NextDeadline().IsZero(), "the courier assignment has no deadline")
 	s.fact(fulfillment.FactCourierAssignedToDelivery)
 	assert.Equal(t, plan.StartAt.Add(fulfillment.DefaultPolicy().PreparationTimeout), s.p.NextDeadline(),
 		"Preparation counts from QueueRestaurantOrder")

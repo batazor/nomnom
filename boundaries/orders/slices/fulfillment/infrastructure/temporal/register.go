@@ -30,7 +30,6 @@ func Register(registry Registry, activities *Activities) {
 		ActivityRequestRestaurantOrder:     activities.RequestRestaurantOrder,
 		ActivityCancelRestaurantOrder:      activities.CancelRestaurantOrder,
 		ActivityCreateDelivery:             activities.CreateDelivery,
-		ActivityReplanDelivery:             activities.ReplanDelivery,
 		ActivityCancelDelivery:             activities.CancelDelivery,
 		ActivityCompleteOrder:              activities.CompleteOrder,
 		ActivityFailOrCancelOrder:          activities.FailOrCancelOrder,

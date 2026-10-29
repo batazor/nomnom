@@ -33,7 +33,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-314, FR-315.
-- **Порты:** `DeliveryAuthorization` (`ConfirmPickup` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `DeliveryOutbox`.
+- **Порты:** `DeliveryAuthorization` (`ConfirmPickup` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `DeliveryOutbox`, `AssignmentProcess` (после commit).
 - **Транзакция:** UoW: `Delivery` + Outbox (`DeliveryPickedUp`); повтор назначенным курьером — no-op.
 
 ## Acceptance

@@ -1,8 +1,9 @@
 //! Create Delivery: the fulfillment process of `orders` requests delivery of
 //! an order in the Market of the order (ADR 41). Idempotent by `OrderId`: a
 //! repeat with the same Market replays the Delivery, a repeat with another
-//! Market is rejected — the Market of a Delivery never changes. Does not start
-//! the courier search. A new Delivery gets random pickup and dropoff points
+//! Market is rejected — the Market of a Delivery never changes. After commit,
+//! and on every replay, it starts the Assignment Workflow of the Delivery,
+//! which searches the courier (FR-306, FR-707). A new Delivery gets random pickup and dropoff points
 //! of the Virtual City and a Tracking Channel (FR-659); a replay keeps the
 //! stored ones. The new Delivery and its `DeliveryCreated` fact are written
 //! in one Unit of Work; a replay writes nothing.
@@ -14,6 +15,7 @@ use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryRepository, OrderId, VirtualCity,
 };
 
+use super::assignment_process::AssignmentProcess;
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -43,6 +45,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub clock: &'a dyn Clock,
     pub city: &'a VirtualCity,
     pub random: &'a dyn RandomSource,
+    pub assignment: &'a dyn AssignmentProcess,
 }
 
 /// Failure of the insert transaction; a uniqueness conflict is a lost race
@@ -73,6 +76,14 @@ impl<U: UnitOfWork> Handler<'_, U> {
         subject: &Subject,
         input: Input,
     ) -> Result<Output, DeliveryApplicationError> {
+        let output = self.create(subject, input)?;
+        // A replay starts it again: the start after the first commit may have
+        // been lost; a running workflow is left as it is.
+        self.assignment.start(&output.delivery_id)?;
+        Ok(output)
+    }
+
+    fn create(&self, subject: &Subject, input: Input) -> Result<Output, DeliveryApplicationError> {
         let order_id = order_id(&input.order_id)?;
         let market_id = market_id(&input.market_id)?;
         self.authorization.check(
@@ -143,7 +154,7 @@ fn replay(existing: &Delivery, market_id: &MarketId) -> Result<Output, DeliveryA
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::memory::StaticAuthorization;
+    use crate::infrastructure::memory::{AssignmentCall, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::MarketIdError;
     use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
@@ -174,6 +185,7 @@ mod tests {
             clock: &world.clock,
             city: &world.city,
             random: &world.random,
+            assignment: &world.assignment,
         }
     }
 
@@ -291,6 +303,33 @@ mod tests {
         assert_eq!(
             DeliveryRepository::find_by_order(&world.store, &OrderId::new("order-1")),
             Ok(None)
+        );
+    }
+
+    /// AC-958: every request starts the Assignment Workflow after commit,
+    /// the replay too: the start after the first commit may have been lost.
+    #[test]
+    fn create_and_replay_start_the_assignment_workflow() {
+        let world = World::new();
+        world.assignment.set_failure(Some("temporal down"));
+
+        assert_eq!(
+            handler(&world).execute(&service(), input()),
+            Err(DeliveryApplicationError::DependencyUnavailable(
+                "assignment workflow unavailable: temporal down".to_owned()
+            ))
+        );
+        assert_eq!(world.store.commits(), 1, "the delivery stays created");
+
+        world.assignment.set_failure(None);
+        let repeat = handler(&world)
+            .execute(&service(), input())
+            .expect("replay");
+
+        assert!(!repeat.created);
+        assert_eq!(
+            world.assignment.calls(),
+            vec![AssignmentCall::Start(DeliveryId::new("generated-1"))]
         );
     }
 }

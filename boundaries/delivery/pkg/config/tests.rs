@@ -17,7 +17,7 @@ fn loads_port_from_toml() {
     fs::write(
         &path,
         format!(
-            "[server]\nport = 9003\n{DATABASE_TOML}{SIMULATOR_TOML}{TRACKING_TOML}{VALKEY_TOML}{KAFKA_TOML}{DELIVERY_ESTIMATE_TOML}"
+            "[server]\nport = 9003\n{DATABASE_TOML}{TEMPORAL_TOML}{SIMULATOR_TOML}{TRACKING_TOML}{VALKEY_TOML}{KAFKA_TOML}{DELIVERY_ESTIMATE_TOML}"
         ),
     )
     .expect("write config");
@@ -46,12 +46,15 @@ const KAFKA_TOML: &str = "\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = 
 /// Обязательная секция Delivery Duration Estimate (FR-691) тестовых конфигов.
 const DELIVERY_ESTIMATE_TOML: &str = "\n[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n";
 
+/// Обязательный Temporal (FR-708) тестовых конфигов.
+const TEMPORAL_TOML: &str = "\n[temporal]\nhost_port = \"temporal:7233\"\nnamespace = \"default\"\nconnect_timeout = \"10s\"\n";
+
 /// Обязательный URI PostgreSQL тестовых конфигов.
 const DATABASE_TOML: &str = "\n[database]\nuri = \"postgresql://u:p@db:5432/delivery\"\n";
 
 /// Пишет TOML во временный файл с уникальным именем и загружает его; без
-/// своих секций `[database]`, `[simulator]`, `[tracking]`, `[valkey]`,
-/// `[kafka]` и `[delivery_estimate]` к нему добавляются [`DATABASE_TOML`],
+/// своих секций `[database]`, `[temporal]`, `[simulator]`, `[tracking]`, `[valkey]`,
+/// `[kafka]` и `[delivery_estimate]` к нему добавляются [`DATABASE_TOML`], [`TEMPORAL_TOML`],
 /// [`SIMULATOR_TOML`], [`TRACKING_TOML`], [`VALKEY_TOML`], [`KAFKA_TOML`] и
 /// [`DELIVERY_ESTIMATE_TOML`].
 fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
@@ -62,6 +65,7 @@ fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
     let mut contents = contents.to_owned();
     for (section, toml) in [
         ("[database]", DATABASE_TOML),
+        ("[temporal]", TEMPORAL_TOML),
         ("[simulator]", SIMULATOR_TOML),
         ("[tracking]", TRACKING_TOML),
         ("[valkey]", VALKEY_TOML),
@@ -283,74 +287,99 @@ fn spicedb_debug_redacts_preshared_key() {
     assert!(!format!("{config:?}").contains("secret-key"));
 }
 
+/// FR-708, AC-967: Temporal is required, without defaults.
 #[test]
-fn offers_expiry_defaults() {
-    let config = load_toml("offers-default", "").expect("load config");
-
+fn missing_or_invalid_temporal_fails_startup() {
+    let config = load_toml("temporal", "").expect("load config");
     assert_eq!(
-        config.offers,
-        OffersConfig {
-            expiry_interval: Duration::from_secs(15),
-            expiry_batch: 100,
-            dispatch_interval: Duration::from_secs(2),
-            dispatch_batch: 100,
+        config.temporal,
+        TemporalConfig {
+            host_port: "temporal:7233".to_owned(),
+            namespace: "default".to_owned(),
+            connect_timeout: Duration::from_secs(10),
         }
     );
-    assert_eq!(config.offers, OffersConfig::default());
+
+    for (name, contents, env) in [
+        (
+            "temporal-missing",
+            "[temporal]
+",
+            None,
+        ),
+        (
+            "temporal-empty-host",
+            "[temporal]\nhost_port = \"\"\nnamespace = \"default\"\nconnect_timeout = \"10s\"\n",
+            Some(TEMPORAL_HOST_PORT_ENV),
+        ),
+        (
+            "temporal-empty-namespace",
+            "[temporal]\nhost_port = \"temporal:7233\"\nnamespace = \" \"\nconnect_timeout = \"10s\"\n",
+            Some(TEMPORAL_NAMESPACE_ENV),
+        ),
+        (
+            "temporal-zero-timeout",
+            "[temporal]\nhost_port = \"temporal:7233\"\nnamespace = \"default\"\nconnect_timeout = \"0s\"\n",
+            Some(TEMPORAL_CONNECT_TIMEOUT_ENV),
+        ),
+    ] {
+        let Err(error) = load_toml(name, contents) else {
+            panic!("{name} must fail startup");
+        };
+        if let Some(env) = env {
+            assert!(error.to_string().contains(env), "{name}: {error}");
+        }
+    }
 }
 
 #[test]
-fn loads_offers_expiry_from_toml_and_validates() {
-    let config = load_toml(
-        "offers",
-        "[offers]\nexpiry_interval = \"5s\"\nexpiry_batch = 20\n",
-    )
-    .expect("load config");
-    assert_eq!(config.offers.expiry_interval, Duration::from_secs(5));
-    assert_eq!(config.offers.expiry_batch, 20);
-
-    assert!(load_toml("offers-zero", "[offers]\nexpiry_interval = \"0s\"\n").is_err());
-    assert!(load_toml("offers-bad", "[offers]\nexpiry_interval = \"soon\"\n").is_err());
-    assert!(load_toml("offers-empty-batch", "[offers]\nexpiry_batch = 0\n").is_err());
-    assert!(load_toml("offers-big-batch", "[offers]\nexpiry_batch = 5000\n").is_err());
-}
-
-#[test]
-fn loads_offers_dispatch_from_toml_and_validates() {
-    let config = load_toml(
-        "offers-dispatch",
-        "[offers]\ndispatch_interval = \"500ms\"\ndispatch_batch = 10\n",
-    )
-    .expect("load config");
-    assert_eq!(config.offers.dispatch_interval, Duration::from_millis(500));
-    assert_eq!(config.offers.dispatch_batch, 10);
-
-    assert!(load_toml("dispatch-zero", "[offers]\ndispatch_interval = \"0s\"\n").is_err());
-    assert!(load_toml("dispatch-empty-batch", "[offers]\ndispatch_batch = 0\n").is_err());
-    assert!(load_toml("dispatch-big-batch", "[offers]\ndispatch_batch = 5000\n").is_err());
-}
-
-#[test]
-fn offers_env_overrides_defaults() {
-    let env = std::collections::HashMap::from([
-        (OFFERS_EXPIRY_INTERVAL_ENV, "1m"),
-        (OFFERS_EXPIRY_BATCH_ENV, "7"),
-        (OFFERS_DISPATCH_INTERVAL_ENV, "5s"),
-        (OFFERS_DISPATCH_BATCH_ENV, "3"),
-    ]);
-    let builder = configure_settings(ConfigLoader::builder(), &OFFERS_SETTINGS, |name| {
-        env.get(name).map(|value| (*value).to_owned())
+fn temporal_env_sets_values() {
+    let builder = configure_temporal(ConfigLoader::builder(), |name| match name {
+        TEMPORAL_HOST_PORT_ENV => Some("temporal-frontend.temporal:7233".to_owned()),
+        TEMPORAL_NAMESPACE_ENV => Some("nomnom".to_owned()),
+        TEMPORAL_CONNECT_TIMEOUT_ENV => Some("5s".to_owned()),
+        _ => None,
     })
-    .expect("configure");
-    let offers: OffersConfig = builder
+    .expect("configure temporal");
+    let temporal: TemporalConfig = builder
         .build()
-        .expect("build")
-        .get("offers")
-        .expect("offers");
-    assert_eq!(offers.expiry_interval, Duration::from_secs(60));
-    assert_eq!(offers.expiry_batch, 7);
-    assert_eq!(offers.dispatch_interval, Duration::from_secs(5));
-    assert_eq!(offers.dispatch_batch, 3);
+        .expect("build config")
+        .get("temporal")
+        .expect("temporal");
+
+    assert_eq!(temporal.host_port, "temporal-frontend.temporal:7233");
+    assert_eq!(temporal.namespace, "nomnom");
+    assert_eq!(temporal.connect_timeout, Duration::from_secs(5));
+}
+
+/// FR-708: `delivery-worker` reads only its sections of the shared file and
+/// needs neither identity, SpiceDB, Valkey nor Kafka.
+#[test]
+fn worker_loads_its_sections_only() {
+    let path = std::env::temp_dir().join(format!(
+        "nomnom-delivery-worker-{}.toml",
+        std::process::id()
+    ));
+    fs::write(
+        &path,
+        format!("[management]\nport = 9084\n{DATABASE_TOML}{TEMPORAL_TOML}"),
+    )
+    .expect("write config");
+    let config = load_worker_from(Some(&path));
+    fs::remove_file(&path).expect("remove config");
+    let config = config.expect("load worker config");
+
+    assert_eq!(config.management.port, 9084);
+    assert_eq!(config.temporal.namespace, "default");
+    assert_eq!(config.shutdown.drain_timeout, Duration::from_secs(20));
+
+    fs::write(&path, format!("{DATABASE_TOML}[temporal]\n")).expect("write config");
+    let missing = load_worker_from(Some(&path));
+    fs::remove_file(path).expect("remove config");
+    assert!(
+        missing.is_err(),
+        "a worker without Temporal must fail startup"
+    );
 }
 
 #[test]

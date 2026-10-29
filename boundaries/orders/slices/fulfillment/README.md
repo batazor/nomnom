@@ -1,6 +1,6 @@
 # Слайс fulfillment
 
-Процесс Order Fulfillment — самостоятельная бизнес-возможность `orders` со своей моделью: этапами (Workflow Stage), сроками (`Policy`), правилами перепланирования доставки, эскалации оператору и порядком компенсаций Saga ([ADR 5](../../docs/adr/0005-order-fulfillment-orchestration.md), [ADR 6](../../../../docs/adr/0006-ddd-structure-inside-vertical-slices.md), спецификация [`order-fulfillment-orchestration`](../../../../openspec/specs/order-fulfillment-orchestration/spec.md), `FR-483`, `FR-484`).
+Процесс Order Fulfillment — самостоятельная бизнес-возможность `orders` со своей моделью: этапами (Workflow Stage), сроками (`Policy`) и порядком компенсаций Saga; Courier Assignment срока не имеет (FR-709) ([ADR 5](../../docs/adr/0005-order-fulfillment-orchestration.md), [ADR 6](../../../../docs/adr/0006-ddd-structure-inside-vertical-slices.md), спецификация [`order-fulfillment-orchestration`](../../../../openspec/specs/order-fulfillment-orchestration/spec.md), `FR-483`, `FR-484`).
 
 ```text
 slices/fulfillment/
@@ -17,17 +17,17 @@ slices/fulfillment/
 
 | Файл | Операции |
 | --- | --- |
-| `fulfillment.go` | `Process` (журнал подтверждённых шагов, факты соседей, replan, эскалация, сроки), `New`, `NewScheduled`, `Outcome`, коды причин |
+| `fulfillment.go` | `Process` (журнал подтверждённых шагов, факты соседей, сроки), `New`, `NewScheduled`, `Outcome`, коды причин |
 | `schedule.go` | Маршрут запланированного заказа: `Plan`, `ConfirmPlan`, подтверждение и освобождение резервации окна, моменты плана как due-шаги, deadline Preparation от `QueueRestaurantOrder` |
-| `facts.go` | `Apply(Fact, at) Effect` — факт соседа с дедупликацией по `EventID`; `Decide(OperatorDecision) Effect` |
+| `facts.go` | `Apply(Fact, at) Effect` — факт соседа с дедупликацией по `EventID` |
 | `cancellation.go` | `AdmitCancellation` (validator Update, без изменений), `AcceptCancellation`, `RequestCancellation` |
 | `route.go` | `Next() (Step, bool)` — следующая операция маршрута (`RequestRestaurantOrder` — только после `AuthorizePayment` и `RecordPaymentAuthorization`); `Confirm(Step, approved, at)` — результат выполненного шага |
-| `deadlines.go` | `NextDeadline()`, `Expire(now) Expiry` — replan до `MaxReplans`, эскалация, отказ по сроку |
+| `deadlines.go` | `NextDeadline()`, `Expire(now) Expiry` — отказ по сроку, шаги плана запланированного заказа |
 | `compensation.go` | `Compensation() []Step` — Saga по журналу шагов и закрытие заказа; `Compensate()` переводит процесс в `compensating` |
 | `stage.go` | `Stage` и его вычисление |
 | `policy.go` | `Policy`, `DefaultPolicy` (placeholders) |
 
-`Step.Key` — логическое имя шага (`authorize_payment`, `replan_delivery_2`, …), из которого адаптер строит idempotency key `order:<order_id>:<key>`. Unit-тесты модели табличные и покрывают маршрут, факты и поздние события, replan до `MaxReplans` (`AC-546`), эскалацию и решение оператора, сроки, Cancellation Request до и после Pickup и компенсации (`AC-547`).
+`Step.Key` — логическое имя шага (`authorize_payment`, `create_delivery`, …), из которого адаптер строит idempotency key `order:<order_id>:<key>`. Unit-тесты модели табличные и покрывают маршрут, факты и поздние события, ожидание курьера без срока (`AC-969`), сроки, Cancellation Request до и после Pickup и компенсации (`AC-547`).
 
 ## Зависимости
 

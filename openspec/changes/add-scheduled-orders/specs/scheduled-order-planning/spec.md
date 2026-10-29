@@ -64,7 +64,7 @@ Use case Plan Schedule SHALL вычислять `planned_ready_at = window_start
 ### Requirement: Курьер вызывается к готовности
 **ID:** FR-680
 
-Для запланированного заказа `CreateDelivery` SHALL выполняться в `courier_request_at`, а не после `RestaurantOrderAccepted`. Deadline Assignment SHALL отсчитываться от `CreateDelivery`.
+Для запланированного заказа `CreateDelivery` SHALL выполняться в `courier_request_at`, а не после `RestaurantOrderAccepted`. Срока Assignment нет (FR-709).
 
 #### Scenario: Курьер не ищется заранее
 **ID:** AC-911

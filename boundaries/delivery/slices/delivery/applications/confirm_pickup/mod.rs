@@ -1,13 +1,15 @@
 //! Confirm Pickup: the assigned courier confirms that the order was picked up
 //! at the restaurant and may name the expected handover time; a named one
 //! must be in the future (FR-610). The Pickup fact with that time is written
-//! to the Outbox in the same Unit of Work.
+//! to the Outbox in the same Unit of Work. After commit the Pickup ends the
+//! Assignment Workflow of the delivery (FR-704).
 
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
 
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -35,6 +37,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub deliveries: &'a dyn DeliveryRepository,
     pub outbox: &'a dyn DeliveryOutbox,
     pub clock: &'a dyn Clock,
+    pub assignment: &'a dyn AssignmentProcess,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -56,7 +59,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &DeliveryResource::Courier(courier_id.clone()),
         )?;
 
-        self.unit_of_work.run(|| {
+        let output = self.unit_of_work.run(|| {
             let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
             let changed = match delivery.confirm_pickup(&courier_id, expected_delivered_at) {
                 Ok(_) => true,
@@ -71,12 +74,16 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 self.deliveries.save(&delivery)?;
                 publish(self.outbox, delivery.pull_events())?;
             }
-            Ok(Output {
+            Ok::<_, DeliveryApplicationError>(Output {
                 delivery_id: delivery_id.clone(),
                 state: delivery.state(),
                 changed,
             })
-        })
+        })?;
+        // Pickup ends the Assignment Workflow (FR-704); also on a repeat.
+        self.assignment
+            .wake(&output.delivery_id, WakeReason::DeliveryClosed)?;
+        Ok(output)
     }
 }
 
@@ -102,6 +109,7 @@ mod tests {
             deliveries: &world.store,
             outbox: &world.store,
             clock: &world.clock,
+            assignment: &world.assignment,
         }
     }
 

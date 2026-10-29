@@ -120,12 +120,6 @@ func TestProcessStage(t *testing.T) {
 		"waiting acceptance": {arrange: func(s *process) { s.run() }, want: fulfillment.StageWaitingAcceptance},
 		"preparing":          {arrange: func(s *process) { s.accepted() }, want: fulfillment.StagePreparing},
 		"assigned not ready": {arrange: func(s *process) { s.accepted(); s.fact(fulfillment.FactCourierAssignedToDelivery) }, want: fulfillment.StagePreparing},
-		"waiting operator": {arrange: func(s *process) {
-			s.accepted()
-			for s.expire() != fulfillment.ExpiryEscalation {
-				s.run()
-			}
-		}, want: fulfillment.StageWaitingOperator},
 		"waiting pickup": {arrange: func(s *process) {
 			s.accepted()
 			s.fact(fulfillment.FactCourierAssignedToDelivery)

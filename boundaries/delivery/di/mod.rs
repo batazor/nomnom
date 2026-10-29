@@ -3,10 +3,15 @@
 //!
 //! - [`infrastructure`] — порты слайсов и их реализации ([`InfrastructureModule`]);
 //! - [`service`] — граф use cases ([`ServiceModule`]) и тестовые графы;
-//! - [`server`] — `cmd/delivery`: gRPC, reconciliation, истечение Delivery
-//!   Offers, Dispatch Deliveries, демо Simulator и consumer Delivery Duration
-//!   Statistics ([`server::ServerModule`]); схему PostgreSQL
-//!   процесс мигрирует сам при старте ([`server::store`]).
+//! - [`server`] — `cmd/delivery`: gRPC, reconciliation, демо Simulator и
+//!   consumer Delivery Duration Statistics ([`server::ServerModule`]); схему
+//!   PostgreSQL процесс мигрирует сам при старте ([`server::store`]);
+//! - [`worker`] — `cmd/delivery-worker`: Temporal worker Assignment Workflow
+//!   ([`worker::WorkerProcess`]).
+//!
+//! Assignment Workflow use cases запускают и будят через Temporal
+//! (`infrastructure::temporal`); тестовые графы записывают эти вызовы
+//! (`infrastructure::memory::RecordingAssignment`).
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
 //! PostgreSQL (`infrastructure::repository`, ADR 0001 контекста), идентификаторы —
@@ -16,22 +21,20 @@
 //! locator и запись relationships для них — `infrastructure::memory`.
 
 mod consuming_worker;
-mod dispatch_worker;
 mod http_worker;
 pub mod infrastructure;
-mod offer_expiry_worker;
 mod reconciling_worker;
 pub mod server;
 pub mod service;
 mod simulator_worker;
+pub mod worker;
 
 pub use consuming_worker::ConsumingWorker;
-pub use dispatch_worker::{DispatchDeliveries, DispatchSchedule, DispatchWorker};
 pub use http_worker::HttpWorker;
 pub use infrastructure::{
-    CourierStore, InfrastructureModule, ProcessAuthorization, ProcessRelationships, ProcessStores,
+    AssignmentAdapters, CourierStore, InfrastructureModule, ProcessAssignment,
+    ProcessAuthorization, ProcessRelationships, ProcessStores,
 };
-pub use offer_expiry_worker::{ExpireOffers, ExpirySchedule, OfferExpiryWorker};
 pub use reconciling_worker::ReconcilingWorker;
 pub use server::{spicedb, spicedb_authorization, store};
 pub use service::{ServiceModule, build_over};

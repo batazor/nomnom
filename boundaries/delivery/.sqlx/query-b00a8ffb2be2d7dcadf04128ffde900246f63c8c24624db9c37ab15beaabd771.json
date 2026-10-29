@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.id FROM deliveries d JOIN couriers c ON c.market_id = d.market_id\n             WHERE c.id = $1 AND d.state = $2\n               AND NOT EXISTS (SELECT 1 FROM delivery_offers o\n                               WHERE o.delivery_id = d.id\n                                 AND (o.state = $3 OR o.courier_id = $1))\n             ORDER BY COALESCE(d.created_at, 0), d.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deliveries",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b00a8ffb2be2d7dcadf04128ffde900246f63c8c24624db9c37ab15beaabd771"
+}

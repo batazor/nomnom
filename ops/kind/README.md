@@ -244,7 +244,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `restaurants-v1-kitchen-reads` | `GetKitchenQueue`, `ListIncomingOrders`, `ListActiveRestaurantOrders`, `GetCookPool` | `reads` |
 | `restaurants-v1-cook-pool` | `HireCook`, `PutCookOnLine`, `TakeCookOffLine`, `RetireCook` | `commands` |
 | `restaurants-v1-administration` | `RegisterRestaurant`, `AssignStaff`, `RevokeStaff` | `commands` |
-| `delivery-v1-commands` | `CreateDelivery`, `ReplanDelivery`, `CancelDelivery` | `commands` |
+| `delivery-v1-commands` | `CreateDelivery`, `CancelDelivery` | `commands` |
 | `delivery-v1-reads` | `EstimateDeliveryDuration` | `reads` |
 | `delivery-v1-courier` | `UpdateCourierLocation`, `SetCourierAvailability`, `AcceptDeliveryOffer`, `RejectDeliveryOffer`, `ConfirmPickup`, `ConfirmDelivery`, `ReportDeliveryFailure` | `commands` |
 | `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderDelivery` | `reads` |

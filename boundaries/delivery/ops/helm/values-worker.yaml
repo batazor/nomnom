@@ -1,0 +1,20 @@
+# Temporal worker delivery (FR-708): отдельный release того же chart.
+#   helm upgrade --install delivery-worker ops/helm -f ops/helm/values-worker.yaml
+# Исполняет Assignment Workflow и его Activities на task queue delivery. gRPC API, SpiceDB,
+# Valkey и Kafka процессу не нужны: identity, spicedb, valkey и cdc не задаются. Адрес и
+# namespace Temporal (temporal.hostPort, temporal.namespace) задаются values окружения.
+component: worker
+
+command:
+  - /usr/local/bin/delivery-worker
+
+service:
+  enabled: false
+
+telemetry:
+  serviceName: delivery-worker
+
+# Activities берут соединение на шаг назначения; лишние ждут в пуле.
+database:
+  pool:
+    maxConns: 5

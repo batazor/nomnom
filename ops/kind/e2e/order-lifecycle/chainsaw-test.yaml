@@ -23,7 +23,7 @@ spec:
       value: (join('-', ['order-lifecycle', $run]))
     - name: courier
       value: (join('-', ['kind-e2e-courier', $run]))
-    # ADR 41: свой Market на прогон. Dispatch delivery предлагает доставку только курьерам её
+    # ADR 41: свой Market на прогон. Assignment Workflow delivery предлагает доставку только курьерам её
     # Market, поэтому демо-курьеры (chart ops/kind/demo, Market berlin) и курьеры других
     # прогонов в этот прогон не попадают, как бы ни сортировались их ids.
     - name: market
@@ -239,8 +239,8 @@ spec:
             - {name: method, value: nomnom.restaurants.v1.RestaurantsService/PutCookOnLine}
             - {name: request, value: '{restaurantId: $s.restaurant_id, cookId: $s.cook_id}'}
 
-    # 3. Курьер выходит на линию: позиция и доступность. Dispatch предлагает доставку только
-    # свободному курьеру с позицией.
+    # 3. Курьер выходит на линию: позиция и доступность. Assignment Workflow предлагает доставку
+    # только свободному курьеру с позицией.
     - name: courier reports location
       use:
         template: ../templates/driver-call.yaml
@@ -341,8 +341,8 @@ spec:
                  and .state == "RESTAURANT_ORDER_STATE_QUEUED")] | length > 0
             - {name: wait, value: 30}
 
-    # 6. Курьер: после Restaurant Order Accepted workflow создаёт доставку, Dispatch
-    # предлагает её свободному курьеру.
+    # 6. Курьер: после Restaurant Order Accepted workflow создаёт доставку, Assignment Workflow
+    # delivery сразу предлагает её свободному курьеру.
     - name: courier receives offer
       use:
         template: ../templates/driver-call.yaml

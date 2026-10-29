@@ -8,10 +8,6 @@ type Expiry int
 const (
 	// ExpiryNone: no active deadline has passed.
 	ExpiryNone Expiry = iota
-	// ExpiryReplan: the courier assignment is due for ReplanDelivery.
-	ExpiryReplan
-	// ExpiryEscalation: replans are exhausted, the process waits for an operator decision.
-	ExpiryEscalation
 	// ExpiryFailure: the deadline chose a negative outcome.
 	ExpiryFailure
 	// ExpiryScheduledStep: a moment of the plan of a Scheduled Order passed,
@@ -29,8 +25,6 @@ func (p *Process) NextDeadline() time.Time {
 		}
 	}
 	consider(p.restaurantRequested && !p.accepted, p.acceptanceDeadline)
-	consider(p.awaitingAssignment(), p.assignmentDeadline)
-	consider(p.escalated, p.operatorDeadline)
 	consider(p.accepted && !p.ready, p.preparationDeadline)
 	consider(p.ready && p.assigned && !p.pickedUp, p.pickupDeadline)
 	consider(p.pickedUp && !p.done, p.deliveryDeadline)
@@ -53,16 +47,6 @@ func (p *Process) Expire(now time.Time) Expiry {
 	switch {
 	case p.restaurantRequested && !p.accepted && passed(p.acceptanceDeadline):
 		p.fail(OutcomeFailure, ReasonRestaurantAcceptanceTimeout)
-	case p.escalated && passed(p.operatorDeadline):
-		p.fail(OutcomeFailure, ReasonCourierAssignmentExhausted)
-	case p.awaitingAssignment() && passed(p.assignmentDeadline):
-		if p.replans < p.policy.MaxReplans {
-			p.replanDue = true
-			return ExpiryReplan
-		}
-		p.escalated = true
-		p.operatorDeadline = now.Add(p.policy.OperatorDecisionTimeout)
-		return ExpiryEscalation
 	case p.accepted && !p.ready && passed(p.preparationDeadline):
 		p.fail(OutcomeFailure, ReasonPreparationTimeout)
 	case p.ready && p.assigned && !p.pickedUp && passed(p.pickupDeadline):
@@ -73,8 +57,4 @@ func (p *Process) Expire(now time.Time) Expiry {
 		return ExpiryNone
 	}
 	return ExpiryFailure
-}
-
-func (p *Process) awaitingAssignment() bool {
-	return p.deliveryCreated && !p.assigned && !p.escalated && !p.replanDue
 }

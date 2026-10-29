@@ -43,7 +43,7 @@
 ### Requirement: Пробуждение доставки при появлении кандидата
 **ID:** FR-706
 
-Доставка без кандидата SHALL ждать signal без таймеров перепроверки. Use case, после commit которого курьер становится Courier Candidate (available с сохранённой позицией), SHALL будить одну доставку: самую старую по `(created_at, id)` ожидающую `Delivery` его Market без pending offer, которой этого курьера ещё не предлагали. Нет такой доставки — signal MUST NOT передаваться.
+Доставка без кандидата SHALL ждать signal без таймеров перепроверки. Use case, после commit которого курьер — Courier Candidate (available с сохранённой позицией: Set Courier Availability, сохранённая позиция, освобождение курьера), SHALL будить одну доставку: самую старую по `(created_at, id)` ожидающую `Delivery` его Market без pending offer, которой этого курьера ещё не предлагали. Нет такой доставки — signal MUST NOT передаваться.
 
 #### Scenario: Курьер выходит на линию
 **ID:** AC-964
@@ -60,7 +60,7 @@
 ### Requirement: Signals Assignment Workflow после commit
 **ID:** FR-707
 
-Accept и Reject Delivery Offer, Reassign Courier, Cancel Delivery и Confirm Pickup SHALL после commit будить workflow своей доставки; start и signals MUST NOT выполняться внутри Unit of Work. Ошибка start или signal SHALL возвращаться как `UNAVAILABLE`, а повтор вызова, не меняющий состояние, SHALL передавать signal заново. Signal завершённому workflow MUST NOT быть ошибкой.
+Accept и Reject Delivery Offer, Offer Delivery To Courier, Reassign Courier, Cancel Delivery, Confirm Pickup и Report Delivery Failure SHALL после commit будить workflow своей доставки; start и signals MUST NOT выполняться внутри Unit of Work. Ошибка start или signal SHALL возвращаться как `UNAVAILABLE`, а повтор вызова, не меняющий состояние, SHALL передавать signal заново. Signal завершённому workflow MUST NOT быть ошибкой.
 
 #### Scenario: Temporal недоступен при отклонении offer
 **ID:** AC-966
@@ -71,7 +71,7 @@ Accept и Reject Delivery Offer, Reassign Courier, Cancel Delivery и Confirm Pi
 ### Requirement: Deployable role delivery-worker
 **ID:** FR-708
 
-Assignment Workflow и его Activities SHALL исполняться отдельным процессом `delivery-worker` на task queue `delivery`. Процессы `delivery` и `delivery-worker` SHALL требовать `TEMPORAL__HOST_PORT`, `TEMPORAL__NAMESPACE` и `TEMPORAL__CONNECT_TIMEOUT`, а `delivery-worker` — ещё `ASSIGNMENT_WORKFLOW__CONTINUE_AS_NEW_AFTER` и `ASSIGNMENT_WORKFLOW__ACTIVITY_START_TO_CLOSE`. Пустое, неразбираемое или неположительное значение MUST останавливать процесс на старте.
+Assignment Workflow и его Activities SHALL исполняться отдельным процессом `delivery-worker` на task queue `delivery`. Процессы `delivery` и `delivery-worker` SHALL требовать `TEMPORAL__HOST_PORT`, `TEMPORAL__NAMESPACE` и `TEMPORAL__CONNECT_TIMEOUT`; пустое, неразбираемое или неположительное значение и недоступный Temporal MUST останавливать процесс на старте.
 
 #### Scenario: Пустой адрес Temporal
 **ID:** AC-967

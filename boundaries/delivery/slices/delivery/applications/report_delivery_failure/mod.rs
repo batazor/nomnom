@@ -7,16 +7,20 @@
 //! The assignment is over, so `delivery:<id>#courier@user:<courier_id>` is
 //! deleted before commit (AC-691); a failed delete rolls the failure back.
 //! The dispatcher is authorized by the platform right `dispatch_delivery`
-//! (AC-694), mapped from the `Delivery(id)` resource.
+//! (AC-694), mapped from the `Delivery(id)` resource. After commit a failure
+//! before Pickup ends the Assignment Workflow, and the released courier wakes
+//! the courier search of its Market (FR-706).
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
 };
 
 use super::assignment::release_assignment;
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -54,6 +58,8 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
+    pub assignment: &'a dyn AssignmentProcess,
+    pub candidates: &'a dyn CandidateWake,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -83,27 +89,36 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &resource,
         )?;
 
-        self.unit_of_work.run(|| {
-            let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
-            delivery.fail(reason.clone(), &reporter)?;
-            let released_courier_id = delivery.courier_id().cloned().ok_or_else(|| {
-                DeliveryApplicationError::Internal("failed delivery had no courier".to_owned())
-            })?;
-            release_assignment(
-                &mut delivery,
-                &released_courier_id,
-                self.couriers,
-                self.relationships,
-            )?;
+        let output = self
+            .unit_of_work
+            .run(|| -> Result<Output, DeliveryApplicationError> {
+                let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
+                delivery.fail(reason.clone(), &reporter)?;
+                let released_courier_id = delivery.courier_id().cloned().ok_or_else(|| {
+                    DeliveryApplicationError::Internal("failed delivery had no courier".to_owned())
+                })?;
+                release_assignment(
+                    &mut delivery,
+                    &released_courier_id,
+                    self.couriers,
+                    self.relationships,
+                )?;
 
-            self.deliveries.save(&delivery)?;
-            publish(self.outbox, delivery.pull_events())?;
-            Ok(Output {
-                delivery_id: delivery_id.clone(),
-                reason: reason.clone(),
-                released_courier_id,
-            })
-        })
+                self.deliveries.save(&delivery)?;
+                publish(self.outbox, delivery.pull_events())?;
+                Ok(Output {
+                    delivery_id: delivery_id.clone(),
+                    reason: reason.clone(),
+                    released_courier_id,
+                })
+            })?;
+        // A failure before Pickup ends the Assignment Workflow; the released
+        // courier may take a waiting delivery (FR-706).
+        self.assignment
+            .wake(&output.delivery_id, WakeReason::DeliveryClosed)?;
+        self.candidates
+            .courier_available(&output.released_courier_id)?;
+        Ok(output)
     }
 }
 
@@ -132,6 +147,8 @@ mod tests {
             couriers: &world.store,
             outbox: &world.store,
             relationships: &world.relationships,
+            assignment: &world.assignment,
+            candidates: &world.assignment,
         }
     }
 

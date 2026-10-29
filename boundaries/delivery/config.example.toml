@@ -50,19 +50,14 @@ grace = "10m"
 # Размер страницы ReadRelationships (1..1000).
 page_size = 500
 
-[offers]
-# Фоновое истечение Delivery Offers основного процесса (Expire Delivery Offers): pending
-# offers с прошедшим expires_at закрываются как expired. Переменные:
-# OFFERS__EXPIRY_INTERVAL, OFFERS__EXPIRY_BATCH. Невалидные значения завершают startup.
-expiry_interval = "15s"
-# Максимум offers одной пачки (1..1000); полные пачки читаются подряд.
-expiry_batch = 100
-# Dispatch Deliveries: ожидающим доставкам без pending offer предлагается курьер,
-# которому их ещё не предлагали. Переменные: OFFERS__DISPATCH_INTERVAL,
-# OFFERS__DISPATCH_BATCH.
-dispatch_interval = "2s"
-# Максимум доставок одной пачки (1..1000); проход продолжается с конца полной пачки.
-dispatch_batch = 100
+[temporal]
+# Temporal Assignment Workflow (FR-704…FR-708): процесс delivery запускает и будит workflow,
+# delivery-worker его исполняет; оба читают эту секцию. Обязательно, значений по умолчанию нет:
+# пустые host_port или namespace, нулевой connect_timeout и недоступный Temporal завершают
+# startup. Переменные: TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE, TEMPORAL__CONNECT_TIMEOUT.
+host_port = "localhost:7233"
+namespace = "default"
+connect_timeout = "10s"
 
 [database]
 # PostgreSQL delivery (ADR 8, ADR 31, ADR 0001 контекста). Обязательно: пустой uri

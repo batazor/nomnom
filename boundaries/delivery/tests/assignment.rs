@@ -1,7 +1,8 @@
 //! Integration-тесты атомарности Courier Assignment (FR-310, FR-485) против
 //! настоящего PostgreSQL: Accept Delivery Offer занимает курьера через порт
 //! слайса `courier` в той же транзакции, что offer, `Delivery` и Outbox;
-//! конкурентные Dispatch Deliveries предлагают доставку один раз (FR-582).
+//! конкурентные шаги Assignment Workflow предлагают доставку один раз
+//! (FR-704).
 //! PostgreSQL из testcontainers (`tests/support`); идентификаторы уникальны,
 //! поэтому база общая.
 
@@ -13,8 +14,8 @@ use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use delivery::infrastructure::memory::{
-    ManualClock, RecordingRelationships, SequentialIdGenerator, StaticAuthorization,
-    StaticCourierLocator,
+    ManualClock, RecordingAssignment, RecordingRelationships, SequentialIdGenerator,
+    StaticAuthorization, StaticCourierLocator,
 };
 use delivery::infrastructure::repository::Store;
 use delivery::pkg::application::Subject;
@@ -23,10 +24,8 @@ use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus,
 };
 use delivery::slices::delivery::applications::accept_delivery_offer::{Handler, Input};
+use delivery::slices::delivery::applications::advance_assignment;
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
-use delivery::slices::delivery::applications::dispatch_deliveries::{
-    self, DeliveryPosition, WaitingDeliveries,
-};
 use delivery::slices::delivery::applications::error::DeliveryApplicationError;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
@@ -127,6 +126,7 @@ fn accept(
             offer_ttl_seconds: 60,
         },
         relationships,
+        assignment: &RecordingAssignment::new(),
     }
     .execute(
         &Subject::User(seed.courier_id.as_str().to_owned()),
@@ -195,33 +195,38 @@ fn failed_acceptance_rolls_courier_back_with_offer_and_delivery() {
     assert_eq!(offer_state(&store, &seed), OfferState::Pending);
 }
 
-/// Batch reads of two dispatchers: both read the batch before either
-/// dispatches it.
-struct SameBatch {
+/// Delivery reads of two workflow steps: both read the delivery before
+/// either offers it.
+struct SameRead {
     store: Arc<Store>,
     barrier: Arc<Barrier>,
 }
 
-impl WaitingDeliveries for SameBatch {
-    fn list_waiting_without_pending_offer(
-        &self,
-        after: Option<&DeliveryPosition>,
-        limit: usize,
-    ) -> Result<Vec<Delivery>, RepositoryError> {
-        let batch = self
-            .store
-            .list_waiting_without_pending_offer(after, limit)?;
+impl DeliveryRepository for SameRead {
+    fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
+        let delivery = DeliveryRepository::get(&*self.store, id)?;
         self.barrier.wait();
-        Ok(batch)
+        Ok(delivery)
+    }
+
+    fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
+        self.store.find_by_order(order_id)
+    }
+
+    fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::add(&*self.store, delivery)
+    }
+
+    fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::save(&*self.store, delivery)
     }
 }
 
-/// FR-582: dispatchers racing for one delivery make one offer; the loser
-/// skips it.
+/// FR-704: steps racing for one delivery make one offer; the loser fails
+/// with a concurrent modification, which the workflow retries.
 #[test]
-fn concurrent_dispatchers_offer_the_delivery_once() {
-    let store = store();
-    let store = Arc::new(store);
+fn concurrent_steps_offer_the_delivery_once() {
+    let store = Arc::new(store());
     let courier_id = CourierId::new(unique("courier"));
     CourierRepository::add(
         &*store,
@@ -232,36 +237,24 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
         ),
     )
     .expect("courier");
-    // A creation time far in the past, unique per run, puts this delivery
-    // first in the batch after `start`.
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let created_at = -9_000_000_000 - i64::try_from(nanos % 1_000_000_000).expect("fits") * 2;
     let delivery = Delivery::new(
         DeliveryId::new(unique("delivery")),
         OrderId::new(unique("order")),
         MarketId::new("berlin").expect("market id"),
-    )
-    .with_created_at(Some(created_at));
+    );
     DeliveryRepository::add(&*store, &delivery).expect("delivery");
-    let start = DeliveryPosition {
-        created_at_epoch_seconds: created_at - 1,
-        delivery_id: DeliveryId::new(""),
-    };
 
-    let dispatchers = 2;
-    let barrier = Arc::new(Barrier::new(dispatchers));
-    let handles: Vec<_> = (0..dispatchers)
-        .map(|dispatcher| {
-            let waiting = SameBatch {
+    let steps = 2;
+    let barrier = Arc::new(Barrier::new(steps));
+    let handles: Vec<_> = (0..steps)
+        .map(|step| {
+            let deliveries = SameRead {
                 store: Arc::clone(&store),
                 barrier: Arc::clone(&barrier),
             };
             let store = Arc::clone(&store);
-            let start = start.clone();
             let courier_id = courier_id.clone();
+            let delivery_id = delivery.id().as_str().to_owned();
             std::thread::spawn(move || {
                 let locator = StaticCourierLocator::new(vec![CourierCandidate {
                     courier_id,
@@ -270,16 +263,15 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
                     distance_to_pickup_meters: 1_000,
                     active_assignments: 0,
                 }]);
-                dispatch_deliveries::Handler {
+                advance_assignment::Handler {
                     unit_of_work: &*store,
-                    waiting: &waiting,
-                    deliveries: &*store,
+                    deliveries: &deliveries,
                     couriers: &*store,
                     offers: &*store,
                     offers_of: &*store,
                     outbox: &*store,
                     locator: &locator,
-                    ids: &SequentialIdGenerator::new(unique(&format!("offer-{dispatcher}"))),
+                    ids: &SequentialIdGenerator::new(unique(&format!("offer-{step}"))),
                     clock: &ManualClock::new(NOW),
                     policy: AssignmentPolicy {
                         maximum_distance_meters: 5_000,
@@ -287,29 +279,26 @@ fn concurrent_dispatchers_offer_the_delivery_once() {
                         offer_ttl_seconds: 60,
                     },
                 }
-                .execute(dispatch_deliveries::Input {
-                    batch_size: 1,
-                    after: Some(start),
-                })
+                .execute(advance_assignment::Input { delivery_id })
             })
         })
         .collect();
-    let outputs: Vec<_> = handles
+    let outcomes: Vec<_> = handles
         .into_iter()
-        .map(|handle| handle.join().expect("dispatcher").expect("no error"))
+        .map(|handle| handle.join().expect("step"))
         .collect();
 
     assert_eq!(
-        outputs
+        outcomes
             .iter()
-            .map(|output| output.offered.len())
-            .sum::<usize>(),
+            .filter(|outcome| matches!(outcome, Ok(advance_assignment::Output::Offered { .. })))
+            .count(),
         1
     );
     assert_eq!(
-        outputs
+        outcomes
             .iter()
-            .filter(|output| output.skipped == vec![delivery.id().clone()])
+            .filter(|outcome| **outcome == Err(DeliveryApplicationError::ConcurrentModification))
             .count(),
         1
     );

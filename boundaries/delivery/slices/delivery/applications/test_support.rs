@@ -1,7 +1,7 @@
 //! Fixtures shared by the `delivery` slice handler tests.
 
 use crate::infrastructure::memory::{
-    FixedRandomSource, ManualClock, RecordingRelationships, RelationshipWrite,
+    FixedRandomSource, ManualClock, RecordingAssignment, RecordingRelationships, RelationshipWrite,
     SequentialIdGenerator, StaticAuthorization, StaticCourierLocator,
 };
 use crate::infrastructure::repository::test_support::TestStore;
@@ -37,6 +37,7 @@ pub struct World {
     pub relationships: RecordingRelationships,
     pub city: VirtualCity,
     pub random: FixedRandomSource,
+    pub assignment: RecordingAssignment,
 }
 
 impl World {
@@ -59,6 +60,7 @@ impl World {
             relationships: RecordingRelationships::new(),
             city: city(),
             random: FixedRandomSource::new(tracking_bytes()),
+            assignment: RecordingAssignment::new(),
         }
     }
 

@@ -38,9 +38,6 @@ catalog:
 # Policy Order Fulfillment Workflow. Значения — placeholders, не продуктовые сроки.
 fulfillment:
   acceptance_timeout: 10m
-  assignment_timeout: 15m
-  max_replans: 2
-  operator_decision_timeout: 30m
   preparation_timeout: 90m
   max_preparation_extension: 60m
   pickup_timeout: 60m

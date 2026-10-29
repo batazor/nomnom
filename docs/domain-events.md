@@ -286,7 +286,7 @@ Domain Events, которые application-слой передаёт в Outbox po
 | `delivery` | `DeliveryPickedUp` | Confirm Pickup | Опубликован как `nomnom.delivery.v1.DeliveryPickedUp`; `orders` записывает Pickup, `restaurants-consumer` переводит `READY` Restaurant Order в `PICKED_UP` (Record Pickup, Inbox `restaurants.delivery-picked-up`) |
 | `delivery` | `DeliveryCompleted` | Confirm Delivery | |
 | `delivery` | `DeliveryFailed` | Report Delivery Failure | Опубликован как `nomnom.delivery.v1.DeliveryFailed`: `reason` — код каталога Delivery Failure Reason, `detail` — необязательное пояснение; retryability не классифицируется |
-| `delivery` | `DeliveryOfferExpired` | Expire Delivery Offers | Внутренний: не публикуется, только метрика `nomnom.delivery.offers{nomnom.outcome="expired"}` |
+| `delivery` | `DeliveryOfferExpired` | Expire Delivery Offer, Advance Assignment | Внутренний: не публикуется, только метрика `nomnom.delivery.offers{nomnom.outcome="expired"}` |
 | `delivery` | `DeliveryCancelled` | Cancel Delivery | Опубликован как `nomnom.delivery.v1.DeliveryCancelled` (пустой `reason` — не указана); `orders` удаляет `order#courier` и `order#delivery` (Record Courier Release) |
 | `payments` | `PaymentAuthorized`, `PaymentFailed` | Authorize Payment | Отказ Authorization записывает `PaymentFailed` и `PaymentOperationDeclined` |
 | `payments` | `PaymentCaptured` | Capture Payment | |

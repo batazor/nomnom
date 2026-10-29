@@ -4,12 +4,11 @@ import "time"
 
 // Policy holds the business deadlines of the process. The product values are
 // not agreed yet (ADR 5): DefaultPolicy contains technical placeholders.
+// Courier Assignment has no deadline: delivery searches until a courier is
+// found (FR-709).
 type Policy struct {
-	AcceptanceTimeout       time.Duration
-	AssignmentTimeout       time.Duration
-	MaxReplans              int
-	OperatorDecisionTimeout time.Duration
-	PreparationTimeout      time.Duration
+	AcceptanceTimeout  time.Duration
+	PreparationTimeout time.Duration
 	// MaxPreparationExtension caps how far PreparationDelayed moves the deadline.
 	MaxPreparationExtension time.Duration
 	PickupTimeout           time.Duration
@@ -20,9 +19,6 @@ type Policy struct {
 func DefaultPolicy() Policy {
 	return Policy{
 		AcceptanceTimeout:       10 * time.Minute,
-		AssignmentTimeout:       15 * time.Minute,
-		MaxReplans:              2,
-		OperatorDecisionTimeout: 30 * time.Minute,
 		PreparationTimeout:      90 * time.Minute,
 		MaxPreparationExtension: 60 * time.Minute,
 		PickupTimeout:           60 * time.Minute,

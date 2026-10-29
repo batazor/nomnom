@@ -22,7 +22,6 @@ const (
 	DeliveryService_GetCourierCurrentDelivery_FullMethodName   = "/nomnom.delivery.v1.DeliveryService/GetCourierCurrentDelivery"
 	DeliveryService_GetOrderDelivery_FullMethodName            = "/nomnom.delivery.v1.DeliveryService/GetOrderDelivery"
 	DeliveryService_CreateDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CreateDelivery"
-	DeliveryService_ReplanDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/ReplanDelivery"
 	DeliveryService_CancelDelivery_FullMethodName              = "/nomnom.delivery.v1.DeliveryService/CancelDelivery"
 	DeliveryService_EstimateDeliveryDuration_FullMethodName    = "/nomnom.delivery.v1.DeliveryService/EstimateDeliveryDuration"
 	DeliveryService_RegisterCourier_FullMethodName             = "/nomnom.delivery.v1.DeliveryService/RegisterCourier"
@@ -59,7 +58,6 @@ type DeliveryServiceClient interface {
 	GetOrderDelivery(ctx context.Context, in *GetOrderDeliveryRequest, opts ...grpc.CallOption) (*GetOrderDeliveryResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(ctx context.Context, in *CreateDeliveryRequest, opts ...grpc.CallOption) (*CreateDeliveryResponse, error)
-	ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error)
 	CancelDelivery(ctx context.Context, in *CancelDeliveryRequest, opts ...grpc.CallOption) (*CancelDeliveryResponse, error)
 	// Delivery Duration Estimate of a Market for planning scheduled orders
 	// (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
@@ -137,16 +135,6 @@ func (c *deliveryServiceClient) CreateDelivery(ctx context.Context, in *CreateDe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateDeliveryResponse)
 	err := c.cc.Invoke(ctx, DeliveryService_CreateDelivery_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *deliveryServiceClient) ReplanDelivery(ctx context.Context, in *ReplanDeliveryRequest, opts ...grpc.CallOption) (*ReplanDeliveryResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ReplanDeliveryResponse)
-	err := c.cc.Invoke(ctx, DeliveryService_ReplanDelivery_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +319,6 @@ type DeliveryServiceServer interface {
 	GetOrderDelivery(context.Context, *GetOrderDeliveryRequest) (*GetOrderDeliveryResponse, error)
 	// Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
 	CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error)
-	ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error)
 	CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error)
 	// Delivery Duration Estimate of a Market for planning scheduled orders
 	// (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
@@ -392,9 +379,6 @@ func (UnimplementedDeliveryServiceServer) GetOrderDelivery(context.Context, *Get
 }
 func (UnimplementedDeliveryServiceServer) CreateDelivery(context.Context, *CreateDeliveryRequest) (*CreateDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateDelivery not implemented")
-}
-func (UnimplementedDeliveryServiceServer) ReplanDelivery(context.Context, *ReplanDeliveryRequest) (*ReplanDeliveryResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ReplanDelivery not implemented")
 }
 func (UnimplementedDeliveryServiceServer) CancelDelivery(context.Context, *CancelDeliveryRequest) (*CancelDeliveryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelDelivery not implemented")
@@ -514,24 +498,6 @@ func _DeliveryService_CreateDelivery_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DeliveryServiceServer).CreateDelivery(ctx, req.(*CreateDeliveryRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _DeliveryService_ReplanDelivery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReplanDeliveryRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DeliveryServiceServer).ReplanDelivery(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DeliveryService_ReplanDelivery_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DeliveryServiceServer).ReplanDelivery(ctx, req.(*ReplanDeliveryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -842,10 +808,6 @@ var DeliveryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateDelivery",
 			Handler:    _DeliveryService_CreateDelivery_Handler,
-		},
-		{
-			MethodName: "ReplanDelivery",
-			Handler:    _DeliveryService_ReplanDelivery_Handler,
 		},
 		{
 			MethodName: "CancelDelivery",

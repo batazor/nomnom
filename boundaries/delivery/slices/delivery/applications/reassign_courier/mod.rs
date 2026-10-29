@@ -1,19 +1,20 @@
 //! Reassign Courier: the assignment process or an authorized dispatcher ends
 //! the Courier Assignment of a not yet picked up Delivery. The delivery
 //! returns to waiting, the courier is released and the fact is written to the
-//! Outbox. The replacement search is started by the caller, not here. Before
-//! commit `delivery:<id>#courier@user:<courier_id>` is deleted from the
-//! authorization graph (AC-477); a failed delete rolls the reassignment back.
-//!
-//! [`end_assignment`] is the application service without authorization;
-//! Replan Delivery reuses it under its own check and Unit of Work.
+//! Outbox. Before commit `delivery:<id>#courier@user:<courier_id>` is deleted
+//! from the authorization graph (AC-477); a failed delete rolls the
+//! reassignment back. After commit the Assignment Workflow of the delivery is
+//! woken to search a courier again (FR-312), and the released courier wakes
+//! the search of its Market (FR-706).
 
 use crate::pkg::application::{Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{Delivery, DeliveryId, DeliveryRepository};
 
 use super::assignment::release_assignment;
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::outbox::{DeliveryOutbox, publish};
@@ -38,6 +39,8 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
+    pub assignment: &'a dyn AssignmentProcess,
+    pub candidates: &'a dyn CandidateWake,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -53,7 +56,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &DeliveryResource::Delivery(delivery_id.clone()),
         )?;
 
-        self.unit_of_work.run(|| {
+        let output = self.unit_of_work.run(|| {
             let mut delivery = load_delivery(self.deliveries, &delivery_id)?;
             let released_courier_id = end_assignment(
                 &mut delivery,
@@ -62,11 +65,17 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 self.outbox,
                 self.relationships,
             )?;
-            Ok(Output {
+            Ok::<_, DeliveryApplicationError>(Output {
                 delivery_id: delivery_id.clone(),
                 released_courier_id,
             })
-        })
+        })?;
+        // The delivery returns to the search, the courier may take another.
+        self.assignment
+            .wake(&output.delivery_id, WakeReason::CourierUnassigned)?;
+        self.candidates
+            .courier_available(&output.released_courier_id)?;
+        Ok(output)
     }
 }
 
@@ -74,7 +83,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 /// waiting, the courier is released, its relationship is revoked and the fact
 /// is written to the Outbox. Runs inside the caller's Unit of Work; returns
 /// the released courier.
-pub fn end_assignment(
+fn end_assignment(
     delivery: &mut Delivery,
     deliveries: &dyn DeliveryRepository,
     couriers: &dyn CourierAssignment,
@@ -97,7 +106,7 @@ pub fn end_assignment(
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{
-        RecordingRelationships, RelationshipWrite, StaticAuthorization,
+        AssignmentCall, RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::domains::courier::CourierStatus;
@@ -118,6 +127,8 @@ mod tests {
             couriers: &world.store,
             outbox: &world.store,
             relationships: &world.relationships,
+            assignment: &world.assignment,
+            candidates: &world.assignment,
         }
     }
 
@@ -242,5 +253,25 @@ mod tests {
             Err(DeliveryApplicationError::PermissionDenied)
         );
         assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
+    }
+
+    /// FR-312, FR-706: the delivery returns to the search and the released
+    /// courier wakes the search of its Market.
+    #[test]
+    fn reassignment_wakes_the_delivery_and_the_courier_search() {
+        let world = World::new();
+        world.assigned_delivery("delivery-1", "courier-1");
+
+        handler(&world)
+            .execute(&subject("dispatcher-1"), input())
+            .expect("reassigned");
+
+        assert_eq!(
+            world.assignment.calls(),
+            vec![
+                AssignmentCall::Wake(DeliveryId::new("delivery-1"), WakeReason::CourierUnassigned),
+                AssignmentCall::CourierAvailable(CourierId::new("courier-1")),
+            ]
+        );
     }
 }

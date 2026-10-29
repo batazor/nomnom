@@ -460,10 +460,6 @@ spec:
         - method:
             type: Exact
             service: nomnom.delivery.v1.DeliveryService
-            method: ReplanDelivery
-        - method:
-            type: Exact
-            service: nomnom.delivery.v1.DeliveryService
             method: CancelDelivery
       backendRefs:
         - name: delivery

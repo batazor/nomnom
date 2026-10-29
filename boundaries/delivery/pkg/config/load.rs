@@ -9,18 +9,53 @@ use config::{ConfigBuilder, builder::DefaultState};
 use super::estimate::DELIVERY_ESTIMATE_SETTINGS;
 use super::kafka::KAFKA_SETTINGS;
 use super::simulator::SIMULATOR_SETTINGS;
+use super::temporal::TEMPORAL_SETTINGS;
 use super::tracking::TRACKING_SETTINGS;
 use super::{
     AppConfig, CONFIG_KEY_DRAIN_TIMEOUT, CONFIG_KEY_MANAGEMENT_PORT, CONFIG_KEY_PORT,
     CONFIG_KEY_READINESS_DELAY, DATABASE_SETTINGS, DEFAULT_DRAIN_TIMEOUT, DEFAULT_MANAGEMENT_PORT,
     DEFAULT_PORT, DEFAULT_READINESS_DELAY, DRAIN_TIMEOUT_ENV, IDENTITY_SETTINGS,
-    MANAGEMENT_PORT_ENV, OFFERS_SETTINGS, PORT_ENV, READINESS_DELAY_ENV, RECONCILER_SETTINGS,
-    SPICEDB_SETTINGS,
+    MANAGEMENT_PORT_ENV, PORT_ENV, READINESS_DELAY_ENV, RECONCILER_SETTINGS, SPICEDB_SETTINGS,
+    WorkerConfig,
 };
 
 pub fn load() -> Result<AppConfig, ConfigError> {
     let config_file = std::env::var("CONFIG_FILE").ok();
     load_from(config_file.as_deref().map(Path::new))
+}
+
+/// Конфигурация `delivery-worker` из того же `CONFIG_FILE` и переменных
+/// окружения; секции процесса `delivery` в файле не мешают.
+pub fn load_worker() -> Result<WorkerConfig, ConfigError> {
+    let config_file = std::env::var("CONFIG_FILE").ok();
+    load_worker_from(config_file.as_deref().map(Path::new))
+}
+
+pub(super) fn load_worker_from(config_file: Option<&Path>) -> Result<WorkerConfig, ConfigError> {
+    let mut builder = ConfigLoader::builder();
+
+    if let Some(path) = config_file {
+        builder = builder.add_source(File::from(path).required(true));
+    }
+
+    builder = configure_management(builder)?;
+    builder = configure_shutdown(builder)?;
+    builder = configure_database(builder, |name| std::env::var(name).ok())?;
+    builder = configure_temporal(builder, |name| std::env::var(name).ok())?;
+
+    let loaded = builder.build()?;
+    let config = WorkerConfig {
+        management: loaded.get("management")?,
+        shutdown: loaded.get("shutdown")?,
+        database: loaded.get("database")?,
+        temporal: loaded.get("temporal")?,
+    };
+    config.management.validate_port()?;
+    config.shutdown.validate()?;
+    config.database.validate()?;
+    config.temporal.validate()?;
+
+    Ok(config)
 }
 
 pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
@@ -36,7 +71,7 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     builder = configure_identity(builder, |name| std::env::var(name).ok())?;
     builder = configure_spicedb(builder, |name| std::env::var(name).ok())?;
     builder = configure_reconciler(builder, |name| std::env::var(name).ok())?;
-    builder = configure_settings(builder, &OFFERS_SETTINGS, |name| std::env::var(name).ok())?;
+    builder = configure_temporal(builder, |name| std::env::var(name).ok())?;
     builder = configure_database(builder, |name| std::env::var(name).ok())?;
     builder = configure_simulator(builder, |name| std::env::var(name).ok())?;
     builder = configure_tracking(builder, |name| std::env::var(name).ok())?;
@@ -49,7 +84,7 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     config.shutdown.validate()?;
     config.spicedb.validate()?;
     config.reconciler.validate()?;
-    config.offers.validate()?;
+    config.temporal.validate()?;
     config.database.validate()?;
     config.simulator.validate()?;
     config.tracking.validate()?;
@@ -128,16 +163,10 @@ pub(super) fn configure_spicedb(
 }
 
 fn configure_database(
-    mut builder: ConfigBuilder<DefaultState>,
+    builder: ConfigBuilder<DefaultState>,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name, default) in DATABASE_SETTINGS {
-        builder = builder.set_default(key, default)?;
-        if let Some(value) = env(name) {
-            builder = builder.set_override(key, value)?;
-        }
-    }
-    Ok(builder)
+    configure_settings(builder, &DATABASE_SETTINGS, env)
 }
 
 pub(super) fn configure_settings(
@@ -192,6 +221,14 @@ pub(super) fn configure_tracking(
         }
     }
     Ok(builder)
+}
+
+/// Temporal без значений по умолчанию: ключ задаёт файл или переменная.
+pub(super) fn configure_temporal(
+    builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+    configure_required(builder, &TEMPORAL_SETTINGS, env)
 }
 
 /// Kafka consumer без значений по умолчанию: ключ задаёт файл или

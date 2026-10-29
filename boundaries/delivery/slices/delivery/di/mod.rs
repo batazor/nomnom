@@ -10,14 +10,14 @@ use shaku::{Component, HasComponent, Interface, module};
 use crate::pkg::application::{Clock, IdGenerator, ScopedUnitOfWork, Subject, TransactionScope};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
+use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
-use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::estimate_delivery_duration::{
     self, DeliveryDurationSamples,
 };
-use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::get_courier_current_delivery::{
     self, CourierCurrentDeliveryReadModel,
 };
@@ -35,10 +35,9 @@ use crate::slices::delivery::applications::record_delivery_duration::{
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    dispatch_deliveries, expire_delivery_offers, find_courier, offer_delivery,
-    offer_delivery_to_courier, reassign_courier, reject_delivery_offer, replan_delivery,
-    report_delivery_failure,
+    accept_delivery_offer, advance_assignment, cancel_delivery, confirm_delivery, confirm_pickup,
+    create_delivery, expire_delivery_offer, find_courier, offer_delivery,
+    offer_delivery_to_courier, reassign_courier, reject_delivery_offer, report_delivery_failure,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryOfferRepository, DeliveryRepository, VirtualCity,
@@ -53,7 +52,6 @@ pub trait TransactionalStore:
     + DeliveryRepository
     + DeliveryOfferRepository
     + OffersOfDelivery
-    + ExpiredDeliveryOffers
     + CourierAssignment
     + DeliveryOutbox
     + DeliveryInbox
@@ -68,7 +66,6 @@ impl<T> TransactionalStore for T where
         + DeliveryRepository
         + DeliveryOfferRepository
         + OffersOfDelivery
-        + ExpiredDeliveryOffers
         + CourierAssignment
         + DeliveryOutbox
         + DeliveryInbox
@@ -101,11 +98,6 @@ impl<T> DeliveryReadModels for T where
 {
 }
 
-/// Выборка Dispatch Deliveries; реализует только PostgreSQL.
-pub trait WaitingDeliveriesQuery: WaitingDeliveries + Send + Sync {}
-
-impl<T: WaitingDeliveries + Send + Sync> WaitingDeliveriesQuery for T {}
-
 /// Внешние порты слайса. Порты не требуют `Send + Sync`, поэтому shaku
 /// хранит их за этим интерфейсом, а не как отдельные `dyn` компоненты.
 pub trait DeliveryPorts: Interface {
@@ -114,7 +106,6 @@ pub trait DeliveryPorts: Interface {
     fn courier_authorization(&self) -> &dyn CourierAuthorization;
     fn store(&self) -> &dyn TransactionalStore;
     fn read_models(&self) -> &dyn DeliveryReadModels;
-    fn waiting_deliveries(&self) -> &dyn WaitingDeliveries;
     fn locator(&self) -> &dyn CourierLocator;
     fn clock(&self) -> &dyn Clock;
     fn ids(&self) -> &dyn IdGenerator;
@@ -123,6 +114,10 @@ pub trait DeliveryPorts: Interface {
     fn city(&self) -> &VirtualCity;
     /// Random source of the points and channel of a new Delivery.
     fn random(&self) -> &dyn RandomSource;
+    /// Assignment Workflow of a Delivery: start and wake after commit.
+    fn assignment(&self) -> &dyn AssignmentProcess;
+    /// Courier search of a Market woken by a released courier (FR-706).
+    fn candidates(&self) -> &dyn CandidateWake;
 }
 
 /// Числовые параметры назначения; значения задаёт корневой `di`.
@@ -229,12 +224,6 @@ pub trait DeliveryUseCases: Interface {
         input: cancel_delivery::Input,
     ) -> Result<cancel_delivery::Output, DeliveryApplicationError>;
 
-    fn replan_delivery(
-        &self,
-        subject: &Subject,
-        input: replan_delivery::Input,
-    ) -> Result<replan_delivery::Output, DeliveryApplicationError>;
-
     fn estimate_delivery_duration(
         &self,
         subject: &Subject,
@@ -247,17 +236,17 @@ pub trait DeliveryUseCases: Interface {
         input: record_delivery_duration::Input,
     ) -> Result<record_delivery_duration::Output, DeliveryApplicationError>;
 
-    /// Background job of the process: no caller subject.
-    fn expire_delivery_offers(
+    /// Step of the Assignment Workflow: no caller subject.
+    fn advance_assignment(
         &self,
-        input: expire_delivery_offers::Input,
-    ) -> Result<expire_delivery_offers::Output, DeliveryApplicationError>;
+        input: advance_assignment::Input,
+    ) -> Result<advance_assignment::Output, DeliveryApplicationError>;
 
-    /// Background job of the process: no caller subject.
-    fn dispatch_deliveries(
+    /// Offer timer of the Assignment Workflow: no caller subject.
+    fn expire_delivery_offer(
         &self,
-        input: dispatch_deliveries::Input,
-    ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError>;
+        input: expire_delivery_offer::Input,
+    ) -> Result<expire_delivery_offer::Output, DeliveryApplicationError>;
 }
 
 #[derive(Component)]
@@ -290,6 +279,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             clock: self.ports.clock(),
             city: self.ports.city(),
             random: self.ports.random(),
+            assignment: self.ports.assignment(),
         }
         .execute(subject, input)
     }
@@ -347,6 +337,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
+            assignment: self.ports.assignment(),
         }
         .execute(subject, input)
     }
@@ -420,6 +411,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
             relationships: self.ports.relationships(),
+            assignment: self.ports.assignment(),
         }
         .execute(subject, input)
     }
@@ -435,6 +427,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             offers: self.ports.store(),
             outbox: self.ports.store(),
             clock: self.ports.clock(),
+            assignment: self.ports.assignment(),
         }
         .execute(subject, input)
     }
@@ -451,6 +444,8 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             couriers: self.ports.store(),
             outbox: self.ports.store(),
             relationships: self.ports.relationships(),
+            assignment: self.ports.assignment(),
+            candidates: self.ports.candidates(),
         }
         .execute(subject, input)
     }
@@ -466,6 +461,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             deliveries: self.ports.store(),
             outbox: self.ports.store(),
             clock: self.ports.clock(),
+            assignment: self.ports.assignment(),
         }
         .execute(subject, input)
     }
@@ -482,6 +478,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             couriers: self.ports.store(),
             outbox: self.ports.store(),
             relationships: self.ports.relationships(),
+            candidates: self.ports.candidates(),
         }
         .execute(subject, input)
     }
@@ -498,6 +495,8 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             couriers: self.ports.store(),
             outbox: self.ports.store(),
             relationships: self.ports.relationships(),
+            assignment: self.ports.assignment(),
+            candidates: self.ports.candidates(),
         }
         .execute(subject, input)
     }
@@ -514,28 +513,8 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             couriers: self.ports.store(),
             outbox: self.ports.store(),
             relationships: self.ports.relationships(),
-        }
-        .execute(subject, input)
-    }
-
-    fn replan_delivery(
-        &self,
-        subject: &Subject,
-        input: replan_delivery::Input,
-    ) -> Result<replan_delivery::Output, DeliveryApplicationError> {
-        replan_delivery::Handler {
-            authorization: self.ports.authorization(),
-            unit_of_work: &self.unit_of_work(),
-            deliveries: self.ports.store(),
-            couriers: self.ports.store(),
-            offers: self.ports.store(),
-            offers_of: self.ports.store(),
-            outbox: self.ports.store(),
-            locator: self.ports.locator(),
-            ids: self.ports.ids(),
-            clock: self.ports.clock(),
-            policy: self.settings.assignment_policy(),
-            relationships: self.ports.relationships(),
+            assignment: self.ports.assignment(),
+            candidates: self.ports.candidates(),
         }
         .execute(subject, input)
     }
@@ -567,27 +546,12 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
         .execute(input)
     }
 
-    fn expire_delivery_offers(
+    fn advance_assignment(
         &self,
-        input: expire_delivery_offers::Input,
-    ) -> Result<expire_delivery_offers::Output, DeliveryApplicationError> {
-        expire_delivery_offers::Handler {
+        input: advance_assignment::Input,
+    ) -> Result<advance_assignment::Output, DeliveryApplicationError> {
+        advance_assignment::Handler {
             unit_of_work: &self.unit_of_work(),
-            offers: self.ports.store(),
-            expired: self.ports.store(),
-            outbox: self.ports.store(),
-            clock: self.ports.clock(),
-        }
-        .execute(input)
-    }
-
-    fn dispatch_deliveries(
-        &self,
-        input: dispatch_deliveries::Input,
-    ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
-        dispatch_deliveries::Handler {
-            unit_of_work: &self.unit_of_work(),
-            waiting: self.ports.waiting_deliveries(),
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
             offers: self.ports.store(),
@@ -597,6 +561,19 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
+        }
+        .execute(input)
+    }
+
+    fn expire_delivery_offer(
+        &self,
+        input: expire_delivery_offer::Input,
+    ) -> Result<expire_delivery_offer::Output, DeliveryApplicationError> {
+        expire_delivery_offer::Handler {
+            unit_of_work: &self.unit_of_work(),
+            offers: self.ports.store(),
+            outbox: self.ports.store(),
+            clock: self.ports.clock(),
         }
         .execute(input)
     }

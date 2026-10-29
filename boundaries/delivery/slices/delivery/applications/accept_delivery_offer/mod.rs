@@ -6,7 +6,8 @@
 //! the authorization graph; a failed write rolls the acceptance back. A repeated
 //! acceptance writes nothing. The courier may name the expected Pickup time;
 //! a named one must be in the future (FR-610) and reaches
-//! `CourierAssignedToDelivery`.
+//! `CourierAssignedToDelivery`. After commit, and on a repeat, the Assignment
+//! Workflow of the delivery is woken (FR-707).
 
 use crate::pkg::application::{Clock, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
@@ -17,6 +18,7 @@ use crate::slices::delivery::domains::delivery::{
     ExpectedTime, OfferAcceptanceConditions, OfferState,
 };
 
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::courier_locator::CourierLocator;
 use super::error::DeliveryApplicationError;
@@ -54,6 +56,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
+    pub assignment: &'a dyn AssignmentProcess,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -77,6 +80,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
 
         let offer = load_offer(self.offers, &offer_id)?;
         if is_repeat(&offer, &courier_id) {
+            // The wake of the first call may have been lost.
+            self.assignment
+                .wake(offer.delivery_id(), WakeReason::OfferAnswered)?;
             return Ok(output(&offer, true));
         }
         // Values from outside the transaction are gathered before it starts.
@@ -92,8 +98,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
             maximum_active_assignments: self.policy.maximum_active_assignments,
         };
 
-        self.unit_of_work
-            .run(|| self.accept(&offer_id, &courier_id, conditions, expected_pickup_at))
+        let output = self
+            .unit_of_work
+            .run(|| self.accept(&offer_id, &courier_id, conditions, expected_pickup_at))?;
+        self.assignment
+            .wake(&output.delivery_id, WakeReason::OfferAnswered)?;
+        Ok(output)
     }
 
     fn accept(

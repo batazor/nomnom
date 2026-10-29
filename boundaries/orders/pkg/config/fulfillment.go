@@ -18,9 +18,6 @@ const (
 // placeholders, not product decisions.
 type FulfillmentConfig struct {
 	AcceptanceTimeout       time.Duration `mapstructure:"acceptance_timeout"`
-	AssignmentTimeout       time.Duration `mapstructure:"assignment_timeout"`
-	MaxReplans              int           `mapstructure:"max_replans"`
-	OperatorDecisionTimeout time.Duration `mapstructure:"operator_decision_timeout"`
 	PreparationTimeout      time.Duration `mapstructure:"preparation_timeout"`
 	MaxPreparationExtension time.Duration `mapstructure:"max_preparation_extension"`
 	PickupTimeout           time.Duration `mapstructure:"pickup_timeout"`
@@ -30,9 +27,6 @@ type FulfillmentConfig struct {
 
 var fulfillmentDefaults = map[string]any{
 	"acceptance_timeout":        10 * time.Minute,
-	"assignment_timeout":        15 * time.Minute,
-	"max_replans":               2,
-	"operator_decision_timeout": 30 * time.Minute,
 	"preparation_timeout":       90 * time.Minute,
 	"max_preparation_extension": 60 * time.Minute,
 	"pickup_timeout":            60 * time.Minute,
@@ -57,12 +51,10 @@ func configureFulfillment(loader *viper.Viper) error {
 
 func (cfg FulfillmentConfig) Validate() error {
 	for name, value := range map[string]time.Duration{
-		"acceptance_timeout":        cfg.AcceptanceTimeout,
-		"assignment_timeout":        cfg.AssignmentTimeout,
-		"operator_decision_timeout": cfg.OperatorDecisionTimeout,
-		"preparation_timeout":       cfg.PreparationTimeout,
-		"pickup_timeout":            cfg.PickupTimeout,
-		"delivery_timeout":          cfg.DeliveryTimeout,
+		"acceptance_timeout":  cfg.AcceptanceTimeout,
+		"preparation_timeout": cfg.PreparationTimeout,
+		"pickup_timeout":      cfg.PickupTimeout,
+		"delivery_timeout":    cfg.DeliveryTimeout,
 	} {
 		if value <= 0 {
 			return fmt.Errorf("fulfillment %s must be positive, got %s", name, value)
@@ -70,9 +62,6 @@ func (cfg FulfillmentConfig) Validate() error {
 	}
 	if cfg.MaxPreparationExtension < 0 {
 		return fmt.Errorf("fulfillment max_preparation_extension must not be negative, got %s", cfg.MaxPreparationExtension)
-	}
-	if cfg.MaxReplans < 0 {
-		return fmt.Errorf("fulfillment max_replans must not be negative, got %d", cfg.MaxReplans)
 	}
 	return nil
 }

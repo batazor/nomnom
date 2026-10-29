@@ -18,11 +18,11 @@ use crate::pkg::application::Subject;
 use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    dispatch_deliveries, estimate_delivery_duration, expire_delivery_offers, find_courier,
+    accept_delivery_offer, advance_assignment, cancel_delivery, confirm_delivery, confirm_pickup,
+    create_delivery, estimate_delivery_duration, expire_delivery_offer, find_courier,
     get_courier_current_delivery, get_courier_pool, get_order_delivery,
     list_available_delivery_offers, offer_delivery, offer_delivery_to_courier, reassign_courier,
-    record_delivery_duration, reject_delivery_offer, replan_delivery, report_delivery_failure,
+    record_delivery_duration, reject_delivery_offer, report_delivery_failure,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 
@@ -44,9 +44,8 @@ pub const CONFIRM_PICKUP: UseCase = UseCase::command("confirm_pickup");
 pub const CONFIRM_DELIVERY: UseCase = UseCase::command("confirm_delivery");
 pub const REPORT_DELIVERY_FAILURE: UseCase = UseCase::command("report_delivery_failure");
 pub const CANCEL_DELIVERY: UseCase = UseCase::command("cancel_delivery");
-pub const REPLAN_DELIVERY: UseCase = UseCase::command("replan_delivery");
-pub const EXPIRE_DELIVERY_OFFERS: UseCase = UseCase::command("expire_delivery_offers");
-pub const DISPATCH_DELIVERIES: UseCase = UseCase::command("dispatch_deliveries");
+pub const ADVANCE_ASSIGNMENT: UseCase = UseCase::command("advance_assignment");
+pub const EXPIRE_DELIVERY_OFFER: UseCase = UseCase::command("expire_delivery_offer");
 pub const ESTIMATE_DELIVERY_DURATION: UseCase = UseCase::query("estimate_delivery_duration");
 pub const RECORD_DELIVERY_DURATION: UseCase = UseCase::command("record_delivery_duration");
 
@@ -258,31 +257,19 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
         })
     }
 
-    fn replan_delivery(
+    fn advance_assignment(
         &self,
-        subject: &Subject,
-        input: replan_delivery::Input,
-    ) -> Result<replan_delivery::Output, DeliveryApplicationError> {
-        self.observe(REPLAN_DELIVERY, || {
-            self.inner.replan_delivery(subject, input)
-        })
+        input: advance_assignment::Input,
+    ) -> Result<advance_assignment::Output, DeliveryApplicationError> {
+        self.observe(ADVANCE_ASSIGNMENT, || self.inner.advance_assignment(input))
     }
 
-    fn expire_delivery_offers(
+    fn expire_delivery_offer(
         &self,
-        input: expire_delivery_offers::Input,
-    ) -> Result<expire_delivery_offers::Output, DeliveryApplicationError> {
-        self.observe(EXPIRE_DELIVERY_OFFERS, || {
-            self.inner.expire_delivery_offers(input)
-        })
-    }
-
-    fn dispatch_deliveries(
-        &self,
-        input: dispatch_deliveries::Input,
-    ) -> Result<dispatch_deliveries::Output, DeliveryApplicationError> {
-        self.observe(DISPATCH_DELIVERIES, || {
-            self.inner.dispatch_deliveries(input)
+        input: expire_delivery_offer::Input,
+    ) -> Result<expire_delivery_offer::Output, DeliveryApplicationError> {
+        self.observe(EXPIRE_DELIVERY_OFFER, || {
+            self.inner.expire_delivery_offer(input)
         })
     }
 

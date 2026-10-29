@@ -33,9 +33,9 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-306.
-- **Порты:** `DeliveryAuthorization` (`CreateDelivery` над `Platform`), `DeliveryRepository`, `IdGenerator`.
+- **Порты:** `DeliveryAuthorization` (`CreateDelivery` над `Platform`), `DeliveryRepository`, `IdGenerator`, `AssignmentProcess` (start после commit).
 - **Транзакция:** Без UoW: ключ идемпотентности — `OrderId` (уникальность в репозитории); повтор для того же заказа и Market возвращает существующую `Delivery` (`created = false`); повтор с другим Market — `DeliveryForOrderInOtherMarket` (`ALREADY_EXISTS`), Market доставки не меняется.
-- **Допущение:** Find Courier здесь не запускается: поиск курьера начинает следующий проход Dispatch Deliveries (FR-582).
+- **Допущение:** Find Courier здесь не вызывается: после commit, и на повторе, use case запускает Assignment Workflow доставки, который ищет курьера (FR-306, FR-707).
 
 ## Acceptance
 

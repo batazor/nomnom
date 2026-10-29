@@ -72,8 +72,8 @@ pub enum DomainEvent {
         reason: Option<DeliveryCancellationReason>,
     },
     /// A waiting Delivery was offered to a courier until the deadline (Offer
-    /// Delivery, Replan Delivery, Dispatch Deliveries). Internal: not
-    /// published.
+    /// Delivery, Offer Delivery To Courier, Advance Assignment). Internal:
+    /// not published.
     DeliveryOffered {
         delivery_id: DeliveryId,
         offer_id: DeliveryOfferId,
@@ -94,7 +94,8 @@ pub enum DomainEvent {
         courier_id: CourierId,
     },
     /// A pending Delivery Offer was closed after its deadline without an
-    /// answer (Expire Delivery Offers). Internal: not published.
+    /// answer (Expire Delivery Offer, Advance Assignment). Internal: not
+    /// published.
     DeliveryOfferExpired {
         delivery_id: DeliveryId,
         offer_id: DeliveryOfferId,

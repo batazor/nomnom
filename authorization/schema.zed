@@ -29,7 +29,7 @@ definition platform {
 	permission manage_payments = fulfillment
 	/** payments: read payment status and operations. */
 	permission view_payments = fulfillment + operator
-	/** delivery: create, find courier, offer, reassign, replan, cancel. */
+	/** delivery: create, find courier, offer, reassign, cancel. */
 	permission coordinate_delivery = fulfillment
 	permission register_restaurant = operator
 	/** delivery: Courier Pool — register, retire, read, line of any courier. */

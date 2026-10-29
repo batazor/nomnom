@@ -16,7 +16,7 @@
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input { order_id, courier_id }`, `Output` Offer Delivery, `Handler::execute(subject, input)`.
-- **Порты:** `DeliveryAuthorization` (`OfferDeliveryToCourier` над `Platform`), `UnitOfWork`, `DeliveryRepository` (`find_by_order`), `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `OffersOfDelivery`, `DeliveryOutbox`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
+- **Порты:** `DeliveryAuthorization` (`OfferDeliveryToCourier` над `Platform`), `UnitOfWork`, `DeliveryRepository` (`find_by_order`), `CourierAssignment` (порт слайса `courier`), `DeliveryOfferRepository`, `OffersOfDelivery`, `DeliveryOutbox`, `IdGenerator`, `Clock`, `AssignmentPolicy`, `AssignmentProcess` (после commit).
 - **Транзакция:** UoW: offer + Outbox (`DeliveryOffered`); открытый offer той же пары возвращается вместо нового и ничего не пишет.
 - **Ошибки:** нет `Delivery` заказа — `DeliveryForOrderNotFound` (`NOT_FOUND`); доставка не ожидает курьера, курьер не `available` или из другого Market — precondition (`FAILED_PRECONDITION`).
 - **Допущение:** Offers процесса назначения той же доставки не отзываются: доставку получает тот, кто примет первым, остальные offers отзывает Accept Delivery Offer. Срок offer — `AssignmentPolicy::offer_ttl_seconds`.

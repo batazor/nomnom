@@ -203,15 +203,6 @@ func TestDeliveryCreateSendsTheOrder(t *testing.T) {
 	require.NoError(t, d.Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1", MarketID: "berlin"}))
 }
 
-func TestDeliveryReplanPreconditionIsSkipped(t *testing.T) {
-	conn, _, _, delivery := serve(t)
-	delivery.EXPECT().ReplanDelivery(mock.Anything, mock.MatchedBy(func(r *deliveryv1.ReplanDeliveryRequest) bool {
-		return proto.Equal(r, &deliveryv1.ReplanDeliveryRequest{OrderId: "order-1"})
-	})).Return(nil, status.Error(codes.FailedPrecondition, "candidate busy")).Once()
-
-	require.NoError(t, grpcclient.NewDelivery(conn).Replan(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"}))
-}
-
 // FR-683: a Scheduled Order carries its window and planned readiness.
 func TestRestaurantsRequestSendsTheScheduleOfAScheduledOrder(t *testing.T) {
 	conn, _, server, _ := serve(t)

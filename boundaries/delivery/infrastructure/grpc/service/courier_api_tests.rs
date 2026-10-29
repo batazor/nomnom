@@ -5,6 +5,7 @@
 
 use super::super::v1::delivery_service_client::DeliveryServiceClient;
 use super::*;
+use crate::di::ServiceModule;
 use crate::infrastructure::memory::{
     RecordingRelationships, RelationshipWrite, StaticAuthorization,
 };
@@ -14,11 +15,10 @@ use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
+use crate::slices::delivery::applications::advance_assignment;
 use crate::slices::delivery::applications::authorization::{DeliveryPermission, DeliveryResource};
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
-use crate::slices::delivery::domains::delivery::{
-    DeliveryId, DeliveryRepository, DomainEvent, OrderId,
-};
+use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryRepository, DomainEvent};
 
 const SUBJECT_HEADER: &str = "x-test-subject";
 const OPERATOR: &str = "operator-1";
@@ -93,9 +93,9 @@ impl DeliveryRelationshipWriter for SharedRelationships {
 }
 
 /// Grants of the scenario: the operator registers couriers, `orders-worker`
-/// creates and replans deliveries, and each courier user has `courier#act`
-/// on itself only.
-fn authorization(couriers: &[&str], orders: &[&str]) -> StaticAuthorization {
+/// creates deliveries, and each courier user has `courier#act` on itself
+/// only.
+fn authorization(couriers: &[&str]) -> StaticAuthorization {
     let authorization = StaticAuthorization::grants_only();
     authorization.grant_courier(
         Subject::User(OPERATOR.to_owned()),
@@ -108,13 +108,6 @@ fn authorization(couriers: &[&str], orders: &[&str]) -> StaticAuthorization {
         DeliveryPermission::CreateDelivery,
         DeliveryResource::Platform,
     );
-    for order in orders {
-        authorization.grant_delivery(
-            worker.clone(),
-            DeliveryPermission::ReplanDelivery,
-            DeliveryResource::Order(OrderId::new(*order)),
-        );
-    }
     for courier in couriers {
         let subject = Subject::User((*courier).to_owned());
         for permission in [
@@ -148,6 +141,7 @@ fn authorization(couriers: &[&str], orders: &[&str]) -> StaticAuthorization {
 
 struct Api {
     client: DeliveryServiceClient<tonic::transport::Channel>,
+    module: Arc<ServiceModule>,
     store: Arc<TestStore>,
     relationships: Arc<RecordingRelationships>,
     stop: watch::Sender<bool>,
@@ -158,14 +152,14 @@ impl Api {
     async fn start(authorization: StaticAuthorization) -> Self {
         let store = Arc::new(TestStore::new());
         let relationships = Arc::new(RecordingRelationships::new());
-        let module = crate::di::build_over_store(
+        let module = Arc::new(crate::di::build_over_store(
             &store,
             Box::new(authorization),
             Box::new(SharedRelationships(Arc::clone(&relationships))),
-        );
+        ));
         let worker = GrpcWorker::bind(
             ([127, 0, 0, 1], 0).into(),
-            Arc::new(module),
+            Arc::clone(&module),
             Arc::new(HeaderSubjectResolver),
         )
         .expect("bind");
@@ -177,6 +171,7 @@ impl Api {
             .expect("connect");
         Self {
             client,
+            module,
             store,
             relationships,
             stop,
@@ -229,8 +224,9 @@ impl Api {
         assert_eq!(availability.status, CourierStatus::Available as i32);
     }
 
-    /// `orders-worker` creates the delivery and replans it, so the only
-    /// courier on line receives an offer. Returns the delivery id.
+    /// `orders-worker` creates the delivery and the first step of its
+    /// Assignment Workflow offers it to the only courier on line. Returns the
+    /// delivery id.
     async fn offered(&mut self, order: &str) -> String {
         let delivery_id = self
             .client
@@ -242,12 +238,12 @@ impl Api {
             .expect("created")
             .into_inner()
             .delivery_id;
-        self.client
-            .replan_delivery(as_orders_worker(ReplanDeliveryRequest {
-                order_id: order.to_owned(),
-            }))
-            .await
-            .expect("replanned");
+        self.module
+            .deliveries()
+            .advance_assignment(advance_assignment::Input {
+                delivery_id: delivery_id.clone(),
+            })
+            .expect("offered");
         delivery_id
     }
 
@@ -312,7 +308,7 @@ fn lifecycle_facts(store: &TestStore) -> Vec<&'static str> {
 /// AC-730
 #[tokio::test]
 async fn courier_accepts_picks_up_and_completes_the_delivery() {
-    let mut api = Api::start(authorization(&["courier-1"], &["order-1"])).await;
+    let mut api = Api::start(authorization(&["courier-1"])).await;
     api.courier_on_line("courier-1").await;
     let delivery_id = api.offered("order-1").await;
 
@@ -405,7 +401,7 @@ async fn courier_accepts_picks_up_and_completes_the_delivery() {
 /// AC-731
 #[tokio::test]
 async fn another_courier_cannot_confirm_pickup() {
-    let mut api = Api::start(authorization(&["courier-1", "courier-2"], &["order-1"])).await;
+    let mut api = Api::start(authorization(&["courier-1", "courier-2"])).await;
     api.courier_on_line("courier-1").await;
     let delivery_id = api.offered("order-1").await;
     let offer_id = api.offers("courier-1").await[0].offer_id.clone();
@@ -435,7 +431,7 @@ async fn another_courier_cannot_confirm_pickup() {
 /// not in the future is `INVALID_ARGUMENT`.
 #[tokio::test]
 async fn courier_names_expected_times_on_acceptance_and_pickup() {
-    let mut api = Api::start(authorization(&["courier-1"], &["order-1"])).await;
+    let mut api = Api::start(authorization(&["courier-1"])).await;
     api.courier_on_line("courier-1").await;
     let delivery_id = api.offered("order-1").await;
     let offer_id = api.offers("courier-1").await[0].offer_id.clone();
@@ -502,7 +498,7 @@ async fn courier_names_expected_times_on_acceptance_and_pickup() {
 /// AC-732
 #[tokio::test]
 async fn operator_registers_a_courier_for_the_user() {
-    let mut api = Api::start(authorization(&[], &[])).await;
+    let mut api = Api::start(authorization(&[])).await;
 
     let registered = api
         .client
@@ -550,7 +546,7 @@ async fn operator_registers_a_courier_for_the_user() {
 /// AC-733
 #[tokio::test]
 async fn non_operator_cannot_register_a_courier() {
-    let mut api = Api::start(authorization(&["user-7"], &[])).await;
+    let mut api = Api::start(authorization(&["user-7"])).await;
 
     let denied = api
         .client
@@ -578,7 +574,7 @@ async fn non_operator_cannot_register_a_courier() {
 /// chose; only that courier sees the offer, and accepting it assigns them.
 #[tokio::test]
 async fn dispatcher_offers_an_order_to_the_chosen_courier() {
-    let authorization = authorization(&["courier-1", "courier-2"], &[]);
+    let authorization = authorization(&["courier-1", "courier-2"]);
     authorization.grant_delivery(
         Subject::User("dispatcher-1".to_owned()),
         DeliveryPermission::OfferDeliveryToCourier,
@@ -652,7 +648,7 @@ async fn dispatcher_offers_an_order_to_the_chosen_courier() {
 
 #[tokio::test]
 async fn rejection_and_failure_report_reach_their_handlers() {
-    let mut api = Api::start(authorization(&["courier-1"], &["order-1", "order-2"])).await;
+    let mut api = Api::start(authorization(&["courier-1"])).await;
     api.courier_on_line("courier-1").await;
     let rejected_delivery = api.offered("order-1").await;
     let offer_id = api.offers("courier-1").await[0].offer_id.clone();
@@ -725,7 +721,7 @@ async fn rejection_and_failure_report_reach_their_handlers() {
 
 #[tokio::test]
 async fn invalid_courier_requests_are_invalid_arguments() {
-    let mut api = Api::start(authorization(&["courier-1"], &[])).await;
+    let mut api = Api::start(authorization(&["courier-1"])).await;
     api.courier_on_line("courier-1").await;
 
     let unspecified = api
@@ -778,7 +774,7 @@ async fn user_assertion_reaches_the_courier_handler_as_user_subject() {
     let store = Arc::new(TestStore::new());
     let module = crate::di::build_over_store(
         &store,
-        Box::new(authorization(&[user.as_str()], &[])),
+        Box::new(authorization(&[user.as_str()])),
         Box::new(RecordingRelationships::new()),
     );
     let worker = GrpcWorker::bind(

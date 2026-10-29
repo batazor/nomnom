@@ -85,8 +85,8 @@ func TestProcessFailsOnOwnerFacts(t *testing.T) {
 	}
 }
 
-// AC-440: a repeated event id does not apply a fact twice; ids are shared with
-// operator decisions, and a fact without id cannot be deduplicated.
+// AC-440: a repeated event id does not apply a fact twice, and a fact without
+// id cannot be deduplicated.
 func TestProcessDeduplicatesFacts(t *testing.T) {
 	s := newProcess(t)
 	s.run()
@@ -95,7 +95,6 @@ func TestProcessDeduplicatesFacts(t *testing.T) {
 	assert.Equal(t, fulfillment.Applied, s.p.Apply(accepted, s.now).Verdict)
 	assert.Equal(t, fulfillment.Duplicate, s.p.Apply(accepted, s.now).Verdict)
 	assert.Equal(t, fulfillment.Duplicate, s.p.Apply(fulfillment.Fact{Kind: fulfillment.FactPreparationFailed, EventID: "event-1"}, s.now).Verdict)
-	assert.Equal(t, fulfillment.Duplicate, s.p.Decide(fulfillment.OperatorDecision{DecisionID: "event-1", Choice: fulfillment.OperatorCancel}).Verdict)
 	assert.Equal(t, fulfillment.MissingEventID, s.p.Apply(fulfillment.Fact{Kind: fulfillment.FactPreparationFailed}, s.now).Verdict)
 	assert.False(t, s.p.Failed())
 
@@ -142,67 +141,4 @@ func TestProcessAdmitsConfirmations(t *testing.T) {
 			assert.False(t, s.p.Failed())
 		})
 	}
-}
-
-// AC-437: the operator decides on an escalated assignment only.
-func TestProcessAppliesOperatorDecision(t *testing.T) {
-	escalate := func(s *process) {
-		s.accepted()
-		s.fact(fulfillment.FactRestaurantOrderReady)
-		for s.expire() != fulfillment.ExpiryEscalation {
-			s.run()
-		}
-	}
-	t.Run("retry assignment replans again", func(t *testing.T) {
-		s := newProcess(t)
-		escalate(s)
-
-		effect := s.p.Decide(fulfillment.OperatorDecision{DecisionID: "decision-1", Choice: fulfillment.OperatorRetryAssignment})
-
-		assert.True(t, effect.Changed())
-		step, ok := s.p.Next()
-		require.True(t, ok)
-		assert.Equal(t, fulfillment.Step{Kind: fulfillment.StepReplanDelivery, Key: "replan_delivery_3"}, step)
-		s.p.Confirm(step, true, s.now)
-		s.fact(fulfillment.FactCourierAssignedToDelivery)
-		assert.Equal(t, fulfillment.StageWaitingPickup, s.p.Stage())
-	})
-	t.Run("cancel", func(t *testing.T) {
-		s := newProcess(t)
-		escalate(s)
-
-		assert.True(t, s.p.Decide(fulfillment.OperatorDecision{DecisionID: "decision-1", Choice: fulfillment.OperatorCancel}).Changed())
-		outcome, code := s.outcome()
-		assert.Equal(t, fulfillment.OutcomeCancellation, outcome)
-		assert.Equal(t, fulfillment.ReasonOperatorDecision, code)
-	})
-	t.Run("unknown choice", func(t *testing.T) {
-		s := newProcess(t)
-		escalate(s)
-
-		effect := s.p.Decide(fulfillment.OperatorDecision{DecisionID: "decision-1", Choice: "wait"})
-
-		assert.Equal(t, fulfillment.Effect{Verdict: fulfillment.Refused, Reason: `unknown choice "wait"`}, effect)
-		assert.Equal(t, fulfillment.StageWaitingOperator, s.p.Stage())
-	})
-	t.Run("without escalation", func(t *testing.T) {
-		s := newProcess(t).accepted()
-
-		effect := s.p.Decide(fulfillment.OperatorDecision{DecisionID: "decision-1", Choice: fulfillment.OperatorCancel})
-
-		assert.Equal(t, fulfillment.Effect{Verdict: fulfillment.Refused, Reason: "no escalation"}, effect)
-		assert.False(t, s.p.Failed())
-	})
-}
-
-// A courier assigned while waiting for the operator ends the escalation.
-func TestProcessAssignmentEndsEscalation(t *testing.T) {
-	s := newProcess(t).accepted()
-	for s.expire() != fulfillment.ExpiryEscalation {
-		s.run()
-	}
-
-	assert.True(t, s.fact(fulfillment.FactCourierAssignedToDelivery).Changed())
-	assert.Equal(t, fulfillment.StagePreparing, s.p.Stage())
-	assert.Equal(t, fulfillment.Refused, s.p.Decide(fulfillment.OperatorDecision{DecisionID: "late", Choice: fulfillment.OperatorCancel}).Verdict)
 }

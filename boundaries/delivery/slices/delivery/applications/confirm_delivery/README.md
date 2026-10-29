@@ -33,7 +33,7 @@ sequenceDiagram
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-316, FR-318.
-- **Порты:** `DeliveryAuthorization` (`ConfirmDelivery` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
+- **Порты:** `DeliveryAuthorization` (`ConfirmDelivery` над `Courier(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `CandidateWake` (порт слайса `courier`, после commit).
 - **Порты (дополнительно):** `DeliveryRelationshipWriter`.
 - **Транзакция:** UoW: `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit (`release_assignment`) + Outbox (`DeliveryCompleted`); повтор назначенным курьером — no-op без записи.
 - **Relationship:** назначение закончилось, поэтому курьер теряет `delivery#act_as_courier` и `order#view` (AC-690); `Delivery.courier_id` сохраняется как факт. Revision `DELETE` сохраняется с доставкой (FR-447). Неудачный `DELETE` откатывает UoW: доставка остаётся picked up, курьер не освобождён, Outbox пуст (AC-692).

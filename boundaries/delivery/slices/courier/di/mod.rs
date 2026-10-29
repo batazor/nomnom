@@ -8,6 +8,7 @@ use shaku::{Component, HasComponent, Interface, module};
 
 use crate::pkg::application::{Clock, Subject};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::{
@@ -28,6 +29,8 @@ pub trait CourierPorts: Interface {
     fn publisher(&self) -> &dyn CourierPositionPublisher;
     fn clock(&self) -> &dyn Clock;
     fn relationships(&self) -> &dyn CourierRelationshipWriter;
+    /// Courier search of the Market woken by an available courier (FR-706).
+    fn wake(&self) -> &dyn CandidateWake;
 }
 
 /// Числовые параметры слайса; значения задаёт корневой `di`.
@@ -99,6 +102,7 @@ impl CourierUseCases for CourierUseCasesImpl {
         set_courier_availability::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
+            wake: self.ports.wake(),
         }
         .execute(subject, input)
     }
@@ -127,6 +131,7 @@ impl CourierUseCases for CourierUseCasesImpl {
             locations: self.ports.locations(),
             channels: self.ports.channels(),
             publisher: self.ports.publisher(),
+            wake: self.ports.wake(),
             clock: self.ports.clock(),
             persist_interval_seconds: self.settings.persist_interval_seconds(),
         }

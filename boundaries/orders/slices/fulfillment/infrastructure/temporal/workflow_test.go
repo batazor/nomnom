@@ -65,7 +65,6 @@ func newHarness(t *testing.T) *harness {
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityCancelRestaurantOrder,
 		temporal.ActivityCreateDelivery,
-		temporal.ActivityReplanDelivery,
 		temporal.ActivityCancelDelivery,
 		temporal.ActivityCompleteOrder,
 		temporal.ActivityFailOrCancelOrder,
@@ -233,36 +232,27 @@ func TestWorkflowExtendsPreparationOnDelay(t *testing.T) {
 	assert.Equal(t, temporal.OutcomeCompleted, result.Outcome)
 }
 
-// AC-437: deadline timers replan and escalate, the OperatorDecision Signal
-// reaches the model and the Saga runs as Activities.
-func TestWorkflowEscalatesAssignmentToOperator(t *testing.T) {
+// AC-968: the workflow waits for Courier Assignment without a deadline: a
+// day without a courier calls no Activity of delivery and changes no Order.
+func TestWorkflowWaitsForCourierWithoutDeadline(t *testing.T) {
 	h := newHarness(t)
 	h.signalAt(time.Minute, temporal.SignalRestaurantOrderAccepted, "accepted")
 	h.signalAt(10*time.Minute, temporal.SignalRestaurantOrderReady, "ready")
-	h.env.RegisterDelayedCallback(func() {
-		h.env.SignalWorkflow(temporal.SignalOperatorDecision, temporal.OperatorDecision{
-			DecisionID: "decision-1",
-			Choice:     temporal.OperatorCancel,
-		})
-	}, 50*time.Minute)
+	h.signalAt(24*time.Hour, temporal.SignalCourierAssignedToDelivery, "assigned")
+	h.signalAt(24*time.Hour+time.Minute, temporal.SignalDeliveryPickedUp, "picked-up")
+	h.signalAt(24*time.Hour+2*time.Minute, temporal.SignalDeliveryCompleted, "delivered")
 
 	result := h.run(policy())
 
-	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCancellation, ReasonCode: temporal.ReasonOperatorDecision}, result)
+	assert.Equal(t, temporal.OutcomeCompleted, result.Outcome)
 	assert.Equal(t, []string{
 		temporal.ActivityAuthorizePayment,
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
-		temporal.ActivityReplanDelivery,
-		temporal.ActivityReplanDelivery,
-		temporal.ActivityCancelDelivery,
-		temporal.ActivityCancelRestaurantOrder,
-		temporal.ActivityCancelPaymentAuthorization,
-		temporal.ActivityFailOrCancelOrder,
+		temporal.ActivityCapturePayment,
+		temporal.ActivityCompleteOrder,
 	}, h.calls)
-	assert.Equal(t, "order:order-1:replan_delivery_1", h.steps[4].IdempotencyKey)
-	assert.Equal(t, "order:order-1:replan_delivery_2", h.steps[5].IdempotencyKey)
 }
 
 // AC-439: a Delivery failure Signal after Capture runs the refund Saga.

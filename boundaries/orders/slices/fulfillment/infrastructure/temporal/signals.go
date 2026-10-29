@@ -47,16 +47,6 @@ func (r *run) listen(ctx workflow.Context) error {
 		})
 	}
 
-	decisions := workflow.GetSignalChannel(ctx, SignalOperatorDecision)
-	workflow.Go(ctx, func(ctx workflow.Context) {
-		for {
-			var decision OperatorDecision
-			decisions.Receive(ctx, &decision)
-			effect := r.process.Decide(fulfillment.OperatorDecision{DecisionID: decision.DecisionID, Choice: decision.Choice})
-			r.receive(ctx, SignalOperatorDecision, decision.DecisionID, effect)
-		}
-	})
-
 	return workflow.SetUpdateHandlerWithOptions(ctx, UpdateCancellationRequested, r.onCancellation,
 		workflow.UpdateHandlerOptions{Validator: r.validateCancellation})
 }

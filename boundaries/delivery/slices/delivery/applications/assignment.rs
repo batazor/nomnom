@@ -1,5 +1,5 @@
 //! Release of a Courier Assignment, shared by every use case that ends one:
-//! Reassign Courier and Replan Delivery (through `end_assignment`), Cancel
+//! Reassign Courier (through `end_assignment`), Cancel
 //! Delivery, Confirm Delivery and Report Delivery Failure. The caller runs
 //! the delivery transition and saves the delivery in its Unit of Work.
 

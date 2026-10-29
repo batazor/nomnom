@@ -22,7 +22,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-// activityNames are the 16 Activities the fulfillment worker registers.
+// activityNames are the 15 Activities the fulfillment worker registers.
 var activityNames = []string{
 	fulfillmenttemporal.ActivityAuthorizePayment,
 	fulfillmenttemporal.ActivityCapturePayment,
@@ -32,7 +32,6 @@ var activityNames = []string{
 	fulfillmenttemporal.ActivityRequestRestaurantOrder,
 	fulfillmenttemporal.ActivityCancelRestaurantOrder,
 	fulfillmenttemporal.ActivityCreateDelivery,
-	fulfillmenttemporal.ActivityReplanDelivery,
 	fulfillmenttemporal.ActivityCancelDelivery,
 	fulfillmenttemporal.ActivityCompleteOrder,
 	fulfillmenttemporal.ActivityFailOrCancelOrder,

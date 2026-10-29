@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::application::{AuthorizationError, RelationshipWriteError};
 use crate::pkg::persistence::RepositoryError;
+use crate::slices::courier::applications::candidate_wake::CandidateWakeError;
 use crate::slices::courier::domains::courier::{
     CourierError, CourierId, CourierNameError, LocationError, MarketIdError,
 };
@@ -89,6 +90,12 @@ impl From<CourierError> for CourierApplicationError {
 
 impl From<RelationshipWriteError> for CourierApplicationError {
     fn from(error: RelationshipWriteError) -> Self {
+        Self::DependencyUnavailable(error.to_string())
+    }
+}
+
+impl From<CandidateWakeError> for CourierApplicationError {
+    fn from(error: CandidateWakeError) -> Self {
         Self::DependencyUnavailable(error.to_string())
     }
 }

@@ -35,7 +35,6 @@ var activityPriority = map[string]int{
 	ActivityRequestRestaurantOrder:     PriorityFulfillment,
 	ActivityQueueRestaurantOrder:       PriorityFulfillment,
 	ActivityCreateDelivery:             PriorityFulfillment,
-	ActivityReplanDelivery:             PriorityFulfillment,
 	ActivityCapturePayment:             PriorityFulfillment,
 	ActivityCancelRestaurantOrder:      PriorityFulfillment,
 	ActivityCancelDelivery:             PriorityFulfillment,
@@ -56,7 +55,6 @@ var activityByStep = map[fulfillment.StepKind]string{
 	fulfillment.StepRequestRestaurantOrder:     ActivityRequestRestaurantOrder,
 	fulfillment.StepCancelRestaurantOrder:      ActivityCancelRestaurantOrder,
 	fulfillment.StepCreateDelivery:             ActivityCreateDelivery,
-	fulfillment.StepReplanDelivery:             ActivityReplanDelivery,
 	fulfillment.StepCancelDelivery:             ActivityCancelDelivery,
 	fulfillment.StepCompleteOrder:              ActivityCompleteOrder,
 	fulfillment.StepFailOrCancelOrder:          ActivityFailOrCancelOrder,
@@ -134,9 +132,7 @@ func (r *run) drive(ctx workflow.Context) (Result, error) {
 		next := r.process.NextDeadline()
 		now := workflow.Now(ctx)
 		if !next.IsZero() && !next.After(now) {
-			if r.process.Expire(now) == fulfillment.ExpiryEscalation {
-				r.log.Warn("courier assignment exhausted, waiting for operator decision", "replans", r.process.Replans())
-			}
+			r.process.Expire(now)
 			continue
 		}
 		r.changed = false

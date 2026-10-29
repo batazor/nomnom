@@ -105,12 +105,21 @@ spec:
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
             {{- include "delivery.databaseEnv" (dict "root" . "maxConns" .Values.database.pool.maxConns) | nindent 12 }}
-            # FR-666: Valkey потока позиций курьеров обязателен.
+            # FR-708: Temporal обязателен API (start и signals Assignment Workflow) и worker.
+            - name: TEMPORAL__HOST_PORT
+              value: {{ required "temporal.hostPort is required (FR-708)" .Values.temporal.hostPort | quote }}
+            - name: TEMPORAL__NAMESPACE
+              value: {{ required "temporal.namespace is required (FR-708)" .Values.temporal.namespace | quote }}
+            - name: TEMPORAL__CONNECT_TIMEOUT
+              value: {{ required "temporal.connectTimeout is required (FR-708)" .Values.temporal.connectTimeout | quote }}
+            {{- if .Values.service.enabled }}
+            # FR-666: Valkey потока позиций курьеров обязателен процессу с gRPC API.
             - name: VALKEY__URL
               valueFrom:
                 secretKeyRef:
                   name: {{ required "valkey.urlSecret.name is required (FR-666)" .Values.valkey.urlSecret.name | quote }}
                   key: {{ required "valkey.urlSecret.key is required (FR-666)" .Values.valkey.urlSecret.key | quote }}
+            {{- end }}
             {{- include "delivery.otelEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}

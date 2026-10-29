@@ -6,7 +6,7 @@ Temporal-адаптер процесса Order Fulfillment по [ADR 5](../../..
 
 | Файл | Содержание |
 | --- | --- |
-| `contract.go` | Workflow ID `order:<order_id>`, task queue `orders`, имена Signals/Update/Activities, payloads, коды причин; `Outcome`, `Stage`, `OperatorChoice` и коды причин — alias'ы типов модели |
+| `contract.go` | Workflow ID `order:<order_id>`, task queue `orders`, имена Signals/Update/Activities, payloads, коды причин; `Outcome`, `Stage` и коды причин — alias'ы типов модели |
 | `policy.go` | `Policy` — deadlines модели во входе workflow плюс переключатель `PublishStage`; `DefaultPolicy` содержит placeholders, а не продуктовые сроки |
 | `workflow.go` | Главный цикл: исполняет `Next` модели как Activity, ждёт `NextDeadline`, вызывает `Expire`, публикует `Stage`, исполняет план `Compensate` |
 | `signals.go` | Signals → `Apply`/`Decide` модели и журнал непринятых фактов; Update `CancellationRequested`: validator — `AdmitCancellation`, handler — `AcceptCancellation` |
@@ -28,11 +28,11 @@ AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → [
 | Deadline (`Policy`) | По истечении |
 | --- | --- |
 | `AcceptanceTimeout` | `restaurant_acceptance_timeout` |
-| `AssignmentTimeout` | `ReplanDelivery` до `MaxReplans`, затем stage `waiting_operator` |
-| `OperatorDecisionTimeout` | `courier_assignment_exhausted` |
 | `PreparationTimeout` (+ `PreparationDelayed` до `MaxPreparationExtension`) | `preparation_timeout` |
 | `PickupTimeout` | `pickup_timeout` |
 | `DeliveryTimeout` | `delivery_timeout` |
+
+Courier Assignment срока не имеет: workflow ждёт `CourierAssignedToDelivery`, поиск ведёт Assignment Workflow `delivery` (FR-709).
 
 Отрицательный итог запускает Saga по журналу шагов: `CancelDelivery` → `CancelRestaurantOrder` → `RefundPayment` после Capture или `CancelPaymentAuthorization`, затем `FailOrCancelOrder`. Шаг, закрытый владельцем (отказ ресторана, `PreparationFailed`, `DeliveryFailed`), не компенсируется. Ресторан запрашивается только после записи оплаты в `Order`: при отказе Authorization Restaurant Order не создан и `CancelRestaurantOrder` не нужен; у `RecordPaymentAuthorization` компенсации нет.
 
@@ -44,7 +44,7 @@ Update `CancellationRequested` принимается до Pickup; позже и
 
 ## Activities
 
-Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `replan_delivery_2`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`, прочитанного Activity на каждой попытке: так `market_id` Order ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) попадает в `payments.CreatePayment` и `delivery.CreateDelivery`. Данные `Order` не добавляются во вход (`Input`, `StepInput`) и состояние workflow: в Event History уже начатых workflow таких полей нет, а сохранённый `Order` их имеет, поэтому replay детерминирован без versioning. Отказ платежа — `PaymentDecision`, а не ошибка. `RecordPaymentAuthorization` вызывает use case [Record Payment Authorization](../../../order/applications/recordpaymentauthorization/README.md) с `StepInput.DecidedAt` (время Workflow, как у `CompleteOrder`); повтор после commit — no-op. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
+Ключ идемпотентности — `order:<order_id>:<step>` (`authorize_payment`, `create_delivery`, …), не зависит от attempt. Запросы к соседям строятся из snapshot `Order`, прочитанного Activity на каждой попытке: так `market_id` Order ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) попадает в `payments.CreatePayment` и `delivery.CreateDelivery`. Данные `Order` не добавляются во вход (`Input`, `StepInput`) и состояние workflow: в Event History уже начатых workflow таких полей нет, а сохранённый `Order` их имеет, поэтому replay детерминирован без versioning. Отказ платежа — `PaymentDecision`, а не ошибка. `RecordPaymentAuthorization` вызывает use case [Record Payment Authorization](../../../order/applications/recordpaymentauthorization/README.md) с `StepInput.DecidedAt` (время Workflow, как у `CompleteOrder`); повтор после commit — no-op. Retryability задаёт таблица `retryabilityByKind` по виду `errorkind.Classify`: `invalid_input` — `InvalidInput`, `not_found` — `OrderNotFound`, `domain_rule` (запрет FSM, guard, правило домена) — `InvalidTransition`, все non-retryable; остальное повторяется (Start-To-Close 30s, 1s → ×2 → 1m).
 
 Приоритет задач ([ADR 5](../../../../docs/adr/0005-order-fulfillment-orchestration.md#приоритет-и-fairness-task-queue)): `Client.Start` задаёт fairness key `restaurant_id` в `StartWorkflowOptions.Priority` — workflow tasks и Activities наследуют его; `activityContext` ставит priority key из `activityPriority` (`PriorityCustomer` 1, `PriorityFulfillment` 2, `PriorityBookkeeping` 3). `Register` отказывает Activity без уровня. Ключи не входят в `Input` и `StepInput`: это опции задач, replay от них не зависит.
 

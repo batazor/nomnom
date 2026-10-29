@@ -4,13 +4,17 @@
 //! it is written only when the stored one is older than the persist
 //! interval. Every accepted position of a courier with an active delivery is
 //! published to the Tracking Channel of that delivery (FR-661) — a live
-//! stream without Integration Events or Outbox.
+//! stream without Integration Events or Outbox. A stored position of an
+//! available courier wakes the courier search of its Market (FR-706).
 
 use crate::pkg::application::{Clock, Subject};
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::domains::courier::{CourierId, CourierRepository, Location};
+use crate::slices::courier::domains::courier::{
+    CourierId, CourierRepository, CourierStatus, Location,
+};
 
 use super::authorization::{CourierAuthorization, CourierPermission, check_courier_or_dispatcher};
+use super::candidate_wake::CandidateWake;
 use super::courier_id;
 use super::error::{CourierApplicationError, InvalidCourierRequest};
 
@@ -69,6 +73,7 @@ pub struct Handler<'a> {
     pub locations: &'a dyn CourierLocationStore,
     pub channels: &'a dyn ActiveTrackingChannel,
     pub publisher: &'a dyn CourierPositionPublisher,
+    pub wake: &'a dyn CandidateWake,
     pub clock: &'a dyn Clock,
     /// `TRACKING__PERSIST_INTERVAL` in seconds.
     pub persist_interval_seconds: i64,
@@ -91,18 +96,24 @@ impl Handler<'_> {
             &courier_id,
         )?;
 
-        if self.couriers.get(&courier_id)?.is_none() {
+        let Some(courier) = self.couriers.get(&courier_id)? else {
             return Err(CourierApplicationError::CourierNotFound(courier_id));
-        }
+        };
         let position = CourierPosition {
             courier_id,
             location,
             recorded_at_epoch_seconds: self.clock.now_epoch_seconds(),
         };
-        self.locations
+        let stored = self
+            .locations
             .record(&position, self.persist_interval_seconds)?;
         if let Some(channel) = self.channels.active_channel(&position.courier_id)? {
             self.publisher.publish(&channel, &position)?;
+        }
+        // A stored position makes an available courier a Courier Candidate
+        // (FR-542): it may take a Delivery that found no candidate (FR-706).
+        if stored && courier.status() == CourierStatus::Available {
+            self.wake.courier_available(&position.courier_id)?;
         }
         Ok(Output { position })
     }
@@ -112,7 +123,8 @@ impl Handler<'_> {
 mod tests {
     use super::*;
     use crate::infrastructure::memory::{
-        ManualClock, RecordingPositionPublisher, StaticAuthorization,
+        AssignmentCall, ManualClock, RecordingAssignment, RecordingPositionPublisher,
+        StaticAuthorization,
     };
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::applications::authorization::CourierResource;
@@ -153,6 +165,7 @@ mod tests {
         store: &'a TestStore,
         authorization: &'a StaticAuthorization,
         publisher: &'a RecordingPositionPublisher,
+        wake: &'a RecordingAssignment,
         clock: &'a ManualClock,
     ) -> Handler<'a> {
         Handler {
@@ -161,6 +174,7 @@ mod tests {
             locations: store,
             channels: store,
             publisher,
+            wake,
             clock,
             persist_interval_seconds: PERSIST_INTERVAL,
         }
@@ -186,9 +200,10 @@ mod tests {
             CourierResource::Platform,
         );
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
 
-        handler(&store, &authorization, &publisher, &clock)
+        handler(&store, &authorization, &publisher, &wake, &clock)
             .execute(&dispatcher, input(52.52, 13.405))
             .expect("dispatcher records the position");
 
@@ -206,8 +221,9 @@ mod tests {
         let store = seeded();
         let authorization = StaticAuthorization::allow_all();
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
-        let handler = handler(&store, &authorization, &publisher, &clock);
+        let handler = handler(&store, &authorization, &publisher, &wake, &clock);
 
         handler.execute(&subject(), input(1.0, 2.0)).expect("first");
         clock.advance(PERSIST_INTERVAL);
@@ -239,8 +255,9 @@ mod tests {
         store.assigned_delivery_with_channel("courier-1", "ab".repeat(16).as_str());
         let authorization = StaticAuthorization::allow_all();
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
-        let handler = handler(&store, &authorization, &publisher, &clock);
+        let handler = handler(&store, &authorization, &publisher, &wake, &clock);
 
         handler.execute(&subject(), input(1.0, 2.0)).expect("first");
         clock.advance(3);
@@ -267,9 +284,10 @@ mod tests {
         let store = seeded();
         let authorization = StaticAuthorization::allow_all();
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
 
-        handler(&store, &authorization, &publisher, &clock)
+        handler(&store, &authorization, &publisher, &wake, &clock)
             .execute(&subject(), input(1.0, 2.0))
             .expect("recorded");
 
@@ -283,10 +301,11 @@ mod tests {
         store.assigned_delivery_with_channel("courier-1", "ab".repeat(16).as_str());
         let authorization = StaticAuthorization::allow_all();
         let publisher = RecordingPositionPublisher::failing("valkey down");
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
 
         assert_eq!(
-            handler(&store, &authorization, &publisher, &clock)
+            handler(&store, &authorization, &publisher, &wake, &clock)
                 .execute(&subject(), input(1.0, 2.0)),
             Err(CourierApplicationError::DependencyUnavailable(
                 "valkey down".to_owned()
@@ -300,8 +319,9 @@ mod tests {
         let store = seeded();
         let authorization = StaticAuthorization::allow_all();
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
-        let handler = handler(&store, &authorization, &publisher, &clock);
+        let handler = handler(&store, &authorization, &publisher, &wake, &clock);
         handler.execute(&subject(), input(1.0, 2.0)).expect("seed");
 
         assert_eq!(
@@ -325,10 +345,11 @@ mod tests {
         let store = TestStore::new();
         let authorization = StaticAuthorization::allow_all();
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
 
         assert_eq!(
-            handler(&store, &authorization, &publisher, &clock)
+            handler(&store, &authorization, &publisher, &wake, &clock)
                 .execute(&subject(), input(1.0, 2.0)),
             Err(CourierApplicationError::CourierNotFound(CourierId::new(
                 "courier-1"
@@ -342,13 +363,61 @@ mod tests {
         let store = seeded();
         let authorization = StaticAuthorization::deny_all();
         let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
         let clock = ManualClock::new(1_000);
 
         assert_eq!(
-            handler(&store, &authorization, &publisher, &clock)
+            handler(&store, &authorization, &publisher, &wake, &clock)
                 .execute(&subject(), input(1.0, 2.0)),
             Err(CourierApplicationError::PermissionDenied)
         );
         assert_eq!(store.latest(&CourierId::new("courier-1")), Ok(None));
+    }
+
+    /// FR-706: a stored position makes an available courier a Courier
+    /// Candidate; a position kept by the persist interval does not wake again.
+    #[test]
+    fn stored_position_of_an_available_courier_wakes_the_search() {
+        let store = seeded();
+        let mut courier = store
+            .get(&CourierId::new("courier-1"))
+            .expect("read")
+            .expect("courier");
+        courier.mark_available().expect("available");
+        store.save(&courier).expect("save");
+        let authorization = StaticAuthorization::allow_all();
+        let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
+        let clock = ManualClock::new(1_000);
+        let handler = handler(&store, &authorization, &publisher, &wake, &clock);
+
+        handler
+            .execute(&subject(), input(1.0, 2.0))
+            .expect("stored");
+        clock.advance(3);
+        handler.execute(&subject(), input(3.0, 4.0)).expect("kept");
+
+        assert_eq!(
+            wake.calls(),
+            vec![AssignmentCall::CourierAvailable(CourierId::new(
+                "courier-1"
+            ))]
+        );
+    }
+
+    /// An unavailable courier is no candidate: its position wakes nothing.
+    #[test]
+    fn position_of_an_unavailable_courier_wakes_nothing() {
+        let store = seeded();
+        let authorization = StaticAuthorization::allow_all();
+        let publisher = RecordingPositionPublisher::new();
+        let wake = RecordingAssignment::new();
+        let clock = ManualClock::new(1_000);
+
+        handler(&store, &authorization, &publisher, &wake, &clock)
+            .execute(&subject(), input(1.0, 2.0))
+            .expect("stored");
+
+        assert_eq!(wake.calls(), Vec::new());
     }
 }

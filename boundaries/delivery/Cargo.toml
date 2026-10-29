@@ -10,8 +10,13 @@ path = "lib.rs"
 name = "delivery"
 path = "cmd/delivery/main.rs"
 
+[[bin]]
+name = "delivery-worker"
+path = "cmd/delivery-worker/main.rs"
+
 [dependencies]
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
+futures = "0.3.34"
 getrandom = "0.4.3"
 http = "1.5.0"
 humantime = "2.4.0"
@@ -27,6 +32,11 @@ redis = { version = "1.8.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 shaku = "0.6.3"
+temporalio-client = { version = "1.1.0", default-features = false, features = ["vendored-protox"] }
+temporalio-common = { version = "1.1.0", default-features = false, features = ["vendored-protox"] }
+temporalio-macros = "1.1.0"
+temporalio-sdk = { version = "1.1.0", default-features = false }
+temporalio-workflow = "1.1.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "tls-rustls-ring-webpki"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "io-util", "sync"] }
 tonic = { version = "0.14.6", features = ["tls-ring", "tls-webpki-roots"] }
@@ -34,6 +44,7 @@ tonic-prost = "0.14.4"
 tower = { version = "0.5.3", default-features = false }
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["registry", "std"] }
+url = "2.5.8"
 uuid = { version = "1.29.0", default-features = false, features = ["std", "v5", "v7"] }
 
 [dev-dependencies]

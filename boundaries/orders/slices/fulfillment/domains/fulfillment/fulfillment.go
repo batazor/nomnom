@@ -1,6 +1,5 @@
 // Package fulfillment is the domain model of the Order Fulfillment process:
-// the journal of confirmed steps, facts of neighbouring contexts, replans,
-// escalation and deadlines. Operations return decisions instead of performing
+// the journal of confirmed steps, facts of neighbouring contexts and deadlines. Operations return decisions instead of performing
 // side effects; the model reads no clock and generates no randomness, so the
 // caller passes the time and executes the steps (ADR 5, FR-483).
 package fulfillment
@@ -23,12 +22,10 @@ const (
 	ReasonRestaurantAcceptanceTimeout = "restaurant_acceptance_timeout"
 	ReasonPreparationFailed           = "preparation_failed"
 	ReasonPreparationTimeout          = "preparation_timeout"
-	ReasonCourierAssignmentExhausted  = "courier_assignment_exhausted"
 	ReasonPickupTimeout               = "pickup_timeout"
 	ReasonDeliveryFailed              = "delivery_failed"
 	ReasonDeliveryTimeout             = "delivery_timeout"
 	ReasonCustomerRequested           = "customer_requested"
-	ReasonOperatorDecision            = "operator_decision"
 	// ReasonSlotUnavailable: the hold of the Delivery Window expired and the
 	// window filled up before ConfirmSlotReservation (FR-682).
 	ReasonSlotUnavailable = "slot_unavailable"
@@ -40,10 +37,8 @@ func ReasonCodes() []string {
 		ReasonPaymentDeclined, ReasonPaymentCaptureDeclined,
 		ReasonRestaurantRejected, ReasonRestaurantAcceptanceTimeout,
 		ReasonPreparationFailed, ReasonPreparationTimeout,
-		ReasonCourierAssignmentExhausted, ReasonPickupTimeout,
-		ReasonDeliveryFailed, ReasonDeliveryTimeout,
-		ReasonCustomerRequested, ReasonOperatorDecision,
-		ReasonSlotUnavailable,
+		ReasonPickupTimeout, ReasonDeliveryFailed, ReasonDeliveryTimeout,
+		ReasonCustomerRequested, ReasonSlotUnavailable,
 	}
 }
 
@@ -75,13 +70,7 @@ type Process struct {
 	pickedUp bool
 	done     bool
 
-	replans   int
-	replanDue bool
-	escalated bool
-
 	acceptanceDeadline  time.Time
-	assignmentDeadline  time.Time
-	operatorDeadline    time.Time
 	preparationDeadline time.Time
 	preparationLimit    time.Time
 	pickupDeadline      time.Time
@@ -117,9 +106,6 @@ func (p *Process) Failed() bool { return p.failure != nil && p.final == "" }
 
 // Completed reports that the Order completed.
 func (p *Process) Completed() bool { return p.final == StageCompleted }
-
-// Replans is the number of confirmed ReplanDelivery steps.
-func (p *Process) Replans() int { return p.replans }
 
 // Outcome is the business outcome once chosen: completed, or the negative
 // outcome with its reason code. It is empty while the route runs.

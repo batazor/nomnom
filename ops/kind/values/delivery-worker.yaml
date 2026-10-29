@@ -1,0 +1,18 @@
+# Values тестового kind-окружения для release delivery-worker chart boundaries/delivery/ops/helm
+# поверх values-worker.yaml (ADR 12, FR-708): Assignment Workflow. image задаёт Skaffold
+# (setValueTemplates).
+image:
+  pullPolicy: Never
+
+# Temporal dev server (manifests/messaging/infrastructure.yaml), тот же, что у release delivery.
+temporal:
+  hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+  namespace: default
+
+# Burstable без CPU limit, как release delivery; профиль worker ещё не измерен, limit — тот же.
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 128Mi

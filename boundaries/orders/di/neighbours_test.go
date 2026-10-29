@@ -43,8 +43,6 @@ func (approvingNeighbours) CancelOrder(context.Context, ports.RestaurantOrderReq
 
 func (approvingNeighbours) Create(context.Context, ports.DeliveryRequest) error { return nil }
 
-func (approvingNeighbours) Replan(context.Context, ports.DeliveryRequest) error { return nil }
-
 func (approvingNeighbours) Cancel(context.Context, ports.DeliveryRequest) error { return nil }
 
 func testNeighbours() fulfillmentdi.Neighbours {

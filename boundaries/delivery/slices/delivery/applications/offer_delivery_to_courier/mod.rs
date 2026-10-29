@@ -3,13 +3,15 @@
 //! same time-limited `Delivery Offer` the assignment process makes; the
 //! courier accepts or rejects it, and until then other offers of the delivery
 //! stay open. The offer and its `DeliveryOffered` fact are written in one
-//! Unit of Work by [`make_offer`].
+//! Unit of Work by [`make_offer`]. After commit the Assignment Workflow of the
+//! delivery is woken, so it waits for the answer or the deadline of the offer.
 
 use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
 
+use super::assignment_process::{AssignmentProcess, WakeReason};
 use super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::error::DeliveryApplicationError;
 use super::offer_delivery::{OfferPorts, Output, make_offer};
@@ -34,6 +36,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
+    pub assignment: &'a dyn AssignmentProcess,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -50,7 +53,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             &DeliveryResource::Platform,
         )?;
 
-        self.unit_of_work.run(|| {
+        let offer = self.unit_of_work.run(|| {
             let delivery = load_delivery_by_order(self.deliveries, &order_id)?;
             make_offer(
                 &delivery,
@@ -65,7 +68,10 @@ impl<U: UnitOfWork> Handler<'_, U> {
                     policy: self.policy,
                 },
             )
-        })
+        })?;
+        self.assignment
+            .wake(&offer.delivery_id, WakeReason::OfferMade)?;
+        Ok(offer)
     }
 }
 
@@ -94,6 +100,7 @@ mod tests {
             ids: &world.ids,
             clock: &world.clock,
             policy: world.policy,
+            assignment: &world.assignment,
         }
     }
 

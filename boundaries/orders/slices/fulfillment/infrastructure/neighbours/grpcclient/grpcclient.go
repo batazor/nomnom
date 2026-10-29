@@ -239,24 +239,6 @@ func (d *Delivery) Create(ctx context.Context, request neighbours.DeliveryReques
 	return mapError("delivery.CreateDelivery", err)
 }
 
-// Replan is best effort: a state precondition (a candidate became busy, the
-// courier was assigned meanwhile) is logged, and the next assignment deadline
-// of the workflow replans again instead of failing the Order.
-func (d *Delivery) Replan(ctx context.Context, request neighbours.DeliveryRequest) error {
-	resp, err := d.client.ReplanDelivery(ctx, &deliveryv1.ReplanDeliveryRequest{OrderId: request.OrderID})
-	if status.Code(err) == codes.FailedPrecondition {
-		slog.InfoContext(ctx, "replan of delivery skipped", slog.String("order_id", request.OrderID), "error", err)
-		return nil
-	}
-	if err != nil {
-		return mapError("delivery.ReplanDelivery", err)
-	}
-	if resp.GetOfferedCourierId() == "" {
-		slog.InfoContext(ctx, "replan of delivery found no courier", slog.String("order_id", request.OrderID))
-	}
-	return nil
-}
-
 // Cancel treats a rejection by state as done, like CancelOrder.
 func (d *Delivery) Cancel(ctx context.Context, request neighbours.DeliveryRequest) error {
 	resp, err := d.client.CancelDelivery(ctx, &deliveryv1.CancelDeliveryRequest{OrderId: request.OrderID})

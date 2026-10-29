@@ -32,10 +32,10 @@ sequenceDiagram
 
 ## Реализация
 
-- **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-312. Без авторизации снятие выполняет сервис `end_assignment` в UoW вызывающего, его же вызывает Replan Delivery.
-- **Порты:** `DeliveryAuthorization` (`ReassignCourier` над `Delivery(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`.
+- **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-312. Снятие выполняет функция `end_assignment` внутри UoW; после commit use case будит Assignment Workflow доставки и поиск Market освобождённым курьером.
+- **Порты:** `DeliveryAuthorization` (`ReassignCourier` над `Delivery(id)`), `UnitOfWork`, `DeliveryRepository`, `CourierAssignment` (порт слайса `courier`), `DeliveryOutbox`, `AssignmentProcess` (после commit), `CandidateWake` (порт слайса `courier`, после commit).
 - **Транзакция:** UoW: `Delivery` (`assigned → waiting`) + освобождение `Courier` и DELETE `delivery#courier` до commit (`release_assignment`, FR-444, FR-447) + Outbox (`CourierUnassignedFromDelivery`).
-- **Допущение:** Переназначение после Pickup запрещено; поиск замены запускает вызывающий процесс (Replan Delivery) или следующий проход Dispatch Deliveries.
+- **Допущение:** Переназначение после Pickup запрещено; поиск замены продолжает Assignment Workflow доставки (FR-312).
 
 ## Acceptance
 

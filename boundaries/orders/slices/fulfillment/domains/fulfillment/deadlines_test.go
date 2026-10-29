@@ -10,32 +10,22 @@ import (
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
 )
 
-// AC-546: with MaxReplans = 2 the model replans twice and escalates on the
-// third expiry of the courier assignment deadline.
-func TestProcessReplansAssignmentThenEscalates(t *testing.T) {
+// AC-968, AC-969: the courier assignment has no deadline; a day without a
+// courier yields neither a step nor a deadline, and the process keeps
+// waiting for CourierAssignedToDelivery.
+func TestProcessWaitsForCourierWithoutDeadline(t *testing.T) {
 	s := newProcess(t).accepted()
 	s.fact(fulfillment.FactRestaurantOrderReady)
-	require.Equal(t, 2, fulfillment.DefaultPolicy().MaxReplans)
 
-	var replans []fulfillment.Step
-	for range 2 {
-		require.Equal(t, fulfillment.ExpiryReplan, s.expire())
-		step, ok := s.p.Next()
-		require.True(t, ok)
-		require.Equal(t, fulfillment.StepReplanDelivery, step.Kind)
-		replans = append(replans, step)
-		s.p.Confirm(step, true, s.now)
-	}
-	require.Equal(t, fulfillment.ExpiryEscalation, s.expire())
-	escalatedAt := s.now
-
-	assert.Equal(t, []string{"replan_delivery_1", "replan_delivery_2"}, keysOf(replans))
-	assert.Equal(t, 2, s.p.Replans())
-	assert.Equal(t, fulfillment.StageWaitingOperator, s.p.Stage())
-	assert.False(t, s.p.Failed())
+	assert.True(t, s.p.NextDeadline().IsZero())
+	assert.Equal(t, fulfillment.ExpiryNone, s.p.Expire(s.now.Add(24*time.Hour)))
 	_, ok := s.p.Next()
-	assert.False(t, ok, "the escalated process waits for the operator")
-	assert.Equal(t, escalatedAt.Add(fulfillment.DefaultPolicy().OperatorDecisionTimeout), s.p.NextDeadline())
+	assert.False(t, ok)
+	assert.False(t, s.p.Failed())
+	assert.Equal(t, fulfillment.StagePreparing, s.p.Stage())
+
+	s.fact(fulfillment.FactCourierAssignedToDelivery)
+	assert.Equal(t, fulfillment.StageWaitingPickup, s.p.Stage())
 }
 
 // Every deadline of the Policy turns into its business branch.
@@ -44,21 +34,13 @@ func TestProcessExpiresDeadlines(t *testing.T) {
 		s.accepted()
 		s.fact(fulfillment.FactCourierAssignedToDelivery)
 	}
-	escalated := func(s *process) {
-		s.accepted()
-		for s.expire() != fulfillment.ExpiryEscalation {
-			s.run()
-		}
-	}
 	for name, tc := range map[string]struct {
 		arrange func(*process)
 		timeout time.Duration
 		reason  string
 	}{
 		// AC-435
-		"acceptance": {arrange: func(s *process) { s.run() }, timeout: fulfillment.DefaultPolicy().AcceptanceTimeout, reason: fulfillment.ReasonRestaurantAcceptanceTimeout},
-		"operator decision": {arrange: escalated, timeout: fulfillment.DefaultPolicy().OperatorDecisionTimeout,
-			reason: fulfillment.ReasonCourierAssignmentExhausted},
+		"acceptance":  {arrange: func(s *process) { s.run() }, timeout: fulfillment.DefaultPolicy().AcceptanceTimeout, reason: fulfillment.ReasonRestaurantAcceptanceTimeout},
 		"preparation": {arrange: assigned, timeout: fulfillment.DefaultPolicy().PreparationTimeout, reason: fulfillment.ReasonPreparationTimeout},
 		"pickup": {arrange: func(s *process) {
 			assigned(s)
@@ -117,5 +99,5 @@ func TestProcessNextDeadlineIsNearestActive(t *testing.T) {
 	s.at(time.Minute).accepted()
 
 	policy := fulfillment.DefaultPolicy()
-	assert.Equal(t, s.now.Add(min(policy.AssignmentTimeout, policy.PreparationTimeout)), s.p.NextDeadline())
+	assert.Equal(t, s.now.Add(policy.PreparationTimeout), s.p.NextDeadline())
 }

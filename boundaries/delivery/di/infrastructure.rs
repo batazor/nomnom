@@ -17,6 +17,7 @@ use crate::pkg::application::{Clock, IdGenerator, TransactionScope, UnitOfWorkEr
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::applications::update_courier_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPositionPublisher,
@@ -25,10 +26,9 @@ use crate::slices::courier::di::{CourierDependencies, CourierPorts, CourierSetti
 use crate::slices::courier::domains::courier::{
     CourierId, CourierRepository, CourierStatus, MarketId,
 };
+use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
-use crate::slices::delivery::applications::dispatch_deliveries::WaitingDeliveries;
-use crate::slices::delivery::applications::expire_delivery_offers::ExpiredDeliveryOffers;
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
@@ -39,7 +39,6 @@ use crate::slices::delivery::applications::relationships::DeliveryRelationshipWr
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
-    WaitingDeliveriesQuery,
 };
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryEstimatePolicy, DeliveryFailureCode, DeliveryId, DeliveryOffer,
@@ -53,7 +52,7 @@ use crate::slices::simulator::applications::authorization::SimulatorAuthorizatio
 use crate::slices::simulator::di::{SimulatorDependencies, SimulatorPorts, SimulatorStore};
 
 /// Локальные значения политики назначения до появления продуктовых настроек.
-const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
+pub(super) const LOCAL_ASSIGNMENT_POLICY: AssignmentPolicy = AssignmentPolicy {
     maximum_distance_meters: 5_000,
     maximum_active_assignments: 1,
     offer_ttl_seconds: 60,
@@ -103,8 +102,6 @@ pub struct ProcessStores {
     pub couriers: Arc<dyn CourierStore>,
     pub transactional: Arc<dyn TransactionalStore>,
     pub read_models: Arc<dyn DeliveryReadModels>,
-    /// Выборка Dispatch Deliveries: только PostgreSQL.
-    pub waiting: Arc<dyn WaitingDeliveriesQuery>,
     /// Переключатель и работа Simulator.
     pub simulator: Arc<dyn SimulatorStore>,
 }
@@ -114,21 +111,31 @@ impl ProcessStores {
     #[must_use]
     pub fn over<S>(store: &Arc<S>) -> Self
     where
-        S: CourierStore
-            + TransactionalStore
-            + DeliveryReadModels
-            + WaitingDeliveriesQuery
-            + SimulatorStore
-            + 'static,
+        S: CourierStore + TransactionalStore + DeliveryReadModels + SimulatorStore + 'static,
     {
         Self {
             couriers: Arc::clone(store) as _,
             transactional: Arc::clone(store) as _,
             read_models: Arc::clone(store) as _,
-            waiting: Arc::clone(store) as _,
             simulator: Arc::clone(store) as _,
         }
     }
+}
+
+/// Assignment Workflow процесса: Temporal
+/// ([`TemporalAssignment`](crate::infrastructure::temporal::TemporalAssignment)),
+/// записывающий только в тестах. Один адаптер закрывает start и wake слайса
+/// `delivery` и пробуждение поиска курьером обоих слайсов.
+pub trait ProcessAssignment: AssignmentProcess + CandidateWake + Send + Sync {}
+
+impl<T: AssignmentProcess + CandidateWake + Send + Sync> ProcessAssignment for T {}
+
+/// Адаптеры назначения процесса: идентификаторы, локатор курьеров и
+/// Assignment Workflow.
+pub struct AssignmentAdapters {
+    pub ids: Box<dyn ProcessIds>,
+    pub locator: Box<dyn ProcessLocator>,
+    pub process: Arc<dyn ProcessAssignment>,
 }
 
 /// Адаптер авторизации процесса: закрывает порты всех слайсов.
@@ -246,6 +253,7 @@ impl Clock for SystemClock {
 pub struct LocalCourierPorts {
     store: Arc<dyn CourierStore>,
     publisher: Box<dyn ProcessPositionPublisher>,
+    assignment: Arc<dyn ProcessAssignment>,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -282,6 +290,10 @@ impl CourierPorts for LocalCourierPorts {
     fn relationships(&self) -> &dyn CourierRelationshipWriter {
         self.relationships.courier()
     }
+
+    fn wake(&self) -> &dyn CandidateWake {
+        &*self.assignment
+    }
 }
 
 #[derive(Component)]
@@ -289,7 +301,7 @@ impl CourierPorts for LocalCourierPorts {
 pub struct LocalDeliveryPorts {
     store: ObservedStore,
     read_models: Arc<dyn DeliveryReadModels>,
-    waiting: Arc<dyn WaitingDeliveriesQuery>,
+    assignment: Arc<dyn ProcessAssignment>,
     #[shaku(inject)]
     authorization: Arc<dyn SharedAuthorization>,
     #[shaku(inject)]
@@ -308,7 +320,7 @@ const DELIVERY_FAILURE_REASONS: &[&str] = &DeliveryFailureCode::CODES;
 
 /// Business metrics, FSM transitions and the Delivery Failure log of the
 /// process.
-fn observed_outbox() -> ObservedOutbox {
+pub(super) fn observed_outbox() -> ObservedOutbox {
     ObservedOutbox::new(
         DomainMetrics::global(DELIVERY_FAILURE_REASONS),
         TransitionMetrics::global(),
@@ -382,17 +394,6 @@ impl OffersOfDelivery for ObservedStore {
         delivery_id: &DeliveryId,
     ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
         self.inner.offer_ids_of(delivery_id)
-    }
-}
-
-impl ExpiredDeliveryOffers for ObservedStore {
-    fn expired_pending_offer_ids(
-        &self,
-        now_epoch_seconds: i64,
-        limit: usize,
-    ) -> Result<Vec<DeliveryOfferId>, RepositoryError> {
-        self.inner
-            .expired_pending_offer_ids(now_epoch_seconds, limit)
     }
 }
 
@@ -481,10 +482,6 @@ impl DeliveryPorts for LocalDeliveryPorts {
         &*self.read_models
     }
 
-    fn waiting_deliveries(&self) -> &dyn WaitingDeliveries {
-        &*self.waiting
-    }
-
     fn locator(&self) -> &dyn CourierLocator {
         &*self.locator
     }
@@ -507,6 +504,14 @@ impl DeliveryPorts for LocalDeliveryPorts {
 
     fn random(&self) -> &dyn RandomSource {
         &*self.random
+    }
+
+    fn assignment(&self) -> &dyn AssignmentProcess {
+        &*self.assignment
+    }
+
+    fn candidates(&self) -> &dyn CandidateWake {
+        &*self.assignment
     }
 }
 
@@ -583,8 +588,7 @@ impl SimulatorDependencies for InfrastructureModule {}
 #[must_use]
 pub(super) fn infrastructure(
     stores: ProcessStores,
-    ids: Box<dyn ProcessIds>,
-    locator: Box<dyn ProcessLocator>,
+    assignment: AssignmentAdapters,
     authorization: Box<dyn ProcessAuthorization>,
     relationships: Box<dyn ProcessRelationships>,
     tracking: ProcessTracking,
@@ -601,6 +605,7 @@ pub(super) fn infrastructure(
             .with_component_parameters::<LocalCourierPorts>(LocalCourierPortsParameters {
                 store: stores.couriers,
                 publisher: tracking.publisher,
+                assignment: Arc::clone(&assignment.process),
             })
             .with_component_parameters::<LocalCourierSettings>(LocalCourierSettingsParameters {
                 persist_interval_seconds: tracking.persist_interval_seconds,
@@ -614,9 +619,9 @@ pub(super) fn infrastructure(
             .with_component_parameters::<LocalDeliveryPorts>(LocalDeliveryPortsParameters {
                 store: ObservedStore::new(stores.transactional, observed_outbox()),
                 read_models: stores.read_models,
-                waiting: stores.waiting,
-                locator,
-                ids,
+                assignment: assignment.process,
+                locator: assignment.locator,
+                ids: assignment.ids,
                 city: tracking.city,
                 random: tracking.random,
             })

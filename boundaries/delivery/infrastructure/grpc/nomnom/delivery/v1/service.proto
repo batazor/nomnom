@@ -22,7 +22,6 @@ service DeliveryService {
 
   // Command RPCs of the Order Fulfillment Workflow of orders, idempotent by order_id.
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
-  rpc ReplanDelivery(ReplanDeliveryRequest) returns (ReplanDeliveryResponse);
   rpc CancelDelivery(CancelDeliveryRequest) returns (CancelDeliveryResponse);
   // Delivery Duration Estimate of a Market for planning scheduled orders
   // (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
@@ -141,16 +140,6 @@ message CreateDeliveryResponse {
   string delivery_id = 1;
   // false when an identical earlier request already created it.
   bool created = 2;
-}
-
-message ReplanDeliveryRequest {
-  string order_id = 1;
-}
-
-message ReplanDeliveryResponse {
-  string delivery_id = 1;
-  // Courier offered the Delivery by this replan; empty when no candidate was found.
-  string offered_courier_id = 2;
 }
 
 message CancelDeliveryRequest {

@@ -57,6 +57,12 @@ spicedb:
   presharedKeySecret:
     name: spicedb-preshared-key
 
+# FR-707: Create Delivery и ответы курьеров запускают и будят Assignment Workflow в Temporal
+# dev server (manifests/messaging/infrastructure.yaml); исполняет его release delivery-worker.
+temporal:
+  hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+  namespace: default
+
 # ADR 37: Outbox публикует коннектор Debezium delivery-outbox в Kafka Connect nomnom-infra;
 # пароль Connect читает из Secret cdc-credentials (ключ delivery-password).
 cdc:

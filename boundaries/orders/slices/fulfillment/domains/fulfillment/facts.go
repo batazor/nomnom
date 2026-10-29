@@ -1,9 +1,6 @@
 package fulfillment
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 // FactKind is a business fact of the Order or of a neighbouring context.
 type FactKind string
@@ -34,20 +31,7 @@ type Fact struct {
 	ExpectedReadyAt time.Time
 }
 
-type OperatorChoice string
-
-const (
-	OperatorRetryAssignment OperatorChoice = "retry_assignment"
-	OperatorCancel          OperatorChoice = "cancel"
-)
-
-// OperatorDecision resolves an escalated courier assignment.
-type OperatorDecision struct {
-	DecisionID string
-	Choice     OperatorChoice
-}
-
-// Verdict says how the process treated an incoming fact or decision.
+// Verdict says how the process treated an incoming fact.
 type Verdict int
 
 const (
@@ -63,7 +47,7 @@ const (
 	Refused
 )
 
-// Effect is the result of applying a fact or a decision.
+// Effect is the result of applying a fact.
 type Effect struct {
 	Verdict Verdict
 	// Reason is the diagnostic reason of Refused.
@@ -73,15 +57,9 @@ type Effect struct {
 // Changed reports that the process admitted the input and must re-evaluate its route.
 func (e Effect) Changed() bool { return e.Verdict == Applied }
 
-// Apply applies a fact received at the given time. Ids are deduplicated
-// across facts and operator decisions.
+// Apply applies a fact received at the given time. Ids are deduplicated.
 func (p *Process) Apply(fact Fact, at time.Time) Effect {
 	return p.receive(fact.EventID, func() string { return p.admit(fact, at) })
-}
-
-// Decide applies the decision of the operator on an escalated assignment.
-func (p *Process) Decide(decision OperatorDecision) Effect {
-	return p.receive(decision.DecisionID, func() string { return p.onOperatorDecision(decision) })
 }
 
 // receive deduplicates by id, ignores input once the outcome is chosen and
@@ -216,8 +194,6 @@ func (p *Process) onAssigned(at time.Time) string {
 		return "already assigned"
 	}
 	p.assigned = true
-	p.escalated = false
-	p.replanDue = false
 	p.armPickup(at)
 	return ""
 }
@@ -254,21 +230,5 @@ func (p *Process) onDeliveryFailed() string {
 	}
 	p.deliveryClosed = true
 	p.fail(OutcomeFailure, ReasonDeliveryFailed)
-	return ""
-}
-
-func (p *Process) onOperatorDecision(decision OperatorDecision) string {
-	if !p.escalated {
-		return "no escalation"
-	}
-	switch decision.Choice {
-	case OperatorRetryAssignment:
-		p.escalated = false
-		p.replanDue = true
-	case OperatorCancel:
-		p.fail(OutcomeCancellation, ReasonOperatorDecision)
-	default:
-		return fmt.Sprintf("unknown choice %q", decision.Choice)
-	}
 	return ""
 }
