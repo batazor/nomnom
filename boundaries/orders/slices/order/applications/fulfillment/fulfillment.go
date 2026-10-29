@@ -44,9 +44,12 @@ const (
 // StartRequest carries OrderPlaced of the Order: the workflow is started with
 // it as the first fact and deduplicates it by EventID.
 type StartRequest struct {
-	OrderID    order.ID
-	EventID    string
-	OccurredAt time.Time
+	OrderID order.ID
+	// RestaurantID is the fairness key of the workflow: every restaurant gets
+	// its share of the worker, whatever the load of the others.
+	RestaurantID order.RestaurantID
+	EventID      string
+	OccurredAt   time.Time
 	// DeliveryWindow of OrderPlaced: set starts the scheduled route of a
 	// Scheduled Order (FR-415), zero the ASAP route.
 	DeliveryWindow order.DeliveryWindow

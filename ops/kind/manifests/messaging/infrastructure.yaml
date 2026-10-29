@@ -101,6 +101,8 @@ spec:
       targetPort: kafka
 ---
 # Temporal dev server (тот же образ, что TemporalImage в boundaries/orders/pkg/testfixture).
+# matching.enableFairness включает Task Queue Fairness: orders-worker делит воркер между
+# ресторанами по fairness key = restaurant_id (ADR 5 orders); Priority включён по умолчанию.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -122,7 +124,7 @@ spec:
       containers:
         - name: temporal
           image: docker.io/temporalio/temporal:1.9.1
-          args: [server, start-dev, --ip, 0.0.0.0, --namespace, default]
+          args: [server, start-dev, --ip, 0.0.0.0, --namespace, default, --dynamic-config-value, matching.enableFairness=true]
           ports:
             - name: grpc
               containerPort: 7233

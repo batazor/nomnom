@@ -207,7 +207,7 @@ func MustStartSpiceDB() *SpiceDB {
 func (s *SpiceDB) Close() { closeContainer(s.container) }
 
 // Temporal is a Temporal dev server (`temporal server start-dev`) with the
-// default namespace.
+// default namespace and Task Queue Fairness enabled, as in kind.
 type Temporal struct {
 	Address   string
 	container testcontainers.Container
@@ -219,7 +219,7 @@ func StartTemporal(ctx context.Context) (*Temporal, error) {
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        TemporalImage,
 			ExposedPorts: []string{"7233/tcp"},
-			Cmd:          []string{"server", "start-dev", "--ip", "0.0.0.0", "--headless"},
+			Cmd:          []string{"server", "start-dev", "--ip", "0.0.0.0", "--headless", "--dynamic-config-value", "matching.enableFairness=true"},
 			WaitingFor: wait.ForAll(
 				wait.ForListeningPort("7233/tcp"),
 				wait.ForExec([]string{"temporal", "operator", "namespace", "describe", "--namespace", "default"}),

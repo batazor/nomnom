@@ -67,6 +67,21 @@ Activity, меняющая `orders`, вызывает handler слайса, ко
 
 Каждая Activity имеет явные Start-To-Close timeout и Retry Policy; длительные — heartbeat. Business rejection возвращается результатом, не technical retry.
 
+### Приоритет и fairness task queue
+
+Workflow и Activities одного `Order` делят task queue `orders`. Когда задач больше, чем слотов worker'а, порядок выдачи задают [Task Queue Priority и Fairness](https://docs.temporal.io/develop/task-queue-priority-fairness) Temporal; уже выданные worker'у задачи они не меняют.
+
+- **Fairness key — `restaurant_id`.** Каждое заведение работает независимо, поэтому ключ — ресторан, а не сеть или Market. Ключ задаётся при `SignalWithStart` из `Order`, который consumer читает в UoW старта; workflow tasks (Signals, Update `CancellationRequested`) и Activities наследуют его. Ресторан в пике — ASAP или запланированные заказы одного окна — получает свою долю worker'а и не задерживает задачи остальных. Веса у ресторанов одинаковые (1.0), переопределения весов не используются. Старт без `restaurant_id` — ошибка.
+- **Priority key — по Activity**, строго между уровнями, fairness — внутри уровня:
+  - `1` — ждёт покупатель или его деньги: `AuthorizePayment`, `CancelPaymentAuthorization`, `RefundPayment`, `ConfirmSlotReservation`;
+  - `2` — ждут кухня или курьер, компенсации: `RequestRestaurantOrder`, `QueueRestaurantOrder`, `CreateDelivery`, `ReplanDelivery`, `CapturePayment`, `CancelRestaurantOrder`, `CancelDelivery`, `FailOrCancelOrder`, `RecordPaymentAuthorization`;
+  - `3` — учёт, планирование наперёд и очистка: `CompleteOrder`, `PlanSchedule`, `ReleaseSlotReservation`.
+
+  Activity без уровня не регистрируется: worker не стартует. Workflow tasks отдельного приоритета не имеют — Update отмены идёт с приоритетом workflow, ускоряются её компенсации.
+- **Лимит частоты на fairness key не вводится.** Он задерживал бы задачи ресторана сверх лимита, включая оплату его покупателей, а приём ASAP-заказов по загрузке не ограничивается ([Kitchen](../../../../docs/kitchen.md)). Priority и fairness не отклоняют задачи и admission control не являются.
+
+Fairness включается на сервере: dynamic config `matching.enableFairness=true` для namespace (в kind и testcontainers — флаг dev server); Priority включён по умолчанию. Fairness действует внутри партиции task queue и гарантирована только для задач одной Worker Deployment Version: при выкатке runs старой и новой версии делят worker'ы без общего круга, priority при этом действует.
+
 ### Ожидания и таймеры
 
 Ожидание ресторана, курьера и доставки — Signal плюс Temporal timer; polling запрещён. Timer выражает продуктовый срок и ведёт к бизнес-ветке (replan, escalation, cancellation, compensation, старт запланированного заказа). Workflow-level timeout не задаётся. `PreparationDelayed` продлевает таймер ожидания Preparation.
@@ -149,4 +164,4 @@ API, Kafka consumer и Temporal worker — управляемые процесс
 
 Старт, входящие события, внешние эффекты и компенсации безопасны при at-least-once повторах и crash, а ответственность `payments`, `restaurants` и `delivery` не переходит в `orders`. `Order` остаётся source of truth и доступен без Temporal. У старта один путь — consumer собственного `OrderPlaced`; кухня получает только оплаченные заказы, и оплата видна в `Order` фактом `payment_authorized`.
 
-Цена: два уровня дедупликации; старт workflow зависит от Debezium и Kafka, поэтому при их задержке workflow, а с ним и кухня, стартует позже; кухня ждёт Authorization; рост Event History на длинных заказах (потребуется Continue-As-New). Версионирование `PINNED` убирает патчи и replay tests из саги, но каждое изменение pod template — новая версия, а старая держит поды, пока на ней есть открытые заказы. Production зависит от Temporal Worker Controller и Temporal Server с Worker Deployments (не ниже 1.29.1).
+Цена: два уровня дедупликации; старт workflow зависит от Debezium и Kafka, поэтому при их задержке workflow, а с ним и кухня, стартует позже; кухня ждёт Authorization; рост Event History на длинных заказах (потребуется Continue-As-New). Версионирование `PINNED` убирает патчи и replay tests из саги, но каждое изменение pod template — новая версия, а старая держит поды, пока на ней есть открытые заказы. Production зависит от Temporal Worker Controller и Temporal Server с Worker Deployments (не ниже 1.29.1) и включённой Task Queue Fairness. Priority и fairness видны только при очереди задач: при свободных слотах worker'а порядок не меняется.

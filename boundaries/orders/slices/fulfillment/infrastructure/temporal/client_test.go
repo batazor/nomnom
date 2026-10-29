@@ -30,12 +30,13 @@ var wantStartOptions = client.StartWorkflowOptions{
 	TaskQueue:                temporal.TaskQueue,
 	WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 	WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	Priority:                 sdktemporal.Priority{FairnessKey: "restaurant-1"},
 }
 
 var placedAt = time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
 
 func startRequest() fulfillment.StartRequest {
-	return fulfillment.StartRequest{OrderID: orderID, EventID: "event-1", OccurredAt: placedAt}
+	return fulfillment.StartRequest{OrderID: orderID, RestaurantID: "restaurant-1", EventID: "event-1", OccurredAt: placedAt}
 }
 
 // FR-638: OrderPlaced starts the workflow with a stable identity as its first Signal.
@@ -78,6 +79,16 @@ func TestClientStartOfClosedWorkflowSucceeds(t *testing.T) {
 		Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("closed", "", "run-1"))
 
 	require.NoError(t, c.Start(context.Background(), startRequest()))
+}
+
+// The fairness key of the workflow is its restaurant: a start without it is
+// refused before Temporal.
+func TestClientStartRequiresRestaurant(t *testing.T) {
+	c, _ := newClient(t)
+	request := startRequest()
+	request.RestaurantID = ""
+
+	require.ErrorContains(t, c.Start(context.Background(), request), "restaurant_id is required")
 }
 
 func TestClientStartFailureIsReturned(t *testing.T) {

@@ -13,6 +13,39 @@ import (
 // StageSearchAttribute publishes the low-cardinality Workflow Stage.
 var StageSearchAttribute = temporal.NewSearchAttributeKeyKeyword("OrderFulfillmentStage")
 
+// Priority keys of the Activities (Task Queue Priority): a lower key is
+// dispatched first when tasks back up in the queue. Within a key the fairness
+// key of the workflow (its restaurant) shares the worker between restaurants.
+const (
+	// PriorityCustomer: the customer waits for the result or for the money.
+	PriorityCustomer = 1
+	// PriorityFulfillment: the kitchen or the courier waits; compensations.
+	PriorityFulfillment = 2
+	// PriorityBookkeeping: recording, planning ahead and cleanup can wait.
+	PriorityBookkeeping = 3
+)
+
+// activityPriority assigns every registered Activity its priority key;
+// Register refuses an Activity without one.
+var activityPriority = map[string]int{
+	ActivityAuthorizePayment:           PriorityCustomer,
+	ActivityCancelPaymentAuthorization: PriorityCustomer,
+	ActivityRefundPayment:              PriorityCustomer,
+	ActivityConfirmSlotReservation:     PriorityCustomer,
+	ActivityRequestRestaurantOrder:     PriorityFulfillment,
+	ActivityQueueRestaurantOrder:       PriorityFulfillment,
+	ActivityCreateDelivery:             PriorityFulfillment,
+	ActivityReplanDelivery:             PriorityFulfillment,
+	ActivityCapturePayment:             PriorityFulfillment,
+	ActivityCancelRestaurantOrder:      PriorityFulfillment,
+	ActivityCancelDelivery:             PriorityFulfillment,
+	ActivityFailOrCancelOrder:          PriorityFulfillment,
+	ActivityRecordPaymentAuthorization: PriorityFulfillment,
+	ActivityCompleteOrder:              PriorityBookkeeping,
+	ActivityPlanSchedule:               PriorityBookkeeping,
+	ActivityReleaseSlotReservation:     PriorityBookkeeping,
+}
+
 // activityByStep maps the steps decided by the model to registered Activities.
 var activityByStep = map[fulfillment.StepKind]string{
 	fulfillment.StepAuthorizePayment:           ActivityAuthorizePayment,
@@ -219,7 +252,7 @@ func (r *run) compensate(ctx workflow.Context) (Result, error) {
 			ReasonCode: code,
 			DecidedAt:  workflow.Now(ctx),
 		}
-		if err := workflow.ExecuteActivity(r.activityContext(ctx), ActivityFailOrCancelOrder, finalize).Get(ctx, nil); err != nil {
+		if err := workflow.ExecuteActivity(r.activityContext(ctx, ActivityFailOrCancelOrder), ActivityFailOrCancelOrder, finalize).Get(ctx, nil); err != nil {
 			return Result{}, err
 		}
 		r.process.Confirm(step, true, workflow.Now(ctx))
@@ -231,10 +264,12 @@ func (r *run) compensate(ctx workflow.Context) (Result, error) {
 }
 
 func (r *run) executeStep(ctx workflow.Context, activity string, input StepInput, result any) error {
-	return workflow.ExecuteActivity(r.activityContext(ctx), activity, input).Get(ctx, result)
+	return workflow.ExecuteActivity(r.activityContext(ctx, activity), activity, input).Get(ctx, result)
 }
 
-func (r *run) activityContext(ctx workflow.Context) workflow.Context {
+// activityContext sets the priority key of the Activity; the fairness key is
+// inherited from the workflow.
+func (r *run) activityContext(ctx workflow.Context, activity string) workflow.Context {
 	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -242,5 +277,6 @@ func (r *run) activityContext(ctx workflow.Context) workflow.Context {
 			BackoffCoefficient: 2,
 			MaximumInterval:    time.Minute,
 		},
+		Priority: temporal.Priority{PriorityKey: activityPriority[activity]},
 	})
 }

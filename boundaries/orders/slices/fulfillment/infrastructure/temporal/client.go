@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/domains/order"
 )
 
 var signalByKind = map[fulfillment.Kind]string{
@@ -49,9 +48,12 @@ func NewClient(temporal client.Client, policy Policy) *Client {
 // (SignalWithStart): the running workflow is reused and deduplicates the
 // event_id, a closed one is not started again.
 func (c *Client) Start(ctx context.Context, request fulfillment.StartRequest) error {
+	if request.RestaurantID == "" {
+		return errors.New("start order fulfillment workflow: restaurant_id is required")
+	}
 	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(string(request.OrderID)), SignalOrderPlaced,
 		Fact{EventID: request.EventID, OccurredAt: request.OccurredAt},
-		c.startOptions(request.OrderID), WorkflowName, c.input(request))
+		c.startOptions(request), WorkflowName, c.input(request))
 	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 		return fmt.Errorf("signal-with-start order fulfillment workflow: %w", err)
 	}
@@ -91,12 +93,16 @@ func (c *Client) RequestCancellation(ctx context.Context, request fulfillment.Ca
 	return mapError(err, "request order cancellation")
 }
 
-func (c *Client) startOptions(orderID order.ID) client.StartWorkflowOptions {
+// startOptions keys the workflow by its restaurant for Task Queue Fairness:
+// workflow tasks and Activities inherit the key, so a restaurant at its peak
+// does not hold back the tasks of the others.
+func (c *Client) startOptions(request fulfillment.StartRequest) client.StartWorkflowOptions {
 	return client.StartWorkflowOptions{
-		ID:                       WorkflowID(string(orderID)),
+		ID:                       WorkflowID(string(request.OrderID)),
 		TaskQueue:                TaskQueue,
 		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Priority:                 temporal.Priority{FairnessKey: string(request.RestaurantID)},
 	}
 }
 

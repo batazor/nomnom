@@ -114,7 +114,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	send := func(eventID string, f fact) { require.NoError(t, f(ctx, string(orderID)+":"+eventID)) }
 	now := time.Now().UTC()
 
-	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID}))
+	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID, RestaurantID: "restaurant-1"}))
 	waitActivity(fulfillmenttemporal.ActivityRequestRestaurantOrder)
 	send("accepted", func(ctx context.Context, id string) error {
 		_, err := confirm.Handle(ctx, confirmorder.Input{EventID: id, OrderID: orderID, OccurredAt: now})
@@ -158,6 +158,29 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	versioning := execution.GetWorkflowExecutionInfo().GetVersioningInfo()
 	assert.Equal(t, enumspb.VERSIONING_BEHAVIOR_PINNED, versioning.GetBehavior())
 	assert.Equal(t, cfg.Temporal.BuildID, versioning.GetDeploymentVersion().GetBuildId())
+
+	// Task Queue Priority & Fairness: the server keeps the fairness key of the
+	// workflow (its restaurant) and the priority key of every Activity.
+	priorities := map[string]int32{}
+	history := temporalClient.GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for history.HasNext() {
+		event, err := history.Next()
+		require.NoError(t, err)
+		if attributes := event.GetWorkflowExecutionStartedEventAttributes(); attributes != nil {
+			assert.Equal(t, "restaurant-1", attributes.GetPriority().GetFairnessKey())
+		}
+		if attributes := event.GetActivityTaskScheduledEventAttributes(); attributes != nil {
+			priorities[attributes.GetActivityType().GetName()] = attributes.GetPriority().GetPriorityKey()
+		}
+	}
+	assert.Equal(t, map[string]int32{
+		fulfillmenttemporal.ActivityAuthorizePayment:           fulfillmenttemporal.PriorityCustomer,
+		fulfillmenttemporal.ActivityRecordPaymentAuthorization: fulfillmenttemporal.PriorityFulfillment,
+		fulfillmenttemporal.ActivityRequestRestaurantOrder:     fulfillmenttemporal.PriorityFulfillment,
+		fulfillmenttemporal.ActivityCreateDelivery:             fulfillmenttemporal.PriorityFulfillment,
+		fulfillmenttemporal.ActivityCapturePayment:             fulfillmenttemporal.PriorityFulfillment,
+		fulfillmenttemporal.ActivityCompleteOrder:              fulfillmenttemporal.PriorityBookkeeping,
+	}, priorities)
 }
 
 // activityCompleted reports whether an Activity of the given type completed in

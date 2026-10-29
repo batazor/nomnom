@@ -32,7 +32,7 @@ func newHandler(t *testing.T, options ...ordertest.Option) (*repositorytest.Stor
 	return store, workflow, startfulfillment.NewHandler(store, store, store, workflow)
 }
 
-var started = fulfillment.StartRequest{OrderID: "order-1", EventID: "event-1", OccurredAt: occurredAt}
+var started = fulfillment.StartRequest{OrderID: "order-1", RestaurantID: "restaurant-1", EventID: "event-1", OccurredAt: occurredAt}
 
 // AC-827: the first delivery records the Inbox and starts the workflow once.
 func TestStartsWorkflow(t *testing.T) {

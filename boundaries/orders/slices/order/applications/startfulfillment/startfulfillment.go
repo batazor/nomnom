@@ -76,12 +76,14 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	}
 
 	var final bool
+	var restaurant order.RestaurantID
 	readOrder := func(ctx context.Context) error {
 		current, err := h.orders.Get(ctx, in.OrderID)
 		if err != nil {
 			return err
 		}
 		final = current.State().IsFinal()
+		restaurant = current.RestaurantID()
 		return nil
 	}
 	accepted, err := application.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, readOrder)
@@ -99,7 +101,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{Outcome: fulfillment.OutcomeIgnoredLate}, nil
 	}
 
-	err = h.workflow.Start(ctx, fulfillment.StartRequest{OrderID: in.OrderID, EventID: in.EventID, OccurredAt: in.OccurredAt, DeliveryWindow: window})
+	err = h.workflow.Start(ctx, fulfillment.StartRequest{OrderID: in.OrderID, RestaurantID: restaurant, EventID: in.EventID, OccurredAt: in.OccurredAt, DeliveryWindow: window})
 	if err != nil {
 		return Result{Outcome: outcome}, fmt.Errorf("%w: start order fulfillment workflow: %w", application.ErrDependencyUnavailable, err)
 	}

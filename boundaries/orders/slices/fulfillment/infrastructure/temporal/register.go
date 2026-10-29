@@ -14,6 +14,8 @@ type Registry interface {
 // Register adds the workflow and its Activities under stable names to a worker
 // polling task queue TaskQueue. The workflow is Pinned (ADR 5): a run finishes
 // on the Worker Deployment Version it started on, so its code is not patched.
+// Every Activity must have a priority key; one without it stops the worker
+// at start.
 func Register(registry Registry, activities *Activities) {
 	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{
 		Name:               WorkflowName,
@@ -37,6 +39,9 @@ func Register(registry Registry, activities *Activities) {
 		ActivityQueueRestaurantOrder:       activities.QueueRestaurantOrder,
 		ActivityReleaseSlotReservation:     activities.ReleaseSlotReservation,
 	} {
+		if _, ok := activityPriority[name]; !ok {
+			panic("temporal: activity " + name + " has no priority key")
+		}
 		registry.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}
 }

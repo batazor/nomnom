@@ -9,8 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/interceptor"
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 )
@@ -25,12 +28,15 @@ type harness struct {
 	steps    []temporal.StepInput
 	finalize temporal.FinalizeInput
 	declined map[string]bool
+	// priorities are the priority keys the Activities were scheduled with.
+	priorities map[string]int
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	suite := &testsuite.WorkflowTestSuite{}
-	h := &harness{t: t, env: suite.NewTestWorkflowEnvironment(), declined: map[string]bool{}}
+	h := &harness{t: t, env: suite.NewTestWorkflowEnvironment(), declined: map[string]bool{}, priorities: map[string]int{}}
+	h.env.SetWorkerOptions(worker.Options{Interceptors: []interceptor.WorkerInterceptor{&priorityRecorder{priorities: h.priorities}}})
 	temporal.Register(h.env, &temporal.Activities{})
 
 	record := func(name string) func(mock.Arguments) {
@@ -70,6 +76,36 @@ func newHarness(t *testing.T) *harness {
 		Return(temporal.RestaurantOrderRequested{RestaurantOrderID: "ro-1"}, nil).
 		Run(record(temporal.ActivityRequestRestaurantOrder)).Maybe()
 	return h
+}
+
+// priorityRecorder records the priority key of every scheduled Activity: the
+// test environment does not pass it to the Activity Info.
+type priorityRecorder struct {
+	interceptor.WorkerInterceptorBase
+	priorities map[string]int
+}
+
+func (r *priorityRecorder) InterceptWorkflow(_ workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
+	return &priorityInbound{WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next}, priorities: r.priorities}
+}
+
+type priorityInbound struct {
+	interceptor.WorkflowInboundInterceptorBase
+	priorities map[string]int
+}
+
+func (i *priorityInbound) Init(outbound interceptor.WorkflowOutboundInterceptor) error {
+	return i.Next.Init(&priorityOutbound{WorkflowOutboundInterceptorBase: interceptor.WorkflowOutboundInterceptorBase{Next: outbound}, priorities: i.priorities})
+}
+
+type priorityOutbound struct {
+	interceptor.WorkflowOutboundInterceptorBase
+	priorities map[string]int
+}
+
+func (o *priorityOutbound) ExecuteActivity(ctx workflow.Context, activityType string, args ...any) workflow.Future {
+	o.priorities[activityType] = workflow.GetActivityOptions(ctx).Priority.PriorityKey
+	return o.Next.ExecuteActivity(ctx, activityType, args...)
 }
 
 // declinePayment makes a financial Activity return a business decline.
@@ -250,6 +286,29 @@ func TestWorkflowRefundsAfterCapture(t *testing.T) {
 		temporal.ActivityRefundPayment,
 		temporal.ActivityFailOrCancelOrder,
 	}, h.calls)
+}
+
+// Task Queue Priority: the customer-facing payment steps go first, the kitchen,
+// the courier and compensations next, bookkeeping last.
+func TestWorkflowSchedulesActivitiesWithTheirPriority(t *testing.T) {
+	h := newHarness(t)
+	h.signalAt(time.Minute, temporal.SignalRestaurantOrderAccepted, "accepted")
+	h.signalAt(2*time.Minute, temporal.SignalCourierAssignedToDelivery, "assigned")
+	h.signalAt(3*time.Minute, temporal.SignalRestaurantOrderReady, "ready")
+	h.signalAt(4*time.Minute, temporal.SignalDeliveryPickedUp, "picked-up")
+	h.signalAt(5*time.Minute, temporal.SignalDeliveryFailed, "failed")
+
+	h.run(policy())
+
+	assert.Equal(t, map[string]int{
+		temporal.ActivityAuthorizePayment:           temporal.PriorityCustomer,
+		temporal.ActivityRefundPayment:              temporal.PriorityCustomer,
+		temporal.ActivityRecordPaymentAuthorization: temporal.PriorityFulfillment,
+		temporal.ActivityRequestRestaurantOrder:     temporal.PriorityFulfillment,
+		temporal.ActivityCreateDelivery:             temporal.PriorityFulfillment,
+		temporal.ActivityCapturePayment:             temporal.PriorityFulfillment,
+		temporal.ActivityFailOrCancelOrder:          temporal.PriorityFulfillment,
+	}, h.priorities)
 }
 
 // AC-442: a Cancellation before Acceptance cancels the Restaurant Order and Authorization.

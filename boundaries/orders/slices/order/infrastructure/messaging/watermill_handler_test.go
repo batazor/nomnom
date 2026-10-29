@@ -168,7 +168,7 @@ func TestRestaurantOrderAcceptedConfirmsOrder(t *testing.T) {
 // FR-638: the own OrderPlaced starts the workflow of the Order.
 func TestOrderPlacedStartsWorkflow(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
-	c.starter.EXPECT().Start(mock.Anything, fulfillment.StartRequest{OrderID: "order-1", EventID: "event-placed", OccurredAt: occurredAt}).
+	c.starter.EXPECT().Start(mock.Anything, fulfillment.StartRequest{OrderID: "order-1", RestaurantID: "restaurant-1", EventID: "event-placed", OccurredAt: occurredAt}).
 		Return(nil).Once()
 
 	c.publish(t, outbound.OrderEventsTopic, "event-placed", &ordersv1.OrderPlaced{OrderId: "order-1"})
@@ -184,7 +184,7 @@ func TestScheduledOrderPlacedStartsWorkflowWithWindow(t *testing.T) {
 	require.NoError(t, err)
 	c := startConsumer(t, ordertest.New(t, "order-1", ordertest.WithDeliveryWindow(t, start, start.Add(15*time.Minute))))
 	c.starter.EXPECT().Start(mock.Anything, fulfillment.StartRequest{
-		OrderID: "order-1", EventID: "event-placed", OccurredAt: occurredAt, DeliveryWindow: window,
+		OrderID: "order-1", RestaurantID: "restaurant-1", EventID: "event-placed", OccurredAt: occurredAt, DeliveryWindow: window,
 	}).Return(nil).Once()
 
 	c.publish(t, outbound.OrderEventsTopic, "event-placed", &ordersv1.OrderPlaced{
