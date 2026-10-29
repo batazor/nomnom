@@ -117,7 +117,9 @@ export function getRuntimeConfig(): RuntimeConfig {
   if (!import.meta.env.PROD) return parseRuntimeConfig(import.meta.env);
   const deployed = globalThis.__NOMNOM_CONFIG__;
   if (deployed === undefined) {
-    throw new Error("/config.js of the deployment did not set __NOMNOM_CONFIG__");
+    throw new Error(
+      "/config.js of the deployment did not set __NOMNOM_CONFIG__",
+    );
   }
   return parseRuntimeConfig(deployed);
 }
