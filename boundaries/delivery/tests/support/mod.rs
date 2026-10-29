@@ -24,6 +24,8 @@ const SPICEDB_IMAGE: &str = "authzed/spicedb";
 const SPICEDB_TAG: &str = "v1.57.0";
 const SPICEDB_KEY: &str = "devkey";
 const SPICEDB_GRPC: u16 = 50051;
+/// Loopback, the address of the ports Docker publishes for the tests: an IP literal keeps clients off the DNS of the host (a gRPC client also looks up TXT _grpc_config.<host> for a name, which a slow local resolver answers in seconds).
+const LOOPBACK: &str = "127.0.0.1";
 
 static CONTAINERS: Mutex<Vec<Box<dyn Any + Send>>> = Mutex::new(Vec::new());
 static DATABASE: OnceLock<String> = OnceLock::new();
@@ -100,10 +102,9 @@ fn start_postgres() -> String {
         .with_cmd(["postgres", "-c", "max_connections=500"])
         .start()
         .expect("start postgres container");
-    let host = container.get_host().expect("container host");
     let port = container.get_host_port_ipv4(5432).expect("container port");
     keep(container);
-    let uri = format!("postgres://postgres:postgres@{host}:{port}/postgres");
+    let uri = format!("postgres://postgres:postgres@{LOOPBACK}:{port}/postgres");
     migrate(&database::Config {
         uri: uri.clone(),
         ..database::Config::default()
@@ -141,12 +142,11 @@ pub fn spicedb(timeout: Duration) -> SpiceDbConfig {
                 ])
                 .start()
                 .expect("start spicedb container");
-            let host = container.get_host().expect("container host");
             let port = container
                 .get_host_port_ipv4(SPICEDB_GRPC)
                 .expect("container port");
             keep(container);
-            format!("{host}:{port}")
+            format!("{LOOPBACK}:{port}")
         })
     });
     SpiceDbConfig {

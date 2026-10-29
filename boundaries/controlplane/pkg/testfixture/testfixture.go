@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -64,7 +65,7 @@ func StartPostgres(ctx context.Context) (*Postgres, error) {
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("start postgres: %w", err))
 	}
-	endpoint, err := c.PortEndpoint(ctx, "5432/tcp", "")
+	endpoint, err := loopbackEndpoint(ctx, c, "5432/tcp")
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("postgres endpoint: %w", err))
 	}
@@ -116,7 +117,7 @@ func StartSpiceDB(ctx context.Context) (*SpiceDB, error) {
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("start spicedb: %w", err))
 	}
-	endpoint, err := c.PortEndpoint(ctx, "50051/tcp", "")
+	endpoint, err := loopbackEndpoint(ctx, c, "50051/tcp")
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("spicedb endpoint: %w", err))
 	}
@@ -133,6 +134,21 @@ func MustStartSpiceDB() *SpiceDB {
 }
 
 func (s *SpiceDB) Close() { closeContainer(s.container) }
+
+// loopback is the address of the ports Docker publishes for the tests. An IP
+// literal keeps clients off the DNS of the host: the gRPC resolver looks up
+// TXT _grpc_config.<host> for a name, which a slow local resolver answers in
+// seconds.
+const loopback = "127.0.0.1"
+
+// loopbackEndpoint is "127.0.0.1:<published port>" of a container port.
+func loopbackEndpoint(ctx context.Context, c testcontainers.Container, port string) (string, error) {
+	mapped, err := c.MappedPort(ctx, port)
+	if err != nil {
+		return "", err
+	}
+	return net.JoinHostPort(loopback, mapped.Port()), nil
+}
 
 // terminate removes a container that failed to start, keeping the start error.
 func terminate(c testcontainers.Container, err error) error {

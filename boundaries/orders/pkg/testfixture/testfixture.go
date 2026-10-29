@@ -73,7 +73,7 @@ func StartPostgres(ctx context.Context) (*Postgres, error) {
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("start postgres: %w", err))
 	}
-	endpoint, err := c.PortEndpoint(ctx, "5432/tcp", "")
+	endpoint, err := loopbackEndpoint(ctx, c, "5432/tcp")
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("postgres endpoint: %w", err))
 	}
@@ -102,7 +102,7 @@ type Kafka struct {
 // StartKafka runs the broker. The advertised listener must be the host-mapped
 // address, so the host port is chosen before the container starts.
 func StartKafka(ctx context.Context) (*Kafka, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", net.JoinHostPort(loopback, "0"))
 	if err != nil {
 		return nil, fmt.Errorf("choose kafka port: %w", err)
 	}
@@ -131,7 +131,7 @@ func StartKafka(ctx context.Context) (*Kafka, error) {
 			},
 			HostConfigModifier: func(hc *container.HostConfig) {
 				hc.PortBindings = network.PortMap{
-					network.MustParsePort("9092/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: fmt.Sprint(port)}},
+					network.MustParsePort("9092/tcp"): {{HostIP: netip.MustParseAddr(loopback), HostPort: fmt.Sprint(port)}},
 				}
 			},
 			WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(startupTimeout),
@@ -188,7 +188,7 @@ func StartSpiceDB(ctx context.Context) (*SpiceDB, error) {
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("start spicedb: %w", err))
 	}
-	endpoint, err := c.PortEndpoint(ctx, "50051/tcp", "")
+	endpoint, err := loopbackEndpoint(ctx, c, "50051/tcp")
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("spicedb endpoint: %w", err))
 	}
@@ -230,7 +230,7 @@ func StartTemporal(ctx context.Context) (*Temporal, error) {
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("start temporal: %w", err))
 	}
-	endpoint, err := c.PortEndpoint(ctx, "7233/tcp", "")
+	endpoint, err := loopbackEndpoint(ctx, c, "7233/tcp")
 	if err != nil {
 		return nil, terminate(c, fmt.Errorf("temporal endpoint: %w", err))
 	}
@@ -247,6 +247,21 @@ func MustStartTemporal() *Temporal {
 }
 
 func (t *Temporal) Close() { closeContainer(t.container) }
+
+// loopback is the address of the ports Docker publishes for the tests. An IP
+// literal keeps clients off the DNS of the host: the gRPC resolver looks up
+// TXT _grpc_config.<host> for a name, which a slow local resolver answers in
+// seconds.
+const loopback = "127.0.0.1"
+
+// loopbackEndpoint is "127.0.0.1:<published port>" of a container port.
+func loopbackEndpoint(ctx context.Context, c testcontainers.Container, port string) (string, error) {
+	mapped, err := c.MappedPort(ctx, port)
+	if err != nil {
+		return "", err
+	}
+	return net.JoinHostPort(loopback, mapped.Port()), nil
+}
 
 // terminate removes a container that failed to start, keeping the start error.
 func terminate(c testcontainers.Container, err error) error {

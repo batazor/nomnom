@@ -16,6 +16,10 @@ const MONGODB_IMAGE = "mongo:8.3.13";
 const KAFKA_IMAGE = "apache/kafka:4.4.0";
 const SPICEDB_IMAGE = "authzed/spicedb:v1.57.0";
 const VALKEY_IMAGE = "valkey/valkey:9.1.2-alpine3.24";
+/**
+ * Loopback, the address of the ports Docker publishes for the tests: an IP literal keeps clients off the DNS of the host (a gRPC client also looks up TXT _grpc_config.<host> for a name, which a slow local resolver answers in seconds).
+ */
+const LOOPBACK = "127.0.0.1";
 
 /** Preshared key of the test SpiceDB (same as `make spicedb-dev`). */
 export const SPICEDB_PRESHARED_KEY = "devkey";
@@ -55,7 +59,7 @@ async function startKafka(port: number): Promise<StartedTestContainer> {
       KAFKA_NODE_ID: "1",
       KAFKA_PROCESS_ROLES: "broker,controller",
       KAFKA_LISTENERS: `PLAINTEXT://0.0.0.0:${port},CONTROLLER://localhost:9093`,
-      KAFKA_ADVERTISED_LISTENERS: `PLAINTEXT://localhost:${port}`,
+      KAFKA_ADVERTISED_LISTENERS: `PLAINTEXT://${LOOPBACK}:${port}`,
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER",
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:
         "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
@@ -115,10 +119,10 @@ export async function globalSetup(): Promise<void> {
     startValkey(),
   ]);
   started.push(database, kafka, spicedb, valkey);
-  process.env.MONGODB_URI = `${database.getConnectionString()}/?directConnection=true`;
-  process.env.KAFKA_BROKERS = `localhost:${kafkaPort}`;
-  process.env.SPICEDB_ENDPOINT = `${spicedb.getHost()}:${spicedb.getMappedPort(50051)}`;
-  process.env.VALKEY_URL = `redis://${valkey.getHost()}:${valkey.getMappedPort(6379)}`;
+  process.env.MONGODB_URI = `mongodb://${LOOPBACK}:${database.getMappedPort(27017)}/?directConnection=true`;
+  process.env.KAFKA_BROKERS = `${LOOPBACK}:${kafkaPort}`;
+  process.env.SPICEDB_ENDPOINT = `${LOOPBACK}:${spicedb.getMappedPort(50051)}`;
+  process.env.VALKEY_URL = `redis://${LOOPBACK}:${valkey.getMappedPort(6379)}`;
 }
 
 export async function globalTeardown(): Promise<void> {

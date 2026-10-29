@@ -23,6 +23,8 @@ from pkg import config
 POSTGRES_IMAGE = "postgres:18.6-alpine3.24"
 SPICEDB_IMAGE = "authzed/spicedb:v1.57.0"
 SPICEDB_PRESHARED_KEY = "devkey"
+# Loopback, the address of the ports Docker publishes for the tests: an IP literal keeps clients off the DNS of the host (a gRPC client also looks up TXT _grpc_config.<host> for a name, which a slow local resolver answers in seconds).
+LOOPBACK = "127.0.0.1"
 AUTHORIZATION_DIR = Path(__file__).resolve().parents[3] / "authorization"
 
 
@@ -31,7 +33,7 @@ def database_uri() -> Iterator[str]:
     with PostgresContainer(
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
-        uri = container.get_connection_url()
+        uri = container.get_connection_url(host=LOOPBACK)
         migrate(config.database.Config(DATABASE__URI=uri), MIGRATIONS)
         yield uri
 
@@ -70,7 +72,7 @@ def spicedb_endpoint() -> Iterator[str]:
         .waiting_for(LogMessageWaitStrategy("grpc server started serving").with_startup_timeout(60))
     )
     with container:
-        yield f"{container.get_container_host_ip()}:{container.get_exposed_port(50051)}"
+        yield f"{LOOPBACK}:{container.get_exposed_port(50051)}"
 
 
 @pytest.fixture(scope="class")
