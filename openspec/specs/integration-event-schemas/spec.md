@@ -1,7 +1,7 @@
 # integration-event-schemas Specification
 
 ## Purpose
-TBD - created by archiving change add-event-schema-registry. Update Purpose after archive.
+Определяет схемы Integration Events в Schema Registry (ADR 25): регистрацию из buf-модулей контекстов, subject = `event_type`, совместимость `FULL_TRANSITIVE`, wire format value, который пишет SMT `SchemaFraming` коннекторов Outbox, и проверку формата и subject consumers.
 
 ## Requirements
 

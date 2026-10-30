@@ -176,13 +176,18 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 ### Requirement: Event Envelope совпадает с orders
 **ID:** FR-530
 
-Коннектор SHALL передавать Event Envelope в Kafka headers строками (`SimpleHeaderConverter`): `event_id`, `_watermill_message_uuid` (= `event_id`), `event_type`, `occurred_at` (RFC 3339 UTC), `aggregate_type`, `aggregate_id`, `aggregate_version` (десятичная строка), `traceparent` (пустой без trace context). Value стрима Integration Events MUST быть `payload` в wire format Schema Registry (transform `SchemaFraming`, FR-714). Value Change Notification streams (`*.v1.*-changes`) MUST быть `payload` без изменений (`ByteArrayConverter`).
+Коннектор SHALL передавать Event Envelope в Kafka headers строками (`SimpleHeaderConverter`): `event_id`, `_watermill_message_uuid` (= `event_id`), `event_type`, `occurred_at` (RFC 3339 UTC), `aggregate_type`, `aggregate_id`, `aggregate_version` (десятичная строка), `traceparent` (пустой без trace context).
 
 #### Scenario: Headers опубликованного события
 **ID:** AC-620
 
 - **WHEN** коннектор публикует запись с `occurred_at = 2026-10-25T10:15:30.120000Z` без trace context
 - **THEN** сообщение несёт все headers Envelope, `occurred_at` — RFC 3339 UTC, `traceparent` пустой, а Go consumer `orders` читает `event_id` как UUID сообщения Watermill
+
+### Requirement: Value записи стрима
+**ID:** FR-724
+
+Value стрима Integration Events SHALL быть `payload` в wire format Schema Registry (transform `SchemaFraming`, FR-714). Value Change Notification streams (`*.v1.*-changes`) MUST быть `payload` без изменений (`ByteArrayConverter`).
 
 #### Scenario: Value Integration Event и Change Notification
 **ID:** AC-981
@@ -204,7 +209,7 @@ Mapper Domain Event → Integration Event SHALL находиться в `infrast
 ### Requirement: Развёртывание коннектора
 **ID:** FR-538
 
-Helm chart каждого контекста SHALL содержать конфигурацию коннектора (`cdc.*`) и при `cdc.enabled` создавать ресурс Strimzi `KafkaConnector` `<context>-outbox` в namespace `KafkaConnect` (`nomnom-infra`, label `strimzi.io/cluster: kafka-connect`) с `autoRestart.enabled: true`. Регистрации коннектора через REST Kafka Connect MUST NOT быть. Пароли коннектора MUST браться config provider Kafka Connect (`${dir:...}`), а не храниться в конфигурации. Тестовое kind-окружение SHALL разворачивать Kafka Connect с Debezium в `nomnom-infra` и включать `cdc` в основном release каждого контекста.
+Helm chart каждого контекста SHALL содержать конфигурацию коннектора (`cdc.*`) и при `cdc.enabled` создавать ресурс Strimzi `KafkaConnector` `<context>-outbox` в namespace `KafkaConnect` (`nomnom-infra`, label `strimzi.io/cluster: kafka-connect`) с `autoRestart.enabled: true`. Регистрации коннектора через REST Kafka Connect MUST NOT быть. Тестовое kind-окружение SHALL включать `cdc` в основном release каждого контекста.
 
 #### Scenario: Коннекторы в kind
 **ID:** AC-624
@@ -217,6 +222,17 @@ Helm chart каждого контекста SHALL содержать конфи
 
 - **WHEN** задача коннектора перешла в `FAILED` из-за записи без схемы, а затем схема зарегистрирована
 - **THEN** Strimzi перезапускает задачу, и она публикует запись без повторного деплоя
+
+### Requirement: Пароли коннектора вне конфигурации
+**ID:** FR-725
+
+Пароли и URI с паролем коннектора SHALL браться config provider Kafka Connect (`${dir:/mnt/cdc:<ключ>}` из Secret `cdc-credentials`), а не храниться в конфигурации `KafkaConnector`.
+
+#### Scenario: Конфигурация коннектора без пароля
+**ID:** AC-988
+
+- **WHEN** release `orders` рендерит `KafkaConnector` `orders-outbox`
+- **THEN** `database.password` — ссылка `${dir:/mnt/cdc:orders-password}`, а не значение пароля
 
 ### Requirement: Integration Events открытости ресторана
 **ID:** FR-560
