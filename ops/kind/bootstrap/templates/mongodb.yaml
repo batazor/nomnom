@@ -67,7 +67,7 @@ spec:
         # mongod отвергает keyFile, доступный группе: копия с режимом 0400 владельца 999.
         - name: keyfile
           image: {{ .Values.images.mongodb }}
-          command: ["sh", "-c", "cp /secret/keyfile /keyfile/keyfile && chmod 0400 /keyfile/keyfile"]
+          command: ["sh", "-c", "rm -f /keyfile/keyfile && cp /secret/keyfile /keyfile/keyfile && chmod 0400 /keyfile/keyfile"]
           resources:
             requests:
               memory: 16Mi
