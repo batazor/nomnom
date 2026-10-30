@@ -428,7 +428,7 @@
           "name": "metrics",
           "pluginId": "prometheus",
           "refresh": "onDashboardLoad",
-          "regex": "",
+          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
           "current": {
             "text": "",
             "value": ""
@@ -448,7 +448,7 @@
           "name": "logs",
           "pluginId": "loki",
           "refresh": "onDashboardLoad",
-          "regex": "",
+          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
           "current": {
             "text": "",
             "value": ""
@@ -468,7 +468,7 @@
           "name": "traces",
           "pluginId": "tempo",
           "refresh": "onDashboardLoad",
-          "regex": "",
+          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
           "current": {
             "text": "",
             "value": ""
@@ -488,7 +488,7 @@
           "name": "profiles",
           "pluginId": "grafana-pyroscope-datasource",
           "refresh": "onDashboardLoad",
-          "regex": "",
+          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
           "current": {
             "text": "",
             "value": ""

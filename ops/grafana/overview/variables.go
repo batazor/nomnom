@@ -21,11 +21,15 @@ var datasources = []struct{ name, label, plugin string }{
 	{"profiles", "Profiles (Pyroscope)", "grafana-pyroscope-datasource"},
 }
 
+// appDatasources исключает служебные data sources Grafana Cloud того же типа: первым по
+// алфавиту среди Loki идёт alert-state-history, и логи сервиса уходили бы в него.
+const appDatasources = "/^(?!.*(alert-state-history|usage)).*$/"
+
 func (g *generator) variables() []dashboard.VariableKind {
 	var vars []dashboard.VariableKind
 	for _, ds := range datasources {
 		v, err := dashboard.NewDatasourceVariableBuilder(ds.name).Label(ds.label).PluginId(ds.plugin).
-			Refresh(dashboard.VariableRefreshOnDashboardLoad).Build()
+			Regex(appDatasources).Refresh(dashboard.VariableRefreshOnDashboardLoad).Build()
 		g.record(err)
 		vars = append(vars, dashboard.VariableKind{DatasourceVariableKind: &v})
 	}

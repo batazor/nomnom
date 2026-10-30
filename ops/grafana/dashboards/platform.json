@@ -2936,7 +2936,7 @@
           "name": "metrics",
           "pluginId": "prometheus",
           "refresh": "onDashboardLoad",
-          "regex": "",
+          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
           "current": {
             "text": "",
             "value": ""

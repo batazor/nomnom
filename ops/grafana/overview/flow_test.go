@@ -2,6 +2,7 @@ package overview
 
 import (
 	"encoding/json"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -135,6 +136,29 @@ func TestServiceAboutNamesTheServiceAndItsLinks(t *testing.T) {
 	for _, want := range []string{"`orders`", "`postgresql`", "`a.dlq`", "Logs (Loki)", "Traces: errors", "Platform / Overview", "community 9628", "boundaries/orders/ops/grafana/README.md"} {
 		if !strings.Contains(about, want) {
 			t.Errorf("нет %s в\n%s", want, about)
+		}
+	}
+}
+
+// Логи и метрики сервиса не должны выбираться из служебных data sources Grafana Cloud.
+func TestDatasourceVariablesSkipServiceDatasources(t *testing.T) {
+	filter := regexp.MustCompile(`^(.*(alert-state-history|usage).*)$`)
+	for _, name := range []string{"grafanacloud-bestnomnom-alert-state-history", "grafanacloud-bestnomnom-usage-insights", "grafanacloud-usage"} {
+		if !filter.MatchString(name) {
+			t.Errorf("%s должен быть исключён", name)
+		}
+	}
+	if !strings.Contains(appDatasources, "alert-state-history|usage") {
+		t.Errorf("фильтр %s", appDatasources)
+	}
+	withAllPresent(t)
+	for ctx, d := range render(t) {
+		raw, err := json.Marshal(d.Manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), `alert-state-history|usage`) {
+			t.Errorf("%s: переменные data source без фильтра", ctx)
 		}
 	}
 }
