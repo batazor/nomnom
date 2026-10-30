@@ -25,8 +25,8 @@ func Services() []Options {
 			Kafka: &Kafka{ConsumerGroup: "restaurants", Consumers: []string{inventory.Restaurants}, Connector: "restaurants-outbox",
 				DeadLetters: []string{"restaurants.v1.restaurant-order-events.dlq"}},
 			UnitOfWork: true, Lifecycle: true, Kitchen: true, Authorization: true,
-			Domain: restaurantsDomain,
-			SLO:    &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
+			Domain: restaurantsDomain, Process: kitchenFlowPanels,
+			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
 		},
 		{
 			Context: "delivery", Title: "Delivery", Language: Rust,
@@ -35,7 +35,7 @@ func Services() []Options {
 			// Kafka не читает: Outbox публикует Debezium (ADR 37).
 			Kafka:      &Kafka{Connector: "delivery-outbox"},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
-			Domain: deliveryDomain, DomainAlerts: deliveryAlerts,
+			Domain: deliveryDomain, DomainAlerts: deliveryAlerts, Process: deliveryFlowPanels,
 			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
 		},
 		{

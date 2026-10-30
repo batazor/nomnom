@@ -2649,6 +2649,60 @@
         "kind": "Panel",
         "spec": {
           "id": 52,
+          "title": "Kitchen flow",
+          "description": "Потоки заказов кухни между состояниями за выбранный диапазон: толщина — их число. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: объект, созданный до него, может дойти до этапа внутри него, а объект в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(restaurants|restaurants-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
+                        "instant": true,
+                        "legendFormat": "",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "volkovlabs-echarts-panel",
+            "version": "",
+            "spec": {
+              "options": {
+                "editorMode": "code",
+                "getOption": "const links = [];\nconst names = new Set();\nfor (const frame of context.panel.data.series) {\n  const field = frame.fields.find((candidate) =\u003e candidate.type === \"number\");\n  const source = field.labels.nomnom_fsm_from_state;\n  const target = field.labels.nomnom_fsm_to_state;\n  links.push({ source, target, value: field.values[field.values.length - 1] });\n  names.add(source);\n  names.add(target);\n}\nreturn {\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: \"#d8d9da\" },\n    data: Array.from(names).map((name) =\u003e ({ name })),\n    links,\n  }],\n};"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-53": {
+        "kind": "Panel",
+        "spec": {
+          "id": 53,
           "title": "Kitchen queue size",
           "description": "Kitchen Queue Size из Kitchen Board projection; это не Kafka consumer lag.",
           "links": [],
@@ -2677,10 +2731,10 @@
           }
         }
       },
-      "panel-53": {
+      "panel-54": {
         "kind": "Panel",
         "spec": {
-          "id": 53,
+          "id": 54,
           "title": "Oldest queued order age",
           "description": "Метрики: `nomnom_kitchen_queue_oldest_age_seconds`.",
           "links": [],
@@ -2709,10 +2763,10 @@
           }
         }
       },
-      "panel-54": {
+      "panel-55": {
         "kind": "Panel",
         "spec": {
-          "id": 54,
+          "id": 55,
           "title": "Active preparations / ready for pickup",
           "description": "Метрики: `nomnom_kitchen_preparations_active`, `nomnom_kitchen_ready_for_pickup`.",
           "links": [],
@@ -2741,10 +2795,10 @@
           }
         }
       },
-      "panel-55": {
+      "panel-56": {
         "kind": "Panel",
         "spec": {
-          "id": 55,
+          "id": 56,
           "title": "Preparation duration",
           "description": "Метрики: `nomnom_kitchen_preparation_duration_seconds`.",
           "links": [],
@@ -2773,10 +2827,10 @@
           }
         }
       },
-      "panel-56": {
+      "panel-57": {
         "kind": "Panel",
         "spec": {
-          "id": 56,
+          "id": 57,
           "title": "Delays",
           "description": "Метрики: `nomnom_kitchen_delays_total`.",
           "links": [],
@@ -2805,10 +2859,10 @@
           }
         }
       },
-      "panel-57": {
+      "panel-58": {
         "kind": "Panel",
         "spec": {
-          "id": 57,
+          "id": 58,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -2837,10 +2891,10 @@
           }
         }
       },
-      "panel-58": {
+      "panel-59": {
         "kind": "Panel",
         "spec": {
-          "id": 58,
+          "id": 59,
           "title": "Denied by permission",
           "description": "DENIED — решение политики, не сбой SpiceDB.",
           "links": [],
@@ -2860,38 +2914,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants`, `restaurants-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-59": {
-        "kind": "Panel",
-        "spec": {
-          "id": 59,
-          "title": "Errors and timeouts",
-          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants`, `restaurants-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2969,6 +2991,38 @@
         "kind": "Panel",
         "spec": {
           "id": 60,
+          "title": "Errors and timeouts",
+          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `restaurants`, `restaurants-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-61": {
+        "kind": "Panel",
+        "spec": {
+          "id": 61,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -4060,8 +4114,8 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Kitchen",
-              "collapse": true,
+              "title": "Flow",
+              "collapse": false,
               "layout": {
                 "kind": "GridLayout",
                 "spec": {
@@ -4078,11 +4132,25 @@
                           "name": "panel-52"
                         }
                       }
-                    },
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Kitchen",
+              "collapse": true,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
+                        "x": 0,
                         "y": 0,
                         "width": 8,
                         "height": 8,
@@ -4095,7 +4163,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 8,
                         "y": 0,
                         "width": 8,
                         "height": 8,
@@ -4108,13 +4176,26 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-55"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
                         "x": 0,
                         "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-55"
+                          "name": "panel-56"
                         }
                       }
                     },
@@ -4127,7 +4208,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-56"
+                          "name": "panel-57"
                         }
                       }
                     }
@@ -4154,7 +4235,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-57"
+                          "name": "panel-58"
                         }
                       }
                     },
@@ -4167,7 +4248,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-58"
+                          "name": "panel-59"
                         }
                       }
                     },
@@ -4180,7 +4261,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-59"
+                          "name": "panel-60"
                         }
                       }
                     },
@@ -4193,7 +4274,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-60"
+                          "name": "panel-61"
                         }
                       }
                     }

@@ -2297,6 +2297,60 @@
         "kind": "Panel",
         "spec": {
           "id": 42,
+          "title": "Delivery steps",
+          "description": "Потоки доставок между состояниями за выбранный диапазон: толщина — их число. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: объект, созданный до него, может дойти до этапа внутри него, а объект в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(delivery)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
+                        "instant": true,
+                        "legendFormat": "",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "volkovlabs-echarts-panel",
+            "version": "",
+            "spec": {
+              "options": {
+                "editorMode": "code",
+                "getOption": "const links = [];\nconst names = new Set();\nfor (const frame of context.panel.data.series) {\n  const field = frame.fields.find((candidate) =\u003e candidate.type === \"number\");\n  const source = field.labels.nomnom_fsm_from_state;\n  const target = field.labels.nomnom_fsm_to_state;\n  links.push({ source, target, value: field.values[field.values.length - 1] });\n  names.add(source);\n  names.add(target);\n}\nreturn {\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: \"#d8d9da\" },\n    data: Array.from(names).map((name) =\u003e ({ name })),\n    links,\n  }],\n};"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-43": {
+        "kind": "Panel",
+        "spec": {
+          "id": 43,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -2325,10 +2379,10 @@
           }
         }
       },
-      "panel-43": {
+      "panel-44": {
         "kind": "Panel",
         "spec": {
-          "id": 43,
+          "id": 44,
           "title": "Denied by permission",
           "description": "DENIED — решение политики, не сбой SpiceDB.",
           "links": [],
@@ -2357,10 +2411,10 @@
           }
         }
       },
-      "panel-44": {
+      "panel-45": {
         "kind": "Panel",
         "spec": {
-          "id": 44,
+          "id": 45,
           "title": "Errors and timeouts",
           "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
           "links": [],
@@ -2389,10 +2443,10 @@
           }
         }
       },
-      "panel-45": {
+      "panel-46": {
         "kind": "Panel",
         "spec": {
-          "id": 45,
+          "id": 46,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -3468,8 +3522,8 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Authorization",
-              "collapse": true,
+              "title": "Flow",
+              "collapse": false,
               "layout": {
                 "kind": "GridLayout",
                 "spec": {
@@ -3486,11 +3540,25 @@
                           "name": "panel-42"
                         }
                       }
-                    },
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Authorization",
+              "collapse": true,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
+                        "x": 0,
                         "y": 0,
                         "width": 8,
                         "height": 8,
@@ -3503,7 +3571,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 8,
                         "y": 0,
                         "width": 8,
                         "height": 8,
@@ -3516,13 +3584,26 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-45"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
                         "x": 0,
                         "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-45"
+                          "name": "panel-46"
                         }
                       }
                     }

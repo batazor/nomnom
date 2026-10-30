@@ -192,7 +192,7 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	}
 	if opts.Process != nil {
 		process := Scope{Services: opts.Services, AllServices: true}
-		rows = append(rows, row{title: "Order flow", scope: process, panels: opts.Process(process)})
+		rows = append(rows, row{title: "Flow", scope: process, panels: opts.Process(process)})
 	}
 	if opts.Temporal != nil {
 		worker := Scope{Var: "worker", Services: []string{opts.Temporal.Worker}}

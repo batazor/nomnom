@@ -147,7 +147,7 @@ JSON — артефакт генератора: правки вносятся в
 | Fulfillment duration | TODO | [`nomnom_orders_fulfillment_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain) |
 | Orders currently in state | TODO | [`nomnom_orders_in_state`](../../../../docs/observability/metric-inventory.md#domain) |
 
-### Order flow
+### Flow
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |

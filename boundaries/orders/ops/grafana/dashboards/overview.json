@@ -3802,7 +3802,7 @@
         "spec": {
           "id": 56,
           "title": "Order flow",
-          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — их число. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: объект, созданный до него, может дойти до этапа внутри него, а объект в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3819,7 +3819,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!=\"record_fact\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!=\"record_fact\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!=\"record_fact\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
+                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"record_fact\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"record_fact\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"record_fact\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
                         "instant": true,
                         "legendFormat": "",
                         "range": false
@@ -5685,7 +5685,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Order flow",
+              "title": "Flow",
               "collapse": false,
               "layout": {
                 "kind": "GridLayout",

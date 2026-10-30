@@ -7,42 +7,44 @@ import (
 	"nomnom/ops/grafana/inventory"
 )
 
-// Sankey не строится с петлями, а record_fact — единственный переход без смены
-// состояния. Поток идёт через все роли, фильтр $service его исказит, а increase()
-// экстраполирует и даёт этапы больше начала.
-func TestOrderFlowQuery(t *testing.T) {
+// Sankey не строится с циклами. Поток идёт через все роли, фильтр $service его исказит,
+// а increase() экстраполирует и даёт этапы больше начала.
+func TestFlowQueries(t *testing.T) {
 	sc := Scope{Services: []string{inventory.Orders, inventory.OrdersWorker, inventory.OrdersConsumer}, AllServices: true}
-
-	flow := orderFlow(sc)
-
-	for _, want := range []string{
-		`nomnom_fsm_trigger!="record_fact"`,
-		`nomnom_fsm_result="applied"`,
-		`job=~"nomnom/(orders|orders-worker|orders-consumer)"`,
-		`offset $__range`,
+	for name, tc := range map[string]struct {
+		panels []Panel
+		want   []string
+	}{
+		"orders":      {orderFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="order"`, `nomnom_fsm_trigger!~"record_fact"`}},
+		"restaurants": {kitchenFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="restaurant_order"`, `nomnom_fsm_trigger!~"report_delay"`}},
+		"delivery":    {deliveryFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="delivery"`, `nomnom_fsm_trigger!~"unassign"`}},
 	} {
-		if !strings.Contains(flow, want) {
-			t.Errorf("%s: нет %s", flow, want)
+		flow := tc.panels[0].Queries[0].Expr
+		for _, want := range append(tc.want, `nomnom_fsm_result="applied"`, `offset $__range`) {
+			if !strings.Contains(flow, want) {
+				t.Errorf("%s: %s: нет %s", name, flow, want)
+			}
 		}
-	}
-	for _, unwanted := range []string{"$service", "increase("} {
-		if strings.Contains(flow, unwanted) {
-			t.Errorf("%s: лишнее %s", flow, unwanted)
+		for _, unwanted := range []string{"$service", "increase("} {
+			if strings.Contains(flow, unwanted) {
+				t.Errorf("%s: %s: лишнее %s", name, flow, unwanted)
+			}
 		}
 	}
 }
 
-func TestOrderFlowIsOnlyInOrders(t *testing.T) {
+func TestFlowRowIsInContextsWithAProcess(t *testing.T) {
 	withAllPresent(t)
+	want := map[string]bool{"orders": true, "restaurants": true, "delivery": true}
 	for ctx, d := range render(t) {
 		found := false
 		for _, r := range d.Rows {
-			if r.Title == "Order flow" {
+			if r.Title == "Flow" {
 				found = true
 			}
 		}
-		if found != (ctx == "orders") {
-			t.Errorf("%s: row Order flow = %v", ctx, found)
+		if found != want[ctx] {
+			t.Errorf("%s: row Flow = %v", ctx, found)
 		}
 	}
 }
