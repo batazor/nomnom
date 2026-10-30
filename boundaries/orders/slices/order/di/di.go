@@ -28,8 +28,8 @@ import (
 
 // Provider sets слайса order. Composition root процесса (корневой di) выбирает
 // нужные: инфраструктура — RepositorySet и TelemetrySet, use cases процесса —
-// APISet или ConsumerSet; Activities orders-worker собирает слайс fulfillment
-// (slices/fulfillment/di) поверх RepositorySet и TelemetrySet. Новый порт
+// APISet, ConsumerSet или FulfillmentSet; Activities orders-worker собирает слайс
+// fulfillment (slices/fulfillment/di) поверх FulfillmentSet. Новый порт
 // добавляется полем в структуру зависимостей набора и provider'ом; позиционных
 // конструкторов нет.
 var (
@@ -42,6 +42,7 @@ var (
 		wire.Bind(new(PlacementStore), new(*ProcessStore)),
 		wire.Bind(new(ReadModels), new(*ProcessStore)),
 		wire.Bind(new(InboxStore), new(*ProcessStore)),
+		wire.Bind(new(FulfillmentStore), new(*ProcessStore)),
 		wire.Bind(new(spicedb.RevisionReader), new(*ProcessStore)))
 	// TelemetrySet — инструменты телеметрии use cases, общие для handlers процесса.
 	TelemetrySet = wire.NewSet(observability.UseCases)
@@ -52,6 +53,8 @@ var (
 	// ConsumerSet — handlers orders-consumer без Notifier workflow: его Temporal
 	// client открывает KafkaConsumer.Start.
 	ConsumerSet = wire.NewSet(NewRelationshipSync, wire.Struct(new(Consumer), "*"))
+	// FulfillmentSet — use cases, которые вызывают Activities orders-worker.
+	FulfillmentSet = wire.NewSet(NewFulfillmentEstimates, wire.Struct(new(FulfillmentDependencies), "*"), NewFulfillmentModule)
 )
 
 // Authorizer — permission checks use cases слайса. Связи Order API не пишет:

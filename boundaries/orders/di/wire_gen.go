@@ -86,7 +86,8 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	}
 	module := di.NewModule(dependencies)
 	simulatorConfig := cfg.Simulator
-	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, store, authorizer, module)
+	pool := NewDatabasePool(store)
+	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, pool, authorizer, module)
 	if err != nil {
 		cleanup5()
 		cleanup4()
@@ -129,16 +130,30 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 	processStore := di.NewProcessStore(store, domainMetrics)
 	internalGatewayConfig := cfg.InternalGateway
 	identityConfig := cfg.Identity
-	neighbours, cleanup2, err := di3.NewNeighbours(internalGatewayConfig, identityConfig)
+	fulfillmentEstimates, cleanup2, err := di.NewFulfillmentEstimates(internalGatewayConfig, identityConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	useCases := observability.UseCases()
 	scheduledOrderConfig := cfg.ScheduledOrder
-	activities := di3.NewActivities(processStore, neighbours, useCases, scheduledOrderConfig)
+	useCases := observability.UseCases()
+	fulfillmentDependencies := di.FulfillmentDependencies{
+		Store:     processStore,
+		Estimates: fulfillmentEstimates,
+		Scheduled: scheduledOrderConfig,
+		Telemetry: useCases,
+	}
+	fulfillmentModule := di.NewFulfillmentModule(fulfillmentDependencies)
+	neighbours, cleanup3, err := di3.NewNeighbours(internalGatewayConfig, identityConfig)
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	activities := di3.NewActivities(fulfillmentModule, neighbours)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
+		cleanup3()
 		cleanup2()
 		cleanup()
 	}, nil
@@ -183,8 +198,8 @@ func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
 
 // Provider sets процессов orders объявлены здесь, под тегом wireinject: их
 // использует только генератор. Инфраструктура слайса (PostgreSQL, SpiceDB
-// ports, телеметрия use cases) и его use cases — в slices/order/di, Activities
-// Order Fulfillment — в slices/fulfillment/di; здесь — клиенты и транспорт
+// ports, телеметрия use cases) и его use cases, в том числе для Activities, — в
+// slices/order/di, Activities Order Fulfillment — в slices/fulfillment/di; здесь — клиенты и транспорт
 // процесса. Запуск и остановка ресурсов, которым нужен
 // контекст Start или pipeline метрик процесса (Temporal client consumer'а и
 // worker'а, Kafka, Watermill Router, telemetry.Start), остаются в lifecycle.Worker
@@ -201,7 +216,4 @@ var (
 	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
 	storeSet = wire.NewSet(NewStore, di.RepositorySet)
-	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
-	// Activities fulfillment.
-	workerStoreSet = wire.NewSet(storeSet, wire.Bind(new(di3.Store), new(*di.ProcessStore)))
 )

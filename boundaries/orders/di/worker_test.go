@@ -18,6 +18,7 @@ import (
 	"nomnom/orders/pkg/config"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
+	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/infrastructure/observability"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
@@ -58,7 +59,11 @@ func testConfig() config.Config {
 func newTestWorker(t *testing.T, cfg config.Config, poller *mockRunner) (*TemporalWorker, *mocks.Client, *worker.Options) {
 	t.Helper()
 	temporalClient := mocks.NewClient(t)
-	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(repositorytest.Open(t), testNeighbours(), observability.UseCases(), cfg.ScheduledOrder))
+	w := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewFulfillmentModule(orderdi.FulfillmentDependencies{
+		Store:     repositorytest.Open(t),
+		Scheduled: cfg.ScheduledOrder,
+		Telemetry: observability.UseCases(),
+	}), testNeighbours()))
 	w.dial = func(ctx context.Context, options client.Options) (client.Client, error) {
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "connection is bounded by connect timeout")

@@ -20,7 +20,6 @@ import (
 	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
-	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrOperationPending is retryable: the Activity repeats the same idempotency key
@@ -201,9 +200,9 @@ func (r *Restaurants) ReleaseSlot(ctx context.Context, request neighbours.SlotRe
 }
 
 // restaurantPriority is the restaurants form of the priority of an Order.
-var restaurantPriority = map[order.Priority]restaurantsv1.OrderPriority{
-	order.PriorityStandard: restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD,
-	order.PriorityPremium:  restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
+var restaurantPriority = map[neighbours.Priority]restaurantsv1.OrderPriority{
+	neighbours.PriorityStandard: restaurantsv1.OrderPriority_ORDER_PRIORITY_STANDARD,
+	neighbours.PriorityPremium:  restaurantsv1.OrderPriority_ORDER_PRIORITY_PREMIUM,
 }
 
 // CancelOrder treats a rejection by stage as done: the owner has already closed

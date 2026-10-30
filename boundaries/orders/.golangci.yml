@@ -76,6 +76,24 @@ linters:
               desc: adapters не зависят от composition root
             - pkg: nomnom/orders/cmd
               desc: adapters не зависят от процессов
+        # Соседний слайс использует use cases order, а не его адаптеры (ADR 5).
+        order-infrastructure:
+          files:
+            - "**/slices/fulfillment/**"
+            - "**/slices/simulator/**"
+            - "!$test"
+          deny:
+            - pkg: nomnom/orders/slices/order/infrastructure
+              desc: адаптеры слайса order собирает его di
+        # Запросы к соседям строятся из view use case, а не из агрегата (ADR 5).
+        order-aggregate:
+          files:
+            - "**/slices/fulfillment/applications/**"
+            - "**/slices/fulfillment/infrastructure/neighbours/**"
+            - "!$test"
+          deny:
+            - pkg: nomnom/orders/slices/order/domains
+              desc: запрос к соседу строится из getfulfillmentorder.View
         generated-code:
           files:
             - "**/orders/pkg/**"

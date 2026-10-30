@@ -24,7 +24,6 @@ import (
 	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
-	"nomnom/orders/slices/order/domains/order"
 )
 
 // serve runs the mocked neighbours behind one in-process endpoint, like the internal gateway.
@@ -177,7 +176,7 @@ func TestRestaurantsRequestAndCancel(t *testing.T) {
 	request := neighbours.RestaurantOrderRequest{
 		OrderID: "order-1", RestaurantID: "restaurant-1",
 		Items:    []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
-		Priority: order.PriorityPremium,
+		Priority: neighbours.PriorityPremium,
 	}
 
 	id, err := restaurants.RequestOrder(context.Background(), request)
@@ -225,7 +224,7 @@ func TestRestaurantsRequestSendsTheScheduleOfAScheduledOrder(t *testing.T) {
 	id, err := grpcclient.NewRestaurants(conn).RequestOrder(context.Background(), neighbours.RestaurantOrderRequest{
 		OrderID: "order-1", RestaurantID: "restaurant-1",
 		Items:    []neighbours.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 1}},
-		Priority: order.PriorityStandard,
+		Priority: neighbours.PriorityStandard,
 		Schedule: &neighbours.RestaurantOrderSchedule{
 			WindowStart: windowStart, WindowEnd: windowStart.Add(15 * time.Minute), PlannedReadyAt: plannedReadyAt,
 		},

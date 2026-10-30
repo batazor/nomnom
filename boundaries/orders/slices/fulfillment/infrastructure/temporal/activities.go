@@ -10,6 +10,7 @@ import (
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
+	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/applications/recordpaymentauthorization"
 	"nomnom/orders/slices/order/domains/order"
@@ -32,12 +33,18 @@ type PlanSchedule interface {
 	Handle(ctx context.Context, in planschedule.Input) (order.SchedulePlan, error)
 }
 
+// GetFulfillmentOrder is the query of the order slice that gives the data of the
+// stored Order to build requests to neighbours from.
+type GetFulfillmentOrder interface {
+	Handle(ctx context.Context, q getfulfillmentorder.Query) (getfulfillmentorder.View, error)
+}
+
 // Activities are the only side effects of the workflow. They call the client
 // ports of applications/neighbours and the use cases of the order slice.
 // Errors of invalid input, a missing Order or a forbidden transition are not
 // retried.
 type Activities struct {
-	Orders        neighbours.Orders
+	Orders        GetFulfillmentOrder
 	Payments      neighbours.Payments
 	Restaurants   neighbours.Restaurants
 	Delivery      neighbours.Delivery
@@ -85,12 +92,12 @@ func (a *Activities) RefundPayment(ctx context.Context, in StepInput) error {
 // restaurant_order_id. A Scheduled Order carries its Delivery Window and the
 // planned_ready_at of the first plan from the input (FR-683).
 func (a *Activities) RequestRestaurantOrder(ctx context.Context, in StepInput) (RestaurantOrderRequested, error) {
-	request, err := request(ctx, a.Orders, in, func(current *order.Order, key string) neighbours.RestaurantOrderRequest {
+	request, err := request(ctx, a.Orders, in, func(current getfulfillmentorder.View, key string) neighbours.RestaurantOrderRequest {
 		r := neighbours.NewRestaurantOrderRequest(current, key)
-		if current.Scheduled() {
+		if current.DeliveryWindow != nil {
 			r.Schedule = &neighbours.RestaurantOrderSchedule{
-				WindowStart:    current.DeliveryWindow().Start(),
-				WindowEnd:      current.DeliveryWindow().End(),
+				WindowStart:    current.DeliveryWindow.Start,
+				WindowEnd:      current.DeliveryWindow.End,
 				PlannedReadyAt: in.PlannedReadyAt,
 			}
 		}
@@ -219,18 +226,18 @@ func (a *Activities) FailOrCancelOrder(ctx context.Context, in FinalizeInput) er
 }
 
 // request loads the Order of a step and builds the request to a neighbour
-// from its snapshot: Activities load → build the request → call → classify.
+// from its view: Activities load → build the request → call → classify.
 // Data of the Order, such as its market_id (ADR 41), is read here on every
 // attempt and never added to Input, StepInput or workflow state: workflows
 // started before a field existed have no such input in their Event History,
 // while the stored Order always has it, so running and replayed workflows stay
 // deterministic and need no versioning.
-func request[R any](ctx context.Context, orders neighbours.Orders, in StepInput, build func(*order.Order, string) R) (R, error) {
+func request[R any](ctx context.Context, orders GetFulfillmentOrder, in StepInput, build func(getfulfillmentorder.View, string) R) (R, error) {
 	var zero R
 	if in.OrderID == "" || in.IdempotencyKey == "" {
 		return zero, classify(application.InvalidInput("step", "order_id and idempotency_key are required"))
 	}
-	current, err := orders.Get(ctx, order.ID(in.OrderID))
+	current, err := orders.Handle(ctx, getfulfillmentorder.Query{OrderID: order.ID(in.OrderID)})
 	if err != nil {
 		return zero, classify(err)
 	}

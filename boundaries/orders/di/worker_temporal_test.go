@@ -74,7 +74,11 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewProcessStore(store, nil), testNeighbours(), observability.UseCases(), cfg.ScheduledOrder))
+	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewFulfillmentModule(orderdi.FulfillmentDependencies{
+		Store:     orderdi.NewProcessStore(store, nil),
+		Scheduled: cfg.ScheduledOrder,
+		Telemetry: observability.UseCases(),
+	}), testNeighbours()))
 	require.NoError(t, worker.Start(ctx))
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()

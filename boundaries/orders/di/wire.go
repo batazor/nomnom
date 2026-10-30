@@ -15,8 +15,8 @@ import (
 
 // Provider sets процессов orders объявлены здесь, под тегом wireinject: их
 // использует только генератор. Инфраструктура слайса (PostgreSQL, SpiceDB
-// ports, телеметрия use cases) и его use cases — в slices/order/di, Activities
-// Order Fulfillment — в slices/fulfillment/di; здесь — клиенты и транспорт
+// ports, телеметрия use cases) и его use cases, в том числе для Activities, — в
+// slices/order/di, Activities Order Fulfillment — в slices/fulfillment/di; здесь — клиенты и транспорт
 // процесса. Запуск и остановка ресурсов, которым нужен
 // контекст Start или pipeline метрик процесса (Temporal client consumer'а и
 // worker'а, Kafka, Watermill Router, telemetry.Start), остаются в lifecycle.Worker
@@ -33,9 +33,6 @@ var (
 	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
 	storeSet = wire.NewSet(NewStore, orderdi.RepositorySet)
-	// workerStoreSet — store процесса слайса order, в том числе в роли хранилища
-	// Activities fulfillment.
-	workerStoreSet = wire.NewSet(storeSet, wire.Bind(new(fulfillmentdi.Store), new(*orderdi.ProcessStore)))
 )
 
 // Injectors процессов orders: каждый cmd/* вызывает свой и передаёт результат
@@ -43,12 +40,12 @@ var (
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
-	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, NewDatabasePool, simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
 	return nil, nil, nil
 }
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
-	wire.Build(configSet, workerStoreSet, NewReasonCodes, orderdi.TelemetrySet, fulfillmentdi.WorkerSet, NewTemporalWorker)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.FulfillmentSet, fulfillmentdi.WorkerSet, NewTemporalWorker)
 	return nil, nil, nil
 }
 

@@ -9,12 +9,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/google/wire"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"nomnom/orders/pkg/config"
 	gatewayclient "nomnom/orders/pkg/gateway"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order/vo"
-	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
 	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
@@ -35,7 +35,7 @@ type Module struct {
 // NewModule проверяет секцию simulator (без неё cmd/orders не стартует,
 // AC-765) и открывает lazy connection к restaurants через internal gateway.
 func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig,
-	catalog config.CatalogConfig, store *repository.Store, authorizer orderdi.Authorizer, order *orderdi.Module,
+	catalog config.CatalogConfig, pool *pgxpool.Pool, authorizer orderdi.Authorizer, order *orderdi.Module,
 ) (*Module, func(), error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
@@ -52,7 +52,7 @@ func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig,
 	if err != nil {
 		return nil, nil, fmt.Errorf("simulator catalog: %w", err)
 	}
-	state := simulatorrepository.NewState(store.Pool())
+	state := simulatorrepository.NewState(pool)
 	customer := customersimulator.New(customersimulator.Dependencies{
 		Switch:              state,
 		Catalog:             restaurants.New(conn, markets, catalog.Timeout),

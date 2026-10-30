@@ -1,6 +1,6 @@
 // Package neighbours declares the client ports of payments, restaurants and
 // delivery that the Activities of the Order Fulfillment Workflow call, their
-// request DTOs and how a request is built from the Order snapshot. Adapters
+// request DTOs and how a request is built from the view of the Order. Adapters
 // (infrastructure/neighbours, grpcclient) implement the ports; the Temporal
 // adapter only uses them.
 package neighbours
@@ -9,13 +9,16 @@ import (
 	"context"
 	"time"
 
-	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 )
 
-// Orders reads the Order whose snapshot builds requests to neighbouring contexts.
-type Orders interface {
-	Get(ctx context.Context, id order.ID) (*order.Order, error)
-}
+// Priority is the Premium Priority of the Order the kitchen starts it by.
+type Priority string
+
+const (
+	PriorityStandard Priority = "STANDARD"
+	PriorityPremium  Priority = "PREMIUM"
+)
 
 // MarketID of PaymentRequest and DeliveryRequest is the Market of the Order
 // (ADR 41). It is read from the stored Order on every Activity attempt, never
@@ -57,7 +60,7 @@ type RestaurantOrderRequest struct {
 	Items        []RestaurantOrderItem
 	// Priority chosen at Place Order: the kitchen starts a premium order first
 	// (FR-650).
-	Priority       order.Priority
+	Priority       Priority
 	IdempotencyKey string
 	// Schedule is set for a Scheduled Order (FR-683): the kitchen accepts it
 	// into ACCEPTED and the workflow queues it at its planned start.
@@ -119,42 +122,42 @@ type Delivery interface {
 }
 
 // NewPaymentRequest addresses the payment of the Order under the step key.
-func NewPaymentRequest(current *order.Order, idempotencyKey string) PaymentRequest {
+func NewPaymentRequest(current getfulfillmentorder.View, idempotencyKey string) PaymentRequest {
 	return PaymentRequest{
-		OrderID:        string(current.ID()),
-		CustomerID:     string(current.CustomerID()),
-		MarketID:       current.MarketID().String(),
-		Amount:         current.Total().Amount().String(),
-		Currency:       current.Total().Currency(),
+		OrderID:        current.OrderID,
+		CustomerID:     current.CustomerID,
+		MarketID:       current.MarketID,
+		Amount:         current.Amount,
+		Currency:       current.Currency,
 		IdempotencyKey: idempotencyKey,
 	}
 }
 
 // NewRestaurantOrderRequest carries the composition of the Order to restaurants.
-func NewRestaurantOrderRequest(current *order.Order, idempotencyKey string) RestaurantOrderRequest {
-	items := make([]RestaurantOrderItem, 0, len(current.Items()))
-	for _, item := range current.Items() {
-		items = append(items, RestaurantOrderItem{MenuItemID: string(item.MenuItemID()), Quantity: item.Quantity().Value()})
+func NewRestaurantOrderRequest(current getfulfillmentorder.View, idempotencyKey string) RestaurantOrderRequest {
+	items := make([]RestaurantOrderItem, 0, len(current.Items))
+	for _, item := range current.Items {
+		items = append(items, RestaurantOrderItem{MenuItemID: item.MenuItemID, Quantity: item.Quantity})
 	}
 	return RestaurantOrderRequest{
-		OrderID:        string(current.ID()),
-		RestaurantID:   string(current.RestaurantID()),
+		OrderID:        current.OrderID,
+		RestaurantID:   current.RestaurantID,
 		Items:          items,
-		Priority:       current.Service().Priority(),
+		Priority:       Priority(current.Priority),
 		IdempotencyKey: idempotencyKey,
 	}
 }
 
 // NewSlotRequest addresses the slot reservation of the Order under the step key.
-func NewSlotRequest(current *order.Order, idempotencyKey string) SlotRequest {
-	return SlotRequest{OrderID: string(current.ID()), IdempotencyKey: idempotencyKey}
+func NewSlotRequest(current getfulfillmentorder.View, idempotencyKey string) SlotRequest {
+	return SlotRequest{OrderID: current.OrderID, IdempotencyKey: idempotencyKey}
 }
 
 // NewDeliveryRequest addresses the delivery of the Order under the step key.
-func NewDeliveryRequest(current *order.Order, idempotencyKey string) DeliveryRequest {
+func NewDeliveryRequest(current getfulfillmentorder.View, idempotencyKey string) DeliveryRequest {
 	return DeliveryRequest{
-		OrderID:        string(current.ID()),
-		MarketID:       current.MarketID().String(),
+		OrderID:        current.OrderID,
+		MarketID:       current.MarketID,
 		IdempotencyKey: idempotencyKey,
 	}
 }

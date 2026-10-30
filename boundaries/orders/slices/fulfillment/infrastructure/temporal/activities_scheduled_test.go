@@ -13,6 +13,7 @@ import (
 
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
+	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -30,7 +31,7 @@ func scheduledActivities(t *testing.T) (*temporal.Activities, *MockRestaurants, 
 	preparation := NewMockPreparation(t)
 	delivery := NewMockDeliveryDuration(t)
 	return &temporal.Activities{
-		Orders:      store,
+		Orders:      getfulfillmentorder.NewHandler(store),
 		Restaurants: restaurants,
 		Plan: planschedule.NewHandler(store, preparation, delivery, order.SchedulePolicy{
 			PreparationBuffer: 5 * time.Minute, ReplanLead: 30 * time.Minute,
@@ -47,7 +48,7 @@ func TestRequestRestaurantOrderCarriesTheSchedule(t *testing.T) {
 		OrderID:        orderID,
 		RestaurantID:   "restaurant-1",
 		Items:          []ports.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
-		Priority:       order.PriorityStandard,
+		Priority:       ports.PriorityStandard,
 		IdempotencyKey: "order:order-1:request_restaurant_order",
 		Schedule: &ports.RestaurantOrderSchedule{
 			WindowStart: windowStart, WindowEnd: windowStart.Add(15 * time.Minute), PlannedReadyAt: plannedReadyAt,

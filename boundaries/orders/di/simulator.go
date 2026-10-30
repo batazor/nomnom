@@ -4,10 +4,17 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"nomnom/orders/pkg/application"
+	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/order/infrastructure/system"
 	simulatordi "nomnom/orders/slices/simulator/di"
 )
+
+// NewDatabasePool даёт слайсу simulator пул общей базы процесса: о store слайса
+// order он не знает.
+func NewDatabasePool(store *repository.Store) *pgxpool.Pool { return store.Pool() }
 
 // SimulatorRunner вызывает демо-покупателя (FR-605) каждые
 // SIMULATOR__INTERVAL в процессе cmd/orders: ему принадлежат use cases Place

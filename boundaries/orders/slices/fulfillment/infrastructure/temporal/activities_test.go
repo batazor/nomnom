@@ -17,6 +17,7 @@ import (
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
+	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 	"nomnom/orders/slices/order/applications/recordpaymentauthorization"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -30,7 +31,7 @@ func activities(t *testing.T, state order.State) (*temporal.Activities, *reposit
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
 	return &temporal.Activities{
-		Orders:        store,
+		Orders:        getfulfillmentorder.NewHandler(store),
 		Payments:      NewMockPayments(t),
 		Restaurants:   NewMockRestaurants(t),
 		Delivery:      NewMockDelivery(t),
@@ -76,7 +77,7 @@ func TestRestaurantAndDeliveryActivitiesUseOrderSnapshot(t *testing.T) {
 		OrderID:        orderID,
 		RestaurantID:   "restaurant-1",
 		Items:          []ports.RestaurantOrderItem{{MenuItemID: "menu-1", Quantity: 2}},
-		Priority:       order.PriorityStandard,
+		Priority:       ports.PriorityStandard,
 		IdempotencyKey: step.IdempotencyKey,
 	}).Return("ro-1", nil).Once()
 	delivery.EXPECT().Create(mock.Anything, ports.DeliveryRequest{
