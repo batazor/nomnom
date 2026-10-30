@@ -4,12 +4,14 @@
 //! над тестовым PostgreSQL.
 
 use std::sync::Arc;
+#[cfg(any(test, feature = "test-support"))]
 use std::time::Duration;
 
 use shaku::{HasComponent, module};
 
 #[cfg(test)]
 use crate::infrastructure::memory::SequentialIdGenerator;
+#[cfg(any(test, feature = "test-support"))]
 use crate::infrastructure::memory::{
     FixedRandomSource, RecordingAssignment, RecordingPositionPublisher, RecordingRelationships,
     StaticCourierLocator,
@@ -20,16 +22,18 @@ use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::slices::courier::di::{CourierModule, CourierUseCases};
 use crate::slices::courier::infrastructure::observed_use_cases::ObservedCourierUseCases;
 use crate::slices::delivery::di::{DeliveryModule, DeliveryUseCases};
+#[cfg(any(test, feature = "test-support"))]
 use crate::slices::delivery::domains::delivery::{DeliveryEstimatePolicy, VirtualCity};
 use crate::slices::delivery::infrastructure::observed_use_cases::ObservedDeliveryUseCases;
 use crate::slices::delivery::infrastructure::transitions::TransitionMetrics;
 use crate::slices::simulator::di::{SimulatorModule, SimulatorUseCases};
 
+use super::infrastructure::InfrastructureModule;
 #[cfg(test)]
 use super::infrastructure::local_authorization;
+#[cfg(any(test, feature = "test-support"))]
 use super::infrastructure::{
-    AssignmentAdapters, InfrastructureModule, ProcessAuthorization, ProcessStores, ProcessTracking,
-    infrastructure,
+    AssignmentAdapters, ProcessAuthorization, ProcessStores, ProcessTracking, infrastructure,
 };
 
 module! {
@@ -101,6 +105,7 @@ pub(super) fn service(infrastructure: Arc<InfrastructureModule>) -> ServiceModul
 /// у позиций курьеров kind, запись каждой позиции, записывающий publisher и
 /// фиксированная случайность. Не часть API крейта: снаружи тестовый граф
 /// собирает только [`build_over`].
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub(crate) fn test_tracking() -> ProcessTracking {
     ProcessTracking {
@@ -113,6 +118,7 @@ pub(crate) fn test_tracking() -> ProcessTracking {
 
 /// Delivery Duration Estimate тестовых графов: значения kind (выборка 50,
 /// 15m и 20m).
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub(crate) fn test_estimate_policy() -> DeliveryEstimatePolicy {
     DeliveryEstimatePolicy::new(
@@ -126,6 +132,7 @@ pub(crate) fn test_estimate_policy() -> DeliveryEstimatePolicy {
 /// Тестовый граф над заданными хранилищами (PostgreSQL в integration-тестах)
 /// с UUID id, пустым locator, выбранной авторизацией и записывающим
 /// Assignment Workflow.
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn build_over(
     stores: ProcessStores,

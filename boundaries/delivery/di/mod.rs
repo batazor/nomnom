@@ -37,7 +37,9 @@ pub use infrastructure::{
 };
 pub use reconciling_worker::ReconcilingWorker;
 pub use server::{spicedb, spicedb_authorization, store};
-pub use service::{ServiceModule, build_over};
+pub use service::ServiceModule;
+#[cfg(any(test, feature = "test-support"))]
+pub use service::build_over;
 pub use simulator_worker::{
     CourierActions, Randomness, Simulator, SimulatorSchedule, SimulatorWorker, SystemRandomness,
     UseCaseCourierActions,

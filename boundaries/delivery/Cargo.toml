@@ -14,6 +14,10 @@ path = "cmd/delivery/main.rs"
 name = "delivery-worker"
 path = "cmd/delivery-worker/main.rs"
 
+[features]
+# Test doubles infrastructure::memory и di::build_over для tests/: в боевой сборке их нет.
+test-support = []
+
 [dependencies]
 config = { version = "0.15.27", default-features = false, features = ["toml"] }
 futures = "0.3.34"
@@ -52,6 +56,7 @@ uuid = { version = "1.29.0", default-features = false, features = ["std", "v5", 
 webpki-roots = "1.0.11"
 
 [dev-dependencies]
+delivery = { path = ".", features = ["test-support"] }
 opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["metrics", "trace", "testing"] }
 libc = "0.2.191"
 testcontainers-modules = { version = "0.15.0", features = ["postgres", "blocking"] }

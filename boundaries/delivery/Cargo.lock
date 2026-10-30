@@ -666,6 +666,7 @@ name = "delivery"
 version = "0.1.0"
 dependencies = [
  "config",
+ "delivery",
  "futures",
  "getrandom 0.4.3",
  "http",
