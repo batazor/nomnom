@@ -15,18 +15,18 @@ var placedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 
 func at(minutes int) time.Time { return placedAt.Add(time.Duration(minutes) * time.Minute) }
 
-func snapshot(state string, facts ...Fact) OrderSnapshot {
+func snapshot(state string, transitions ...Transition) OrderSnapshot {
 	return OrderSnapshot{
 		ID: "order-1", RestaurantID: "restaurant-1", State: state,
 		Items:    []OrderLine{{MenuItemID: "menu-tea", Name: "Чай", Quantity: 3, UnitPrice: Money{Amount: "0.10", Currency: "EUR"}}},
 		Total:    Money{Amount: "0.30", Currency: "EUR"},
-		PlacedAt: placedAt, Facts: facts,
+		PlacedAt: placedAt, Transitions: transitions,
 	}
 }
 
 func TestStatusFollowsState(t *testing.T) {
-	scheduled := func(state string, facts ...Fact) OrderSnapshot {
-		order := snapshot(state, facts...)
+	scheduled := func(state string, transitions ...Transition) OrderSnapshot {
+		order := snapshot(state, transitions...)
 		order.DeliveryWindow = &DeliveryWindow{Start: at(120), End: at(135)}
 		return order
 	}
@@ -42,18 +42,18 @@ func TestStatusFollowsState(t *testing.T) {
 	}{
 		{"placed", snapshot("placed"), StatusReceived},
 		// AC-831: the recorded payment before acceptance is PAID.
-		{"paid", snapshot("paid", Fact{"payment_authorized", at(1)}), StatusPaid},
+		{"paid", snapshot("paid", Transition{"authorize_payment", at(1)}), StatusPaid},
 		{"confirmed", snapshot("confirmed"), StatusConfirmed},
-		{"preparing", snapshot("preparing", Fact{"preparation_started", at(3)}), StatusPreparing},
+		{"preparing", snapshot("preparing", Transition{"start_preparation", at(3)}), StatusPreparing},
 		// AC-927: a confirmed scheduled Order without Preparation Started.
-		{"scheduled", scheduled("confirmed", Fact{"restaurant_accepted", at(2)}), StatusScheduled},
-		{"scheduled preparing", scheduled("preparing", Fact{"preparation_started", at(100)}), StatusPreparing},
-		{"scheduled paid", scheduled("paid", Fact{"payment_authorized", at(1)}), StatusPaid},
-		{"ready", snapshot("ready", Fact{"preparation_started", at(3)}, Fact{"ready_for_pickup", at(9)}), StatusReadyForPickup},
-		{"picked up", snapshot("picked_up", Fact{"ready_for_pickup", at(9)}, Fact{"picked_up", at(12)}), StatusPickedUp},
-		{"delivered", snapshot("delivered", Fact{"delivery_completed", at(20)}), StatusDelivered},
-		{"rejected", snapshot("rejected", Fact{"restaurant_rejected", at(2)}), StatusFailed},
-		{"delivery failed", snapshot("delivery_failed", Fact{"delivery_failed", at(20)}), StatusFailed},
+		{"scheduled", scheduled("confirmed", Transition{"confirm", at(2)}), StatusScheduled},
+		{"scheduled preparing", scheduled("preparing", Transition{"start_preparation", at(100)}), StatusPreparing},
+		{"scheduled paid", scheduled("paid", Transition{"authorize_payment", at(1)}), StatusPaid},
+		{"ready", snapshot("ready", Transition{"start_preparation", at(3)}, Transition{"mark_ready", at(9)}), StatusReadyForPickup},
+		{"picked up", snapshot("picked_up", Transition{"mark_ready", at(9)}, Transition{"pick_up", at(12)}), StatusPickedUp},
+		{"delivered", snapshot("delivered", Transition{"deliver", at(20)}), StatusDelivered},
+		{"rejected", snapshot("rejected", Transition{"reject", at(2)}), StatusFailed},
+		{"delivery failed", snapshot("delivery_failed", Transition{"fail_delivery", at(20)}), StatusFailed},
 		{"completed", snapshot("completed"), StatusDelivered},
 		{"cancelled", cancelled("cancellation"), StatusCancelled},
 		{"failed", cancelled("failure"), StatusFailed},
@@ -120,7 +120,7 @@ func TestEndReasonByReasonCode(t *testing.T) {
 
 // AC-831: the payment moment is the PAID milestone after PLACED.
 func TestPaymentIsPaidMilestone(t *testing.T) {
-	order := snapshot("placed", Fact{"payment_authorized", at(1)})
+	order := snapshot("placed", Transition{"authorize_payment", at(1)})
 	orders := NewMockOrderReader(t)
 	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
 	catalog := NewMockCatalog(t)
@@ -133,9 +133,9 @@ func TestPaymentIsPaidMilestone(t *testing.T) {
 	assert.Equal(t, []Milestone{{MilestonePlaced, placedAt}, {MilestonePaid, at(1)}}, got.Milestones)
 }
 
-// AC-564: the acceptance moment becomes CONFIRMED between PLACED and later facts.
+// AC-564: the acceptance moment becomes CONFIRMED between PLACED and later transitions.
 func TestRestaurantAcceptanceIsConfirmedMilestone(t *testing.T) {
-	order := snapshot("confirmed", Fact{"preparation_started", at(4)}, Fact{"restaurant_accepted", at(3)})
+	order := snapshot("confirmed", Transition{"start_preparation", at(4)}, Transition{"confirm", at(3)})
 	orders := NewMockOrderReader(t)
 	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()
 	catalog := NewMockCatalog(t)
@@ -154,7 +154,8 @@ func TestRestaurantAcceptanceIsConfirmedMilestone(t *testing.T) {
 
 // AC-557: preparing with a courier assigned; milestones in time order.
 func TestPreparingOrderWithCourierMilestones(t *testing.T) {
-	order := snapshot("preparing", Fact{"courier_assigned", at(8)}, Fact{"preparation_started", at(3)})
+	order := snapshot("preparing", Transition{"start_preparation", at(3)})
+	order.CourierAssignedAt = at(8)
 	deliveries := NewMockDeliveries(t)
 	deliveries.EXPECT().DeliveryOf(mock.Anything, "order-1").Return(OrderDelivery{Courier: &Courier{Name: "Тимур"}}, nil).Once()
 	orders := NewMockOrderReader(t)
@@ -177,7 +178,8 @@ func TestPreparingOrderWithCourierMilestones(t *testing.T) {
 // AC-795: an Order with an Assignment names its courier; before it delivery
 // is not asked.
 func TestCourierIsNamedOnceAssigned(t *testing.T) {
-	assigned := snapshot("confirmed", Fact{"courier_assigned", at(8)})
+	assigned := snapshot("confirmed")
+	assigned.CourierAssignedAt = at(8)
 	deliveries := NewMockDeliveries(t)
 	deliveries.EXPECT().DeliveryOf(mock.Anything, assigned.ID).Return(OrderDelivery{Courier: &Courier{Name: "Тимур"}}, nil).Once()
 	orders := NewMockOrderReader(t)
@@ -216,7 +218,8 @@ func TestCourierIsNamedOnceAssigned(t *testing.T) {
 // tracking delivery returns in the same call; delivery returns no tracking
 // for a delivered Order.
 func TestTrackingOfActiveAssignedOrder(t *testing.T) {
-	pickedUp := snapshot("confirmed", Fact{"courier_assigned", at(8)}, Fact{"picked_up", at(9)})
+	pickedUp := snapshot("confirmed", Transition{"pick_up", at(9)})
+	pickedUp.CourierAssignedAt = at(8)
 	tracking := &Tracking{
 		Channel: "cd",
 		City:    VirtualCity{Origin: GeoPoint{Latitude: 52.515, Longitude: 13.385}, Blocks: 12, BlockMeters: 150},
@@ -240,7 +243,8 @@ func TestTrackingOfActiveAssignedOrder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tracking, got.Tracking)
 
-	delivered := snapshot("completed", Fact{"courier_assigned", at(8)}, Fact{"delivery_completed", at(20)})
+	delivered := snapshot("completed", Transition{"deliver", at(20)})
+	delivered.CourierAssignedAt = at(8)
 	final := NewMockDeliveries(t)
 	final.EXPECT().DeliveryOf(mock.Anything, delivered.ID).Return(OrderDelivery{Courier: &Courier{Name: "Тимур"}}, nil).Once()
 	deliveredOrders := NewMockOrderReader(t)
@@ -256,7 +260,7 @@ func TestTrackingOfActiveAssignedOrder(t *testing.T) {
 // FR-611: the view carries the deadlines orders named, unnamed ones stay nil.
 func TestViewCarriesDeadlines(t *testing.T) {
 	ready, pickup := at(12), at(15)
-	order := snapshot("confirmed", Fact{Kind: "restaurant_accepted", OccurredAt: at(1)})
+	order := snapshot("confirmed", Transition{Trigger: "confirm", OccurredAt: at(1)})
 	order.Deadlines = Deadlines{ExpectedReadyAt: &ready, ExpectedPickupAt: &pickup}
 	orders := NewMockOrderReader(t)
 	orders.EXPECT().GetOrder(mock.Anything, "order-1").Return(order, nil).Once()

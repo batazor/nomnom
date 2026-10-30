@@ -151,10 +151,11 @@ func refusal(reason string) error {
 func TestOrdersGetOrderCarriesCustomerAndMapsOrder(t *testing.T) {
 	server := &ordersServer{order: &ordersv1.Order{
 		OrderId: "order-1", RestaurantId: "restaurant-1", State: ordersv1.OrderState_ORDER_STATE_CONFIRMED,
-		Items:            []*ordersv1.OrderItem{{MenuItemId: "menu-tea", Quantity: 3, UnitPrice: &ordersv1.Money{Amount: "0.10", Currency: "EUR"}}},
-		Total:            &ordersv1.Money{Amount: "0.30", Currency: "EUR"},
-		PlacedAt:         timestamppb.New(placedAt),
-		FulfillmentFacts: []*ordersv1.FulfillmentFact{{Kind: "preparation_started", OccurredAt: timestamppb.New(placedAt.Add(time.Minute))}},
+		Items:             []*ordersv1.OrderItem{{MenuItemId: "menu-tea", Quantity: 3, UnitPrice: &ordersv1.Money{Amount: "0.10", Currency: "EUR"}}},
+		Total:             &ordersv1.Money{Amount: "0.30", Currency: "EUR"},
+		PlacedAt:          timestamppb.New(placedAt),
+		Transitions:       []*ordersv1.OrderTransition{{Trigger: "start_preparation", OccurredAt: timestamppb.New(placedAt.Add(time.Minute))}},
+		CourierAssignedAt: timestamppb.New(placedAt.Add(2 * time.Minute)),
 		CancellationWindow: &ordersv1.CancellationWindow{
 			OpensAt: timestamppb.New(placedAt), ClosesAt: timestamppb.New(placedAt.Add(5 * time.Minute)),
 		},
@@ -170,7 +171,8 @@ func TestOrdersGetOrderCarriesCustomerAndMapsOrder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "confirmed", got.State)
 	assert.Equal(t, &applications.DeliveryWindow{Start: placedAt.Add(2 * time.Hour), End: placedAt.Add(2*time.Hour + 15*time.Minute)}, got.DeliveryWindow)
-	assert.Equal(t, []applications.Fact{{Kind: "preparation_started", OccurredAt: placedAt.Add(time.Minute)}}, got.Facts)
+	assert.Equal(t, []applications.Transition{{Trigger: "start_preparation", OccurredAt: placedAt.Add(time.Minute)}}, got.Transitions)
+	assert.Equal(t, placedAt.Add(2*time.Minute), got.CourierAssignedAt)
 	assert.Equal(t, placedAt.Add(5*time.Minute), got.Window.ClosesAt)
 	require.NotNil(t, got.Deadlines.ExpectedReadyAt)
 	assert.Equal(t, placedAt.Add(12*time.Minute), *got.Deadlines.ExpectedReadyAt)

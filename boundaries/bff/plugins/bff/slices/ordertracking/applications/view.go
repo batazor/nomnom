@@ -134,14 +134,13 @@ type ItemView struct {
 	LineTotal Money
 }
 
-var milestoneOfFact = map[string]MilestoneKind{
-	"payment_authorized":  MilestonePaid,
-	"restaurant_accepted": MilestoneConfirmed,
-	"preparation_started": MilestonePreparationStarted,
-	"ready_for_pickup":    MilestoneReadyForPickup,
-	"courier_assigned":    MilestoneCourierAssigned,
-	"picked_up":           MilestonePickedUp,
-	"delivery_completed":  MilestoneDelivered,
+var milestoneOfTrigger = map[string]MilestoneKind{
+	"authorize_payment": MilestonePaid,
+	"confirm":           MilestoneConfirmed,
+	"start_preparation": MilestonePreparationStarted,
+	"mark_ready":        MilestoneReadyForPickup,
+	"pick_up":           MilestonePickedUp,
+	"deliver":           MilestoneDelivered,
 }
 
 var endReasonOfCode = map[string]EndReason{
@@ -206,15 +205,18 @@ func endReason(order OrderSnapshot) EndReason {
 	return EndNotFulfilled
 }
 
-// milestones lists PLACED, the facts that are milestones and ENDED by time.
-// CONFIRMED comes from restaurant_accepted; Orders confirmed before orders
-// recorded that fact have none.
+// milestones lists PLACED, the transitions that are milestones, the current
+// Courier Assignment and ENDED by time. CONFIRMED comes from the confirm
+// transition; Orders confirmed before orders kept its time have none.
 func milestones(order OrderSnapshot) []Milestone {
 	result := []Milestone{{Kind: MilestonePlaced, OccurredAt: order.PlacedAt}}
-	for _, fact := range order.Facts {
-		if kind, ok := milestoneOfFact[fact.Kind]; ok {
-			result = append(result, Milestone{Kind: kind, OccurredAt: fact.OccurredAt})
+	for _, applied := range order.Transitions {
+		if kind, ok := milestoneOfTrigger[applied.Trigger]; ok {
+			result = append(result, Milestone{Kind: kind, OccurredAt: applied.OccurredAt})
 		}
+	}
+	if !order.CourierAssignedAt.IsZero() {
+		result = append(result, Milestone{Kind: MilestoneCourierAssigned, OccurredAt: order.CourierAssignedAt})
 	}
 	if order.Cancellation != nil {
 		result = append(result, Milestone{Kind: MilestoneEnded, OccurredAt: order.Cancellation.CancelledAt})

@@ -39,7 +39,11 @@ type OrderSnapshot struct {
 	// PremiumFee is nil for a standard Order.
 	PremiumFee *Money
 	PlacedAt   time.Time
-	Facts      []Fact
+	// Transitions is the history of the Order state machine.
+	Transitions []Transition
+	// CourierAssignedAt is the time of the current Courier Assignment; zero
+	// without a courier.
+	CourierAssignedAt time.Time
 	// Cancellation is set only for a cancelled Order.
 	Cancellation *Cancellation
 	// Window is set only while the Order State admits cancellation.
@@ -74,9 +78,9 @@ type OrderLine struct {
 	UnitPrice Money
 }
 
-// Fact is a Fulfillment Fact reflected in the Order, for example picked_up.
-type Fact struct {
-	Kind       string
+// Transition is an applied transition of the Order state machine, for example pick_up.
+type Transition struct {
+	Trigger    string
 	OccurredAt time.Time
 }
 

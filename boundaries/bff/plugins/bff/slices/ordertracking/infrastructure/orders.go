@@ -166,8 +166,11 @@ func snapshot(order *ordersv1.Order) applications.OrderSnapshot {
 			UnitPrice:  money(item.GetUnitPrice()),
 		})
 	}
-	for _, fact := range order.GetFulfillmentFacts() {
-		result.Facts = append(result.Facts, applications.Fact{Kind: fact.GetKind(), OccurredAt: fact.GetOccurredAt().AsTime()})
+	for _, applied := range order.GetTransitions() {
+		result.Transitions = append(result.Transitions, applications.Transition{Trigger: applied.GetTrigger(), OccurredAt: applied.GetOccurredAt().AsTime()})
+	}
+	if at := order.GetCourierAssignedAt(); at != nil {
+		result.CourierAssignedAt = at.AsTime()
 	}
 	if cancellation := order.GetCancellation(); cancellation != nil {
 		result.Cancellation = &applications.Cancellation{
