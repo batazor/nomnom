@@ -35,5 +35,5 @@ sequenceDiagram
 
 BDD-сценарии размещаются в `acceptance/cancel-restaurant-order.feature` после утверждения acceptance criteria в SDD.
 
-Общий каталог: [Restaurants use cases](../../../../../README.md#use-cases).
+Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).
 

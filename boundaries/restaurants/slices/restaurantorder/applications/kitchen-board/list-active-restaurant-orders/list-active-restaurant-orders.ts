@@ -8,7 +8,7 @@ import {
   authorizeKitchenBoard,
   type KitchenBoardItem,
   type KitchenBoardQuery,
-} from "../kitchen-board/kitchen-board.ts";
+} from "../kitchen-board.ts";
 
 export type ListActiveRestaurantOrders = KitchenBoardQuery;
 

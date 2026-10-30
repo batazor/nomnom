@@ -11,7 +11,7 @@ import {
   InvalidOpeningHoursError,
   InvalidTimeZoneError,
 } from "../slices/restaurant/domains/restaurant/restaurant.ts";
-import { AcceptOrderHandler } from "../slices/restaurantorder/applications/intake/accept-order/accept-order.ts";
+import { AcceptOrderHandler } from "../slices/restaurantorder/applications/acceptance/accept-order/accept-order.ts";
 import { GuardFailedError } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { OpeningHoursAcceptanceConditions } from "../slices/restaurantorder/infrastructure/acceptance/opening-hours.ts";
 import { RepositoryAcceptanceFactsReader } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";

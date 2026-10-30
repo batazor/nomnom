@@ -22,8 +22,8 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { AcceptOrderHandler } from "../../applications/intake/accept-order/accept-order.ts";
-import type { RejectOrderHandler } from "../../applications/intake/reject-order/reject-order.ts";
+import type { AcceptOrderHandler } from "../../applications/acceptance/accept-order/accept-order.ts";
+import type { RejectOrderHandler } from "../../applications/acceptance/reject-order/reject-order.ts";
 import type { KitchenCommand } from "../../applications/kitchen-command/kitchen-command.ts";
 import type { MarkAssembledHandler } from "../../applications/preparation/mark-assembled/mark-assembled.ts";
 import type { MarkReadyForPickupHandler } from "../../applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";

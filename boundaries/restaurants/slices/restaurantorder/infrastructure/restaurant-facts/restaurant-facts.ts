@@ -9,8 +9,8 @@ import type {
 import type {
   AcceptanceFacts,
   AcceptanceFactsReader,
-} from "../../applications/intake/accept-order/accept-order.ts";
-import type { RestaurantMarkets } from "../../applications/intake/receive-order-request/receive-order-request.ts";
+} from "../../applications/acceptance/accept-order/accept-order.ts";
+import type { RestaurantMarkets } from "../../applications/acceptance/receive-order-request/receive-order-request.ts";
 
 /**
  * Existence and Market of a restaurant, read from the Restaurant aggregate.

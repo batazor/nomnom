@@ -14,10 +14,10 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { CancelRestaurantOrderHandler } from "../../applications/intake/cancel-restaurant-order/cancel-restaurant-order.ts";
-import type { QueueRestaurantOrderHandler } from "../../applications/intake/queue-restaurant-order/queue-restaurant-order.ts";
-import type { ReceiveOrderRequestHandler } from "../../applications/intake/receive-order-request/receive-order-request.ts";
-import type { RecordPickupHandler } from "../../applications/preparation/record-pickup/record-pickup.ts";
+import type { ReceiveOrderRequestHandler } from "../../applications/acceptance/receive-order-request/receive-order-request.ts";
+import type { CancelRestaurantOrderHandler } from "../../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import type { QueueRestaurantOrderHandler } from "../../applications/preparation/queue-restaurant-order/queue-restaurant-order.ts";
+import type { RecordPickupHandler } from "../../applications/record-pickup/record-pickup.ts";
 import { fromPriorityMessage, toRestaurantOrderMessage } from "./messages.ts";
 
 export type FulfillmentRpcDependencies = Readonly<{

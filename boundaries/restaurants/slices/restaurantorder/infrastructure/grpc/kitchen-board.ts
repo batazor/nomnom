@@ -13,11 +13,11 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { GetKitchenQueueHandler } from "../../applications/board/get-kitchen-queue/get-kitchen-queue.ts";
-import type { KitchenBoardQuery } from "../../applications/board/kitchen-board/kitchen-board.ts";
-import type { ListActiveRestaurantOrdersHandler } from "../../applications/board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import type { ListIncomingOrdersHandler } from "../../applications/board/list-incoming-orders/list-incoming-orders.ts";
-import type { ListScheduledOrdersHandler } from "../../applications/board/list-scheduled-orders/list-scheduled-orders.ts";
+import type { GetKitchenQueueHandler } from "../../applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+import type { KitchenBoardQuery } from "../../applications/kitchen-board/kitchen-board.ts";
+import type { ListActiveRestaurantOrdersHandler } from "../../applications/kitchen-board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import type { ListIncomingOrdersHandler } from "../../applications/kitchen-board/list-incoming-orders/list-incoming-orders.ts";
+import type { ListScheduledOrdersHandler } from "../../applications/kitchen-board/list-scheduled-orders/list-scheduled-orders.ts";
 import {
   toActiveRestaurantOrderMessage,
   toIncomingOrderMessage,

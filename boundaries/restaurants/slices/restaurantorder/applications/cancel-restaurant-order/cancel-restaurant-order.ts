@@ -1,18 +1,18 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
-import type { Subject } from "../../../../../pkg/authz/subject.ts";
-import type { Outbox } from "../../../../../pkg/outbox/outbox.ts";
-import type { UnitOfWork } from "../../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../../pkg/usecase/errors.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
+import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type {
   CancellationDecision,
   CancellationPolicy,
   CancellationRejectionReason,
   RestaurantOrderRepository,
   RestaurantOrderState,
-} from "../../../domains/restaurantorder/restaurantorder.ts";
-import type { FulfillmentCoordinatorAccess } from "../../access-control/access-control.ts";
-import { saveAndPublish } from "../../publish-order-change/publish-order-change.ts";
+} from "../../domains/restaurantorder/restaurantorder.ts";
+import type { FulfillmentCoordinatorAccess } from "../access-control/access-control.ts";
+import { saveAndPublish } from "../publish-order-change/publish-order-change.ts";
 
 export type CancelRestaurantOrder = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */
@@ -22,7 +22,7 @@ export type CancelRestaurantOrder = Readonly<{
   reason?: string;
 }>;
 
-export { CancellationRejectionReason } from "../../../domains/restaurantorder/restaurantorder.ts";
+export { CancellationRejectionReason } from "../../domains/restaurantorder/restaurantorder.ts";
 
 /** Business result by stage; a rejection is not a technical error. */
 export type CancelRestaurantOrderResult =

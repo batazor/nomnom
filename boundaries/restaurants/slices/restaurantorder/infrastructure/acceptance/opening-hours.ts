@@ -1,5 +1,5 @@
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
-import type { AcceptanceConditionsProvider } from "../../applications/intake/accept-order/accept-order.ts";
+import type { AcceptanceConditionsProvider } from "../../applications/acceptance/accept-order/accept-order.ts";
 import type { AcceptanceConditions } from "../../domains/restaurantorder/acceptance.ts";
 
 const BEGINNING = new Date(0);

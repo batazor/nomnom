@@ -36,6 +36,10 @@ _Avoid_: Delivery, fulfillment
 Бизнес-очередь принятых Restaurant Order, ожидающих начала Preparation.
 _Avoid_: Kafka queue, task queue
 
+**Kitchen Board**:
+Read models кухни одного ресторана для её сотрудников: очередь, входящие, активные, готовые и запланированные заказы.
+_Avoid_: Order flow board, Kitchen Queue
+
 **Preparation Item**:
 Позиция Restaurant Order в работе кухни.
 _Avoid_: Menu Item, order item

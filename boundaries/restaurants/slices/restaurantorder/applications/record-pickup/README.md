@@ -10,7 +10,7 @@
 ## Границы
 
 - **Владелец:** `restaurants/slices/restaurantorder`.
-- **Домен:** `domains/restaurantorder` — `RestaurantOrder.recordPickup` (`READY × RecordPickup → PICKED_UP`, [FSM](../../../../../../../docs/fsm.md)).
+- **Домен:** `domains/restaurantorder` — `RestaurantOrder.recordPickup` (`READY × RecordPickup → PICKED_UP`, [FSM](../../../../../../docs/fsm.md)).
 - **Взаимодействие:** gRPC `RecordRestaurantOrderPickup` (`order_id`, `picked_up_at`) через internal gateway; только `service` identity `orders`, платформенная проверка до чтения заказа. Вызывает Activity `RecordRestaurantPickup`, когда workflow уже получил и готовность кухни, и `DeliveryPickedUp`. Заказ не в `READY` — `invalid_transition` (`FAILED_PRECONDITION`), неизвестный — `not_found`.
 
 ## Последовательность
@@ -28,4 +28,4 @@ sequenceDiagram
     App-->>Workflow: restaurant_order
 ```
 
-Общий каталог: [Restaurants use cases](../../../../../README.md#use-cases).
+Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

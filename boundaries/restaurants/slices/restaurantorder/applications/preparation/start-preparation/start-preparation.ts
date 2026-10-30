@@ -14,7 +14,7 @@ import type { KitchenStaffAccess } from "../../access-control/access-control.ts"
 import type {
   KitchenQueueOrdering,
   KitchenQueueReader,
-} from "../../board/get-kitchen-queue/get-kitchen-queue.ts";
+} from "../../kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
 import type { RepeatPolicy } from "../../kitchen-command/kitchen-command.ts";
 import { loadRestaurantOrder } from "../../load-restaurant-order/load-restaurant-order.ts";
 import { saveAndPublish } from "../../publish-order-change/publish-order-change.ts";

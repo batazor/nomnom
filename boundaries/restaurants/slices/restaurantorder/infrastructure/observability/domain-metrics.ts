@@ -22,12 +22,12 @@ import type {
   PublishableEvent,
 } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { CancelRestaurantOrderResult } from "../../applications/intake/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type {
   ReceiveOrderRequest,
   ReceiveOrderRequestHandler,
   ReceiveOrderRequestResult,
-} from "../../applications/intake/receive-order-request/receive-order-request.ts";
+} from "../../applications/acceptance/receive-order-request/receive-order-request.ts";
+import type { CancelRestaurantOrderResult } from "../../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import {
   ALL_STATES,
   InvalidTransitionError,

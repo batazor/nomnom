@@ -1,16 +1,16 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
-import type { Subject } from "../../../../../pkg/authz/subject.ts";
-import type { UnitOfWork } from "../../../../../pkg/unit-of-work/unit-of-work.ts";
-import { NotFoundError } from "../../../../../pkg/usecase/errors.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
+import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import {
   AlreadyInStateError,
   type RestaurantOrderRepository,
-} from "../../../domains/restaurantorder/restaurantorder.ts";
-import type { FulfillmentProcessAccess } from "../../access-control/access-control.ts";
+} from "../../domains/restaurantorder/restaurantorder.ts";
+import type { FulfillmentProcessAccess } from "../access-control/access-control.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../../restaurant-order-view/restaurant-order-view.ts";
+} from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type RecordPickup = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */

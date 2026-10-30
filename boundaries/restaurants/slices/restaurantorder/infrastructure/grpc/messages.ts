@@ -11,10 +11,10 @@ import {
   RestaurantOrderState,
   ScheduledRestaurantOrderSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import type { KitchenQueueEntry } from "../../applications/board/get-kitchen-queue/get-kitchen-queue.ts";
-import type { ActiveRestaurantOrder } from "../../applications/board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import type { IncomingOrder } from "../../applications/board/list-incoming-orders/list-incoming-orders.ts";
-import type { ScheduledOrder } from "../../applications/board/list-scheduled-orders/list-scheduled-orders.ts";
+import type { KitchenQueueEntry } from "../../applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+import type { ActiveRestaurantOrder } from "../../applications/kitchen-board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import type { IncomingOrder } from "../../applications/kitchen-board/list-incoming-orders/list-incoming-orders.ts";
+import type { ScheduledOrder } from "../../applications/kitchen-board/list-scheduled-orders/list-scheduled-orders.ts";
 import type { RestaurantOrderView } from "../../applications/restaurant-order-view/restaurant-order-view.ts";
 import type { OrderScheduleValue } from "../../domains/restaurantorder/restaurantorder.ts";
 

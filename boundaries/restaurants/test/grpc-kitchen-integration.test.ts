@@ -30,12 +30,12 @@ import {
   DatabaseRestaurantRepository,
   DatabaseRestaurantWaitTimes,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
-import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/board/get-kitchen-queue/get-kitchen-queue.ts";
-import { ListActiveRestaurantOrdersHandler } from "../slices/restaurantorder/applications/board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import { ListIncomingOrdersHandler } from "../slices/restaurantorder/applications/board/list-incoming-orders/list-incoming-orders.ts";
-import { AcceptOrderHandler } from "../slices/restaurantorder/applications/intake/accept-order/accept-order.ts";
-import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/intake/receive-order-request/receive-order-request.ts";
-import { RejectOrderHandler } from "../slices/restaurantorder/applications/intake/reject-order/reject-order.ts";
+import { AcceptOrderHandler } from "../slices/restaurantorder/applications/acceptance/accept-order/accept-order.ts";
+import { ReceiveOrderRequestHandler } from "../slices/restaurantorder/applications/acceptance/receive-order-request/receive-order-request.ts";
+import { RejectOrderHandler } from "../slices/restaurantorder/applications/acceptance/reject-order/reject-order.ts";
+import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+import { ListActiveRestaurantOrdersHandler } from "../slices/restaurantorder/applications/kitchen-board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import { ListIncomingOrdersHandler } from "../slices/restaurantorder/applications/kitchen-board/list-incoming-orders/list-incoming-orders.ts";
 import { MarkAssembledHandler } from "../slices/restaurantorder/applications/preparation/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../slices/restaurantorder/applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import { ReportPreparationDelayHandler } from "../slices/restaurantorder/applications/preparation/report-preparation-delay/report-preparation-delay.ts";
