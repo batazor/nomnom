@@ -130,15 +130,11 @@ func TestProcessIgnoresSignalsAfterOutcome(t *testing.T) {
 	}
 }
 
-// Confirmations of OrderPlaced and the payment result are admitted without effect.
-func TestProcessAdmitsConfirmations(t *testing.T) {
-	for _, kind := range []fulfillment.SignalKind{fulfillment.SignalOrderPlaced, fulfillment.SignalPaymentAuthorized, fulfillment.SignalPaymentFailed} {
-		t.Run(string(kind), func(t *testing.T) {
-			s := newProcess(t)
+// The confirmation of OrderPlaced is admitted without effect.
+func TestProcessAdmitsOrderPlaced(t *testing.T) {
+	s := newProcess(t)
 
-			assert.True(t, s.signal(kind).Changed())
-			assert.Equal(t, fulfillment.StageAuthorizingPayment, s.p.Stage())
-			assert.False(t, s.p.Failed())
-		})
-	}
+	assert.True(t, s.signal(fulfillment.SignalOrderPlaced).Changed())
+	assert.Equal(t, fulfillment.StageAuthorizingPayment, s.p.Stage())
+	assert.False(t, s.p.Failed())
 }

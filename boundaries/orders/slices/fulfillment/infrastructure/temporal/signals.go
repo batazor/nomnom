@@ -14,8 +14,6 @@ import (
 // kindBySignal maps Integration Event Signals to kinds of the model.
 var kindBySignal = map[string]fulfillment.SignalKind{
 	SignalOrderPlaced:               fulfillment.SignalOrderPlaced,
-	SignalPaymentAuthorized:         fulfillment.SignalPaymentAuthorized,
-	SignalPaymentFailed:             fulfillment.SignalPaymentFailed,
 	SignalRestaurantOrderAccepted:   fulfillment.SignalRestaurantOrderAccepted,
 	SignalRestaurantOrderRejected:   fulfillment.SignalRestaurantOrderRejected,
 	SignalPreparationStarted:        fulfillment.SignalPreparationStarted,

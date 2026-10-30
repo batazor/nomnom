@@ -46,11 +46,13 @@ Temporal не используется для:
 
 ### Входящие события и идемпотентность
 
-Факты `restaurants`, `delivery` и `payments` проходят путь `Kafka → orders consumer → Inbox → application handler → Signal/Update`. Соседние контексты не вызывают Temporal напрямую.
+Факты `restaurants` и `delivery` проходят путь `Kafka → orders consumer → Inbox → application handler → Signal/Update`. Соседние контексты не вызывают Temporal напрямую.
+
+Результат операции `payments` workflow получает синхронно, результатом Activity. `orders` не читает `payments.v1.payment-events`, и Signal для этих событий нет.
 
 Дедупликация двухуровневая: Inbox по `(consumer, event_id)` защищает локальные эффекты consumer; workflow хранит обработанные `event_id` и превращает повтор Signal RPC в no-op. Имя Signal совпадает с именем Integration Event; перевод `fulfillment.Kind` в имя Signal выполняет адаптер.
 
-Положительное событие, которое текущий Workflow Stage не ожидает, логируется и игнорируется без падения workflow. Отрицательные факты (`RestaurantOrderRejected`, `PreparationFailed`, `DeliveryFailed`, `PaymentFailed`) в незавершённом workflow молча не игнорируются: они ведут в Saga с диагностикой.
+Положительное событие, которое текущий Workflow Stage не ожидает, логируется и игнорируется без падения workflow. Отрицательные факты (`RestaurantOrderRejected`, `PreparationFailed`, `DeliveryFailed`) в незавершённом workflow молча не игнорируются: они ведут в Saga с диагностикой. Отказ оплаты ведёт в Saga через результат Activity.
 
 ### Signal, Update, Query
 

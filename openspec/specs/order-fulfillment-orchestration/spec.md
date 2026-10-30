@@ -111,7 +111,7 @@ Workflow SHALL инициировать запрос Order Acceptance и durable
 
 ### Requirement: Входящее событие проходит Inbox и несёт event_id
 
-События `restaurants`, `delivery` и `payments` SHALL поступать по пути `Kafka → orders consumer → Inbox → application handler → Signal/Update`. Соседние контексты MUST NOT вызывать Temporal напрямую. Каждый Signal SHALL содержать исходный `event_id`.
+События `restaurants` и `delivery` SHALL поступать по пути `Kafka → orders consumer → Inbox → application handler → Signal/Update`. Результат операции `payments` workflow SHALL получать результатом Activity, а не Signal. Соседние контексты MUST NOT вызывать Temporal напрямую. Каждый Signal SHALL содержать исходный `event_id`.
 
 #### Scenario: Повтор Signal RPC после timeout
 **ID:** AC-003
@@ -124,7 +124,7 @@ Workflow SHALL инициировать запрос Order Acceptance и durable
 - **THEN** handler игнорирует событие, записывает диагностический log и не завершает workflow ошибкой
 
 #### Scenario: Отрицательное событие вне ожидаемого Workflow Stage
-- **WHEN** незавершённый workflow получает `RestaurantOrderRejected`, `PreparationFailed`, `DeliveryFailed` или `PaymentFailed` в stage, которая не ждёт этот факт
+- **WHEN** незавершённый workflow получает `RestaurantOrderRejected`, `PreparationFailed` или `DeliveryFailed` в stage, которая не ждёт этот факт
 - **THEN** workflow не игнорирует событие молча, а запускает предусмотренную Saga с диагностикой
 
 ### Requirement: Signal называется по Integration Event

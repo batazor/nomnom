@@ -6,10 +6,8 @@ import "time"
 type SignalKind string
 
 const (
-	// Confirmations: the process already knows the result synchronously.
-	SignalOrderPlaced       SignalKind = "OrderPlaced"
-	SignalPaymentAuthorized SignalKind = "PaymentAuthorized"
-	SignalPaymentFailed     SignalKind = "PaymentFailed"
+	// Confirmation: the process already knows the Order was placed.
+	SignalOrderPlaced SignalKind = "OrderPlaced"
 
 	SignalRestaurantOrderAccepted   SignalKind = "RestaurantOrderAccepted"
 	SignalRestaurantOrderRejected   SignalKind = "RestaurantOrderRejected"

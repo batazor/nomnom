@@ -30,7 +30,7 @@ type OrderPlaced struct {
 	RestaurantId string                 `protobuf:"bytes,3,opt,name=restaurant_id,json=restaurantId,proto3" json:"restaurant_id,omitempty"`
 	Total        *Money                 `protobuf:"bytes,4,opt,name=total,proto3" json:"total,omitempty"`
 	PlacedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=placed_at,json=placedAt,proto3" json:"placed_at,omitempty"`
-	// Состав заказа по ценам catalog snapshot; restaurants создаёт по нему Restaurant Order.
+	// Состав заказа по ценам catalog snapshot.
 	Items []*OrderItem `protobuf:"bytes,6,rep,name=items,proto3" json:"items,omitempty"`
 	// Market of the aggregate (ADR 41).
 	MarketId string `protobuf:"bytes,7,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`

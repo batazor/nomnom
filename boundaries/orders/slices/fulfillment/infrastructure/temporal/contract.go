@@ -28,8 +28,6 @@ func WorkflowID(orderID string) string { return workflowIDPrefix + orderID }
 // Signal names equal the names of the Integration Events that cause them.
 const (
 	SignalOrderPlaced               = "OrderPlaced"
-	SignalPaymentAuthorized         = "PaymentAuthorized"
-	SignalPaymentFailed             = "PaymentFailed"
 	SignalRestaurantOrderAccepted   = "RestaurantOrderAccepted"
 	SignalRestaurantOrderRejected   = "RestaurantOrderRejected"
 	SignalPreparationStarted        = "PreparationStarted"

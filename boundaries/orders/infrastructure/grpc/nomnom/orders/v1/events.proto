@@ -16,7 +16,7 @@ message OrderPlaced {
   string restaurant_id = 3;
   Money total = 4;
   google.protobuf.Timestamp placed_at = 5;
-  // Состав заказа по ценам catalog snapshot; restaurants создаёт по нему Restaurant Order.
+  // Состав заказа по ценам catalog snapshot.
   repeated OrderItem items = 6;
   // Market of the aggregate (ADR 41).
   string market_id = 7;
