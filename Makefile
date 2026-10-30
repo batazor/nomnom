@@ -132,11 +132,15 @@ semconv-tools: ## установить weaver $(WEAVER_VERSION) в GOBIN (brew w
 LIKEC4_VERSION ?= 1.60.0
 LIKEC4 := npx --yes likec4@$(LIKEC4_VERSION)
 
-.PHONY: arch-dev arch-validate
+.PHONY: arch-dev arch-validate arch-generate arch-check
 arch-dev: ## LikeC4: схемы архитектуры в браузере с обновлением при правке
 	@$(LIKEC4) start docs/architecture
 arch-validate: ## LikeC4: проверить модель docs/architecture
 	@$(LIKEC4) validate docs/architecture
+arch-generate: ## сгенерировать каталог событий docs/events-catalog.md
+	@cd ops/architecture && go run . -root ../..
+arch-check: arch-validate ## проверить модель, сверить её с ops, каталог событий без диффа и индекс ADR
+	@cd ops/architecture && go test ./... && go run . -root ../.. -check
 
 .PHONY: help
 help: ## показать цели

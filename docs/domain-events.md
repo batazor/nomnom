@@ -27,7 +27,7 @@ infrastructure → маппинг в Integration Event, Event Envelope, сери
 | --- | --- | --- |
 | `domains/` | Создаёт Domain Event в domain method, когда факт значим; хранит события в памяти; отдаёт их через `PullEvents()`. | Topic, Protobuf package, версия схемы, headers, сериализация, `event_id`, Outbox, Kafka, Watermill |
 | `applications/` | Забирает события после domain operation, решает, какие публикуются, передаёт их в порт Outbox внутри UoW. При необходимости собирает Application DTO исходящего события. | Сериализация, Protobuf, Kafka, Event Envelope |
-| `infrastructure/` | Маппит вход порта в Integration Event, заполняет Event Envelope, сериализует, пишет Outbox Record в текущую транзакцию, публикует Outbox в Kafka. | Бизнес-решение о публикации; загрузка aggregate в publisher |
+| `infrastructure/` | Маппит вход порта в Integration Event, заполняет Event Envelope, сериализует, пишет Outbox Record в текущую транзакцию; публикует Debezium ([ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md)). | Бизнес-решение о публикации; загрузка aggregate в publisher |
 
 FSM не создаёт событие автоматически на каждый переход ([ADR 21](adr/0021-pure-fsm-transitions.md#domain-methods-и-events)): выбор Domain Event — явное решение domain method.
 
@@ -46,7 +46,7 @@ handler (cancel use case)
           → Event Envelope → serialize → Outbox Record в текущую транзакцию
     }
   → commit
-Outbox publisher → Kafka → mark published
+Debezium (журнал базы) → Kafka
 ```
 
 Пример handler'а в Go (иллюстрация, не реализация):
@@ -114,7 +114,7 @@ Consumer, проверяющий `aggregate_version` ([ADR 11](adr/0011-transact
 | `payload` | Сериализованный Integration Event. |
 | `metadata` | W3C trace context, `correlation_id`, `causation_id` (`event_id` входящего события, если запись создана его обработчиком). Берутся из `ctx`. |
 
-Infrastructure заполняет весь envelope; domain и application его не видят. Protobuf-схема envelope и размещение полей в Kafka headers или payload пока не выбраны ([открытые вопросы](event-driven-architecture.md#открытые-вопросы-реализации)). `event_id` в любом случае передаётся в Kafka header `event_id`.
+Infrastructure заполняет весь envelope; domain и application его не видят. Envelope передаётся в Kafka headers (`event_id`, `event_type`, `occurred_at`, `aggregate_*`, `traceparent`), payload — Protobuf ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md)).
 
 ## `event_id`
 
@@ -146,12 +146,12 @@ UoW {
   insert Outbox Record (envelope + serialized Integration Event)
 }
 commit
-Outbox publisher: read record → Kafka → mark published
+Debezium: журнал базы → Kafka
 ```
 
 - В Outbox хранится transport-ready событие. Маппинг и сериализация выполняются до commit, внутри UoW: ошибка маппинга откатывает бизнес-изменение, а не обнаруживается publisher'ом позже.
 - Business state и Outbox Record — одна Unit of Work ([ADR 20](adr/0020-unit-of-work-for-local-transactions.md#inbox-и-outbox)).
-- Publisher читает готовую запись, публикует её и фиксирует результат. Он не загружает aggregate, не видит Domain Events и не выполняет domain mapping; в `orders` это Watermill Forwarder ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md#orders-go-postgresql-и-watermill)).
+- Публикует Debezium: читает вставку из журнала базы и через Outbox Event Router пишет сообщение в Kafka, запись не помечается ([ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md)). Приложение Outbox не читает, а Debezium не загружает aggregate и не видит Domain Events.
 
 ## Domain Events внутри контекста
 
@@ -276,7 +276,7 @@ Topic и партиционирование новой версии опреде
 
 ## Каталог кандидатов: `orders`, `delivery`, `payments`
 
-Domain Events, которые application-слой передаёт в Outbox port (changes `implement-{orders,delivery,payments}-application-layer`). Integration Event контракты, имена в `nomnom.<context>.v1.*` и consumers ещё не определены; маппинг по умолчанию — кандидат 1 → 1.
+Domain Events, которые application-слой передаёт в Outbox port (changes `implement-{orders,delivery,payments}-application-layer`). Контракты Integration Events — `events.proto` контекстов ([каталог событий](events-catalog.md)); не каждому Domain Event соответствует публикуемое событие.
 
 | Context | Domain Event | Use case | Примечание |
 | --- | --- | --- | --- |

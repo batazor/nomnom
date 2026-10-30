@@ -113,7 +113,7 @@ Restaurant Order received → accepted → queued → preparation started
 
 | Use Case | Contract name (кандидат) | Actor | Предусловие (State) | Результат | Факт |
 | --- | --- | --- | --- | --- | --- |
-| **Receive Order Request** | `ReceiveRestaurantOrder` | Activity `orders` | Нет заказа с этим `orderId` | `RECEIVED`; запланированный заказ — с `schedule` (окно, `planned_ready_at`); повтор возвращает существующий заказ | — |
+| **Receive Order Request** | `ReceiveOrderRequest` | Activity `orders` | Нет заказа с этим `orderId` | `RECEIVED`; запланированный заказ — с `schedule` (окно, `planned_ready_at`); повтор возвращает существующий заказ | — |
 | **Accept Order** | `AcceptRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | Без окна: `ACCEPTED`, затем `QUEUED`; `accepted_at`, `queued_at`, `expected_ready_at`. Запланированный: `ACCEPTED`, `expected_ready_at = planned_ready_at` | `RestaurantOrderAccepted` |
 | **Reject Order** | `RejectRestaurantOrder` | Сотрудник ресторана | `RECEIVED` | `REJECTED` с причиной | `RestaurantOrderRejected` |
 | **Queue Restaurant Order** | `QueueRestaurantOrder` | `service` identity `orders` (запланированный заказ в `start_at`); заказ без окна — в UoW Accept Order | `ACCEPTED` | `QUEUED`, `queued_at`; `expected_ready_at` не меняется; место определяется политикой очереди | `RestaurantOrderQueued` (локальный) |
@@ -181,7 +181,7 @@ Start Next Preparation: кухня называет ресторан и `request
 | **Get Kitchen Queue** | `GetKitchenQueue` | Сотрудник ресторана | Заказы `QUEUED` в порядке очереди с `expected_ready_at` и окном запланированного заказа | Projection Kitchen Queue |
 | **List Scheduled Orders** | `ListScheduledOrders` | Сотрудник ресторана | Принятые запланированные заказы в `ACCEPTED` по `planned_ready_at` с окном; в Kitchen Queue их нет до Queue Restaurant Order | Read model kitchen board |
 | **Get Restaurant Order** | `GetRestaurantOrder` | Сотрудник ресторана; авторизованный внутренний actor | Состав, State, timeline одного заказа | Read model `restaurants` |
-| **List Active Preparations** | `ListActivePreparations` | Сотрудник ресторана | Заказы `PREPARING`, `ASSEMBLED` с прогрессом позиций и задержками | Read model kitchen board |
+| **List Active Preparations** | `ListActiveRestaurantOrders` | Сотрудник ресторана | Заказы `PREPARING`, `ASSEMBLED` с прогрессом позиций и задержками | Read model kitchen board |
 | **List Ready Orders** | `ListReadyOrders` | Сотрудник ресторана | Заказы `READY`, ожидающие передачи курьеру, с информацией о курьере при наличии | Read model kitchen board |
 | **Get Cook Pool** | `GetCookPool` | Сотрудник ресторана | Pool Load: размер, на линии, занято, в очереди; Cook с текущим заказом | Read model по `cooks` и `restaurant_orders` |
 
@@ -300,7 +300,7 @@ drink   PENDING → READY ────────────┘
 
 ## События
 
-### Domain Events (кандидаты)
+### Domain Events
 
 Domain Event записывает domain method явно; FSM не создаёт событие на каждый переход ([ADR 21](adr/0021-pure-fsm-transitions.md#domain-methods-и-events)).
 
@@ -335,7 +335,7 @@ Domain Event записывает domain method явно; FSM не создаё�
 | `RestaurantOrderCancelled` | `orders`: подтверждение результата компенсации | `order_id`, `stage`, `preparation_started` |
 | `PreparationFailed` | `orders`: компенсация | `order_id`, `reason`, `stage` |
 
-Цепочка — по [Domain и Integration Events](domain-events.md): domain method → `PullEvents()` → решение handler → Outbox port в той же UoW → infrastructure mapper → `nomnom.restaurants.v1.*` → Kafka. Partition key — кандидат `order_id`, чтобы `orders` получал факты одного `Order` по порядку; решение — вместе с topics.
+Цепочка — по [Domain и Integration Events](domain-events.md): domain method → `PullEvents()` → решение handler → Outbox port в той же UoW → infrastructure mapper → `nomnom.restaurants.v1.*` → Kafka. Partition key — `aggregate_id` стрима `restaurants.v1.restaurant-order-events`.
 
 ### Сверка с сигналами Temporal
 
@@ -439,8 +439,7 @@ Feature: Order ready for pickup
 - Семантика дубликата команды: no-op или ошибка для Start Preparation и Mark Ready for Pickup. Текущее допущение реализации — обязательный параметр handler `onRepeat` без значения по умолчанию.
 - Политика отмены во время Preparation и после Ready, включая списание еды. Текущее допущение реализации — обязательный параметр handler `cancellationDuringPreparation` без значения по умолчанию.
 - Нужно ли `restaurants` подтверждение передачи заказа курьеру (state после `READY`) или достаточно факта Pickup из `delivery`.
-- Какие события публиковать, их окончательные имена и потребитель `delivery` для `RestaurantOrderReady` и `PreparationDelayed`.
-- Грамматика имён: `PreparationStarted`, `PreparationDelayed`, `PreparationFailed` не следуют форме `<Aggregate><Fact>`; кандидаты `RestaurantOrderPreparationStarted` и подобные — решить при создании контракта.
+- Нужен ли потребитель `delivery` для `RestaurantOrderReady` и `PreparationDelayed`.
 - Cancel до Receive: Activity отмены может прийти раньше, чем повтор Receive Order Request создаст заказ; нужен ли tombstone, запрещающий последующее создание. Текущее допущение реализации — `NotFoundError` без tombstone.
 
 Текущие допущения реализации описаны в [design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md#допущения-по-открытым-продуктовым-вопросам); они не закрывают вопросы выше.

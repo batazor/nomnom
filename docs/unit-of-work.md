@@ -143,7 +143,7 @@ func (h Handler) Handle(ctx context.Context, cmd CompleteOrder) (Result, error) 
 
 Дефолт PostgreSQL — `READ COMMITTED`. `REPEATABLE READ` и `SERIALIZABLE` выбираются только по явной причине, записанной в документации use case (например, инвариант по нескольким строкам, который нельзя защитить constraint'ом или версией). Повышенный уровень приносит serialization failures, поэтому такой use case обязан поддерживать retry.
 
-Для MongoDB используются read concern `snapshot` и write concern `majority` в транзакциях; детали фиксируются при реализации `restaurants`.
+Для MongoDB используются read concern `snapshot` и write concern `majority` в транзакциях (`infrastructure/repository/unit-of-work.ts`).
 
 ### Optimistic concurrency
 
@@ -222,9 +222,9 @@ COMMIT
 
 Application решает, какое integration event создать, и передаёт его в порт Outbox; infrastructure преобразует его в Protobuf payload и пишет запись в текущую транзакцию ([ADR 6](adr/0006-ddd-structure-inside-vertical-slices.md#mapping)).
 
-Для Watermill в `orders`: publisher `watermill-sql` исполняется на executor текущей транзакции — создаётся на транзакции, извлечённой из `ctx`, по одному на транзакцию ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md#orders-go-postgresql-и-watermill)). Способ получения executor'а (`*sql.Tx` или адаптер pgx) выбирается при реализации; требование — Outbox и state в одной транзакции.
+В `orders` запись Outbox выполняет репозиторий `slices/order/infrastructure/repository/outbox.go` на executor текущей транзакции: Outbox и state в одной транзакции.
 
-Kafka publish выполняется после commit Outbox publisher'ом (Watermill Forwarder в `orders`). Kafka в UoW не входит.
+Kafka publish выполняет Debezium после commit ([ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md)). Kafka в UoW не входит.
 
 ### Inbox
 
@@ -483,9 +483,7 @@ Accept Delivery Offer, Reassign Courier и сценарии завершения
 
 ## Открытые вопросы реализации
 
-- драйвер PostgreSQL в `orders` и способ передать executor транзакции в `watermill-sql` publisher;
 - формат хранения idempotency key команд и сохранённого результата (общий с [event-driven architecture](event-driven-architecture.md#открытые-вопросы-реализации));
 - точные параметры retry (число попыток, backoff) после нагрузочных данных;
 - имена метрик и buckets гистограмм;
-- механизм propagation в `payments` и `delivery` после выбора хранилищ;
 - стратегия повторения Signal Temporal для duplicate-ветки apply-сценариев `orders`. Выбран первый вариант из [«Действия после commit в Inbox-сценариях»](#действия-после-commit-в-inbox-сценариях): duplicate-ветка повторно уведомляет workflow с тем же `event_id`, workflow дедуплицирует его ([design.md change `implement-orders-application-layer`](../openspec/changes/archive/2026-10-25-implement-orders-application-layer/design.md)); вопрос остаётся до реализации Temporal adapter'а.

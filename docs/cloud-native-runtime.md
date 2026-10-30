@@ -54,7 +54,7 @@ Liveness остаётся успешной во время graceful shutdown: и
 
 ### Consumers и workers
 
-Для Kafka consumers, Outbox relay и Temporal workers Kubernetes не управляет входящей работой: они сами забирают её из Kafka, хранилища или Temporal. Для таких процессов readiness — диагностический сигнал: он показывает, что экземпляр инициализирован, не находится в shutdown и способен получать работу, но не влияет на распределение работы. Распределение определяется consumer group, Temporal task queue или механизмом распределения relay.
+Для Kafka consumers и Temporal workers Kubernetes не управляет входящей работой: они сами забирают её из Kafka или Temporal. Для таких процессов readiness — диагностический сигнал: он показывает, что экземпляр инициализирован, не находится в shutdown и способен получать работу, но не влияет на распределение работы. Распределение определяется consumer group или Temporal task queue.
 
 ### Startup и зависимости
 
@@ -175,7 +175,7 @@ Application code корректно обрабатывает cancellation contex
 
 Если shutdown deadline истёк, незакоммиченные сообщения будут доставлены повторно другому экземпляру после rebalance. Это штатное поведение at-least-once delivery, а не ошибка: корректность обеспечивают Transactional Inbox, Outbox и idempotency. Прерванная локальная транзакция откатывается целиком вместе с записью Inbox.
 
-Outbox relay ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md)) при shutdown прекращает выборку новых записей, дожидается подтверждения Kafka для уже отправленных и отмечает опубликованными только подтверждённые. Неотмеченные записи публикуются повторно другим экземпляром.
+Процесса Outbox relay нет: Outbox доставляет Debezium ([ADR 37](adr/0037-outbox-delivery-via-debezium-cdc.md)), поэтому shutdown приложения публикацию не затрагивает.
 
 ## Temporal workers
 
@@ -191,7 +191,7 @@ Lifecycle Temporal server не является частью lifecycle `orders`.
 
 ## Background workers
 
-Любой background process (Outbox relay, периодическая задача, внутренний consumer, обновление кешей) имеет:
+Любой background process (периодическая задача, внутренний consumer, обновление кешей) имеет:
 
 - явного owner в composition root;
 - явный lifecycle start;
@@ -314,7 +314,7 @@ composition root
 | `delivery` | `pkg/lifecycle` (`Lifecycle::bind(settings).await?.run(worker)`), `di::HttpWorker` | `9083` |
 | `payments` | `pkg/lifecycle` (`Lifecycle(config).run(worker)`), `HttpWorker` | `9084` |
 
-Общие параметры: `management.port` (`MANAGEMENT__PORT`, отличается от бизнес-порта), `shutdown.readiness_delay` (`SHUTDOWN__READINESS_DELAY`, по умолчанию `5s`, допускается `0`) и `shutdown.drain_timeout` (`SHUTDOWN__DRAIN_TIMEOUT`, по умолчанию `20s`). Длительности в environment записываются как `500ms`, `5s`, `1m`. `shutdown.telemetry_flush_timeout` появится вместе с OpenTelemetry SDK. Повторный сигнал во время shutdown завершает процесс сразу: в Go, Node.js и Python восстанавливается обработка по умолчанию, а в Rust, где `tokio` не умеет её вернуть, lifecycle прерывает drain и выходит с non-zero exit.
+Общие параметры: `management.port` (`MANAGEMENT__PORT`, отличается от бизнес-порта), `shutdown.readiness_delay` (`SHUTDOWN__READINESS_DELAY`, по умолчанию `5s`, допускается `0`) и `shutdown.drain_timeout` (`SHUTDOWN__DRAIN_TIMEOUT`, по умолчанию `20s`). Длительности в environment записываются как `500ms`, `5s`, `1m`. В `payments` и `restaurants` flush телеметрии ограничен `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`. Повторный сигнал во время shutdown завершает процесс сразу: в Go, Node.js и Python восстанавливается обработка по умолчанию, а в Rust, где `tokio` не умеет её вернуть, lifecycle прерывает drain и выходит с non-zero exit.
 
 Один набор black-box сценариев проверяет contract на реальных процессах всех четырёх приложений: [`ops/runtime-contract`](../ops/runtime-contract/README.md), запуск — `make runtime-contract`. Завершение начатых запросов в пределах deadline и non-zero exit при его превышении покрыты unit-тестами lifecycle-модулей.
 
@@ -332,7 +332,7 @@ BFF использует сторонний Cosmo Router, который сам 
 | --- | --- | --- | --- | --- |
 | Сигналы и PID 1 | `signal.NotifyContext` в процессе PID 1 без init в distroless; подтвердить отсутствие дочерних процессов. | `process.on('SIGTERM')` под `tini`; исключить завершение через `process.exit` до drain. | `tokio::signal::unix` под `tini`. | Явный обработчик (`loop.add_signal_handler` или `signal.signal`) под `tini`; поведение выбранного ASGI/gRPC server при сигнале. |
 | cgroup-aware limits | Способ задания `GOMEMLIMIT`; контроль, что `GOMAXPROCS` не переопределён. | Heap limit и учёт CPU quota в Node.js 24/libuv. | Размеры worker и blocking pools async runtime. | Модель процессов; число workers без `os.cpu_count()`. |
-| GOAWAY и drain в gRPC-стеке | `grpc-go` `GracefulStop` с deadline и fallback на `Stop`. | Выбранный gRPC/Connect server для Node.js: GOAWAY и закрытие HTTP/2 sessions. | `tonic` `serve_with_shutdown`: GOAWAY и ожидание in-flight запросов. | `grpcio` `server.stop(grace)` или асинхронный аналог. |
+| GOAWAY и drain в gRPC-стеке | `grpc-go` `GracefulStop` с deadline и fallback на `Stop`. | `@grpc/grpc-js`: GOAWAY и закрытие HTTP/2 sessions. | `tonic` `serve_with_shutdown`: GOAWAY и ожидание in-flight запросов. | `grpcio` `server.stop(grace)` или асинхронный аналог. |
 | Flush телеметрии | `Shutdown` providers OTel и остановка Pyroscope с timeout. | `sdk.shutdown()` OTel и Pyroscope agent. | Shutdown OTel providers и Pyroscope agent. | `shutdown()` providers OTel и Pyroscope; совместимость с Python 3.14. |
 | Kafka client и rebalance при shutdown | `watermill-kafka`: закрытие router/subscriber с timeout, commit offsets только после обработки, выход из consumer group. | `@confluentinc/kafka-javascript` (`infrastructure/kafka/consumer.ts`): offset сохраняется только после успешной обработки, `shutdown` дожидается начатой обработки до deadline, `disconnect` коммитит сохранённые offsets и выводит из consumer group. | Kafka consumers нет (Outbox доставляет Debezium, ADR 37); при появлении — те же требования. | Kafka consumers нет (Outbox доставляет Debezium, ADR 37); при появлении — те же требования. |
 

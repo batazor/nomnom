@@ -111,8 +111,7 @@ func (s *Service) ListCustomerOrders(ctx context.Context, request *ordersv1.List
 }
 
 // PlaceOrder places an Order for the verified subject. Only a user subject is a
-// Customer; until the BFF user identity exists, service subjects get
-// PERMISSION_DENIED from the use case.
+// Customer; a service subject gets PERMISSION_DENIED from the use case.
 func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRequest) (*ordersv1.PlaceOrderResponse, error) {
 	subject, err := s.subjects.Resolve(ctx)
 	if err != nil {

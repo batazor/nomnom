@@ -67,14 +67,14 @@ begin local transaction
 commit
     |
     v
-outbox publisher --> Kafka --> mark published
+Debezium (журнал базы) --> Kafka
 ```
 
 Publisher фиксирует изменение своего состояния и запись Outbox атомарно в одной локальной транзакции. Отдельный Outbox publisher доставляет записи в Kafka после commit и фиксирует факт публикации только после подтверждения Kafka. Факт публикации хранится durable и переживает перезапуск publisher. Outbox предотвращает потерю события между commit локального состояния и публикацией в Kafka.
 
 Запрещены синхронная публикация в Kafka внутри бизнес-транзакции и dual write «commit, затем publish» без Outbox.
 
-Publisher может опубликовать одну запись повторно, например после сбоя между подтверждением Kafka и фиксацией факта публикации. Поэтому Outbox сам по себе даёт at-least-once, а не exactly-once. Повторная публикация не является ошибкой протокола.
+Debezium может опубликовать одну запись повторно, например после перезапуска коннектора с последнего подтверждённого offset журнала. Поэтому Outbox сам по себе даёт at-least-once, а не exactly-once. Повторная публикация не является ошибкой протокола.
 
 Каждый bounded context владеет своим Outbox в своём основном хранилище. Outbox одного контекста не читается и не используется другим.
 
@@ -169,7 +169,7 @@ Temporal retries не заменяют Outbox: Temporal — durable orchestratio
 | --- | --- | --- |
 | Commit не произошёл | State и запись Outbox не сохранены | Событие не существует; операцию можно повторить |
 | Commit прошёл, процесс упал до публикации | State и запись Outbox сохранены | Publisher публикует запись после восстановления |
-| Kafka приняла сообщение, publisher не зафиксировал успех | Запись остаётся неопубликованной | Повторная публикация с тем же `event_id`; consumer обрабатывает duplicate |
+| Kafka приняла сообщение, коннектор не сохранил offset журнала | Позиция журнала не сдвинута | Повторная публикация с тем же `event_id`; consumer обрабатывает duplicate |
 | Consumer выполнил обработку, acknowledgement потерян | Inbox содержит `event_id` | Повторная доставка — no-op у идемпотентного consumer |
 | Операция повторена после commit | State и запись Outbox уже сохранены | Идемпотентная операция не пишет ни state, ни Outbox |
 | Kafka недоступна | Backlog растёт | Business operation успешна; публикация после восстановления |
@@ -473,15 +473,15 @@ Consumer и Temporal Activity авторизуются как собственн
 
 | Сигнал | Назначение |
 | --- | --- |
-| Outbox backlog | Число неопубликованных записей. |
-| Oldest unpublished age | Возраст самой старой неопубликованной записи: задержка между commit и публикацией. |
-| Published events | Записи, подтверждённые Kafka. |
+| Состояние задач коннектора | `RUNNING` или `FAILED`: остановка задачи останавливает доставку Outbox контекста. |
+| Лаг источника | `MilliSecondsBehindSource`: задержка между commit и обработкой записи коннектором. |
+| Активность слота репликации | Неактивный слот не читается и копит WAL. |
 | Publish attempts | Все попытки публикации, включая повторы. |
 | Publish failures | Неудачные попытки публикации с низкокардинальным классом ошибки. |
 | Publish duration | Гистограмма длительности публикации в Kafka. |
 | Publication lag | Гистограмма задержки от `occurred_at` до подтверждения публикации Kafka. |
 
-Для Outbox publisher labels — `event_type` и boundary. Head-of-line blocking и рост возраста самой старой неопубликованной записи сопровождаются alert'ами. Publisher логирует `event_id`, `event_type` и результат публикации.
+Остановка коннектора, лаг источника и неактивный слот сопровождаются alert'ами `cdc-task-failed`, `cdc-task-not-running`, `cdc-lag` и `replication-slot-inactive` ([runbook](runbooks.md#cdc)).
 
 Watermill-consumers публикуют `nomnom.messaging.*` и `nomnom.inbox.duplicates` ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#observability)), consumer lag — на стороне брокера; trace context восстанавливается из headers OpenTelemetry middleware ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md#observability)).
 
@@ -539,7 +539,7 @@ Inbox не обязан храниться бесконечно. Retention уч�
 
 - ~~формат protobuf envelope интеграционного события и место `event_type`, `aggregate_*` и trace context: Kafka headers или payload (`event_id` передаётся в header `event_id`);~~ — решено для consumer `orders` ([ADR 28](adr/0028-selective-use-of-watermill-cqrs.md)): envelope целиком в Kafka headers (`event_id`, `event_type`, `occurred_at` RFC 3339, `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent`), payload — Protobuf-сообщение контракта; publishers на других языках используют тот же формат;
 - ~~размещение event-схем в Buf и правила их совместимости;~~ — решено [ADR 25](adr/0025-integration-event-publication.md#payload-и-schema-registry): схемы — файлы `events.proto` buf-модулей контекстов, `buf breaking` в PR и `FULL_TRANSITIVE` Confluent Schema Registry при регистрации (`ops/schema-registration`), value стрима — wire format Registry (SMT `SchemaFraming`, ADR 37);
-- polling или CDC для Outbox не-Go сервисов, распределение записей между экземплярами publisher с сохранением порядка, срок retention опубликованных записей и процедура ручной повторной публикации;
+- срок хранения записей Outbox;
 - процедура карантина и ручного восстановления poison outbox record;
 - формат и хранение idempotency key команд и сохранённого результата;
 - правила именования `consumer` и процедура его переименования;
@@ -551,17 +551,13 @@ Inbox не обязан храниться бесконечно. Retention уч�
 
 Go (`orders`):
 
-- alert на остановленный коннектор Debezium и лаг слота репликации (ADR 37);
 - обёртка Inbox как Watermill middleware или отдельный адаптер вокруг handler; in-memory дедупликация не заменяет durable Inbox;
-- передача транзакции PostgreSQL в репозитории и Outbox через unit of work и сборка через Google Wire;
 - ключ идемпотентности Activity, производный от Workflow ID и шага процесса;
 - подтверждение сообщения и commit offset в `watermill-kafka` строго после commit;
 - связывание `event_id`, Workflow ID, Signal ID и политик повторного запуска workflow в Temporal.
 
 TypeScript (`restaurants`):
 
-- выбор Kafka-клиента и ручного commit offsets после транзакции;
-- Outbox publisher: polling коллекции Outbox или MongoDB change streams;
 - топология MongoDB с поддержкой транзакций, включая локальную и integration-среду;
 - передача MongoDB session в репозитории и Outbox через message scope Awilix;
 - распознавание конфликта unique index и откат транзакции как duplicate;
@@ -569,17 +565,11 @@ TypeScript (`restaurants`):
 
 Rust (`delivery`):
 
-- выбор хранилища и подтверждение атомарной уникальности `(consumer, event_id)` и атомарной записи state и Outbox;
-- Outbox publisher: polling или CDC, библиотека после выбора хранилища;
-- выбор Kafka-клиента и явное сохранение offset только после commit;
 - передача транзакции через traits репозиториев без зависимости `domains` от драйвера;
 - корректный откат при отмене async-задачи посреди транзакции.
 
 Python (`payments`):
 
-- выбор хранилища и подтверждение атомарной уникальности `(consumer, event_id)` и атомарной записи state и Outbox;
-- Outbox publisher: polling или CDC, библиотека после выбора хранилища;
-- выбор Kafka-клиента и ручной commit offsets после транзакции;
 - unit of work и время жизни транзакции на сообщение в Dependency Injector;
 - идемпотентность вызовов платёжного провайдера: Inbox не защищает внешнее списание или возврат, нужен idempotency key операции;
 - связь дедупликации платёжных webhooks с Inbox: webhooks не являются Kafka integration events и требуют отдельной идемпотентной boundary.

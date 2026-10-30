@@ -4,7 +4,7 @@ Date: 2026-10-24
 
 ## Status
 
-Accepted
+Accepted; Watermill Forwarder заменён [ADR 37](0037-outbox-delivery-via-debezium-cdc.md)
 
 Дополняет [4. Использовать Event-Driven Architecture и Apache Kafka](0004-use-event-driven-architecture-with-apache-kafka.md)
 

@@ -36,8 +36,8 @@ import (
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 )
 
-// Stream topics of the source aggregates. Names are provisional until the
-// integration specification of restaurants and delivery fixes them.
+// Stream topics of the source aggregates, fixed by the publishers' contracts
+// (ADR 25).
 const (
 	RestaurantOrderEventsTopic = "restaurants.v1.restaurant-order-events"
 	DeliveryEventsTopic        = "delivery.v1.delivery-events"

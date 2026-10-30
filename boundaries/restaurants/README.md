@@ -20,7 +20,7 @@ TypeScript.
 
 ## Use Cases
 
-Статус реализации: application handlers всех сценариев, кроме **Start / Complete Preparation Item** и **Reject After Acceptance**, реализованы change [`implement-restaurants-application-layer`](../../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/) поверх портов; хранилище — MongoDB, брокер не подключён, к transport подключена часть handlers (см. [Статус реализации](#статус-реализации)). Новые handlers, контракты и adapters по-прежнему создаются только вместе с SDD change; пустые программные scaffolds не используются.
+Статус реализации: application handlers всех сценариев, кроме **Start / Complete Preparation Item** и **Reject After Acceptance**, реализованы change [`implement-restaurants-application-layer`](../../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/) поверх портов; хранилище — MongoDB, Integration Events публикует Debezium, `restaurants-consumer` читает Kafka, к transport подключена часть handlers (см. [Статус реализации](#статус-реализации)). Новые handlers, контракты и adapters по-прежнему создаются только вместе с SDD change; пустые программные scaffolds не используются.
 
 ### Commands
 
@@ -367,7 +367,7 @@ MongoDB предлагается как основное логическое х
 
 Направление для кухни: aggregate `RestaurantOrder` — отдельный document; Kitchen Queue и read models kitchen board — projections; один документ на ресторан вместе с меню и заказами не используется ([Kitchen](../../docs/kitchen.md#temporal-и-persistence)). Конкретные collections, поля, document boundaries и indexes проектируются по согласованным SDD-сценариям. Реализации репозиториев, BSON-модели и преобразования находятся в `infrastructure`; доменная модель и прикладные контракты не зависят от BSON, MongoDB driver или ODM.
 
-Решение имеет статус Proposed в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); коллекции, границы документов, validators, индексы, эволюция схемы и атомарность конкретизированы в локальном [ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md).
+Решение принято в [ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md); коллекции, границы документов, validators, индексы, эволюция схемы и атомарность конкретизированы в локальном [ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md).
 
 Реализация: официальный драйвер `mongodb` без ODM. Общие части — `infrastructure/repository` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекция `outbox` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) в контракте CDC [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper процесса, который по `aggregate_type` выбирает mappers слайсов `restaurant`, `menu` и `restaurantorder`), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts` — запуск [migrate-mongo](https://github.com/seppevs/migrate-mongo) по наборам миграций и шаг `ensureCollection`, `migrations/` — миграции набора `pkg`), адаптеры слайсов — `slices/<slice>/infrastructure/repository`, миграции слайса — `slices/<slice>/infrastructure/repository/migrations/`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `cooks`, `schedule_slots`, `simulator`, `outbox`, `inbox`, `migrations_changelog_<набор>`, `migrations_lock`. Транзакции требуют replica set.
 

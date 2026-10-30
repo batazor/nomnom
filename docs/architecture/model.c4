@@ -251,7 +251,7 @@ model {
   nomnom.cell1.orders.consumer -[kafka]-> nomnom.cell1.messaging.integrationEvents 'order-events, order-relationships, restaurant-order-events, delivery-events'
   nomnom.cell1.restaurants.consumer -[kafka]-> nomnom.cell1.messaging.integrationEvents 'restaurant-order-events, restaurant-events, menu-events'
   nomnom.cell1.delivery.api -[kafka]-> nomnom.cell1.messaging.integrationEvents 'delivery-events'
-  nomnom.cell1.router -[kafka]-> nomnom.cell1.messaging.changeNotifications 'подписки Cosmo Streams'
+  nomnom.cell1.router -[kafka]-> nomnom.cell1.messaging.changeNotifications 'order-changes, kitchen-changes, courier-changes, courier-pool-changes'
 
   // Платежи
   nomnom.cell1.payments.api -[http]-> paymentProvider 'авторизация, списание, возврат'

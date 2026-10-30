@@ -28,7 +28,7 @@ Workflow относится к прикладному процессу. Доме
 
 ## Use Cases
 
-Статус реализации: application handlers всех перечисленных Commands и Queries реализованы поверх PostgreSQL store и адаптеров портов (см. [Статус реализации](#статус-реализации)); transport, persistence, Kafka и Temporal adapters создаются отдельными SDD changes; пустые программные scaffolds не используются.
+Статус реализации: application handlers всех перечисленных Commands и Queries реализованы поверх PostgreSQL store и адаптеров портов (см. [Статус реализации](#статус-реализации)); transport, persistence, Kafka и Temporal adapters реализованы, новые создаются вместе с SDD changes; пустые программные scaffolds не используются.
 
 ### Commands
 
@@ -167,9 +167,8 @@ workflow запускает consumer собственного `OrderPlaced` (Sta
 `window_start − CANCELLATION__SCHEDULED_CUTOFF` (FR-462, обязателен, неположительный — ошибка старта).
 `Order.delivery_window { start, end }` отдаётся у запланированного заказа. Открыто ли окно сейчас, решает потребитель по своему
 clock, а сам запрос отмены проверяется заново. Если политика вернёт ошибку, `GetOrder`
-отдаёт заказ без окна, а декоратор `cancellationpolicy.Observed` пишет ошибку в log и span. Composition root по
-умолчанию устанавливает deny-by-default `SubjectResolver`: пока не подключён adapter
-проверки internal identity, вызов завершается `UNAUTHENTICATED`, а произвольным metadata
+отдаёт заказ без окна, а декоратор `cancellationpolicy.Observed` пишет ошибку в log и span. `SubjectResolver` проверяет projected
+ServiceAccount token и user assertion (ADR 27, ADR 32); без `IDENTITY__*` процесс не стартует, а произвольным metadata
 gateway не доверяет. Политика контрактов, генерации и совместимости описана в
 [ADR 7](../../docs/adr/0007-grpc-contracts-and-buf-schema-registry.md).
 
@@ -221,7 +220,7 @@ gateway не доверяет. Политика контрактов, генер
 
 В контексте `orders` применяется CQRS. Команды выполняют бизнес-действия и изменяют состояние заказа только после проверки доменных правил и инвариантов. Запросы используют отдельные модели чтения и возвращают DTO, подходящие конкретному сценарию отображения или использования данных.
 
-На начальном этапе командная сторона и модели чтения используют одно хранилище внутри контекста. Локальный CQRS ADR не выбирает конкретную СУБД; предложенный ADR 8 ниже конкретизирует это хранилище как PostgreSQL, не меняя границы CQRS.
+На начальном этапе командная сторона и модели чтения используют одно хранилище внутри контекста. Локальный CQRS ADR не выбирает конкретную СУБД; ADR 8 ниже конкретизирует это хранилище как PostgreSQL, не меняя границы CQRS.
 
 В соответствии с Vertical Slice Architecture команды и запросы организуются по сценариям, например `request-order-cancellation`, `get-order-details` и `list-customer-orders`. Глобальные каталоги `commands/` и `queries/` не становятся основным каркасом контекста. Общие доменные правила и инварианты переиспользуются между срезами, а не дублируются в каждом сценарии.
 
@@ -235,7 +234,7 @@ PostgreSQL — основное логическое хранилище `orders`
 
 Доменная модель определяет бизнес-инварианты `Order`; ограничения базы дополняют, но не заменяют эти проверки. Реализация репозитория в `infrastructure` преобразует persistence-модели в доменные типы и сохраняет изменения агрегата в явно определённой транзакционной границе. Реализация — [`slices/order/infrastructure/repository`](slices/order/infrastructure/repository): PostgreSQL 18, pgx v5, запросы собираются squirrel, миграции golang-migrate (`migrations/NNNNN_name.up.sql`, только вперёд, встроены в бинарь через `iofs`, драйвер `pgx/v5`). Миграция лежит рядом с репозиторием своей таблицы ([ADR 39](../../docs/adr/0039-data-access-without-orm.md)): у каждого набора своя нумерация с `00001` и своя таблица версий `schema_migrations_<id>`. Id набора (`migration.Set.ID`) — часть контракта схемы базы: строковый литерал рядом с миграциями набора, назван по данным, которые набор хранит, и никогда не выводится из имени пакета, каталога или слайса; runner строит имя таблицы версий только из него, поэтому рефакторинг кода таблицы базы не переименовывает, а смена id требует миграции его таблицы версий. Слайс `order` — id `orders` в [`slices/order/infrastructure/repository/migrations`](slices/order/infrastructure/repository/migrations) (`schema_migrations_orders`: `orders` и все её `ALTER`, `order_items`, `order_transitions`, `inbox`, `idempotency_keys` и Outbox `orders_outbox` с индексом и publication для Debezium — их репозитории в этом пакете), слайс `simulator` — id `simulator` в [`slices/simulator/infrastructure/repository/migrations`](slices/simulator/infrastructure/repository/migrations) (`schema_migrations_simulator`: `simulator_state`); у `fulfillment` таблиц нет. Миграции слайса меняют только его таблицы, межслайсовых foreign keys нет. Каждый набор встраивает свои файлы в своём пакете (`//go:embed`); явный список наборов без автопоиска — [`di/schema`](di/schema), его применяют процессы (`di.NewStore`) и шаблонная база тестов (`repositorytest`). Новый слайс с таблицами заводит свой набор и добавляет его в этот список. Один runner [`infrastructure/migration`](infrastructure/migration) на процесс: каждый процесс при старте применяет недостающие миграции всех наборов под одним advisory lock до запуска остального, применённые пропускает; совместимости со старой общей таблицей `schema_migrations` нет, схема рассчитана на новую базу. Lock берётся на отдельном соединении, миграция идёт на втором с `lock_timeout = 5s`: `ALTER TABLE`, вставший в очередь за транзакцией живого трафика во время rolling update, не замораживает таблицу, а падает, и pod повторяет миграцию после рестарта. Версию, помеченную `dirty` (файл упал или процесс умер посреди него), старт возвращает к предыдущей и применяет файл заново: драйвер отправляет файл одним simple-protocol запросом, PostgreSQL выполняет его одной неявной транзакцией, поэтому упавший файл изменений не оставляет. Отсюда правило: файл миграции не содержит команд, недопустимых в транзакции (`CREATE INDEX CONCURRENTLY` и т.п.). Таблицы `orders` (с `version` и `authorization_revision`), `order_items`, `order_transitions`, `inbox`, `idempotency_keys`, `simulator_state` и Outbox `orders_outbox` (publication `orders_outbox` для Debezium, ADR 37). Unit of Work — `READ COMMITTED` транзакция в context, вложенный `Do` присоединяется к внешней; `Save` проверяет `version` и при расхождении возвращает `ErrConcurrencyConflict`. API, worker и consumer работают с одной базой; `POSTGRES__DSN` обязателен.
 
-`orders` — основной потребитель Unit of Work: `Order` + Outbox, Inbox + `Order` (+ Outbox) и idempotent commands фиксируются одной транзакцией PostgreSQL с `READ COMMITTED` по умолчанию и optimistic concurrency по `version`; queries выполняются без UoW. Workflow транзакцией не владеет, каждая Activity вызывает handler со своим UoW. Когда общий UoW-контракт будет реализован, его shared package размещается в `pkg/unitofwork`; use-case-specific ports — рядом с package владельца в `slices/<slice>/applications/<usecase>`, реализация — в infrastructure модуля. Правила и список слайсов — в [документации Unit of Work](../../docs/unit-of-work.md#orders--postgresql), решение — в [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md).
+`orders` — основной потребитель Unit of Work: `Order` + Outbox, Inbox + `Order` (+ Outbox) и idempotent commands фиксируются одной транзакцией PostgreSQL с `READ COMMITTED` по умолчанию и optimistic concurrency по `version`; queries выполняются без UoW. Workflow транзакцией не владеет, каждая Activity вызывает handler со своим UoW. Общий UoW-контракт находится в `pkg/unitofwork`; use-case-specific ports — рядом с package владельца в `slices/<slice>/applications/<usecase>`, реализация — в infrastructure модуля. Правила и список слайсов — в [документации Unit of Work](../../docs/unit-of-work.md#orders--postgresql), решение — в [ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md).
 
 Ссылки на Restaurant, Menu Item, Payment, Delivery и другие сущности соседних bounded contexts хранятся как идентификаторы без межконтекстных foreign keys. Локальные foreign keys допустимы между таблицами, принадлежащими `orders`, например между заказом и его позициями.
 
@@ -597,9 +596,8 @@ docker run --rm -p 8081:8081 \
   nomnom/orders:local
 ```
 
-Текущий gRPC-процесс не подключается к PostgreSQL, Kafka или Temporal. Kafka
-transport используется будущими отдельными composition roots consumers;
-соответствующие подключения станут обязательными при их запуске.
+gRPC-процесс подключается к PostgreSQL и Temporal; Kafka читает отдельный процесс
+`orders-consumer`.
 
 ## Развёртывание
 

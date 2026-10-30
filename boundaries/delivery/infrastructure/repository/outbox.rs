@@ -47,7 +47,7 @@ pub trait OutboxMapper: Send + Sync {
     fn map(&self, message: &OutboxMessage) -> Option<OutboxRecord>;
 }
 
-/// Default mapper until the Protobuf mappers land: nothing is published.
+/// Mapper for stores without Integration Events: nothing is published.
 pub struct NoIntegrationEvents;
 
 impl OutboxMapper for NoIntegrationEvents {

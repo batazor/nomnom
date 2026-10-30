@@ -192,7 +192,7 @@ Dependency Injection (DI) описывает зависимости vertical sli
 | [`orders`](orders/README.md#dependency-injection) | Compile-time DI через Google Wire |
 | [`restaurants`](restaurants/README.md#dependency-injection) | Awilix |
 | [`delivery`](delivery/README.md#dependency-injection) | Compile-time DI через shaku |
-| [`payments`](payments/README.md#dependency-injection) | Dependency Injector как кандидат |
+| [`payments`](payments/README.md#dependency-injection) | Dependency Injector |
 
 Контексты взаимодействуют через согласованные контракты и не импортируют внутренние контейнеры или реализации друг друга. Транзакции и другие ресурсы отдельной операции получают соответствующее время жизни. Доменные объекты и обработчики use cases должны создаваться в тестах с явно переданными зависимостями.
 
@@ -215,7 +215,7 @@ PostgreSQL `orders` и MongoDB `restaurants` не участвуют в обще
 
 Контракты репозиториев остаются во внутренних слоях согласно [DDD-структуре](#организация-кода-внутри-контекста). Реализации репозиториев, SQL/BSON-модели хранения и преобразования располагаются в `infrastructure` соответствующего сервиса или слайса. `domains` и `applications` не зависят от SQL, BSON, драйверов, ORM или ODM.
 
-Распределение, основания и открытые эксплуатационные вопросы описаны в предложенном [ADR 8](../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md). Версии СУБД, библиотеки доступа, миграции и физические модели будут выбраны на следующих шагах.
+Распределение, основания и открытые эксплуатационные вопросы описаны в [ADR 8](../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md). Доступ к данным — [ADR 39](../docs/adr/0039-data-access-without-orm.md), миграции — [ADR 42](../docs/adr/0042-schema-migrations-at-process-startup.md); версии и физические модели — в README контекстов.
 
 ## Unit of Work
 
@@ -296,7 +296,7 @@ Pipeline, ошибки, конкурентная обработка, observabili
 
 ## Runtime lifecycle
 
-Каждый запускаемый процесс контекста — API, Kafka consumer, Outbox relay или Temporal worker — реализует общий cloud-native runtime contract: startup, liveness и readiness с разной семантикой, health на техническом порту `metrics`, graceful shutdown по `SIGTERM`, конфигурация извне с fail fast и учёт resource limits. Consumers подтверждают только обработанные сообщения, а повторная доставка после shutdown обрабатывается Inbox. Lifecycle, health и обработка сигналов находятся в composition root процесса; `domains/` и `domains/<domain>/vo/` не знают о контейнерах, Kubernetes, сигналах и probes, а `applications/` получает только языковые абстракции cancellation и deadline. Подробности — в [документации cloud-native runtime](../docs/cloud-native-runtime.md) и [ADR 17](../docs/adr/0017-cloud-native-application-runtime.md).
+Каждый запускаемый процесс контекста — API, Kafka consumer или Temporal worker — реализует общий cloud-native runtime contract: startup, liveness и readiness с разной семантикой, health на техническом порту `metrics`, graceful shutdown по `SIGTERM`, конфигурация извне с fail fast и учёт resource limits. Consumers подтверждают только обработанные сообщения, а повторная доставка после shutdown обрабатывается Inbox. Lifecycle, health и обработка сигналов находятся в composition root процесса; `domains/` и `domains/<domain>/vo/` не знают о контейнерах, Kubernetes, сигналах и probes, а `applications/` получает только языковые абстракции cancellation и deadline. Подробности — в [документации cloud-native runtime](../docs/cloud-native-runtime.md) и [ADR 17](../docs/adr/0017-cloud-native-application-runtime.md).
 
 ## Observability
 

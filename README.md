@@ -8,7 +8,7 @@ nomnom — сервис доставки еды, объединяющий кли
 
 Обязательный общий словарь, правила именования и границы Published Language зафиксированы в [Ubiquitous Language](docs/ubiquitous-language.md). Локальные индексы терминов каждого bounded context перечислены в [карте глоссариев](GLOSSARY-MAP.md).
 
-Схемы сервисов и их связей описаны моделью [LikeC4](docs/architecture/README.md): `make arch-dev`.
+Схемы сервисов и их связей описаны моделью [LikeC4](docs/architecture/README.md): `make arch-dev`. Путь одного заказа через систему — [разбор](docs/order-walkthrough.md), все Kafka topics и события — [каталог событий](docs/events-catalog.md), реакция на alerts — [runbooks](docs/runbooks.md), решения по темам — [индекс ADR](docs/adr/README.md).
 
 Основные Commands, Queries, участие Temporal и Kafka, клиентские API composition scenarios и открытые продуктовые вопросы собраны в [матрице use cases](docs/use-cases.md).
 
@@ -63,7 +63,7 @@ BFF отвечает за клиентский API и агрегацию, gatewa
 
 ## Событийное взаимодействие
 
-Асинхронное взаимодействие между bounded contexts строится через интеграционные события, транспортом для которых служит Apache Kafka. В Go-контекстах публикация и обработка сообщений выполняются через Watermill и адаптер `watermill-kafka`. Выбор Kafka-клиентов для остальных языков остаётся открытым.
+Асинхронное взаимодействие между bounded contexts строится через интеграционные события, транспортом для которых служит Apache Kafka. Публикует Debezium из Outbox каждого контекста ([ADR 37](docs/adr/0037-outbox-delivery-via-debezium-cdc.md)). Consumers: Watermill и `watermill-kafka` в `orders`, `@confluentinc/kafka-javascript` в `restaurants`, `rdkafka` в `delivery`; у `payments` consumers нет.
 
 Доставка событий имеет семантику at-least-once: publisher использует Transactional Outbox, а consumer — Transactional Inbox. Каждое событие имеет стабильный `event_id`; consumer фиксирует его в одной локальной транзакции с изменением своего состояния и при повторной доставке не выполняет бизнес-действие снова. Так достигается effectively-once эффект в локальном состоянии consumer, но не глобальная exactly-once delivery между сервисами. Pipeline, границы гарантии и обязательные fault scenarios описаны в [документации событийного взаимодействия](docs/event-driven-architecture.md), решения — в [ADR 13](docs/adr/0013-transactional-outbox-for-integration-event-publishing.md) (Outbox) и [ADR 11](docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md) (Inbox).
 

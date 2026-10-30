@@ -77,7 +77,7 @@ DLQ разбирает оператор после исправления деф
 
 ## Публикация
 
-Только `Domain Event → Application → Transport DTO → Outbox → Watermill Forwarder → Kafka` ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md)). `EventBus.Publish()` до commit запрещён; `EventBus` не используется для Domain Events.
+Только `Domain Event → Application → Transport DTO → Outbox → Debezium → Kafka` ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md)). `EventBus.Publish()` до commit запрещён; `EventBus` не используется для Domain Events.
 
 ## Observability и тесты
 
