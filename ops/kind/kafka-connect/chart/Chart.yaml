@@ -1,7 +1,7 @@
 apiVersion: v2
 name: kind-kafka-connect
 description: >-
-  Kafka Connect с Debezium для Outbox контекстов (ADR 37) и Prometheus JMX exporter. Образ —
-  ops/kind/kafka-connect/Dockerfile. ТОЛЬКО для kind.
+  Kafka Connect с Debezium для Outbox контекстов (ADR 37): ресурс Strimzi KafkaConnect и правила
+  его метрик. Образ — ops/kind/kafka-connect/Dockerfile. ТОЛЬКО для kind.
 type: application
-version: 0.1.0
+version: 0.2.0

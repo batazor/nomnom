@@ -13,7 +13,7 @@ import {
 
 /** Images of the kind environment (ops/kind/bootstrap/values.yaml, ops/kind/manifests/messaging). */
 const MONGODB_IMAGE = "mongo:8.3.13";
-const KAFKA_IMAGE = "apache/kafka:4.4.0";
+const KAFKA_IMAGE = "apache/kafka:4.3.1";
 const SPICEDB_IMAGE = "authzed/spicedb:v1.57.0";
 const VALKEY_IMAGE = "valkey/valkey:9.1.2-alpine3.24";
 /**

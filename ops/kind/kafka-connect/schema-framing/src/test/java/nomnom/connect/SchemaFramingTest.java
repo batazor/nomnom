@@ -28,34 +28,64 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 class SchemaFramingTest {
 
-  /** Broker image of the kind environment (ops/kind/manifests/messaging/infrastructure.yaml). */
-  private static final String REDPANDA_IMAGE =
-      "docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce";
+  /** Kafka and Confluent Schema Registry of ops/kind/manifests/messaging (kafka.yaml, schema-registry.yaml). */
+  private static final String KAFKA_IMAGE = "apache/kafka:4.3.1";
+
+  private static final String SCHEMA_REGISTRY_IMAGE =
+      "docker.io/confluentinc/cp-schema-registry:8.4.0@sha256:12cd2770fa25df65243dabafd5eef5337ea1145a3cb85afc8a27f7151dfa2999";
 
   private static final Path MODULES = Path.of("../../../../boundaries");
   private static final String STREAM = "delivery.v1.delivery-events";
 
-  private static GenericContainer<?> redpanda;
+  private static Network network;
+  private static GenericContainer<?> kafka;
+  private static GenericContainer<?> registry;
   private static String registryUrl;
   private static int deliveryEventsId;
   private static int paymentEventsId;
 
   @BeforeAll
   static void startRegistry() throws Exception {
-    redpanda =
-        new GenericContainer<>(REDPANDA_IMAGE)
-            .withCommand(
-                "redpanda", "start", "--mode=dev-container", "--smp=1", "--memory=256M",
-                "--overprovisioned", "--schema-registry-addr=0.0.0.0:8081")
+    network = Network.newNetwork();
+    kafka =
+        new GenericContainer<>(KAFKA_IMAGE)
+            .withNetwork(network)
+            .withNetworkAliases("kafka")
+            .withEnv(
+                Map.ofEntries(
+                    Map.entry("KAFKA_NODE_ID", "1"),
+                    Map.entry("KAFKA_PROCESS_ROLES", "broker,controller"),
+                    Map.entry("KAFKA_LISTENERS", "PLAINTEXT://:9092,CONTROLLER://:9093"),
+                    Map.entry("KAFKA_ADVERTISED_LISTENERS", "PLAINTEXT://kafka:9092"),
+                    Map.entry("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER"),
+                    Map.entry(
+                        "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP",
+                        "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"),
+                    Map.entry("KAFKA_CONTROLLER_QUORUM_VOTERS", "1@localhost:9093"),
+                    Map.entry("KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR", "1"),
+                    Map.entry("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1"),
+                    Map.entry("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")))
+            .waitingFor(Wait.forLogMessage(".*Kafka Server started.*", 1))
+            .withStartupTimeout(Duration.ofMinutes(2));
+    kafka.start();
+    registry =
+        new GenericContainer<>(SCHEMA_REGISTRY_IMAGE)
+            .withNetwork(network)
+            .withEnv(
+                Map.of(
+                    "SCHEMA_REGISTRY_HOST_NAME", "schema-registry",
+                    "SCHEMA_REGISTRY_LISTENERS", "http://0.0.0.0:8081",
+                    "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS", "PLAINTEXT://kafka:9092"))
             .withExposedPorts(8081)
             .waitingFor(Wait.forHttp("/subjects").forPort(8081))
             .withStartupTimeout(Duration.ofMinutes(2));
-    redpanda.start();
-    registryUrl = "http://127.0.0.1:" + redpanda.getMappedPort(8081);
+    registry.start();
+    registryUrl = "http://127.0.0.1:" + registry.getMappedPort(8081);
 
     String delivery = read("delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto");
     deliveryEventsId = register("nomnom.delivery.v1.DeliveryPickedUp", delivery, List.of());
@@ -74,7 +104,9 @@ class SchemaFramingTest {
 
   @AfterAll
   static void stopRegistry() {
-    redpanda.stop();
+    registry.stop();
+    kafka.stop();
+    network.close();
   }
 
   private static String read(String path) throws IOException {

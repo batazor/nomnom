@@ -7,7 +7,7 @@
 # offsets групп. Разбор DLQ — только командой dlq контекста (docs/dlq.md): сдвиг offset
 # <group>.dlq из UI не пишет журнал discard, а публикация из UI — без redriven_from.
 # Value Integration Events — wire format Schema Registry (FR-714): Console читает схему записи
-# по её id из Schema Registry Redpanda и показывает payload расшифрованным. Change
+# по её id из Confluent Schema Registry и показывает payload расшифрованным. Change
 # Notifications (*-changes) — JSON.
 apiVersion: v1
 kind: ConfigMap
@@ -19,15 +19,15 @@ metadata:
 data:
   config.yaml: |
     kafka:
-      brokers: [kafka.nomnom-infra.svc.cluster.local:9092]
+      brokers: [kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092]
     schemaRegistry:
       enabled: true
-      urls: [http://kafka.nomnom-infra.svc.cluster.local:8081]
+      urls: [http://schema-registry.nomnom-infra.svc.cluster.local:8081]
     kafkaConnect:
       enabled: true
       clusters:
         - name: outbox
-          url: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
+          url: http://kafka-connect-connect-api.nomnom-infra.svc.cluster.local:8083
     analytics:
       enabled: false
     server:

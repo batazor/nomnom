@@ -13,37 +13,77 @@ import (
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// redpandaImage is the broker image of the kind environment
-// (ops/kind/manifests/messaging/infrastructure.yaml).
-const redpandaImage = "docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce"
+// Kafka and Confluent Schema Registry of the kind environment
+// (ops/kind/manifests/messaging/kafka.yaml, schema-registry.yaml).
+const (
+	kafkaImage          = "apache/kafka:4.3.1"
+	schemaRegistryImage = "docker.io/confluentinc/cp-schema-registry:8.4.0@sha256:12cd2770fa25df65243dabafd5eef5337ea1145a3cb85afc8a27f7151dfa2999"
+)
 
 var registryURL string
 
+// TestMain runs Kafka and Schema Registry on a network of their own: the
+// Registry stores schemas in the _schemas topic of the broker.
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	dockerNet, err := network.New(ctx)
+	if err != nil {
+		panic(err)
+	}
+	kafka, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image: redpandaImage,
-			Cmd: []string{"redpanda", "start", "--mode=dev-container", "--smp=1", "--memory=256M",
-				"--overprovisioned", "--schema-registry-addr=0.0.0.0:8081"},
-			ExposedPorts: []string{"8081/tcp"},
-			WaitingFor:   wait.ForHTTP("/subjects").WithPort("8081/tcp").WithStartupTimeout(2 * time.Minute),
+			Image:          kafkaImage,
+			Networks:       []string{dockerNet.Name},
+			NetworkAliases: map[string][]string{dockerNet.Name: {"kafka"}},
+			Env: map[string]string{
+				"KAFKA_NODE_ID":                                  "1",
+				"KAFKA_PROCESS_ROLES":                            "broker,controller",
+				"KAFKA_LISTENERS":                                "PLAINTEXT://:9092,CONTROLLER://:9093",
+				"KAFKA_ADVERTISED_LISTENERS":                     "PLAINTEXT://kafka:9092",
+				"KAFKA_CONTROLLER_LISTENER_NAMES":                "CONTROLLER",
+				"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP":           "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+				"KAFKA_CONTROLLER_QUORUM_VOTERS":                 "1@localhost:9093",
+				"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR":         "1",
+				"KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
+				"KAFKA_TRANSACTION_STATE_LOG_MIN_ISR":            "1",
+			},
+			WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(2 * time.Minute),
 		},
 		Started: true,
 	})
 	if err != nil {
 		panic(err)
 	}
-	port, err := c.MappedPort(ctx, "8081/tcp")
+	registry, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        schemaRegistryImage,
+			Networks:     []string{dockerNet.Name},
+			ExposedPorts: []string{"8081/tcp"},
+			Env: map[string]string{
+				"SCHEMA_REGISTRY_HOST_NAME":                    "schema-registry",
+				"SCHEMA_REGISTRY_LISTENERS":                    "http://0.0.0.0:8081",
+				"SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS": "PLAINTEXT://kafka:9092",
+			},
+			WaitingFor: wait.ForHTTP("/subjects").WithPort("8081/tcp").WithStartupTimeout(2 * time.Minute),
+		},
+		Started: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	port, err := registry.MappedPort(ctx, "8081/tcp")
 	if err != nil {
 		panic(err)
 	}
 	registryURL = "http://" + net.JoinHostPort("127.0.0.1", port.Port())
 	code := m.Run()
-	_ = c.Terminate(ctx)
+	_ = registry.Terminate(ctx)
+	_ = kafka.Terminate(ctx)
+	_ = dockerNet.Remove(ctx)
 	os.Exit(code)
 }
 

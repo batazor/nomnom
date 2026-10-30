@@ -134,22 +134,23 @@ lock сериализует старт реплик; ошибка миграци
 
 Outbox `delivery_outbox` публикует коннектор Debezium `delivery-outbox` в Kafka Connect
 ([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)); процесса relay нет.
-При `cdc.enabled` hook Job после install/upgrade кладёт конфигурацию в Kafka Connect
-(`PUT <cdc.connectUrl>/connectors/delivery-outbox/config`: создаёт или обновляет) и повторяет
-запрос, пока Connect поднимается. Конфигурация — `cdc.connector.config` (контракт Outbox:
+При `cdc.enabled` chart создаёт ресурс Strimzi `KafkaConnector` `delivery-outbox` в namespace
+KafkaConnect `cdc.connect.namespace` с label `strimzi.io/cluster: <cdc.connect.cluster>`:
+Cluster Operator регистрирует коннектор и сам перезапускает упавшие задачи (`autoRestart`). Конфигурация — `cdc.connector.config` (контракт Outbox:
 publication и слот `delivery_outbox`, топик из поля `topic`, ключ `aggregate_id`, заголовки
 Event Envelope) поверх `cdc.database`. `cdc.database.password` — ссылка config provider
-Connect (`${dir:/etc/nomnom/cdc:delivery-password}`), а не пароль: Secret `cdc-credentials`
+Connect (`${dir:/mnt/cdc:delivery-password}`), а не пароль: Secret `cdc-credentials`
 монтирует сам Connect. Publication создаёт миграция, слот — коннектор; PostgreSQL нужен
 `wal_level = logical`.
 
 ```bash
 helm template delivery boundaries/delivery/ops/helm \
   --set cdc.enabled=true \
-  --set cdc.connectUrl=http://kafka-connect.nomnom-infra.svc.cluster.local:8083 \
+  --set cdc.connect.cluster=kafka-connect --set cdc.connect.namespace=nomnom-infra \
+  --set cdc.schemaRegistryUrl=http://schema-registry.nomnom-infra.svc.cluster.local:8081 \
   --set cdc.database.hostname=postgres.nomnom-data.svc.cluster.local \
   --set cdc.database.name=delivery --set cdc.database.user=delivery \
-  --set 'cdc.database.password=${dir:/etc/nomnom/cdc:delivery-password}'
+  --set 'cdc.database.password=${dir:/mnt/cdc:delivery-password}'
 ```
 
 Состояние коннектора — `GET /connectors/delivery-outbox/status`; запись, нарушающая контракт,

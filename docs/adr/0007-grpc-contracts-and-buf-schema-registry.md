@@ -235,7 +235,7 @@ Label `main` соответствует ветке `main`, но потребит
 
 ### Схемы Integration Events в Schema Registry
 
-Контракты Integration Events лежат в тех же buf-модулях (`nomnom/<context>/v1/events.proto`) и проходят те же проверки. Для доставки по Kafka их схемы дополнительно публикуются в Confluent-совместимый Schema Registry окружения — встроенный в Redpanda, а не BSR: интеграция BSR с Confluent Schema Registry доступна только в Enterprise-плане Buf ([ADR 25](0025-integration-event-publication.md#payload-и-schema-registry)). Публикует их утилита `ops/schema-registration`: компилирует файлы из списка `ops/schema-registration/event-files.yaml` компилятором buf (`protocompile`) и регистрирует их исходный текст с `references` на импортированные файлы модулей. `buf` остаётся источником схем и первой проверкой совместимости; Registry повторяет её режимом `FULL_TRANSITIVE` на шаге деплоя.
+Контракты Integration Events лежат в тех же buf-модулях (`nomnom/<context>/v1/events.proto`) и проходят те же проверки. Для доставки по Kafka их схемы дополнительно публикуются в Confluent Schema Registry окружения, а не BSR: интеграция BSR с Confluent Schema Registry доступна только в Enterprise-плане Buf ([ADR 25](0025-integration-event-publication.md#payload-и-schema-registry)). Публикует их утилита `ops/schema-registration`: компилирует файлы из списка `ops/schema-registration/event-files.yaml` компилятором buf (`protocompile`) и регистрирует их исходный текст с `references` на импортированные файлы модулей. `buf` остаётся источником схем и первой проверкой совместимости; Registry повторяет её режимом `FULL_TRANSITIVE` на шаге деплоя.
 
 ## Consequences
 

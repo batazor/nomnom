@@ -27,12 +27,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
+	tcnetwork "github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -40,13 +42,14 @@ import (
 const (
 	// PostgresImage is POSTGRES_IMAGE of the Makefile.
 	PostgresImage = "postgres:18.6-alpine3.24"
-	// KafkaImage is the Kafka of ops/kind/manifests/messaging/infrastructure.yaml.
-	KafkaImage = "apache/kafka:4.4.0"
+	// KafkaImage is the Apache Kafka version of the Strimzi broker of
+	// ops/kind/manifests/messaging/kafka.yaml.
+	KafkaImage = "apache/kafka:4.3.1"
 	// SpiceDBImage is SPICEDB_IMAGE of the root Makefile.
 	SpiceDBImage = "authzed/spicedb:v1.57.0"
-	// RedpandaImage is the broker of ops/kind/manifests/messaging/infrastructure.yaml; the
-	// tests use its Schema Registry.
-	RedpandaImage = "docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce"
+	// SchemaRegistryImage is the Confluent Schema Registry of
+	// ops/kind/manifests/messaging/schema-registry.yaml.
+	SchemaRegistryImage = "docker.io/confluentinc/cp-schema-registry:8.4.0@sha256:12cd2770fa25df65243dabafd5eef5337ea1145a3cb85afc8a27f7151dfa2999"
 	// TemporalImage is the Temporal CLI dev server of ops/kind/manifests/messaging/infrastructure.yaml.
 	TemporalImage = "temporalio/temporal:1.9.1"
 	// SpiceDBPresharedKey is the key of the SpiceDB container.
@@ -166,33 +169,79 @@ func MustStartKafka() *Kafka {
 
 func (k *Kafka) Close() { closeContainer(k.container) }
 
-// SchemaRegistry is the Schema Registry of a Redpanda broker for the tests of
-// one package: the tests register the event files their records reference.
+// SchemaRegistry is a Confluent Schema Registry with a Kafka broker of its own
+// for the tests of one package: the tests register the event files their
+// records reference.
 type SchemaRegistry struct {
-	URL       string
-	container testcontainers.Container
+	URL        string
+	containers []testcontainers.Container
+	network    *testcontainers.DockerNetwork
 }
 
-// StartSchemaRegistry runs Redpanda with the Schema Registry on 8081.
+// StartSchemaRegistry runs Kafka and Schema Registry on a network of their own:
+// the Registry stores schemas in the _schemas topic of the broker.
 func StartSchemaRegistry(ctx context.Context) (*SchemaRegistry, error) {
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	net, err := tcnetwork.New(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("schema registry network: %w", err)
+	}
+	r := &SchemaRegistry{network: net}
+	broker, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image: RedpandaImage,
-			Cmd: []string{"redpanda", "start", "--mode=dev-container", "--smp=1", "--memory=256M",
-				"--overprovisioned", "--schema-registry-addr=0.0.0.0:8081"},
-			ExposedPorts: []string{"8081/tcp"},
-			WaitingFor:   wait.ForHTTP("/subjects").WithPort("8081/tcp").WithStartupTimeout(startupTimeout),
+			Image:          KafkaImage,
+			Networks:       []string{net.Name},
+			NetworkAliases: map[string][]string{net.Name: {"kafka"}},
+			Env: map[string]string{
+				"KAFKA_NODE_ID":                                  "1",
+				"KAFKA_PROCESS_ROLES":                            "broker,controller",
+				"KAFKA_LISTENERS":                                "PLAINTEXT://:9092,CONTROLLER://:9093",
+				"KAFKA_ADVERTISED_LISTENERS":                     "PLAINTEXT://kafka:9092",
+				"KAFKA_CONTROLLER_LISTENER_NAMES":                "CONTROLLER",
+				"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP":           "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+				"KAFKA_CONTROLLER_QUORUM_VOTERS":                 "1@localhost:9093",
+				"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR":         "1",
+				"KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
+				"KAFKA_TRANSACTION_STATE_LOG_MIN_ISR":            "1",
+			},
+			WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(startupTimeout),
 		},
 		Started: true,
 	})
-	if err != nil {
-		return nil, terminate(c, fmt.Errorf("start schema registry: %w", err))
+	if broker != nil {
+		r.containers = append(r.containers, broker)
 	}
-	endpoint, err := loopbackEndpoint(ctx, c, "8081/tcp")
 	if err != nil {
-		return nil, terminate(c, fmt.Errorf("schema registry endpoint: %w", err))
+		r.Close()
+		return nil, fmt.Errorf("start schema registry kafka: %w", err)
 	}
-	return &SchemaRegistry{URL: "http://" + endpoint, container: c}, nil
+	registry, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        SchemaRegistryImage,
+			Networks:     []string{net.Name},
+			ExposedPorts: []string{"8081/tcp"},
+			Env: map[string]string{
+				"SCHEMA_REGISTRY_HOST_NAME":                    "schema-registry",
+				"SCHEMA_REGISTRY_LISTENERS":                    "http://0.0.0.0:8081",
+				"SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS": "PLAINTEXT://kafka:9092",
+			},
+			WaitingFor: wait.ForHTTP("/subjects").WithPort("8081/tcp").WithStartupTimeout(startupTimeout),
+		},
+		Started: true,
+	})
+	if registry != nil {
+		r.containers = append(r.containers, registry)
+	}
+	if err != nil {
+		r.Close()
+		return nil, fmt.Errorf("start schema registry: %w", err)
+	}
+	endpoint, err := loopbackEndpoint(ctx, registry, "8081/tcp")
+	if err != nil {
+		r.Close()
+		return nil, fmt.Errorf("schema registry endpoint: %w", err)
+	}
+	r.URL = "http://" + endpoint
+	return r, nil
 }
 
 // MustStartSchemaRegistry is StartSchemaRegistry for TestMain.
@@ -302,7 +351,15 @@ func (r *SchemaRegistry) post(ctx context.Context, path string, s registrySchema
 	return out, nil
 }
 
-func (r *SchemaRegistry) Close() { closeContainer(r.container) }
+// Close removes the containers and their network.
+func (r *SchemaRegistry) Close() {
+	for _, c := range slices.Backward(r.containers) {
+		closeContainer(c)
+	}
+	if r.network != nil {
+		_ = r.network.Remove(context.Background())
+	}
+}
 
 // WireFormat frames a Protobuf payload as the SchemaFraming SMT of the
 // connectors does (FR-714): magic byte, schema id, the indexes of the

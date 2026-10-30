@@ -1,0 +1,65 @@
+# Apache Kafka тестового окружения под Strimzi (FR-720): ресурсы Kafka и KafkaNodePool, их
+# приводит к кластеру Strimzi Cluster Operator платформы (skaffold module platform). KRaft, один
+# узел с ролями broker и controller; данные — ephemeral (emptyDir), теряются при рестарте pod,
+# Topic Operator тогда создаёт topics заново по KafkaTopic (topics.yaml).
+#
+# Broker не создаёт topics при первом обращении: каждый topic объявлен KafkaTopic, publish в
+# необъявленный topic — ошибка (FR-721). Клиенты подключаются к Service kafka-kafka-bootstrap:9092
+# без TLS и аутентификации, как прежний Redpanda; egress к pod'ам брокера (label
+# app.kubernetes.io/name: kafka) разрешает manifests/netpol/app-infrastructure.yaml.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  replicas: 1
+  roles: [controller, broker]
+  storage:
+    type: ephemeral
+    sizeLimit: 2Gi
+    kraftMetadata: shared
+  # Heap брокера на одноузловом стенде: живых данных немного, лимит держит память ноутбука.
+  jvmOptions:
+    -Xms: 256m
+    -Xmx: 512m
+  resources:
+    requests:
+      memory: 768Mi
+    limits:
+      memory: 1Gi
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: kafka
+  namespace: nomnom-infra
+spec:
+  kafka:
+    version: 4.3.1
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      auto.create.topics.enable: false
+      default.replication.factor: 1
+      min.insync.replicas: 1
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      # Consumer group стенда собирается без ожидания остальных участников.
+      group.initial.rebalance.delay.ms: 0
+  # Только Topic Operator: KafkaTopic в nomnom-infra. User Operator не нужен — брокер без
+  # аутентификации.
+  entityOperator:
+    topicOperator:
+      reconciliationIntervalMs: 30000
+      resources:
+        requests:
+          memory: 192Mi
+        limits:
+          memory: 384Mi

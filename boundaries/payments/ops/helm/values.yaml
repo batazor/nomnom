@@ -237,25 +237,26 @@ database:
   connectTimeout: "5s"
   acquireTimeout: "5s"
 
-# ADR 37: Outbox payments доставляет Debezium (Kafka Connect) из WAL. Hook Job release
-# регистрирует коннектор cdc.connector.name в cdc.connectUrl.
+# ADR 37: Outbox payments доставляет Debezium (Kafka Connect) из WAL. Release контекста
+# создаёт ресурс KafkaConnector cdc.connector.name в KafkaConnect cdc.connect.
 cdc:
   enabled: false
-  # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
-  connectUrl: ""
+  # KafkaConnect, к которому относится ресурс KafkaConnector (FR-538): имя и namespace, например
+  # kafka-connect и nomnom-infra.
+  connect:
+    cluster: ""
+    namespace: ""
   # Schema Registry для SchemaFraming коннектора (FR-714), например
-  # http://kafka.nomnom-infra.svc.cluster.local:8081.
+  # http://schema-registry.nomnom-infra.svc.cluster.local:8081.
   schemaRegistryUrl: ""
   # Адрес базы для Kafka Connect. password — ссылка config provider Connect, не сам пароль,
-  # например ${dir:/etc/nomnom/cdc:payments-password}.
+  # например ${dir:/mnt/cdc:payments-password}.
   database:
     hostname: ""
     port: 5432
     name: ""
     user: ""
     password: ""
-  registrar:
-    image: docker.io/curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
   # Контракт Outbox (ADR 37): таблица payments_outbox, publication payments_outbox (миграция
   # 00002), слот payments_outbox; топик — поле topic, ключ — aggregate_id, value — payload как
   # есть, Event Envelope — заголовки из полей записи (как у прежнего payments-relay).

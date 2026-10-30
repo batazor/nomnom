@@ -1,124 +1,88 @@
-# Kafka Connect с Debezium (ADR 37): доставляет Outbox контекстов в брокер из журналов баз
-# (PostgreSQL WAL через pgoutput, MongoDB change streams) — без опроса таблиц. Config, offsets и
-# status хранятся в топиках брокера, сам Connect stateless. Коннекторы регистрируют charts
-# контекстов (cdc.*, hook Job), пароли читаются DirectoryConfigProvider из Secret
-# cdc-credentials (chart ../bootstrap): ${dir:/etc/nomnom/cdc:<ключ>}. Метрики — :9404,
-# их скрейпит Alloy (job infra/kafka-connect).
-apiVersion: apps/v1
-kind: Deployment
+{{- /*
+Kafka Connect с Debezium (ADR 37, FR-722): доставляет Outbox контекстов в брокер из журналов
+баз (PostgreSQL WAL через pgoutput, MongoDB change streams) — без опроса таблиц. Pod приводит к
+этому ресурсу Strimzi Cluster Operator. Config, offsets и status хранятся в topics брокера
+(KafkaTopic nomnom-cdc-*, manifests/messaging/topics.yaml), сам Connect stateless.
+
+Коннекторы — только ресурсы KafkaConnector charts контекстов (strimzi.io/use-connector-resources),
+REST API для регистрации не используется. Пароли читает DirectoryConfigProvider из Secret
+cdc-credentials (chart ../bootstrap): ${dir:/mnt/cdc:<ключ>}. Метрики — :9404 по
+правилам files/metrics.yaml, их скрейпит Alloy (job infra/kafka-connect, label
+app.kubernetes.io/name=kafka-connect ставит Strimzi).
+*/ -}}
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnect
 metadata:
   name: kafka-connect
   namespace: nomnom-infra
-  labels:
-    app.kubernetes.io/name: kafka-connect
+  annotations:
+    strimzi.io/use-connector-resources: "true"
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: kafka-connect
+  image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+  bootstrapServers: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
+  groupId: nomnom-cdc
+  configStorageTopic: nomnom-cdc-configs
+  offsetStorageTopic: nomnom-cdc-offsets
+  statusStorageTopic: nomnom-cdc-status
+  config:
+    config.storage.replication.factor: 1
+    offset.storage.replication.factor: 1
+    status.storage.replication.factor: 1
+    # Плагины по манифестам ServiceLoader (KIP-898) вместо сканирования всех классов
+    # classgraph: скан — пик heap на старте выше 256MB.
+    plugin.discovery: service_load
+    config.providers: dir
+    config.providers.dir.class: org.apache.kafka.common.config.provider.DirectoryConfigProvider
+    config.providers.dir.param.allowed.paths: /mnt/cdc
+  # Живых данных в heap ~70MB (jvm_memory_used_bytes, 2026-10-26). Serial GC и два процессора
+  # для эргономики: без CPU limit JVM видит все ядра узла и заводит по ним потоки GC и JIT, а
+  # Metaspace и code cache ничем не ограничены — RSS вдвое больше heap.
+  jvmOptions:
+    -Xms: 64m
+    -Xmx: 256m
+    -XX:
+      UseSerialGC: "true"
+      ActiveProcessorCount: "2"
+      MaxMetaspaceSize: 128m
+      ReservedCodeCacheSize: 64m
+      MaxDirectMemorySize: 64m
+      MinHeapFreeRatio: "10"
+      MaxHeapFreeRatio: "30"
+  resources:
+    requests:
+      memory: 384Mi
+    limits:
+      memory: 768Mi
+  metricsConfig:
+    type: jmxPrometheusExporter
+    valueFrom:
+      configMapKeyRef:
+        name: kafka-connect-metrics
+        key: metrics.yaml
   template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: kafka-connect
-    spec:
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: kafka-connect
-          # Debezium 3.7.0.Final и JMX exporter (ops/kind/kafka-connect/Dockerfile).
-          image: "{{ .Values.image.repository }}{{ with .Values.image.tag }}:{{ . }}{{ end }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          env:
-            - name: BOOTSTRAP_SERVERS
-              value: kafka.nomnom-infra.svc.cluster.local:9092
-            - name: GROUP_ID
-              value: nomnom-cdc
-            - name: CONFIG_STORAGE_TOPIC
-              value: nomnom-cdc-configs
-            - name: OFFSET_STORAGE_TOPIC
-              value: nomnom-cdc-offsets
-            - name: STATUS_STORAGE_TOPIC
-              value: nomnom-cdc-status
-            - name: CONFIG_STORAGE_REPLICATION_FACTOR
-              value: "1"
-            - name: OFFSET_STORAGE_REPLICATION_FACTOR
-              value: "1"
-            - name: STATUS_STORAGE_REPLICATION_FACTOR
-              value: "1"
-            # Плагины по манифестам ServiceLoader (KIP-898) вместо сканирования всех классов
-            # classgraph: скан — пик heap на старте выше 256MB.
-            - name: CONNECT_PLUGIN_DISCOVERY
-              value: service_load
-            - name: CONNECT_CONFIG_PROVIDERS
-              value: dir
-            - name: CONNECT_CONFIG_PROVIDERS_DIR_CLASS
-              value: org.apache.kafka.common.config.provider.DirectoryConfigProvider
-            - name: CONNECT_CONFIG_PROVIDERS_DIR_PARAM_ALLOWED_PATHS
-              value: /etc/nomnom/cdc
-            # Живых данных в heap ~70MB (jvm_memory_used_bytes, 2026-10-26); free ratio отдаёт
-            # системе heap, раздутый на старте, после GC.
-            - name: HEAP_OPTS
-              value: -Xms64m -Xmx256m -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30
-            # glibc по умолчанию держит до 8 malloc-арен на CPU: без CPU limit JVM видит все ядра
-            # узла, и ~110 потоков (JIT, GC, коннекторы) набирали >100 арен — ~200MB RSS вне heap,
-            # из-за чего pod уходил в OOMKilled на старте. Две арены на процесс достаточно для JVM.
-            - name: MALLOC_ARENA_MAX
-              value: "2"
-            # Заменяет G1 из kafka-run-class: по числу ядер узла JVM заводит потоки GC и JIT,
-            # а Metaspace и code cache (240MB) ничем не ограничены — RSS вдвое больше heap.
-            # Serial GC и два процессора для эргономики хватает одному воркеру на четыре коннектора.
-            - name: KAFKA_JVM_PERFORMANCE_OPTS
-              value: >-
-                -server -XX:+UseSerialGC -XX:ActiveProcessorCount=2
-                -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m
-                -XX:MaxDirectMemorySize=64m -Xss512k -XX:MaxInlineLevel=15
-          ports:
-            - name: http
-              containerPort: 8083
-            # Prometheus JMX exporter (metrics.yaml): состояние коннекторов и метрики Debezium.
-            - name: metrics
-              containerPort: 9404
-          readinessProbe:
-            httpGet:
-              path: /connectors
-              port: http
-            periodSeconds: 5
-            failureThreshold: 60
-          resources:
-            requests:
-              memory: 384Mi
-            limits:
-              memory: 768Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-          volumeMounts:
-            - name: cdc-credentials
-              mountPath: /etc/nomnom/cdc
-              readOnly: true
+    pod:
       volumes:
         - name: cdc-credentials
           secret:
             secretName: cdc-credentials
+    connectContainer:
+      env:
+        # glibc по умолчанию держит до 8 malloc-арен на CPU: ~110 потоков JVM набирали >100 арен —
+        # ~200MB RSS вне heap и OOMKilled на старте. Двух арен на процесс достаточно.
+        - name: MALLOC_ARENA_MAX
+          value: "2"
+      # Strimzi монтирует дополнительные volumes только под /mnt.
+      volumeMounts:
+        - name: cdc-credentials
+          mountPath: /mnt/cdc
+          readOnly: true
 ---
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: kafka-connect
+  name: kafka-connect-metrics
   namespace: nomnom-infra
-  labels:
-    app.kubernetes.io/name: kafka-connect
-spec:
-  selector:
-    app.kubernetes.io/name: kafka-connect
-  ports:
-    - name: http
-      port: 8083
-      targetPort: http
+data:
+  metrics.yaml: |-
+{{ .Files.Get "files/metrics.yaml" | indent 4 }}

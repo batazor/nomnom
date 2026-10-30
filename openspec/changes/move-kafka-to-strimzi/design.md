@@ -53,11 +53,12 @@ Topics лежат вместе, а не в charts контекстов: DLQ об
 
 Ресурс `KafkaConnect kafka-connect` рендерит chart `ops/kind/kafka-connect/chart` вместо прежнего Deployment: образ, собранный Skaffold, доступен только releases (`setValueTemplates`). Аннотация `strimzi.io/use-connector-resources: "true"` — коннекторы задаются только `KafkaConnector`, REST API для регистрации не используется.
 
-- Образ: `quay.io/strimzi/kafka:1.3.0-kafka-4.3.1`, в `/opt/kafka/plugins` — каталоги Debezium PostgreSQL и MongoDB из архивов релиза 3.7.0.Final (checksum) и `schema-framing`. Сборку Strimzi (`spec.build`) не используем: ей нужен registry для push и Buildah.
+- Образ: `quay.io/strimzi/kafka:1.3.0-kafka-4.3.1`, в `/opt/kafka/plugins` — каталоги Debezium PostgreSQL и MongoDB 3.7.0.Final из закреплённого по digest образа `quay.io/debezium/connect` (каждый самодостаточен: `EventRouter` — в `debezium-connect-plugins`, `MongoEventRouter` — в jar коннектора) и `schema-framing`. Сборку Strimzi (`spec.build`) не используем: ей нужен registry для push и Buildah.
 - `group.id` и topics хранения — прежние (`nomnom-cdc`, `nomnom-cdc-configs`, `nomnom-cdc-offsets`, `nomnom-cdc-status`); topics объявлены `KafkaTopic`, Connect их не создаёт.
-- Пароли: `config.providers=dir` (`DirectoryConfigProvider`, `allowed.paths=/etc/nomnom/cdc`), Secret `cdc-credentials` монтируется через `template.pod.volumes` и `template.connectContainer.volumeMounts`.
-- Метрики: `metricsConfig` типа `jmxPrometheusExporter` с ConfigMap прежних правил `metrics.yaml`; имена метрик для Alloy и дашбордов не меняются.
-- SMT `SchemaFraming`: в образе Debezium `protobuf-java` и Jackson лежали в `/kafka/libs`; в образе Strimzi их наличие и версии проверяются первой задачей. Недостающие зависимости кладутся в каталог плагина рядом с jar (`dependency:copy-dependencies`), а не в общий classpath.
+- Пароли: `config.providers=dir` (`DirectoryConfigProvider`, `allowed.paths=/mnt/cdc`), Secret `cdc-credentials` монтируется через `template.pod.volumes` и `template.connectContainer.volumeMounts`.
+- Метрики: `metricsConfig` типа `jmxPrometheusExporter` с ConfigMap прежних правил (`chart/files/metrics.yaml`) на том же порту 9404; Alloy находит pod по `app.kubernetes.io/name=kafka-connect`, который ставит Strimzi, имена метрик для дашбордов не меняются.
+- NetworkPolicy Strimzi не генерирует (`generateNetworkPolicy: false` chart operator'а): политики стенда — `manifests/netpol` (ADR 16), а сгенерированные закрыли бы REST Connect от Console и e2e. Egress hook Jobs к Connect `:8083` больше не нужен и удалён.
+- SMT `SchemaFraming`: в `/opt/kafka/libs` образа Strimzi лежат `connect-api` 4.3.1, `protobuf-java` 3.25.5 и Jackson 2.21.2 — те же версии, что в образе Debezium, поэтому зависимости SMT остаются `provided` (проверено 2026-10-30).
 
 ## Коннекторы
 

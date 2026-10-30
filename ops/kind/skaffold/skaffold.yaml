@@ -3,8 +3,8 @@
 # Версии charts закреплены здесь: Skaffold не подставляет environment в remoteChart/version.
 # Остальные версии (kind, node image, Skaffold, Gateway API CRD, образы) — в ../versions.env.
 #
-#   platform — CNI (Cilium, Hubble observer без relay), controller gateways (Envoy Gateway + Gateway API CRD) и
-#              cert-manager;
+#   platform — CNI (Cilium, Hubble observer без relay), controller gateways (Envoy Gateway + Gateway API CRD),
+#              cert-manager, Temporal Worker Controller и Strimzi;
 #   apps     — образы bounded contexts, их Helm charts, internal gateway и pod проверок.
 apiVersion: skaffold/v4beta14
 kind: Config
@@ -72,6 +72,22 @@ deploy:
         createNamespace: true
         upgradeOnChange: true
         wait: true
+      # Strimzi Cluster Operator (FR-720): Apache Kafka, topics, Kafka Connect и коннекторы
+      # ресурсами Kafka, KafkaNodePool, KafkaTopic, KafkaConnect и KafkaConnector в nomnom-infra.
+      # watchAnyNamespace: nomnom-infra создаёт before-hook модуля apps, его ещё нет при
+      # установке платформы, а RoleBinding в несуществующем namespace chart не создаст.
+      - name: strimzi
+        remoteChart: oci://quay.io/strimzi-helm/strimzi-kafka-operator
+        version: 1.3.0
+        namespace: strimzi
+        createNamespace: true
+        upgradeOnChange: true
+        wait: true
+        setValues:
+          watchAnyNamespace: true
+          # NetworkPolicy стенда — manifests/netpol (ADR 16); сгенерированные Strimzi закрыли бы
+          # REST Kafka Connect от Console и проверок e2e.
+          generateNetworkPolicy: false
     hooks:
       after:
         # Установленные chart Envoy Gateway CRD должны совпадать с закреплённой версией Gateway API.
@@ -241,12 +257,11 @@ deploy:
                   --set-file authz.bootstrap=../../../authorization/bootstrap.yaml \
                   --set-file authz.kindBootstrap=../authz/bootstrap-kind.yaml \
                   --set-file identity.idpJwks=../../../tests/identity/fixtures/idp-jwks.json
-        # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
-        # consumer подключается к ним при startup. DLQ topics consumers объявляются здесь же,
-        # до charts: retention — контракт разбора DLQ, а не дефолт auto create (docs/dlq.md).
-        # Тот же Job объявляет служебные topics Kafka Connect (compact): auto create брокера после
-        # перезапуска Redpanda создал бы их с delete, и Connect не стартовал бы.
-        # Spec Job неизменяем, поэтому прошлый Job удаляется перед apply.
+        # Брокер, topics, Schema Registry и Temporal dev server нужны до установки charts:
+        # consumers подключаются к ним при startup, а broker не создаёт topics сам (FR-720,
+        # FR-721). Kafka, KafkaNodePool и KafkaTopic приводит к кластеру Strimzi Cluster Operator
+        # платформы; hook ждёт их Ready. Schema Registry стартует после брокера: его topic
+        # _schemas — тоже KafkaTopic.
         - host:
             command:
               - sh
@@ -255,10 +270,13 @@ deploy:
                 set -eu
                 k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
                 k apply -f ../manifests/messaging/infrastructure.yaml
-                k -n nomnom-infra wait deployment/kafka deployment/temporal --for=condition=Available --timeout=300s
-                k -n nomnom-infra delete job dead-letter-topics --ignore-not-found --wait
-                k apply -f ../manifests/messaging/dead-letter-topics.yaml
-                k -n nomnom-infra wait job/dead-letter-topics --for=condition=Complete --timeout=180s
+                k apply -f ../manifests/messaging/kafka.yaml
+                k -n nomnom-infra wait kafka/kafka --for=condition=Ready --timeout=600s
+                k apply -f ../manifests/messaging/topics.yaml
+                k -n nomnom-infra wait kafkatopic --all --for=condition=Ready --timeout=300s
+                k apply -f ../manifests/messaging/schema-registry.yaml
+                k -n nomnom-infra wait deployment/schema-registry deployment/temporal \
+                  --for=condition=Available --timeout=300s
       after:
         # Skaffold status check не знает WorkerDeployment: ждём, пока Temporal Worker Controller
         # сделает версию orders-worker текущей, иначе новые заказы не на чем исполнять.
@@ -270,6 +288,17 @@ deploy:
                 set -eu
                 kubectl --context "$SKAFFOLD_KUBE_CONTEXT" -n nomnom-orders wait workerdeployment/orders-worker \
                   --for=condition=Ready --timeout=300s
+        # Skaffold status check не знает ресурсов Strimzi: Kafka Connect и коннекторы контекстов
+        # (FR-722, FR-538) ждём явно.
+        - host:
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                k() { kubectl --context "$SKAFFOLD_KUBE_CONTEXT" "$@"; }
+                k -n nomnom-infra wait kafkaconnect/kafka-connect --for=condition=Ready --timeout=600s
+                k -n nomnom-infra wait kafkaconnector --all --for=condition=Ready --timeout=300s
     releases:
       - name: orders
         chartPath: ../../../boundaries/orders/ops/helm
@@ -422,7 +451,7 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
           image.tag: "{{.IMAGE_TAG_nomnom_delivery}}"
-      # Схемы Integration Events в Schema Registry Redpanda (FR-716): hook Job до kafka-connect.
+      # Схемы Integration Events в Confluent Schema Registry (FR-716): hook Job до kafka-connect.
       # Последний release (индекс 14): индексы в patches профилей не меняются.
       - name: schema-registration
         chartPath: ../schema-registration

@@ -13,12 +13,12 @@ spec:
   scenarios:
     - bindings:
         - {name: from_namespace, value: nomnom-delivery}
-        - {name: host, value: kafka.nomnom-infra.svc.cluster.local}
+        - {name: host, value: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local}
         - {name: port, value: 9092}
         - {name: expect, value: open}
     - bindings:
         - {name: from_namespace, value: nomnom-payments}
-        - {name: host, value: kafka.nomnom-infra.svc.cluster.local}
+        - {name: host, value: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local}
         - {name: port, value: 9092}
         - {name: expect, value: open}
     - bindings:

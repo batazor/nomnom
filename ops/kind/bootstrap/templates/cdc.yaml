@@ -1,5 +1,5 @@
 # Учётные данные коннекторов Outbox (ADR 37) для Kafka Connect в nomnom-infra. Connect читает их
-# DirectoryConfigProvider из смонтированного Secret: ${dir:/etc/nomnom/cdc:<ключ>}; в
+# DirectoryConfigProvider из смонтированного Secret: ${dir:/mnt/cdc:<ключ>}; в
 # конфигурации коннекторов, которую регистрируют charts контекстов, паролей нет. ТОЛЬКО для kind:
 # коннекторы работают под ролями владельцев баз (REPLICATION; pg_hba пускает логическую репликацию
 # только в свою базу, templates/postgres.yaml), в production —

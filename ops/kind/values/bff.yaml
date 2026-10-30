@@ -35,7 +35,7 @@ env:
 # ADR 36: Router читает orders.v1.order-changes для подписок orderChanged
 # (egress — manifests/netpol/app-infrastructure.yaml).
 kafka:
-  brokers: kafka.nomnom-infra.svc.cluster.local:9092
+  brokers: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
 
 # FR-668: Valkey delivery в nomnom-data, ACL-пользователь bff (только SUBSCRIBE).
 tracks:

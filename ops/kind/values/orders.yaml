@@ -64,14 +64,16 @@ resources:
   limits:
     memory: 256Mi
 
-# ADR 37: коннектор Debezium orders-outbox (Outbox → Kafka из WAL) регистрирует hook Job этого
+# ADR 37: коннектор Debezium orders-outbox (Outbox → Kafka из WAL) — ресурс KafkaConnector этого
 # release. Пароль Kafka Connect читает из Secret cdc-credentials (chart ../bootstrap).
 cdc:
   enabled: true
-  connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
-  schemaRegistryUrl: http://kafka.nomnom-infra.svc.cluster.local:8081
+  connect:
+    cluster: kafka-connect
+    namespace: nomnom-infra
+  schemaRegistryUrl: http://schema-registry.nomnom-infra.svc.cluster.local:8081
   database:
     hostname: postgres.nomnom-data.svc.cluster.local
     name: orders
     user: orders
-    password: ${dir:/etc/nomnom/cdc:orders-password}
+    password: ${dir:/mnt/cdc:orders-password}

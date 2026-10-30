@@ -75,8 +75,8 @@ worker и consumer 5), миграции при старте — 2 отдельн
 Outbox `orders_outbox` доставляет в Kafka Debezium из WAL
 ([ADR 37](../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): процесса публикации нет.
 Базе нужен `wal_level = logical`, publication `orders_outbox` создаёт миграция. Коннектор
-`orders-outbox` регистрирует hook Job release с `cdc.enabled: true` (API): `cdc.connectUrl` —
-REST Kafka Connect, `cdc.database.*` — адрес базы и ссылка на пароль в config provider Connect.
+`orders-outbox` — ресурс Strimzi `KafkaConnector` release с `cdc.enabled: true` (API): `cdc.connect.*` —
+ресурс `KafkaConnect`, `cdc.database.*` — адрес базы и ссылка на пароль в config provider Connect.
 
 ## Temporal worker
 

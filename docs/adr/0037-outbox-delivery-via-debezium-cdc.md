@@ -25,7 +25,7 @@ ADR 31 отказался от CDC как от лишней инфраструк
 опроса и без кода публикации в сервисах.
 
 Проверено на стенде Redpanda 26.2 + Debezium Connect 3.7.0.Final + PostgreSQL 18 + MongoDB 8
-(2026-10-25):
+(2026-10-25); с 2026-10-30 брокер стенда — Apache Kafka 4.3.1 под Strimzi:
 
 - Outbox Event Router отдаёт сообщение с ключом `aggregate_id`, payload — сырыми байтами
   (`ByteArrayConverter`, Protobuf не меняется), заголовки — строками
@@ -41,8 +41,10 @@ Debezium Server не подходит: заголовки он пишет тол
 
 ### Kafka Connect + Debezium
 
-Один Kafka Connect кластер (`quay.io/debezium/connect`, 3.7.0.Final, образ `ops/kind/kafka-connect` с JMX exporter) в `nomnom-infra`. Его
-config, offsets и status хранятся в топиках брокера, поэтому сам Connect stateless. На каждый
+Один Kafka Connect кластер в `nomnom-infra` — ресурс Strimzi `KafkaConnect kafka-connect` (образ
+`ops/kind/kafka-connect`: Strimzi Kafka 4.3.1 с плагинами Debezium 3.7.0.Final и SMT в
+`/opt/kafka/plugins`, метрики — `metricsConfig` Strimzi). Его config, offsets и status хранятся в
+topics брокера (`KafkaTopic` `nomnom-cdc-*`, `compact`), поэтому сам Connect stateless. На каждый
 контекст свой коннектор:
 
 | Контекст | Коннектор | Источник |
@@ -52,10 +54,12 @@ config, offsets и status хранятся в топиках брокера, п�
 | `delivery` | `delivery-outbox` | PostgreSQL, таблица `delivery_outbox`, publication `delivery_outbox` |
 | `restaurants` | `restaurants-outbox` | MongoDB, коллекция `outbox`, change streams |
 
-Коннектор принадлежит контексту: конфигурацию держит его Helm chart (`cdc.*`), а hook Job
-release контекста регистрирует её через REST Connect (`PUT /connectors/<name>/config`).
+Коннектор принадлежит контексту: конфигурацию держит его Helm chart (`cdc.*`), а release
+контекста создаёт из неё ресурс Strimzi `KafkaConnector` в namespace `KafkaConnect`. Cluster
+Operator регистрирует коннектор (у `KafkaConnect` включены `strimzi.io/use-connector-resources`,
+REST Connect для регистрации не используется) и с `autoRestart` перезапускает задачи в `FAILED`.
 Пароли Connect читает из Secret `cdc-credentials` в `nomnom-infra` через
-`DirectoryConfigProvider` (`${dir:/etc/nomnom/cdc:<key>}`); в конфигурации коннектора их нет.
+`DirectoryConfigProvider` (`${dir:/mnt/cdc:<key>}`); в конфигурации коннектора их нет.
 
 ### Контракт записи Outbox
 
@@ -87,7 +91,8 @@ Id последней версии subject `event_type` и индекс сооб
 (`?format=serialized`, `FileDescriptorProto`) и кеширует на `transforms.schema.cache.ttl.ms`;
 value проверяется разбором как это сообщение. Запись без `event_type`, без subject, с
 неразбираемым value или при недоступном Registry переводит задачу в `FAILED` без пропуска
-записи; hook Job регистрации коннектора перезапускает такие задачи при следующем деплое. Topics
+записи; `autoRestart` ресурса `KafkaConnector` перезапускает такие задачи с backoff, и после
+регистрации схемы коннектор продолжает без деплоя. Topics
 Change Notifications в список не входят, их JSON проходит без изменений. Id последней версии
 безопасен для payload любой прежней версии: Registry держит `FULL_TRANSITIVE`.
 

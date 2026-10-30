@@ -218,7 +218,7 @@ prometheus.relabel "kafka_connect" {
 // <group>.dlq хранят разобранное в <stream>.dlq (docs/dlq.md): alert kafka-dlq-unresolved
 // считает неразобранное как конец partition DLQ минус их offset.
 prometheus.exporter.kafka "infra" {
-  kafka_uris          = ["kafka.nomnom-infra.svc.cluster.local:9092"]
+  kafka_uris          = ["kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092"]
   groups_filter_regex = "^(orders|restaurants)(\\.dlq)?$"
 }
 

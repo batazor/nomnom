@@ -63,9 +63,11 @@ mongodb:
 # из Secret cdc-credentials (ключ restaurants-uri) через DirectoryConfigProvider.
 cdc:
   enabled: true
-  connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
-  schemaRegistryUrl: http://kafka.nomnom-infra.svc.cluster.local:8081
-  connectionString: ${dir:/etc/nomnom/cdc:restaurants-uri}
+  connect:
+    cluster: kafka-connect
+    namespace: nomnom-infra
+  schemaRegistryUrl: http://schema-registry.nomnom-infra.svc.cluster.local:8081
+  connectionString: ${dir:/mnt/cdc:restaurants-uri}
 
 # ADR 43: кеш чтения каталога; Secret restaurants-valkey (URL ACL-пользователя restaurants)
 # создаёт chart ops/kind/bootstrap.

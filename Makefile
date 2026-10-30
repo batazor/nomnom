@@ -38,7 +38,7 @@ kind-cluster: ## создать single-node кластер kind из ops/kind/cl
 	@kind get clusters | grep -Fxq '$(KIND_CLUSTER_NAME)' || \
 	  sed -e 's|__WEBHOOKS_HOST_PORT__|$(WEBHOOKS_HOST_PORT)|' ops/kind/cluster.yaml | \
 	  kind create cluster --name '$(KIND_CLUSTER_NAME)' --image '$(KIND_NODE_IMAGE)' --config=-
-kind-up: kind-cluster ## создать кластер и установить платформу: Cilium (Hubble observer), Envoy Gateway, cert-manager, Temporal Worker Controller
+kind-up: kind-cluster ## создать кластер и установить платформу: Cilium (Hubble observer), Envoy Gateway, cert-manager, Temporal Worker Controller, Strimzi
 	@$(SKAFFOLD) run --module platform $(SKAFFOLD_FLAGS)
 kind-local-ca: ## сохранить корень локального CA в ops/kind/.artifacts/nomnom-local-ca.crt и вывести путь
 	@mkdir -p ops/kind/.artifacts

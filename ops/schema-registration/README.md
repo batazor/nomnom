@@ -15,7 +15,7 @@ Registry: SMT `SchemaFraming` и consumers только читают.
 
 ```bash
 SCHEMA_REGISTRY__URL=http://127.0.0.1:8081 go run . --root ../.. --config event-files.yaml
-go test ./...   # Redpanda из testcontainers
+go test ./...   # Kafka и Confluent Schema Registry из testcontainers
 ```
 
 В kind утилиту запускает hook Job `schema-registration`

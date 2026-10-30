@@ -1,5 +1,5 @@
-# Образ собирает Skaffold (artifact nomnom/kafka-connect) и задаёт setValueTemplates.
+# Образ собирает Skaffold (artifact nomnom/kafka-connect) и задаёт setValueTemplates; pod
+# запускает Strimzi Cluster Operator, образ загружен в kind (kind load).
 image:
   repository: nomnom/kafka-connect
   tag: ""
-  pullPolicy: Never

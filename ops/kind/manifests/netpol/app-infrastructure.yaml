@@ -34,20 +34,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
-        # Schema Registry (FR-719): consumer проверяет subject схемы записи.
-        - protocol: TCP
-          port: 8081
-    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    # Schema Registry (FR-719): consumer проверяет subject схемы записи.
     - to:
         - namespaceSelector:
             matchLabels:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: kafka-connect
+              app.kubernetes.io/name: schema-registry
       ports:
         - protocol: TCP
-          port: 8083
+          port: 8081
     - to:
         - namespaceSelector:
             matchLabels:
@@ -112,20 +109,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
-        # Schema Registry (FR-719): consumer проверяет subject схемы записи.
-        - protocol: TCP
-          port: 8081
-    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    # Schema Registry (FR-719): consumer проверяет subject схемы записи.
     - to:
         - namespaceSelector:
             matchLabels:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: kafka-connect
+              app.kubernetes.io/name: schema-registry
       ports:
         - protocol: TCP
-          port: 8083
+          port: 8081
     # SpiceDB (ADR 18): authorization checks и relationship writes.
     - to:
         - namespaceSelector:
@@ -180,20 +174,17 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
-        # Schema Registry (FR-719): consumer проверяет subject схемы записи.
-        - protocol: TCP
-          port: 8081
-    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
+    # Schema Registry (FR-719): consumer проверяет subject схемы записи.
     - to:
         - namespaceSelector:
             matchLabels:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: kafka-connect
+              app.kubernetes.io/name: schema-registry
       ports:
         - protocol: TCP
-          port: 8083
+          port: 8081
     - to:
         - namespaceSelector:
             matchLabels:
@@ -246,17 +237,6 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
-    # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              nomnom.dev/tier: infra
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: kafka-connect
-      ports:
-        - protocol: TCP
-          port: 8083
     # SpiceDB (ADR 18): authorization checks и relationship writes.
     - to:
         - namespaceSelector:

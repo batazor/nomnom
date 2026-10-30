@@ -4,6 +4,8 @@ import { after, before, describe, test } from "node:test";
 
 import {
   GenericContainer,
+  Network,
+  type StartedNetwork,
   type StartedTestContainer,
   Wait,
 } from "testcontainers";
@@ -13,37 +15,57 @@ import {
   UnknownSchemaError,
 } from "../pkg/infrastructure/messaging/schema-registry.ts";
 
-/** Broker of ops/kind/manifests/messaging/infrastructure.yaml, with its Schema Registry. */
-const REDPANDA_IMAGE =
-  "docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce";
+/** Kafka and Confluent Schema Registry of ops/kind/manifests/messaging (kafka.yaml, schema-registry.yaml). */
+const KAFKA_IMAGE = "apache/kafka:4.3.1";
+const SCHEMA_REGISTRY_IMAGE =
+  "docker.io/confluentinc/cp-schema-registry:8.4.0@sha256:12cd2770fa25df65243dabafd5eef5337ea1145a3cb85afc8a27f7151dfa2999";
 
 const DELIVERY_EVENTS = new URL(
   "../../delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto",
   import.meta.url,
 );
 
-describe("HttpSchemaRegistry against the Redpanda Schema Registry", () => {
-  let redpanda: StartedTestContainer;
+describe("HttpSchemaRegistry against Confluent Schema Registry", () => {
+  let network: StartedNetwork;
+  let kafka: StartedTestContainer;
+  let registryContainer: StartedTestContainer;
   let stopped = false;
   let url: URL;
   let schemaId: number;
 
   before(async () => {
-    redpanda = await new GenericContainer(REDPANDA_IMAGE)
-      .withCommand([
-        "redpanda",
-        "start",
-        "--mode=dev-container",
-        "--smp=1",
-        "--memory=256M",
-        "--overprovisioned",
-        "--schema-registry-addr=0.0.0.0:8081",
-      ])
+    network = await new Network().start();
+    kafka = await new GenericContainer(KAFKA_IMAGE)
+      .withNetwork(network)
+      .withNetworkAliases("kafka")
+      .withEnvironment({
+        KAFKA_NODE_ID: "1",
+        KAFKA_PROCESS_ROLES: "broker,controller",
+        KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093",
+        KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092",
+        KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER",
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:
+          "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+        KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093",
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1",
+        KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1",
+        KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1",
+      })
+      .withWaitStrategy(Wait.forLogMessage(/Kafka Server started/))
+      .withStartupTimeout(180_000)
+      .start();
+    registryContainer = await new GenericContainer(SCHEMA_REGISTRY_IMAGE)
+      .withNetwork(network)
+      .withEnvironment({
+        SCHEMA_REGISTRY_HOST_NAME: "schema-registry",
+        SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081",
+        SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:9092",
+      })
       .withExposedPorts(8081)
       .withWaitStrategy(Wait.forHttp("/subjects", 8081))
-      .withStartupTimeout(120_000)
+      .withStartupTimeout(180_000)
       .start();
-    url = new URL(`http://127.0.0.1:${redpanda.getMappedPort(8081)}/`);
+    url = new URL(`http://127.0.0.1:${registryContainer.getMappedPort(8081)}/`);
     const schema = await readFile(DELIVERY_EVENTS, "utf8");
     for (const subject of [
       "nomnom.delivery.v1.DeliveryPickedUp",
@@ -63,7 +85,9 @@ describe("HttpSchemaRegistry against the Redpanda Schema Registry", () => {
   });
 
   after(async () => {
-    if (!stopped) await redpanda?.stop();
+    if (!stopped) await registryContainer?.stop();
+    await kafka?.stop();
+    await network?.stop();
   });
 
   test("FR-717: the subjects of a schema id are the events of its file", async () => {
@@ -93,7 +117,7 @@ describe("HttpSchemaRegistry against the Redpanda Schema Registry", () => {
       assert.ok(!(error instanceof UnknownSchemaError));
       return true;
     });
-    await redpanda.stop();
+    await registryContainer.stop();
     stopped = true;
     assert.equal((await registry.subjects(schemaId)).length, 2);
   });

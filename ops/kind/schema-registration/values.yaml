@@ -7,5 +7,5 @@ image:
   # Образ загружен через kind load.
   pullPolicy: IfNotPresent
 
-# Schema Registry Redpanda (ops/kind/manifests/messaging/infrastructure.yaml).
-registryUrl: http://kafka.nomnom-infra.svc.cluster.local:8081
+# Confluent Schema Registry (ops/kind/manifests/messaging/schema-registry.yaml).
+registryUrl: http://schema-registry.nomnom-infra.svc.cluster.local:8081

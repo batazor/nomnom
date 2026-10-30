@@ -4,9 +4,9 @@ image:
   pullPolicy: Never
 
 env:
-  KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+  KAFKA__BROKERS: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
   # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
-  SCHEMA_REGISTRY__URL: http://kafka.nomnom-infra.svc.cluster.local:8081
+  SCHEMA_REGISTRY__URL: http://schema-registry.nomnom-infra.svc.cluster.local:8081
   TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
   TEMPORAL__NAMESPACE: default
   # Config orders требует адрес gateway при fulfillment neighbours "grpc" (по умолчанию):

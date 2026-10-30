@@ -1,0 +1,249 @@
+# Все topics тестового окружения — KafkaTopic Topic Operator ресурса Kafka kafka (FR-721, FR-723).
+# Broker auto create выключен (kafka.yaml): topic без ресурса не появится, publish в него —
+# ошибка. Удаление ресурса удаляет topic с данными, а partitions можно только увеличить —
+# переименование или перенос ресурса из этого файла есть удаление topic.
+#
+#   стримы Integration Events и Change Notifications — 3 partitions, порядок по ключу aggregate_id;
+#   DLQ consumers (ADR 28, docs/dlq.md) — 1 partition, retention 30 дней: окно разбора DLQ;
+#   служебные topics Kafka Connect (ADR 37) и Schema Registry — compact, у configs одна partition.
+---
+# orders: Integration Events Order (ADR 25)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders.v1.order-events
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# orders: внутренний стрим связей SpiceDB (ADR 18)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders.v1.order-relationships
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# payments: Integration Events Payment
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: payments.v1.payment-events
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# delivery: Integration Events Delivery
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: delivery.v1.delivery-events
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# restaurants: Integration Events Restaurant Order
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: restaurants.v1.restaurant-order-events
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# restaurants: Integration Events Restaurant
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: restaurants.v1.restaurant-events
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# restaurants: Integration Events Menu
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: restaurants.v1.menu-events
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# Change Notifications (ADR 36): JSON для Cosmo Router
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders.v1.order-changes
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: restaurants.v1.kitchen-changes
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: delivery.v1.courier-changes
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: delivery.v1.courier-pool-changes
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 3
+  replicas: 1
+---
+# DLQ: 30 дней — окно разбора (docs/dlq.md)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders.v1.order-events.dlq
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: "2592000000"
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: restaurants.v1.restaurant-order-events.dlq
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: "2592000000"
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: delivery.v1.delivery-events.dlq
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: "2592000000"
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders.v1.order-relationships.dlq
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: "2592000000"
+---
+# Kafka Connect (KafkaConnect kafka-connect): config — одна partition, иначе Connect не стартует
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: nomnom-cdc-configs
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: compact
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: nomnom-cdc-offsets
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 25
+  replicas: 1
+  config:
+    cleanup.policy: compact
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: nomnom-cdc-status
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 5
+  replicas: 1
+  config:
+    cleanup.policy: compact
+---
+# Confluent Schema Registry (kafkastore.topic): имя ресурса без подчёркивания — DNS-имя Kubernetes
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: schemas
+  namespace: nomnom-infra
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  topicName: _schemas
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: compact

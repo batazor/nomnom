@@ -1,45 +1,74 @@
-//! FR-715, FR-717: subjects of a schema id from the Schema Registry of the
-//! Redpanda broker of the kind environment.
+//! FR-715, FR-717: subjects of a schema id from the Confluent Schema Registry
+//! of the kind environment, with a Kafka broker of its own.
 
 mod support;
 
 use std::path::Path;
 
 use delivery::infrastructure::messaging::{SchemaLookupError, SchemaRegistry};
-use testcontainers_modules::testcontainers::core::IntoContainerPort;
+use testcontainers_modules::testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers_modules::testcontainers::runners::SyncRunner;
 use testcontainers_modules::testcontainers::{GenericImage, ImageExt};
 
-/// Broker of `ops/kind/manifests/messaging/infrastructure.yaml`.
-const REDPANDA_IMAGE: &str = "docker.io/redpandadata/redpanda";
-const REDPANDA_TAG: &str = "v26.2.6";
+/// Apache Kafka of the Strimzi broker (`ops/kind/manifests/messaging/kafka.yaml`).
+const KAFKA_IMAGE: &str = "apache/kafka";
+const KAFKA_TAG: &str = "4.3.1";
+/// `ops/kind/manifests/messaging/schema-registry.yaml`.
+const SCHEMA_REGISTRY_IMAGE: &str = "docker.io/confluentinc/cp-schema-registry";
+const SCHEMA_REGISTRY_TAG: &str = "8.4.0";
 const SCHEMA_REGISTRY: u16 = 8081;
 
+/// Kafka and Schema Registry on a network of their own: the Registry stores
+/// schemas in the `_schemas` topic of the broker, reached by container name.
 fn start_registry() -> String {
-    let container = GenericImage::new(REDPANDA_IMAGE, REDPANDA_TAG)
-        .with_exposed_port(SCHEMA_REGISTRY.tcp())
-        .with_cmd([
-            "redpanda",
-            "start",
-            "--mode=dev-container",
-            "--smp=1",
-            "--memory=256M",
-            "--overprovisioned",
-            "--schema-registry-addr=0.0.0.0:8081",
-        ])
+    let id = std::process::id();
+    let network = format!("delivery-schema-registry-{id}");
+    let kafka = format!("delivery-kafka-{id}");
+    let broker = GenericImage::new(KAFKA_IMAGE, KAFKA_TAG)
+        .with_wait_for(WaitFor::message_on_stdout("Kafka Server started"))
+        .with_network(&network)
+        .with_container_name(&kafka)
+        .with_env_var("KAFKA_NODE_ID", "1")
+        .with_env_var("KAFKA_PROCESS_ROLES", "broker,controller")
+        .with_env_var("KAFKA_LISTENERS", "PLAINTEXT://:9092,CONTROLLER://:9093")
+        .with_env_var(
+            "KAFKA_ADVERTISED_LISTENERS",
+            format!("PLAINTEXT://{kafka}:9092"),
+        )
+        .with_env_var("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
+        .with_env_var(
+            "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP",
+            "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+        )
+        .with_env_var("KAFKA_CONTROLLER_QUORUM_VOTERS", "1@localhost:9093")
+        .with_env_var("KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR", "1")
+        .with_env_var("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1")
+        .with_env_var("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")
         .start()
-        .expect("start redpanda container");
-    let port = container
+        .expect("start kafka container");
+    support::keep(broker);
+    let registry = GenericImage::new(SCHEMA_REGISTRY_IMAGE, SCHEMA_REGISTRY_TAG)
+        .with_exposed_port(SCHEMA_REGISTRY.tcp())
+        .with_network(&network)
+        .with_env_var("SCHEMA_REGISTRY_HOST_NAME", "schema-registry")
+        .with_env_var("SCHEMA_REGISTRY_LISTENERS", "http://0.0.0.0:8081")
+        .with_env_var(
+            "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS",
+            format!("PLAINTEXT://{kafka}:9092"),
+        )
+        .start()
+        .expect("start schema registry container");
+    let port = registry
         .get_host_port_ipv4(SCHEMA_REGISTRY.tcp())
         .expect("schema registry port");
-    support::keep(container);
+    support::keep(registry);
     format!("http://127.0.0.1:{port}")
 }
 
-/// Waits until the Registry answers: its log lines do not reach the log
-/// wait of testcontainers.
+/// Waits until the Registry answers: it starts only after the broker accepts
+/// its `_schemas` topic.
 async fn await_registry(url: &str) {
-    for _ in 0..120 {
+    for _ in 0..240 {
         if let Ok(response) = reqwest::get(format!("{url}/subjects")).await
             && response.status().is_success()
         {

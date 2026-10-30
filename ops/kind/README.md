@@ -17,7 +17,7 @@ Docker, `kind` и `skaffold` версий из [`versions.env`](versions.env), `
 
 ```bash
 make kind-e2e       # весь цикл для CI: кластер → skaffold run → проверки → удаление
-make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium (Hubble observer), Envoy Gateway, cert-manager, Temporal Worker Controller
+make kind-up        # make kind-cluster (single-node кластер из cluster.yaml) и платформа: Cilium (Hubble observer), Envoy Gateway, cert-manager, Temporal Worker Controller, Strimzi
 make kind-deploy    # skaffold run: сборка образов, загрузка в kind, gateway, charts приложений, readiness
 make kind-dev       # skaffold dev (профиль core): пересборка и передеплой при изменении исходников
 make kind-test      # тесты Chainsaw; NetworkPolicy применяются внутри и остаются
@@ -64,13 +64,22 @@ make kind-down
 - `orders-consumer` ([ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — второй
   release chart `orders` с `values-consumer.yaml` и [`values/orders-consumer.yaml`](values/orders-consumer.yaml):
   тот же образ, `command: ["/orders-consumer"]`, без Service; читает Kafka и уведомляет Temporal в
-  `nomnom-infra`. Kafka и Temporal применяет `before`-hook helm-деплоера и ждёт их readiness:
-  consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
-  Тот же hook после Kafka запускает Job `dead-letter-topics`
-  ([`manifests/messaging/dead-letter-topics.yaml`](manifests/messaging/dead-letter-topics.yaml)): DLQ
-  consumers объявляются явно — retention 30 дней, одна partition ([Разбор DLQ](../../docs/dlq.md)); там же
-  служебные topics Kafka Connect (`nomnom-cdc-*`, `cleanup.policy=compact`, у `nomnom-cdc-configs` одна partition), которые
-  Connect, работавший во время перезапуска Redpanda, иначе пересоздал бы auto create брокера.
+  `nomnom-infra`. Брокер, topics, Schema Registry и Temporal применяет `before`-hook helm-деплоера
+  и ждёт их readiness: consumer подключается к ним при startup. Egress разрешён
+  `manifests/netpol/app-infrastructure.yaml`.
+- Kafka — Apache Kafka 4.3.1 под Strimzi 1.3.0 (Cluster Operator ставит `make kind-up`):
+  ресурсы `Kafka kafka` и `KafkaNodePool dual` ([`manifests/messaging/kafka.yaml`](manifests/messaging/kafka.yaml)),
+  KRaft, один узел, ephemeral storage, bootstrap `kafka-kafka-bootstrap.nomnom-infra:9092`. Broker
+  не создаёт topics сам: каждый topic — `KafkaTopic`
+  ([`manifests/messaging/topics.yaml`](manifests/messaging/topics.yaml)) — стримы (3 partitions), DLQ
+  (одна partition, 30 дней, [Разбор DLQ](../../docs/dlq.md)), служебные topics Connect и `_schemas`
+  (`compact`). Новый стрим без `KafkaTopic` — ошибка publish; удаление ресурса удаляет topic с данными.
+  После рестарта pod брокера Topic Operator создаёт topics заново. NetworkPolicy Strimzi не генерирует
+  (`generateNetworkPolicy: false`): политики стенда — `manifests/netpol`.
+  Память (working set, 2026-10-30): брокер ~530 MiB, Topic Operator ~170 MiB, Cluster Operator
+  ~270 MiB, Schema Registry ~340 MiB, Kafka Connect ~240 MiB. После рестарта pod брокера
+  ephemeral storage теряет и `_schemas`: схемы остаются в памяти Schema Registry до его рестарта,
+  а затем их возвращает следующий `make kind-deploy` (hook Job `schema-registration`).
 - `orders-worker` (Temporal worker Order Fulfillment Workflow) — release chart `orders` с
   `values-worker.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml): тот же образ,
   своя `command`, без Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
@@ -81,19 +90,19 @@ make kind-down
 - Outbox всех контекстов доставляет в Kafka Debezium в Kafka Connect `nomnom-infra`
   ([ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md)): PostgreSQL — из WAL
   (`wal_level=logical`, publication `<context>_outbox` создают миграции), MongoDB `restaurants` —
-  из change streams. Процессов relay нет. Коннектор `<context>-outbox` регистрирует hook Job
-  основного release контекста (`cdc.enabled` в `values/<context>.yaml`) через REST Connect;
-  пароли Connect читает из Secret `cdc-credentials` (chart [`bootstrap`](#bootstrap)).
-  Connect — release `kafka-connect` (chart [`kafka-connect/chart`](kafka-connect/chart), образ
-  [`kafka-connect/Dockerfile`](kafka-connect/Dockerfile): Debezium и Prometheus JMX exporter `:9404`);
-  releases контекстов ставятся после него (`dependsOn`, `wait`). Метрики коннекторов и слотов
-  репликации собирает Alloy (row CDC и PostgreSQL в Platform / Overview, alerts `cdc-*` и
-  `replication-slot-*`). Состояние:
-  `kubectl -n nomnom-infra exec deploy/kafka-connect -- curl -s localhost:8083/connectors?expand=status`.
-  Topics создаются при первой публикации.
+  из change streams. Процессов relay нет. Коннектор `<context>-outbox` — ресурс Strimzi
+  `KafkaConnector` основного release контекста (`cdc.enabled` в `values/<context>.yaml`) с
+  `autoRestart`; пароли Connect читает из Secret `cdc-credentials` (chart [`bootstrap`](#bootstrap)).
+  Connect — ресурс `KafkaConnect kafka-connect` release `kafka-connect` (chart
+  [`kafka-connect/chart`](kafka-connect/chart), образ [`kafka-connect/Dockerfile`](kafka-connect/Dockerfile):
+  Strimzi Kafka с плагинами Debezium и SMT); releases контекстов ставятся после него (`dependsOn`),
+  after-hook ждёт `Ready` `KafkaConnect` и всех `KafkaConnector`. Метрики — `metricsConfig` Strimzi
+  `:9404` по правилам `kafka-connect/chart/files/metrics.yaml`; их и слоты репликации собирает Alloy
+  (row CDC и PostgreSQL в Platform / Overview, alerts `cdc-*` и `replication-slot-*`). Состояние:
+  `kubectl -n nomnom-infra get kafkaconnector`.
 - Schema Registry Integration Events ([ADR 25](../../docs/adr/0025-integration-event-publication.md#payload-и-schema-registry))
-  — встроенный в Redpanda (`kafka.nomnom-infra.svc.cluster.local:8081`, порт `schema-registry`
-  Service `kafka`). Схемы регистрирует hook Job release `schema-registration` (chart
+  — Confluent Schema Registry 8.4.0 ([`manifests/messaging/schema-registry.yaml`](manifests/messaging/schema-registry.yaml),
+  `schema-registry.nomnom-infra:8081`, topic `_schemas`). Схемы регистрирует hook Job release `schema-registration` (chart
   [`schema-registration`](schema-registration), образ [`ops/schema-registration`](../schema-registration)):
   файлы `events.proto` buf-модулей, subject = `event_type`, режим `FULL_TRANSITIVE`; release
   `kafka-connect` ставится после него (`dependsOn`). SMT `SchemaFraming`
@@ -101,7 +110,7 @@ make kind-down
   оформляет value стримов Integration Events в wire format Registry; Change Notifications
   проходят без изменений. Consumers `orders`, `restaurants` и `delivery` читают Registry по
   `SCHEMA_REGISTRY__URL`, egress `:8081` открыт `manifests/netpol/app-infrastructure.yaml`.
-  Тесты SMT — `mvn package` в `kafka-connect/schema-framing` (Redpanda из testcontainers).
+  Тесты SMT — `mvn package` в `kafka-connect/schema-framing` (Kafka и Schema Registry из testcontainers).
 - Redpanda Console ([`manifests/messaging/console.yaml`](manifests/messaging/console.yaml)) — web UI
   Kafka: topics и записи с headers (в том числе `<stream>.dlq`), consumer groups и offsets,
   коннекторы Kafka Connect. По умолчанию не ставится, чтобы не занимать память: `make kind-console`
@@ -184,7 +193,8 @@ make kind-down
 | --- | --- |
 | kind, node image (digest), Skaffold, ожидаемая версия Gateway API CRD, Chainsaw | [`versions.env`](versions.env) |
 | образы SpiceDB, PostgreSQL, MongoDB и Job JWKS (digest) | [`bootstrap/values.yaml`](bootstrap/values.yaml) |
-| charts Cilium и Envoy Gateway | [`skaffold/skaffold.yaml`](skaffold/skaffold.yaml): Skaffold не подставляет environment в `remoteChart`/`version` |
+| charts Cilium, Envoy Gateway, cert-manager, Temporal Worker Controller и Strimzi | [`skaffold/skaffold.yaml`](skaffold/skaffold.yaml): Skaffold не подставляет environment в `remoteChart`/`version` |
+| Apache Kafka (`spec.kafka.version`), образы Schema Registry, Kafka Connect и Debezium (digest) | [`manifests/messaging`](manifests/messaging), [`kafka-connect/Dockerfile`](kafka-connect/Dockerfile) |
 
 Политика — последние стабильные релизы. Kubernetes 1.37 новее диапазонов, протестированных
 Cilium 1.20 и Envoy Gateway 1.9 (1.33–1.36); совместимость подтверждается `make kind-e2e`.
@@ -240,7 +250,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka API и Schema Registry (Redpanda dev-container, Service `kafka`: `9092`, `8081`), Job регистрации схем (release `schema-registration`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
+| `nomnom-infra` | Apache Kafka под Strimzi (ресурсы `Kafka`, `KafkaNodePool`, `KafkaTopic`, Service `kafka-kafka-bootstrap:9092`), Confluent Schema Registry (`schema-registry:8081`), Job регистрации схем (release `schema-registration`), Kafka Connect с Debezium для Outbox (ресурс `KafkaConnect` release `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
 
 ## Internal gateway
 

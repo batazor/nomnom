@@ -1,111 +1,15 @@
-# Messaging и orchestration тестового окружения: single-node Kafka API (Redpanda) для integration
-# events (ADR 4, ADR 28) и Temporal dev server для orders-consumer (ADR orders 2). Kafka Connect
-# с Debezium (ADR 37) — release kafka-connect (../../kafka-connect/chart).
-# Данные хранятся в emptyDir и теряются при рестарте pod. Egress к ним из прикладных
-# неймспейсов разрешает manifests/netpol/app-infrastructure.yaml (tier infra, порты 9092, 8081, 7233).
+# Namespace nomnom-infra и Temporal dev server для orders-consumer, orders-worker и
+# delivery-worker (ADR orders 2). Apache Kafka под Strimzi — kafka.yaml, topics — topics.yaml,
+# Schema Registry — schema-registry.yaml, Kafka Connect с Debezium (ADR 37) — release
+# kafka-connect (../../kafka-connect/chart). Данные хранятся в emptyDir и теряются при рестарте
+# pod. Egress к ним из прикладных неймспейсов разрешает manifests/netpol/app-infrastructure.yaml
+# (tier infra, порты 9092, 8081, 7233).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: nomnom-infra
   labels:
     nomnom.dev/tier: infra
----
-# Kafka API тестового окружения — Redpanda в режиме dev-container: один процесс без JVM и
-# ZooKeeper/KRaft-контроллера, ~150 МиБ вместо ~800 МиБ у Apache Kafka. Клиенты контекстов
-# (sarama, librdkafka, confluent-kafka-javascript) работают с ним по протоколу Kafka без
-# изменений, включая idempotent producer. Имя kafka (Deployment, Service, label) — логическое
-# имя брокера: на него ссылаются values контекстов, NetworkPolicy и e2e.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka
-  namespace: nomnom-infra
-  labels:
-    app.kubernetes.io/name: kafka
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: kafka
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: kafka
-    spec:
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 101
-        runAsGroup: 101
-        fsGroup: 101
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: kafka
-          image: docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
-          # dev-container: без fsync, auto create topics, допуск малой памяти; один shard
-          # (--smp 1) и --overprovisioned — без pinning ядер и busy-polling на общей ноде.
-          # Stream topics и poison topic создаются при первом обращении: partitions по ключу
-          # aggregate_id, как в integration specification.
-          args:
-            - redpanda
-            - start
-            - --mode=dev-container
-            - --smp=1
-            - --memory=256M
-            - --reserve-memory=0M
-            - --overprovisioned
-            - --default-log-level=warn
-            - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-            - --advertise-kafka-addr=PLAINTEXT://kafka.nomnom-infra.svc.cluster.local:9092
-            # Schema Registry Integration Events (FR-716): схемы регистрирует Job schema-registration.
-            - --schema-registry-addr=0.0.0.0:8081
-            - --set
-            - redpanda.auto_create_topics_enabled=true
-            - --set
-            - redpanda.default_topic_partitions=3
-          ports:
-            - name: kafka
-              containerPort: 9092
-            - name: schema-registry
-              containerPort: 8081
-          readinessProbe:
-            tcpSocket:
-              port: kafka
-            periodSeconds: 5
-          resources:
-            requests:
-              memory: 192Mi
-            limits:
-              memory: 448Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/redpanda/data
-      volumes:
-        - name: data
-          emptyDir: {}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka
-  namespace: nomnom-infra
-  labels:
-    app.kubernetes.io/name: kafka
-spec:
-  selector:
-    app.kubernetes.io/name: kafka
-  ports:
-    - name: kafka
-      port: 9092
-      targetPort: kafka
-    - name: schema-registry
-      port: 8081
-      targetPort: schema-registry
 ---
 # Temporal dev server (тот же образ, что TemporalImage в boundaries/orders/pkg/testfixture).
 # matching.enableFairness включает Task Queue Fairness: orders-worker делит воркер между

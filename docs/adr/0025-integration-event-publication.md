@@ -74,10 +74,10 @@ metadata: trace context, correlation_id, causation_id
 
 Outbox хранит payload — байты Protobuf контракта. Value записи стрима Integration Events — тот же payload в wire format Schema Registry: magic byte `0`, id схемы (4 байта big-endian), индексы сообщения в файле и байты Protobuf. Префикс дописывает SMT `SchemaFraming` коннектора Outbox ([ADR 37](0037-outbox-delivery-via-debezium-cdc.md)) по header `event_type`, поэтому publishers на любом языке префикс не пишут и Registry при записи в Outbox не нужен. Change Notifications ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)) — не Integration Events: их value — JSON без префикса.
 
-- Registry — встроенный в Redpanda Schema Registry с API Confluent. Интеграция BSR с Confluent Schema Registry доступна только в Enterprise-плане Buf, а регистрация схем там оплачивается отдельно; переход на другой Confluent-совместимый Registry меняет только URL.
+- Registry — Confluent Schema Registry (в kind — Deployment `schema-registry` рядом с брокером Strimzi, схемы в topic `_schemas`). Интеграция BSR с Confluent Schema Registry доступна только в Enterprise-плане Buf, а регистрация схем там оплачивается отдельно. Код рассчитан на API Confluent (`?format=serialized`, `/schemas/ids/{id}/versions`): другой Registry с тем же API меняет только URL.
 - Subject Integration Event — полное имя Protobuf-сообщения, равное `event_type` (record name strategy): в одном стриме несколько типов событий. Импортированный файл модуля регистрируется под subject = путь файла и указывается в `references`.
 - Схемы регистрирует только шаг деплоя `ops/schema-registration` из buf-модулей контекстов ([ADR 7](0007-grpc-contracts-and-buf-schema-registry.md)); producers, SMT и consumers Registry только читают.
-- Глобальный режим совместимости Registry — `FULL_TRANSITIVE`: несовместимая версия (смена типа поля, удаление сообщения) отклоняется и останавливает деплой. Registry не ловит удаление поля и перестановку номеров — это остаётся проверкой `buf breaking` в PR.
+- Глобальный режим совместимости Registry — `FULL_TRANSITIVE`: несовместимая версия (смена типа поля, удаление сообщения) отклоняется и останавливает деплой. Удаление поля и перестановку номеров ловит `buf breaking` в PR.
 - Consumer сверяет subjects id схемы записи с `event_type`. Value вне wire format, неизвестный id и схема другого `event_type` — `deserialization`, запись уходит в `<stream>.dlq`; недоступный Registry — transient, partition ждёт.
 
 ### Стабильный `event_id`

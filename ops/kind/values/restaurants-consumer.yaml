@@ -5,9 +5,9 @@ image:
   pullPolicy: Never
 
 env:
-  KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+  KAFKA__BROKERS: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
   # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
-  SCHEMA_REGISTRY__URL: http://kafka.nomnom-infra.svc.cluster.local:8081
+  SCHEMA_REGISTRY__URL: http://schema-registry.nomnom-infra.svc.cluster.local:8081
   # Wait Time Statistics (FR-645, FR-657): уровень ожидания считает consumer; значения
   # совпадают с release restaurants, иначе каталог и уровень разойдутся.
   KITCHEN__PREPARATION_TIME: 1m
