@@ -13,7 +13,7 @@ func orderFlowPanels(sc Scope) []Panel {
 	return []Panel{
 		{Title: "Order flow", Unit: "short", Sankey: true, Queries: []Query{{orderFlow(sc), ""}},
 			Description: "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. " +
-				"Панель плагина `netsage-sankey-panel`: без него в stack Grafana покажет, что плагина нет. " +
+				"Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. " +
 				"Счётчики за диапазон: заказ, оформленный до него, может дойти до этапа внутри него, " +
 				"а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа."},
 	}

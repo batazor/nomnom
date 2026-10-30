@@ -17,7 +17,7 @@ make kind-down
 make grafana-cloud-push            # overview dashboards → folder nomnom в stack (gcx)
 ```
 
-Панель `Order flow` дашборда `Orders / Overview` — Sankey плагина [`netsage-sankey-panel`](https://grafana.com/grafana/plugins/netsage-sankey-panel/): он ставится в stack один раз (**Administration → Plugins**), push его не устанавливает.
+Панель `Order flow` дашборда `Orders / Overview` — Sankey плагина Business Charts [`volkovlabs-echarts-panel`](https://grafana.com/grafana/plugins/volkovlabs-echarts-panel/): он ставится в stack один раз (**Administration → Plugins**), push его не устанавливает.
 
 `push-dashboards.sh` собирает временный gcx config (token gcx кладёт в системный keychain) и загружает копии артефактов с annotation `grafana.app/folder: nomnom`: Editor в Grafana 13 создаёт dashboards в корне, но не может их читать и обновлять, а на созданный им folder получает права администратора. Закоммиченные артефакты не меняются.
 

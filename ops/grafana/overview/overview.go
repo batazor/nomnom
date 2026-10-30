@@ -105,7 +105,7 @@ type Panel struct {
 	Unit        string
 	Queries     []Query
 	// Sankey — потоки между состояниями (sankey.go): запрос даёт по строке на пару
-	// узлов, два label и значение. Требует плагин netsage-sankey-panel в Grafana.
+	// узлов, два label и значение. Требует плагин Business Charts в Grafana.
 	Sankey bool
 	// Traces — TraceQL-условия spans серий по индексу Queries: data link точки
 	// ведёт в Tempo на spans этой серии. "" — у запроса нет ссылки.

@@ -3802,7 +3802,7 @@
         "spec": {
           "id": 56,
           "title": "Order flow",
-          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. Панель плагина `netsage-sankey-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3840,11 +3840,6 @@
                       "excludeByName": {
                         "Time": true
                       },
-                      "indexByName": {
-                        "Value": 2,
-                        "nomnom_fsm_from_state": 0,
-                        "nomnom_fsm_to_state": 1
-                      },
                       "renameByName": {
                         "nomnom_fsm_from_state": "from",
                         "nomnom_fsm_to_state": "to"
@@ -3858,12 +3853,12 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "netsage-sankey-panel",
+            "group": "volkovlabs-echarts-panel",
             "version": "",
             "spec": {
               "options": {
-                "monochrome": false,
-                "valueField": "Value"
+                "editorMode": "code",
+                "getOption": "const frame = context.panel.data.series[0];\nif (!frame) {\n  return {};\n}\nconst column = (name) =\u003e frame.fields.find((field) =\u003e field.name === name).values;\nconst from = column(\"from\");\nconst to = column(\"to\");\nconst value = column(\"Value\");\nconst links = [];\nconst names = new Set();\nfor (let i = 0; i \u003c frame.length; i++) {\n  links.push({ source: from[i], target: to[i], value: value[i] });\n  names.add(from[i]);\n  names.add(to[i]);\n}\nreturn {\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: context.grafana.theme.colors.text.primary },\n    data: Array.from(names).map((name) =\u003e ({ name })),\n    links,\n  }],\n};"
               },
               "fieldConfig": {
                 "defaults": {},
