@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recordcourierrelease.go`](recordcourierrelease.go), unit-тесты: [`recordcourierrelease_test.go`](recordcourierrelease_test.go).
+Handler: [`recordcourierrelease.go`](recordcourierrelease.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`recordcourierrelease_test.go`](recordcourierrelease_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt, DeliveryVersion, DeliveryID, CourierID, DeliveryCancelled}`; `DeliveryVersion` — `aggregate_version` envelope. В одном unit of work (`application.AcceptOnce`, тот же протокол Inbox, что у входящих сигналов `fulfillment`): чтение назначения под row lock; устарело ли событие и какое назначение остаётся, решает домен (`order.CourierAssignment.Release`, `CourierRelease.Kept`); затем `CourierAssignments.RememberCourierAssignment` с пустым курьером (и Delivery при отмене), временем и версией события; при `DeliveryCancelled` сохранённой Delivery (`HoldsRelationsOf`; снятие курьера связи не меняет) — `syncorderrelationships.Changes.RelationshipsChanged` в той же транзакции ([ADR 18](../../../../../../docs/adr/0018-spicedb-for-authorization.md)).
 - **Guard:** порядок задаёт версия Delivery (у Order одна Delivery, каждая транзакция Delivery увеличивает версию), а не `occurred_at` (`DEFAULT now()` — начало транзакции delivery). Событие другой Delivery или с версией ниже сохранённой — `ignored_stale` без изменений, но с Inbox record. Применённое событие снимает сохранённого курьера, даже если называет другого: после этой версии у Delivery нет курьера, а назначение названного старше и будет пропущено. Без сохранённого назначения ничего не удаляется, но снятие запоминается со своей версией (`remembered_ahead`), поэтому более старое `CourierAssignedToDelivery`, обработанное позже, пропускается Record Courier Assignment.
@@ -43,7 +43,7 @@ Handler: [`recordcourierrelease.go`](recordcourierrelease.go), unit-тесты: 
 - **Outcomes:** `released`, `remembered_ahead`, `ignored_stale`, `duplicate`. Ошибка записи `RelationshipsChanged` откатывает Inbox record вместе со снятием, и redelivery повторяет событие; SpiceDB use case не вызывает.
 - **Outbox:** только `RelationshipsChanged` во внутренний стрим `orders.v1.order-relationships`; Integration Events не пишутся.
 - **Требования:** FR-476, AC-534…AC-537 (в редакции change `scope-courier-access-to-assignment`: снятие курьера SpiceDB не трогает, FR-477 удалён); FR-564, AC-669, AC-670 в change `harden-courier-relationship-ordering`.
-- **`.feature`:** сценарии проверяются unit-тестами handler против PostgreSQL (testcontainers); Gherkin runner (`godog`) пока не подключён.
+- **`.feature`:** исполняется `godog` под `go test` против PostgreSQL (testcontainers). Отзыв доступа курьера здесь не проверяется: его выполняет `delivery`.
 
 ## Acceptance
 

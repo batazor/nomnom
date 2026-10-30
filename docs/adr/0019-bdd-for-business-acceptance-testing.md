@@ -28,14 +28,16 @@ SDD → Specification → Acceptance Criteria → optional BDD scenarios → Imp
 
 Принять два уровня BDD:
 
-- **slice acceptance** вызывает application handler через его interface, использует реальную доменную модель и test adapters портов/репозиториев;
+- **slice acceptance** вызывает application handler через его interface, использует реальную доменную модель и реальное хранилище из testcontainers; остальные порты (workflow, provider, authorization, clock) заменяются моками. In-memory репозиториев нет: они дублировали бы адаптеры;
 - **boundary journey** проверяет исход процесса через несколько слайсов `orders`, Temporal test environment с time skipping и test adapters.
 
 Slice-сценарий принадлежит use-case package внутри модуля slice и размещается в `<slice>/applications/<usecase>/acceptance/<usecase>.feature`. Journey принадлежит координирующему bounded context и размещается в `<boundary>/acceptance/<journey>.feature`. Общего каталога несвязанных `.feature` не создаётся. Shared step definitions для общих `Given`-состояний располагаются на уровне boundary; специфичные шаги остаются у use case.
 
 Gherkin пишется на английском с ubiquitous language соответствующего glossary. Сценарий описывает наблюдаемое бизнес-поведение и не знает о gRPC/HTTP method, PostgreSQL/MongoDB, Kafka partition, Inbox table, Temporal Activity или framework. Варианты одного правила выражаются `Scenario Outline`.
 
-Каждый scenario связывается со стабильным идентификатором acceptance criterion тегом `@AC-NNN`; `@FR-NNN` может дополнительно указывать requirement. CI проверяет, что каждый такой tag разрешается ровно в один существующий идентификатор спецификации. Неопределённое продуктовое правило получает `@pending` и не считается окончательным исполняемым тестом. Текст спецификации в `.feature` не копируется.
+Каждый scenario связывается со стабильным идентификатором acceptance criterion тегом `@AC-NNN`; `@FR-NNN` может дополнительно указывать requirement. `make arch-check` проверяет, что каждый такой tag разрешается ровно в один идентификатор в `openspec/specs`.
+
+Сценарий заменяет test того же поведения, а не дублирует его: граничные случаи и технические варианты остаются обычными tests. Шаг — тело теста: ожидания моков пишутся в нём инлайн, до вызова handler, без функций-обёрток и `.Maybe()`. Текст сценария утверждает только то, что шаг действительно проверяет. Неопределённое продуктовое правило получает `@pending` и не считается окончательным исполняемым тестом. Текст спецификации в `.feature` не копируется.
 
 Повторная доставка проверяется в BDD как бизнес-гарантия «одно логическое событие — один логический эффект». Transactional Inbox, атомарность с business storage, Outbox recovery, конкуренция и инфраструктурные сбои проверяются integration/fault tests. BDD применим к техническому отказу только тогда, когда спецификация задаёт наблюдаемый бизнес-результат.
 
@@ -49,6 +51,6 @@ Gherkin пишется на английском с ubiquitous language соот
 
 Критичные acceptance criteria получают исполняемую связь между спецификацией и production behaviour, а сценарии остаются устойчивыми к смене транспорта и storage. Два уровня дают быстрый feedback для одного use case и детерминированную проверку orchestration без wall-clock ожиданий и реальных провайдеров.
 
-Появляются требования к стабильным идентификаторам спецификаций, CI-проверке traceability и дисциплине step definitions: они только подготавливают состояние, вызывают application interface и проверяют результат, не реализуя бизнес-алгоритм повторно. BDD не заменяет domain/application unit tests, Testcontainers, Temporal replay/timer tests или kind E2E; часть поведения неизбежно проверяется несколькими типами тестов на разных seams.
+Появляются требования к стабильным идентификаторам спецификаций, проверке traceability и дисциплине step definitions: они только подготавливают состояние, вызывают application interface и проверяют результат, не реализуя бизнес-алгоритм повторно. Slice acceptance требует Docker, как и `make test` в `orders`. BDD не заменяет domain/application unit tests, Testcontainers, Temporal replay/timer tests или kind E2E; часть поведения неизбежно проверяется несколькими типами тестов на разных seams.
 
-На этом шаге фиксируется решение и документация. `.feature`, step definitions, runner dependencies и CI jobs не создаются.
+Первый исполняемый сценарий — пилот `godog` на Record Courier Release в `orders`. Остальные `.feature` пока не исполняются, runners других boundaries не подключены.

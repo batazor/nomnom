@@ -1,8 +1,8 @@
-// Command architecture генерирует каталог событий docs/events-catalog.md и
-// сверяет модель LikeC4 с ops (ADR 44).
+// Command architecture генерирует каталог событий docs/events-catalog.md,
+// сверяет модель LikeC4 с ops (ADR 44) и теги .feature с openspec/specs (ADR 19).
 //
 //	go run . -root ../..         записать каталог
-//	go run . -root ../.. -check  каталог без диффа и модель совпадает с ops
+//	go run . -root ../.. -check  каталог без диффа, модель совпадает с ops, теги разрешаются
 package main
 
 import (
@@ -55,6 +55,11 @@ func run(root string, check bool) error {
 	if err != nil {
 		return err
 	}
+	tagProblems, err := checkAcceptanceTags(root)
+	if err != nil {
+		return err
+	}
+	problems = append(problems, tagProblems...)
 	if check {
 		current, err := os.ReadFile(path)
 		if err != nil {

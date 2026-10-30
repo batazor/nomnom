@@ -21,10 +21,12 @@ Mapper, repository SQL, Protobuf serialization, DI container, Helm rendering, mi
 ### Slice acceptance
 
 ```text
-BDD → application handler → real domain → test ports/repositories
+BDD → application handler → real domain → real storage (testcontainers) + mocks of other ports
 ```
 
-Сценарий проверяет один use case через тот же application interface, которым пользуются production adapters. Используются настоящая доменная модель и управляемые test adapters портов, репозиториев, clock и authorization. Транспорт и реальная инфраструктура не запускаются.
+Сценарий проверяет один use case через тот же application interface, которым пользуются production adapters. Используются настоящая доменная модель и реальное хранилище из testcontainers; workflow, provider, clock и authorization заменяются моками. Транспорт и остальная инфраструктура не запускаются.
+
+Сценарий заменяет test того же поведения, а не дублирует его: граничные случаи остаются обычными tests. Шаг — тело теста: ожидания моков пишутся в нём инлайн, до вызова handler, без функций-обёрток и `.Maybe()`. Текст шага утверждает только то, что шаг проверяет. Пример: [`recordcourierrelease`](../boundaries/orders/slices/order/applications/recordcourierrelease/acceptance_test.go).
 
 ### Boundary journey
 
@@ -72,7 +74,7 @@ Outbox recovery, атомарность `Inbox + DB transaction`, конкуре
 | Режим | Когда применять | Test seam |
 | --- | --- | --- |
 | Domain-only | Правило полностью выражается чистой доменной моделью | steps → aggregate/value object |
-| Application | Нужны authorization, repository, port, транзакционная координация или use-case orchestration | steps → handler → domain → test adapters |
+| Application | Нужны authorization, repository, port, транзакционная координация или use-case orchestration | steps → handler → domain → real storage + mocks |
 | Boundary journey | Нужен процесс через несколько slices и durable workflow | steps → application + Temporal test environment |
 
 Domain-only feature всё равно располагается в `acceptance/`, а не в `domains/`. Его step definitions переиспользуют domain builders/fixtures, созданные для unit tests, и не собирают сложный aggregate вручную в каждом шаге. Если подготовка состояния начинает воспроизводить production-правила, нужен более подходящий builder или другой seam.
@@ -141,7 +143,7 @@ BDD не заменяет technical integration/E2E coverage. Inbox duplicate de
 - номера состоят из трёх цифр, выдаются последовательно по репозиторию, не перенумеровываются и не переиспользуются после удаления;
 - существующие спецификации получают идентификаторы по мере изменения либо выбора критерия для executable scenario; BDD scenario нельзя принять без уже назначенного `AC-*`;
 - каждый Gherkin scenario содержит ровно один основной tag `@AC-NNN`; `@FR-NNN` допустим как дополнительная ссылка на requirement;
-- CI проверяет уникальность идентификаторов в `openspec/` и требует, чтобы каждый `@AC-*`/`@FR-*` из `.feature` ссылался ровно на один существующий ID.
+- `make arch-check` требует, чтобы каждый `@AC-*`/`@FR-*` из `.feature` встречался в `openspec/specs` ровно один раз, а у сценария без `@pending` был один `@AC-*`. Уникальность всех идентификаторов пока не проверяется: в `openspec/specs` есть дубли (`FR-497`…`FR-499`, `AC-567`…`AC-569`).
 
 `.feature` не копирует содержание спецификации. Если продуктовое правило не согласовано, scenario получает `@pending`, остаётся видимым в отчёте и исключается из набора окончательных acceptance checks до решения вопроса.
 
@@ -174,7 +176,7 @@ BDD не заменяет unit tests, Testcontainers или kind. Тесты н�
 
 ## Integration fixtures
 
-Integration-тесты помечаются build tag `integration` и сами поднимают инфраструктуру через Testcontainers: `make test` остаётся без Docker, integration-цели не требуют заранее запущенных dev-контейнеров.
+Integration-тесты сами поднимают инфраструктуру через Testcontainers и не требуют заранее запущенных dev-контейнеров. Build tag нет: `make test` в `orders` запускает всё и требует Docker.
 
 - Контейнер стартует один раз на test package в `TestMain`, а не в каждом тесте; schema migrations выполняются там же один раз.
 - Тесты пакета разделяют контейнер и изолируют данные уникальными идентификаторами, а не очисткой таблиц между тестами.
@@ -213,7 +215,7 @@ func TestMain(m *testing.M) {
 | Python | `payments` | `pytest-bdd` |
 | BFF | `bff` | Выбрать по фактическому runtime harness |
 
-Runner и его зависимости добавляются только вместе с первым executable scenario соответствующего boundary. Версии фиксируются на момент реализации. Отчёты runner могут публиковаться как living documentation, если генерируются из успешно выполненных сценариев и сохраняют ссылки на `AC-*`.
+В `orders` `godog` подключён пилотом к Record Courier Release, остальные `.feature` этого boundary пока не исполняются. Runner и его зависимости добавляются только вместе с первым executable scenario соответствующего boundary. Версии фиксируются на момент реализации. Отчёты runner могут публиковаться как living documentation, если генерируются из успешно выполненных сценариев и сохраняют ссылки на `AC-*`.
 
 ## Performance Testing
 

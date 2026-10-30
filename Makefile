@@ -139,7 +139,7 @@ arch-validate: ## LikeC4: проверить модель docs/architecture
 	@$(LIKEC4) validate docs/architecture
 arch-generate: ## сгенерировать каталог событий docs/events-catalog.md
 	@cd ops/architecture && go run . -root ../..
-arch-check: arch-validate ## проверить модель, сверить её с ops, каталог событий без диффа и индекс ADR
+arch-check: arch-validate ## проверить модель, сверить её с ops, каталог событий без диффа, индекс ADR и теги @AC/@FR в .feature
 	@cd ops/architecture && go test ./... && go run . -root ../.. -check
 
 .PHONY: help
