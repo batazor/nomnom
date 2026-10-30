@@ -2,9 +2,10 @@
 // unassignment without a replacement (CourierUnassignedFromDelivery) only
 // clears the courier of the stored assignment, because delivery revokes the
 // access of the courier (delivery#courier); a cancelled Delivery
-// (DeliveryCancelled) also deletes order#delivery. The Order and the
-// fulfillment workflow are not touched: neither fact is a fulfillment fact of
-// orders.
+// (DeliveryCancelled) also deletes order#delivery. The State of the Order and the
+// fulfillment workflow are not touched: neither event is a step of Fulfillment.
+// A release of a stored courier saves the Order, so order_details and the Order
+// Change Notification follow the assignment.
 package recordcourierrelease
 
 import (
@@ -59,6 +60,7 @@ type Result struct {
 type Handler struct {
 	uow         unitofwork.UnitOfWork
 	inbox       unitofwork.Inbox
+	orders      order.Repository
 	assignments order.CourierAssignments
 	changes     syncorderrelationships.Changes
 }
@@ -66,10 +68,11 @@ type Handler struct {
 func NewHandler(
 	uow unitofwork.UnitOfWork,
 	inbox unitofwork.Inbox,
+	orders order.Repository,
 	assignments order.CourierAssignments,
 	changes syncorderrelationships.Changes,
 ) Handler {
-	return Handler{uow: uow, inbox: inbox, assignments: assignments, changes: changes}
+	return Handler{uow: uow, inbox: inbox, orders: orders, assignments: assignments, changes: changes}
 }
 
 func (in Input) validate() error {
@@ -144,6 +147,15 @@ func (h Handler) release(ctx context.Context, in Input) (fulfillment.Outcome, er
 	if unlinked {
 		if err := h.changes.RelationshipsChanged(ctx, in.OrderID); err != nil {
 			return "", fmt.Errorf("record relationships change: %w", err)
+		}
+	}
+	if found && stored.CourierID != "" {
+		current, err := h.orders.Get(ctx, in.OrderID)
+		if err != nil {
+			return "", fmt.Errorf("load order of the courier release: %w", err)
+		}
+		if err := h.orders.Save(ctx, current); err != nil {
+			return "", fmt.Errorf("save order of the courier release: %w", err)
 		}
 	}
 	return outcome, nil

@@ -1,7 +1,7 @@
 // Package fulfillment is the application port of the Order Fulfillment Workflow
 // shared by the use cases of the order slice. It is not a use case: it declares
-// how handlers start the workflow, hand business facts to it and request
-// cancellation, and the common flow that reflects inbound facts in an Order.
+// how handlers start the workflow, hand signals to it and request
+// cancellation, and the common flow that reflects inbound signals in an Order.
 // Temporal specifics (Workflow ID, Signal/Update names) belong to the adapter.
 package fulfillment
 
@@ -22,7 +22,7 @@ var ErrWorkflowNotFound = errors.New("order fulfillment workflow not found or cl
 // Request in its current Workflow Stage, for example after Pickup.
 var ErrCancellationRefused = errors.New("order fulfillment workflow refused cancellation")
 
-// Kind is a business fact of a neighbouring context handed to the workflow.
+// Kind is a signal of a neighbouring context handed to the workflow.
 type Kind string
 
 const (
@@ -35,14 +35,14 @@ const (
 	KindDeliveryCompleted  Kind = "delivery_completed"
 	KindDeliveryFailed     Kind = "delivery_failed"
 	// KindPreparationDelayed and KindPreparationFailed are not Fulfillment
-	// Facts of the Order: a delay only replaces its expected ready time, a
+	// Steps of the Order: a delay only replaces its expected ready time, a
 	// failure is an orchestration input only.
 	KindPreparationDelayed Kind = "preparation_delayed"
 	KindPreparationFailed  Kind = "preparation_failed"
 )
 
 // StartRequest carries OrderPlaced of the Order: the workflow is started with
-// it as the first fact and deduplicates it by EventID.
+// it as the first signal and deduplicates it by EventID.
 type StartRequest struct {
 	OrderID order.ID
 	// RestaurantID is the fairness key of the workflow: every restaurant gets
@@ -72,7 +72,7 @@ type Notification struct {
 	ExpectedReadyAt time.Time
 }
 
-// Notifier hands a business fact to the running workflow of an Order.
+// Notifier hands a signal to the running workflow of an Order.
 type Notifier interface {
 	Notify(ctx context.Context, notification Notification) error
 }

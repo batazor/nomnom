@@ -421,7 +421,7 @@ UoW всех четырёх boundaries реализован поверх их х
 | `recordpreparationstarted`, `recordorderready` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierassignment`, `recordpickup`, `recorddeliverycompletion`, `recorddeliveryfailure` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierrelease` | Да | Inbox + назначение курьера в `orders` + DELETE relationships SpiceDB до commit; `Order` и workflow не меняются |
-| `recordpaymentauthorization` | Да | `Order` (факт `payment_authorized`) + `order_details` + Change Notification, без Integration Event; повтор Activity — `already_recorded` |
+| `recordpaymentauthorization` | Да | `Order` (переход `authorize_payment`) + `order_details` + Change Notification, без Integration Event; повтор Activity — `already_recorded` |
 | `completeorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `failorcancelorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `fulfillment` (Temporal-адаптер) | Нет | Workflow; Activities вызывают handlers |

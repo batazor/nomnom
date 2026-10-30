@@ -108,8 +108,8 @@ type DeliveryWindow struct {
 	End   time.Time
 }
 
-// Fact is the payload of every Integration Event Signal.
-type Fact struct {
+// SignalPayload is the payload of every Integration Event Signal.
+type SignalPayload struct {
 	EventID    string
 	OccurredAt time.Time
 	Reason     string

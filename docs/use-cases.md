@@ -21,7 +21,7 @@
 | `orders` | Record Pickup | Command | Kafka consumer `orders` | signals workflow | Inbox: consumes Pickup |
 | `orders` | Record Delivery Completion | Command | Kafka consumer `orders` | signals workflow | Inbox: consumes Delivery Completion |
 | `orders` | Record Delivery Failure | Command | Kafka consumer `orders` | signals workflow | Inbox: consumes delivery failure |
-| `orders` | Record Payment Authorization | Command | Temporal fulfillment workflow | invoked by Activity after approved Authorization | no: Fulfillment Fact `payment_authorized` |
+| `orders` | Record Payment Authorization | Command | Temporal fulfillment workflow | invoked by Activity after approved Authorization | no: переход `authorize_payment` в FSM `Order` |
 | `orders` | Complete Order | Command | Temporal fulfillment workflow | finalizes successful workflow result | Outbox: publishes business fact |
 | `orders` | Fail or Cancel Order | Command | Temporal fulfillment workflow | finalizes negative workflow result | Outbox: publishes business fact |
 | `restaurants` | Register Restaurant | Command | Оператор платформы или владелец ресторана | no | no |
@@ -97,7 +97,7 @@ BFF на WunderGraph Cosmo не является bounded context. Он пред�
 - `orders` владеет общим жизненным циклом и orchestration, но не решает, может ли ресторан приготовить заказ, какой курьер подходит или успешна ли финансовая операция;
 - `restaurants` владеет `Restaurant Order`, Kitchen Queue и Preparation; его принятие не является `Order Confirmation`, успешной оплатой или назначением курьера; кухонные сценарии — в [Kitchen](kitchen.md);
 - `delivery` владеет `Delivery Offer`, `Courier Assignment`, Pickup и Delivery Completion; завершение доставки ещё не подменяет финализацию `Order`;
-- `payments` владеет Authorization, Capture и Refund; финансовая операция не определяет правила отмены `Order`. Authorization выполняется первым шагом workflow: `orders` записывает факт `payment_authorized` (Record Payment Authorization) и только после этого запрашивает Restaurant Order ([ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md#saga));
+- `payments` владеет Authorization, Capture и Refund; финансовая операция не определяет правила отмены `Order`. Authorization выполняется первым шагом workflow: `orders` применяет переход `authorize_payment` (Record Payment Authorization) и только после этого запрашивает Restaurant Order ([ADR 5 orders](../boundaries/orders/docs/adr/0005-order-fulfillment-orchestration.md#saga));
 - BFF владеет только API composition и клиентским представлением, а authoritative authorization и бизнес-инварианты остаются у владельца команды или данных.
 
 ## Open questions

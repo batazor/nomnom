@@ -8,14 +8,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"nomnom/orders/infrastructure/messaging"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/confirmorder"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliverycompletion"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordorderready"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpickup"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -99,7 +99,7 @@ func toCourierUnassignment(e messaging.Envelope, event *deliveryv1.CourierUnassi
 	}
 }
 
-// toDeliveryCancellation drops the reason: no fulfillment fact of orders
+// toDeliveryCancellation drops the reason: no step of the Order FSM
 // derives from it (the cancellation is a compensation orders requested).
 func toDeliveryCancellation(e messaging.Envelope, event *deliveryv1.DeliveryCancelled) recordcourierrelease.Input {
 	return recordcourierrelease.Input{

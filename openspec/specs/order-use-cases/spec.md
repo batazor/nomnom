@@ -70,7 +70,7 @@ Place Order SHALL записывать creation relationship Customer → `Order
 ### Requirement: Confirm Order отражает Order Acceptance
 **ID:** FR-105
 
-Confirm Order SHALL переводить `Order` из `placed` в `confirmed` по событию Order Acceptance ресторана, в той же транзакции записывать Fulfillment Fact `restaurant_accepted` с моментом события и после commit передавать бизнес-факт Order Fulfillment Workflow вместе с исходным `event_id`.
+Confirm Order SHALL переводить `Order` из `placed` в `confirmed` по событию Order Acceptance ресторана, в той же транзакции записывать в историю переход `confirm` с моментом события и после commit передавать сигнал Order Fulfillment Workflow вместе с исходным `event_id`.
 
 #### Scenario: Ресторан принял заказ
 **ID:** AC-108
@@ -82,7 +82,7 @@ Confirm Order SHALL переводить `Order` из `placed` в `confirmed` п
 **ID:** AC-563
 
 - **WHEN** событие Order Acceptance с `OccurredAt = 12:03` подтверждает `Order`
-- **THEN** `GetOrder` возвращает факт `restaurant_accepted` с моментом `12:03`
+- **THEN** `GetOrder` возвращает переход `confirm` с моментом `12:03`
 
 ### Requirement: Отказ ресторана сохраняется без финализации Order
 **ID:** FR-106
@@ -454,16 +454,16 @@ Use case Start Fulfillment SHALL в одной Unit of Work записывать
 ### Requirement: Record Payment Authorization фиксирует оплату в Order
 **ID:** FR-639
 
-Use case Record Payment Authorization SHALL записывать Fulfillment Fact `payment_authorized` с моментом решения в `Order` в состоянии `placed`, обновлять `order_details` и Change Notification `Order` в той же транзакции. Повтор MUST быть успешным no-op без второго факта и уведомления. Для `Order` не в `placed` use case SHALL возвращать invalid transition без изменений. Integration Event MUST NOT публиковаться.
+Use case Record Payment Authorization SHALL применять переход `authorize_payment` с моментом решения к `Order` в состоянии `placed`, обновлять `order_details` и Change Notification `Order` в той же транзакции. Повтор MUST быть успешным no-op без второй записи в истории и уведомления. Для `Order` не в `placed` use case SHALL возвращать invalid transition без изменений. Integration Event MUST NOT публиковаться.
 
 #### Scenario: Оплата записана
 **ID:** AC-829
 
 - **WHEN** worker вызывает Record Payment Authorization для `Order` в `placed`
-- **THEN** у `Order` есть факт `payment_authorized`, `order_details` и Change Notification обновлены в той же транзакции
+- **THEN** `Order` применил переход `authorize_payment`, `order_details` и Change Notification обновлены в той же транзакции
 
 #### Scenario: Повторная запись
 **ID:** AC-830
 
-- **WHEN** факт `payment_authorized` уже записан, и вызов повторяется
+- **WHEN** переход `authorize_payment` уже применён, и вызов повторяется
 - **THEN** use case завершается успешно без изменений и без нового Change Notification

@@ -22,7 +22,7 @@ func TestProcessPlansCompensation(t *testing.T) {
 		"rejected before acceptance": {
 			arrange: func(s *process) {
 				s.run()
-				s.fact(fulfillment.FactRestaurantOrderRejected)
+				s.signal(fulfillment.SignalRestaurantOrderRejected)
 			},
 			outcome: fulfillment.OutcomeFailure, reason: fulfillment.ReasonRestaurantRejected,
 			saga: []fulfillment.StepKind{fulfillment.StepCancelPaymentAuthorization, fulfillment.StepFailOrCancelOrder},
@@ -42,7 +42,7 @@ func TestProcessPlansCompensation(t *testing.T) {
 		"rejected after acceptance": {
 			arrange: func(s *process) {
 				s.accepted()
-				s.fact(fulfillment.FactRestaurantOrderRejected)
+				s.signal(fulfillment.SignalRestaurantOrderRejected)
 			},
 			outcome: fulfillment.OutcomeFailure, reason: fulfillment.ReasonRestaurantRejected,
 			saga: []fulfillment.StepKind{
@@ -52,7 +52,7 @@ func TestProcessPlansCompensation(t *testing.T) {
 		"preparation failed": {
 			arrange: func(s *process) {
 				s.accepted()
-				s.fact(fulfillment.FactPreparationFailed)
+				s.signal(fulfillment.SignalPreparationFailed)
 			},
 			outcome: fulfillment.OutcomeFailure, reason: fulfillment.ReasonPreparationFailed,
 			saga: []fulfillment.StepKind{
@@ -64,7 +64,7 @@ func TestProcessPlansCompensation(t *testing.T) {
 		"delivery failed after capture": {
 			arrange: func(s *process) {
 				s.pickedUp()
-				s.fact(fulfillment.FactDeliveryFailed)
+				s.signal(fulfillment.SignalDeliveryFailed)
 			},
 			outcome: fulfillment.OutcomeFailure, reason: fulfillment.ReasonDeliveryFailed,
 			saga: []fulfillment.StepKind{fulfillment.StepRefundPayment, fulfillment.StepFailOrCancelOrder},

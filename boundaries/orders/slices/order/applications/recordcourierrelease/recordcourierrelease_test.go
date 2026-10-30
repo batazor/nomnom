@@ -12,7 +12,7 @@ import (
 
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -61,7 +61,7 @@ func newUnassignedWorld(t *testing.T, workflow *MockNotifier) world {
 	w := world{store: store, changes: NewMockChanges(t), workflow: workflow}
 	require.NoError(t, w.store.Add(context.Background(), ordertest.New(t, "order-1")))
 	w.assign = recordcourierassignment.NewHandler(w.store, w.store, w.store, w.workflow, w.store, w.store)
-	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.changes)
+	w.release = recordcourierrelease.NewHandler(w.store, w.store, w.store, w.store, w.changes)
 	return w
 }
 
@@ -124,6 +124,23 @@ func TestUnassignmentClearsCourierOnly(t *testing.T) {
 
 // AC-535: the cancellation clears the courier and the delivery and records
 // RelationshipsChanged: the sync deletes order#delivery.
+// The card follows the assignment: without a courier it has no assignment time.
+func TestUnassignmentClearsCourierAssignedAt(t *testing.T) {
+	workflow := NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
+	w := newWorld(t, workflow)
+
+	_, err := w.release.Handle(context.Background(), unassigned("event-1", "delivery-1", "courier-1", 3))
+
+	require.NoError(t, err)
+	details, err := w.store.OrderDetails(context.Background(), "order-1")
+	require.NoError(t, err)
+	assert.True(t, details.CourierAssignedAt.IsZero())
+	snapshot, _ := w.store.Snapshot("order-1")
+	assert.Equal(t, order.StatePlaced, snapshot.State)
+	assert.Equal(t, uint64(3), snapshot.Version, "the release saves the Order")
+}
+
 func TestCancellationUnlinksDelivery(t *testing.T) {
 	workflow := NewMockNotifier(t)
 	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()

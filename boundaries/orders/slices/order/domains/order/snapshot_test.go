@@ -11,8 +11,6 @@ import (
 
 func TestSnapshotRoundTripAndRestoreValidation(t *testing.T) {
 	order := newTestOrder(t)
-	_, err := order.RecordCourierAssignment(testNow)
-	require.NoError(t, err)
 	reason, err := NewCancellationReason(OutcomeFailure, "delivery_failed")
 	require.NoError(t, err)
 	_, err = order.Cancel(testNow, reason)
@@ -32,7 +30,7 @@ func TestSnapshotRoundTripAndRestoreValidation(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnknownOrderState)
 
 	duplicate := snapshot
-	duplicate.Facts = []RecordedFact{{Fact: FactPickedUp, OccurredAt: testNow}, {Fact: FactPickedUp, OccurredAt: testNow}}
+	duplicate.Transitions = []AppliedTransition{{Trigger: TriggerPickUp, OccurredAt: testNow}, {Trigger: TriggerPickUp, OccurredAt: testNow}}
 	_, err = Restore(duplicate)
 	require.ErrorIs(t, err, ErrInvalidSnapshot)
 
@@ -42,7 +40,7 @@ func TestSnapshotRoundTripAndRestoreValidation(t *testing.T) {
 	require.ErrorIs(t, err, ErrMarketRequired)
 
 	foreign := snapshot
-	foreign.Facts = []RecordedFact{{Fact: "payment_captured", OccurredAt: testNow}}
+	foreign.Transitions = []AppliedTransition{{Trigger: "capture_payment", OccurredAt: testNow}}
 	_, err = Restore(foreign)
 	require.ErrorIs(t, err, ErrInvalidSnapshot)
 }

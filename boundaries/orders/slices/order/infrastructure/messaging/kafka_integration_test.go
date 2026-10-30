@@ -19,14 +19,14 @@ import (
 	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/confirmorder"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliverycompletion"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordorderready"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpickup"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -119,12 +119,12 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	})
 
 	t.Run("events of one aggregate keep their order across partitions", func(t *testing.T) {
-		// Each Order expects its facts in the published order: NotBefore fails
-		// the test on a fact that overtakes the previous one.
+		// Each Order expects its signals in the published order: NotBefore fails
+		// the test on a signal that overtakes the previous one.
 		notified := make(chan struct{}, 6)
 		for _, id := range []order.ID{"order-b", "order-c"} {
 			var previous *mock.Call
-			for _, fact := range []struct {
+			for _, signal := range []struct {
 				eventID string
 				kind    fulfillment.Kind
 			}{
@@ -133,7 +133,7 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 				{"completed", fulfillment.KindDeliveryCompleted},
 			} {
 				call := notifier.EXPECT().Notify(mock.Anything, fulfillment.Notification{
-					OrderID: id, EventID: string(id) + "-" + fact.eventID, Kind: fact.kind, OccurredAt: occurredAt,
+					OrderID: id, EventID: string(id) + "-" + signal.eventID, Kind: signal.kind, OccurredAt: occurredAt,
 				}).RunAndReturn(func(context.Context, fulfillment.Notification) error {
 					notified <- struct{}{}
 					return nil
@@ -258,7 +258,7 @@ func handlersOf(store *repositorytest.Store, notifier fulfillment.Notifier, star
 		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, notifier),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(notifier),
 		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, notifier, store, store),
-		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store, store),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, notifier),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, notifier),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, notifier),

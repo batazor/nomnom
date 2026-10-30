@@ -44,10 +44,10 @@ func (s *process) run() *process {
 	}
 }
 
-// fact applies a fact with a fresh event id.
-func (s *process) fact(kind fulfillment.FactKind) fulfillment.Effect {
+// signal applies a signal with a fresh event id.
+func (s *process) signal(kind fulfillment.SignalKind) fulfillment.Effect {
 	s.ids++
-	return s.p.Apply(fulfillment.Fact{Kind: kind, EventID: string(kind) + "-" + strconv.Itoa(s.ids)}, s.now)
+	return s.p.Apply(fulfillment.Signal{Kind: kind, EventID: string(kind) + "-" + strconv.Itoa(s.ids)}, s.now)
 }
 
 // expire moves the clock to the nearest deadline and expires it.
@@ -64,16 +64,16 @@ func (s *process) expire() fulfillment.Expiry {
 // accepted runs the route up to a created Delivery.
 func (s *process) accepted() *process {
 	s.run()
-	s.fact(fulfillment.FactRestaurantOrderAccepted)
+	s.signal(fulfillment.SignalRestaurantOrderAccepted)
 	return s.run()
 }
 
 // pickedUp runs the route up to Pickup and Capture.
 func (s *process) pickedUp() *process {
 	s.accepted()
-	s.fact(fulfillment.FactCourierAssignedToDelivery)
-	s.fact(fulfillment.FactRestaurantOrderReady)
-	s.fact(fulfillment.FactDeliveryPickedUp)
+	s.signal(fulfillment.SignalCourierAssignedToDelivery)
+	s.signal(fulfillment.SignalRestaurantOrderReady)
+	s.signal(fulfillment.SignalDeliveryPickedUp)
 	return s.run()
 }
 

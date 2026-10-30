@@ -15,7 +15,7 @@ import (
 // waiting for CourierAssignedToDelivery.
 func TestProcessWaitsForCourierWithoutDeadline(t *testing.T) {
 	s := newProcess(t).accepted()
-	s.fact(fulfillment.FactRestaurantOrderReady)
+	s.signal(fulfillment.SignalRestaurantOrderReady)
 
 	assert.True(t, s.p.NextDeadline().IsZero())
 	assert.Equal(t, fulfillment.ExpiryNone, s.p.Expire(s.now.Add(24*time.Hour)))
@@ -24,7 +24,7 @@ func TestProcessWaitsForCourierWithoutDeadline(t *testing.T) {
 	assert.False(t, s.p.Failed())
 	assert.Equal(t, fulfillment.StagePreparing, s.p.Stage())
 
-	s.fact(fulfillment.FactCourierAssignedToDelivery)
+	s.signal(fulfillment.SignalCourierAssignedToDelivery)
 	assert.Equal(t, fulfillment.StageWaitingPickup, s.p.Stage())
 }
 
@@ -32,7 +32,7 @@ func TestProcessWaitsForCourierWithoutDeadline(t *testing.T) {
 func TestProcessExpiresDeadlines(t *testing.T) {
 	assigned := func(s *process) {
 		s.accepted()
-		s.fact(fulfillment.FactCourierAssignedToDelivery)
+		s.signal(fulfillment.SignalCourierAssignedToDelivery)
 	}
 	for name, tc := range map[string]struct {
 		arrange func(*process)
@@ -44,7 +44,7 @@ func TestProcessExpiresDeadlines(t *testing.T) {
 		"preparation": {arrange: assigned, timeout: fulfillment.DefaultPolicy().PreparationTimeout, reason: fulfillment.ReasonPreparationTimeout},
 		"pickup": {arrange: func(s *process) {
 			assigned(s)
-			s.fact(fulfillment.FactRestaurantOrderReady)
+			s.signal(fulfillment.SignalRestaurantOrderReady)
 		}, timeout: fulfillment.DefaultPolicy().PickupTimeout, reason: fulfillment.ReasonPickupTimeout},
 		"delivery": {arrange: func(s *process) { s.pickedUp() }, timeout: fulfillment.DefaultPolicy().DeliveryTimeout, reason: fulfillment.ReasonDeliveryTimeout},
 	} {
@@ -82,9 +82,9 @@ func TestProcessExtendsPreparationOnDelay(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := newProcess(t).accepted()
-			s.fact(fulfillment.FactCourierAssignedToDelivery)
+			s.signal(fulfillment.SignalCourierAssignedToDelivery)
 
-			effect := s.p.Apply(fulfillment.Fact{Kind: fulfillment.FactPreparationDelayed, EventID: "delayed", ExpectedReadyAt: tc.expectedReadyAt}, s.now)
+			effect := s.p.Apply(fulfillment.Signal{Kind: fulfillment.SignalPreparationDelayed, EventID: "delayed", ExpectedReadyAt: tc.expectedReadyAt}, s.now)
 
 			assert.Equal(t, fulfillment.Effect{Verdict: tc.verdict, Reason: tc.reason}, effect)
 			assert.Equal(t, tc.want, s.p.NextDeadline())

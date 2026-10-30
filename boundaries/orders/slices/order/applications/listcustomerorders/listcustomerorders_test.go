@@ -83,7 +83,7 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 			Total:        ordertest.Money(t, "20"),
 			State:        order.StatePlaced,
 			PlacedAt:     ordertest.PlacedAt,
-			Facts:        []orderdetails.Fact{},
+			Transitions:  []order.AppliedTransition{},
 		},
 		CancellationWindow: &order.CancellationWindow{OpensAt: ordertest.PlacedAt, ClosesAt: ordertest.PlacedAt.Add(window)},
 	}}, last, "the history carries the full card with its Cancellation Window")

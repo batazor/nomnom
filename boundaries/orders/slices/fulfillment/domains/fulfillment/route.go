@@ -39,7 +39,7 @@ type Step struct {
 }
 
 // Next is the next due step of the route; ok is false while the process waits
-// for a fact, a deadline or the Saga.
+// for a signal, a deadline or the Saga.
 func (p *Process) Next() (step Step, ok bool) {
 	switch {
 	case p.failure != nil || p.final != "":
@@ -48,7 +48,7 @@ func (p *Process) Next() (step Step, ok bool) {
 		return routeStep(StepAuthorizePayment), true
 	case !p.paymentRecorded:
 		// The restaurant gets the Order only after the payment is recorded in
-		// it: no kitchen fact can precede its step, and a declined payment
+		// it: no kitchen signal can precede its step, and a declined payment
 		// leaves no Restaurant Order behind.
 		return routeStep(StepRecordPaymentAuthorization), true
 	case p.schedule != nil && !p.schedule.slotConfirmed:

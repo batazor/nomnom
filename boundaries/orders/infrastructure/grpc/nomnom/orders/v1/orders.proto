@@ -40,10 +40,10 @@ message OrderItem {
   string name = 4;
 }
 
-message FulfillmentFact {
-  string kind = 1;
+// Applied transition of the Order state machine (docs/fsm.md#order).
+message OrderTransition {
+  string trigger = 1;
   google.protobuf.Timestamp occurred_at = 2;
-  string reason = 3;
 }
 
 message Cancellation {
@@ -69,7 +69,8 @@ message Order {
   Money total = 6;
   OrderState state = 7;
   google.protobuf.Timestamp placed_at = 8;
-  repeated FulfillmentFact fulfillment_facts = 9;
+  reserved 9;
+  reserved "fulfillment_facts";
   Cancellation cancellation = 10;
   // Present only while the Order State admits Order Cancellation.
   CancellationWindow cancellation_window = 11;
@@ -86,6 +87,10 @@ message Order {
   Money premium_fee = 17;
   // Delivery window of a scheduled Order (FR-681); unset for an ASAP Order.
   DeliveryWindow delivery_window = 18;
+  // History of the Order state machine, each trigger at most once.
+  repeated OrderTransition transitions = 19;
+  // Time of the current Courier Assignment; unset without a courier.
+  google.protobuf.Timestamp courier_assigned_at = 20;
 }
 
 // Delivery window [start, end) of a scheduled Order.

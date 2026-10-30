@@ -4,7 +4,7 @@
 
 ```text
 slices/fulfillment/
-  domains/fulfillment/        Process, Policy, Stage, Outcome, Fact, Step, Effect
+  domains/fulfillment/        Process, Policy, Stage, Outcome, Signal, Step, Effect
   applications/neighbours/    client-порты payments, restaurants, delivery, их DTO и построение запросов из Order
   infrastructure/temporal/    workflow, signals, activities, client, search attribute
   infrastructure/neighbours/  client-адаптеры payments, restaurants, delivery для Activities
@@ -19,7 +19,7 @@ slices/fulfillment/
 | --- | --- |
 | `fulfillment.go` | `Process` (журнал подтверждённых шагов, факты соседей, сроки), `New`, `NewScheduled`, `Outcome`, коды причин |
 | `schedule.go` | Маршрут запланированного заказа: `Plan`, `ConfirmPlan`, подтверждение и освобождение резервации окна, моменты плана как due-шаги, deadline Preparation от `QueueRestaurantOrder` |
-| `facts.go` | `Apply(Fact, at) Effect` — факт соседа с дедупликацией по `EventID` |
+| `signals.go` | `Apply(Signal, at) Effect` — сигнал соседа с дедупликацией по `EventID` |
 | `cancellation.go` | `AdmitCancellation` (validator Update, без изменений), `AcceptCancellation`, `RequestCancellation` |
 | `route.go` | `Next() (Step, bool)` — следующая операция маршрута (`RequestRestaurantOrder` — только после `AuthorizePayment` и `RecordPaymentAuthorization`); `Confirm(Step, approved, at)` — результат выполненного шага |
 | `deadlines.go` | `NextDeadline()`, `Expire(now) Expiry` — отказ по сроку, шаги плана запланированного заказа |

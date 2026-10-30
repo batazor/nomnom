@@ -13,15 +13,15 @@ import (
 func TestProcessRunsRouteToCompletion(t *testing.T) {
 	s := newProcess(t)
 	s.run()
-	s.fact(fulfillment.FactRestaurantOrderAccepted)
+	s.signal(fulfillment.SignalRestaurantOrderAccepted)
 	s.run()
-	s.fact(fulfillment.FactPreparationStarted)
-	s.fact(fulfillment.FactCourierAssignedToDelivery)
-	s.fact(fulfillment.FactRestaurantOrderReady)
-	s.fact(fulfillment.FactDeliveryPickedUp)
+	s.signal(fulfillment.SignalPreparationStarted)
+	s.signal(fulfillment.SignalCourierAssignedToDelivery)
+	s.signal(fulfillment.SignalRestaurantOrderReady)
+	s.signal(fulfillment.SignalDeliveryPickedUp)
 	s.run()
 	require.False(t, s.p.Completed())
-	s.fact(fulfillment.FactDeliveryCompleted)
+	s.signal(fulfillment.SignalDeliveryCompleted)
 	s.run()
 
 	assert.Equal(t, []string{
@@ -37,26 +37,26 @@ func TestProcessRunsRouteToCompletion(t *testing.T) {
 	assert.False(t, ok, "a completed process decides nothing")
 }
 
-// The route waits for the fact that unlocks the next step.
-func TestProcessNextWaitsForFacts(t *testing.T) {
+// The route waits for the signal that unlocks the next step.
+func TestProcessNextWaitsForSignals(t *testing.T) {
 	for name, tc := range map[string]struct {
 		arrange func(*process)
 		want    fulfillment.StepKind
 	}{
 		"fresh process authorizes":       {arrange: func(*process) {}, want: fulfillment.StepAuthorizePayment},
 		"waits for acceptance":           {arrange: func(s *process) { s.run() }},
-		"acceptance creates delivery":    {arrange: func(s *process) { s.run(); s.fact(fulfillment.FactRestaurantOrderAccepted) }, want: fulfillment.StepCreateDelivery},
+		"acceptance creates delivery":    {arrange: func(s *process) { s.run(); s.signal(fulfillment.SignalRestaurantOrderAccepted) }, want: fulfillment.StepCreateDelivery},
 		"waits for assignment and ready": {arrange: func(s *process) { s.accepted() }},
 		"waits for pickup": {arrange: func(s *process) {
 			s.accepted()
-			s.fact(fulfillment.FactCourierAssignedToDelivery)
-			s.fact(fulfillment.FactRestaurantOrderReady)
+			s.signal(fulfillment.SignalCourierAssignedToDelivery)
+			s.signal(fulfillment.SignalRestaurantOrderReady)
 		}},
 		"pickup captures": {arrange: func(s *process) {
 			s.accepted()
-			s.fact(fulfillment.FactCourierAssignedToDelivery)
-			s.fact(fulfillment.FactRestaurantOrderReady)
-			s.fact(fulfillment.FactDeliveryPickedUp)
+			s.signal(fulfillment.SignalCourierAssignedToDelivery)
+			s.signal(fulfillment.SignalRestaurantOrderReady)
+			s.signal(fulfillment.SignalDeliveryPickedUp)
 		}, want: fulfillment.StepCapturePayment},
 		"waits for delivery": {arrange: func(s *process) { s.pickedUp() }},
 	} {
@@ -119,21 +119,21 @@ func TestProcessStage(t *testing.T) {
 		"authorizing":        {arrange: func(*process) {}, want: fulfillment.StageAuthorizingPayment},
 		"waiting acceptance": {arrange: func(s *process) { s.run() }, want: fulfillment.StageWaitingAcceptance},
 		"preparing":          {arrange: func(s *process) { s.accepted() }, want: fulfillment.StagePreparing},
-		"assigned not ready": {arrange: func(s *process) { s.accepted(); s.fact(fulfillment.FactCourierAssignedToDelivery) }, want: fulfillment.StagePreparing},
+		"assigned not ready": {arrange: func(s *process) { s.accepted(); s.signal(fulfillment.SignalCourierAssignedToDelivery) }, want: fulfillment.StagePreparing},
 		"waiting pickup": {arrange: func(s *process) {
 			s.accepted()
-			s.fact(fulfillment.FactCourierAssignedToDelivery)
-			s.fact(fulfillment.FactRestaurantOrderReady)
+			s.signal(fulfillment.SignalCourierAssignedToDelivery)
+			s.signal(fulfillment.SignalRestaurantOrderReady)
 		}, want: fulfillment.StageWaitingPickup},
 		"delivering": {arrange: func(s *process) { s.pickedUp() }, want: fulfillment.StageDelivering},
 		"compensating": {arrange: func(s *process) {
 			s.run()
-			s.fact(fulfillment.FactRestaurantOrderRejected)
+			s.signal(fulfillment.SignalRestaurantOrderRejected)
 			s.p.Compensate()
 		}, want: fulfillment.StageCompensating},
 		"cancelled": {arrange: func(s *process) {
 			s.run()
-			s.fact(fulfillment.FactRestaurantOrderRejected)
+			s.signal(fulfillment.SignalRestaurantOrderRejected)
 			for _, step := range s.p.Compensate() {
 				s.p.Confirm(step, true, s.now)
 			}
@@ -154,16 +154,16 @@ func TestProcessReportsPickupToRestaurant(t *testing.T) {
 	s := newProcess(t)
 	s.p.ReportPickupToRestaurant()
 	s.run()
-	s.fact(fulfillment.FactRestaurantOrderAccepted)
+	s.signal(fulfillment.SignalRestaurantOrderAccepted)
 	s.run()
-	s.fact(fulfillment.FactCourierAssignedToDelivery)
-	s.fact(fulfillment.FactDeliveryPickedUp)
+	s.signal(fulfillment.SignalCourierAssignedToDelivery)
+	s.signal(fulfillment.SignalDeliveryPickedUp)
 	step, ok := s.p.Next()
 	require.True(t, ok)
 	assert.Equal(t, fulfillment.StepCapturePayment, step.Kind, "the money does not wait for the kitchen")
 	s.run()
 
-	s.fact(fulfillment.FactRestaurantOrderReady)
+	s.signal(fulfillment.SignalRestaurantOrderReady)
 	step, ok = s.p.Next()
 	require.True(t, ok)
 	assert.Equal(t, fulfillment.StepRecordRestaurantPickup, step.Kind)

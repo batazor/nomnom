@@ -10,7 +10,7 @@ import (
 var migrations embed.FS
 
 // Migrations is the migration set of the order slice: orders, order_items,
-// order_facts, inbox, idempotency_keys and the Outbox orders_outbox with its CDC
+// order_transitions, inbox, idempotency_keys and the Outbox orders_outbox with its CDC
 // publication (ADR 37) — the tables of the repositories in this package.
 var Migrations = migration.Set{ID: migrationsID, Files: migrations}
 

@@ -11,7 +11,7 @@ import (
 
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"

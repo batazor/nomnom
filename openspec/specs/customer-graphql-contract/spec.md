@@ -25,12 +25,12 @@
 ### Requirement: Customer-представление статуса заказа
 **ID:** FR-451
 
-`Order.status` SHALL принимать значения публичного enum `OrderStatus` (`RECEIVED`, `PAID`, `CONFIRMED`, `PREPARING`, `READY_FOR_PICKUP`, `PICKED_UP`, `DELIVERED`, `CANCELLED`, `FAILED`), а неуспешно завершённый заказ SHALL содержать `endReason` из `OrderEndReason`. Схема MUST NOT раскрывать имена состояний FSM, Fulfillment Facts, Temporal workflow или gRPC-контрактов bounded contexts. Назначение курьера SHALL отражаться milestone `COURIER_ASSIGNED`, а не статусом.
+`Order.status` SHALL принимать значения публичного enum `OrderStatus` (`RECEIVED`, `PAID`, `CONFIRMED`, `PREPARING`, `READY_FOR_PICKUP`, `PICKED_UP`, `DELIVERED`, `CANCELLED`, `FAILED`), а неуспешно завершённый заказ SHALL содержать `endReason` из `OrderEndReason`. Схема MUST NOT раскрывать имена состояний и триггеров FSM, Temporal workflow или gRPC-контрактов bounded contexts. Назначение курьера SHALL отражаться milestone `COURIER_ASSIGNED`, а не статусом.
 
 #### Scenario: Отказ ресторана
 **ID:** AC-488
 
-- **WHEN** заказ отменён по факту `restaurant_rejected`
+- **WHEN** заказ отменён после отказа ресторана (`restaurant_rejected`)
 - **THEN** `status = FAILED` и `endReason = RESTAURANT_REJECTED`
 
 #### Scenario: Курьер назначен до готовности

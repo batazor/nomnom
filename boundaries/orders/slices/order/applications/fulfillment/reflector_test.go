@@ -40,8 +40,8 @@ func (h harness) reflector(orders order.Repository) fulfillment.Reflector {
 	return fulfillment.NewReflector(h.store, h.store, orders, h.workflow)
 }
 
-func pickup(eventID string) fulfillment.InboundFact {
-	return fulfillment.InboundFact{
+func pickup(eventID string) fulfillment.InboundSignal {
+	return fulfillment.InboundSignal{
 		Consumer:   "orders.recordpickup",
 		EventID:    eventID,
 		OrderID:    "order-1",
@@ -79,8 +79,8 @@ func TestDuplicateEventIsNoOpAndNotifiesAgain(t *testing.T) {
 	assert.Equal(t, 1, h.store.InboxSize())
 }
 
-// AC-107: the same fact under a new event_id has no second business effect.
-func TestRepeatedFactWithNewEventIDIsAlreadyApplied(t *testing.T) {
+// AC-107: the same step under a new event_id has no second business effect.
+func TestRepeatedStepWithNewEventIDIsAlreadyApplied(t *testing.T) {
 	h := newHarness(t, ordertest.New(t, "order-1"))
 	h.workflow.EXPECT().
 		Notify(mock.Anything, fulfillment.Notification{
@@ -104,12 +104,12 @@ func TestRepeatedFactWithNewEventIDIsAlreadyApplied(t *testing.T) {
 	assert.Equal(t, fulfillment.OutcomeAlreadyApplied, repeated.Outcome)
 	snapshot, _ := h.store.Snapshot("order-1")
 	assert.Equal(t, uint64(2), snapshot.Version)
-	assert.Len(t, snapshot.Facts, 1)
+	assert.Len(t, snapshot.Transitions, 1)
 	assert.Equal(t, 2, h.store.InboxSize())
 }
 
-// AC-112: a fact for a final Order is recorded in the Inbox and ignored.
-func TestLateFactForFinalOrderIsIgnored(t *testing.T) {
+// AC-112: a signal for a final Order is recorded in the Inbox and ignored.
+func TestLateSignalForFinalOrderIsIgnored(t *testing.T) {
 	for _, state := range []order.State{order.StateCompleted, order.StateCancelled} {
 		t.Run(string(state), func(t *testing.T) {
 			h := newHarness(t, ordertest.New(t, "order-1", ordertest.WithState(state)))
@@ -126,7 +126,7 @@ func TestLateFactForFinalOrderIsIgnored(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, fulfillment.Reflection{Outcome: fulfillment.OutcomeIgnoredLate}, reflection)
 			snapshot, _ := h.store.Snapshot("order-1")
-			assert.Empty(t, snapshot.Facts)
+			assert.Empty(t, snapshot.Transitions)
 			assert.Equal(t, uint64(1), snapshot.Version)
 			assert.Equal(t, 1, h.store.InboxSize(), "redelivery must become a duplicate")
 		})
@@ -155,7 +155,7 @@ func TestFailedNotificationIsReturnedAndRepairedByRedelivery(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, fulfillment.Reflection{Outcome: fulfillment.OutcomeApplied}, reflection)
 	snapshot, _ := h.store.Snapshot("order-1")
-	assert.Len(t, snapshot.Facts, 1, "local changes stay committed")
+	assert.Len(t, snapshot.Transitions, 1, "local changes stay committed")
 	assert.Equal(t, 1, h.store.InboxSize())
 
 	redelivered, err := reflector.Reflect(context.Background(), pickup("event-1"), recordPickup)
@@ -227,14 +227,14 @@ func TestReflectRejectsInvalidInputAndUnknownOrders(t *testing.T) {
 	h := newHarness(t, ordertest.New(t, "order-1"))
 	reflector := h.reflector(nil)
 
-	invalid := []fulfillment.InboundFact{
+	invalid := []fulfillment.InboundSignal{
 		{EventID: "e", OrderID: "order-1", OccurredAt: occurredAt},
 		{Consumer: "c", OrderID: "order-1", OccurredAt: occurredAt},
 		{Consumer: "c", EventID: "e", OccurredAt: occurredAt},
 		{Consumer: "c", EventID: "e", OrderID: "order-1"},
 	}
-	for _, fact := range invalid {
-		_, err := reflector.Reflect(context.Background(), fact, recordPickup)
+	for _, signal := range invalid {
+		_, err := reflector.Reflect(context.Background(), signal, recordPickup)
 		require.ErrorIs(t, err, usecase.ErrInvalidInput)
 	}
 

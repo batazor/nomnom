@@ -11,7 +11,6 @@ import (
 
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
-	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -112,7 +111,7 @@ func TestOrderDetailsFollowOrderChanges(t *testing.T) {
 	details, err := store.OrderDetails(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, order.StateConfirmed, details.State)
-	assert.Equal(t, []orderdetails.Fact{{Fact: order.FactRestaurantAccepted, OccurredAt: ordertest.PlacedAt.Add(time.Minute)}}, details.Facts)
+	assert.Equal(t, []order.AppliedTransition{{Trigger: order.TriggerConfirm, OccurredAt: ordertest.PlacedAt.Add(time.Minute)}}, details.Transitions)
 	assert.Equal(t, int64(2), projectedVersion(t, store, id), "the row reflects the saved Order version")
 }
 

@@ -1,7 +1,7 @@
 // Package recordpreparationdelay reflects PreparationDelayed of restaurants:
 // the Order takes the new expected ready time (FR-611) and the fulfillment
 // workflow extends its preparation deadline. A delay is not a Fulfillment
-// Fact: every delay replaces the ready time named before.
+// step: every delay replaces the ready time named before.
 package recordpreparationdelay
 
 import (
@@ -48,7 +48,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if in.ExpectedReadyAt.IsZero() {
 		return Result{}, usecase.InvalidInput("expected_ready_at", "is required")
 	}
-	fact := fulfillment.InboundFact{
+	signal := fulfillment.InboundSignal{
 		Consumer:        Consumer,
 		EventID:         in.EventID,
 		OrderID:         in.OrderID,
@@ -56,7 +56,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		OccurredAt:      in.OccurredAt,
 		ExpectedReadyAt: in.ExpectedReadyAt,
 	}
-	reflection, err := h.reflector.Reflect(ctx, fact, func(current *order.Order) error {
+	reflection, err := h.reflector.Reflect(ctx, signal, func(current *order.Order) error {
 		_, err := current.ExpectReadyAt(in.OccurredAt, in.ExpectedReadyAt)
 		return err
 	})

@@ -25,7 +25,11 @@ type Details struct {
 	Total    vo.Money
 	State    order.State
 	PlacedAt time.Time
-	Facts    []Fact
+	// Transitions is the history of the Order FSM.
+	Transitions []order.AppliedTransition
+	// CourierAssignedAt is the time of the current Courier Assignment; zero
+	// without a courier.
+	CourierAssignedAt time.Time
 	// Expected are the latest named Fulfillment deadlines; a zero time is not named.
 	Expected order.ExpectedTimes
 	// DeliveryWindow is set for a Scheduled Order (FR-681).
@@ -41,12 +45,6 @@ type Item struct {
 	Name       string
 	Quantity   int
 	UnitPrice  vo.Money
-}
-
-type Fact struct {
-	Fact       order.FulfillmentFact
-	OccurredAt time.Time
-	Reason     string
 }
 
 type Cancellation struct {

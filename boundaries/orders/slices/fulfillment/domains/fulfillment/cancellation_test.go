@@ -26,7 +26,7 @@ func TestProcessAdmitsCancellation(t *testing.T) {
 			message: "cancellation refused in stage delivering"},
 		"after outcome": {arrange: func(s *process) {
 			s.run()
-			s.fact(fulfillment.FactRestaurantOrderRejected)
+			s.signal(fulfillment.SignalRestaurantOrderRejected)
 		}, request: request, err: fulfillment.ErrCancellationRefused, message: "cancellation refused in stage waiting_acceptance"},
 		"repeated after acceptance": {arrange: func(s *process) {
 			s.run()
@@ -76,7 +76,7 @@ func TestProcessRefusesCancellationAfterPickup(t *testing.T) {
 	require.ErrorIs(t, s.p.RequestCancellation(fulfillment.CancellationRequest{RequestID: "cancel-1"}), fulfillment.ErrCancellationRefused)
 
 	assert.False(t, s.p.Failed())
-	s.fact(fulfillment.FactDeliveryCompleted)
+	s.signal(fulfillment.SignalDeliveryCompleted)
 	s.run()
 	assert.True(t, s.p.Completed())
 }

@@ -75,7 +75,7 @@ func newTelemetry() (*telemetry, error) {
 	}, nil
 }
 
-// observation collects per-message facts for the metrics recorded by middleware.
+// observation collects per-message data for the metrics recorded by middleware.
 type observation struct {
 	errorClass Class
 	duplicate  bool

@@ -34,10 +34,10 @@ func (o *Order) ExpectDeliveredAt(occurredAt, deliveredAt time.Time) (bool, erro
 	return o.expect(occurredAt, &o.expected.DeliveredAt, deliveredAt)
 }
 
-// expect lets the FSM admit the change like a fulfillment fact: a final Order
+// expect lets the FSM admit the change like a step of Fulfillment: a final Order
 // takes no new deadlines.
 func (o *Order) expect(occurredAt time.Time, stored *time.Time, next time.Time) (bool, error) {
-	if _, err := transition(o.state, TriggerRecordFact, TransitionInput{OccurredAt: occurredAt}); err != nil {
+	if _, err := transition(o.state, TriggerUpdateDetails, TransitionInput{OccurredAt: occurredAt}); err != nil {
 		return false, err
 	}
 	if stored.Equal(next) {

@@ -39,7 +39,7 @@ type CompoundState string
 
 const (
 	// CompoundOpen is an Open Order: Fulfillment is not finished, the Order
-	// can be cancelled and records Fulfillment Facts.
+	// can be cancelled and takes steps of Fulfillment.
 	CompoundOpen CompoundState = "open"
 	// CompoundInProgress is an Open Order whose outcome is not known: progress
 	// moves it forward and the customer can request a cancellation.
@@ -117,16 +117,16 @@ const (
 	TriggerDeliver          Trigger = "deliver"
 	TriggerCancel           Trigger = "cancel"
 	TriggerComplete         Trigger = "complete"
-	// TriggerRecordFact records data of a neighbour that is not a position of the
-	// Order: a courier assignment, whose states belong to Delivery, and a reported
+	// TriggerUpdateDetails changes data that is not a position of the Order: a
+	// courier assignment, whose states belong to Delivery, and a reported
 	// deadline. Its target state equals the source state.
-	TriggerRecordFact Trigger = "record_fact"
+	TriggerUpdateDetails Trigger = "update_details"
 )
 
-// allTriggers starts with TriggerRecordFact: TriggerOf names a change that
+// allTriggers starts with TriggerUpdateDetails: TriggerOf names a change that
 // keeps the State by it, whichever trigger stayed.
 var allTriggers = [...]Trigger{
-	TriggerRecordFact, TriggerAuthorizePayment, TriggerConfirm, TriggerStartPreparation,
+	TriggerUpdateDetails, TriggerAuthorizePayment, TriggerConfirm, TriggerStartPreparation,
 	TriggerMarkReady, TriggerPickUp, TriggerReject, TriggerFailDelivery, TriggerDeliver,
 	TriggerCancel, TriggerComplete,
 }
@@ -206,11 +206,11 @@ func occurredAtIsPresent(input TransitionInput) error {
 // transitions is the single source of truth for allowed transitions; a row
 // on a CompoundState applies to every State inside it.
 //
-// Progress is monotonic: facts of restaurants and delivery arrive from separate
-// topics without a common order, so a fact may jump the Order forward over a
-// step that has not been reported yet, and a fact of a step already passed stays
-// and is only added to the journal of facts. A known outcome ends progress: later
-// facts only join the journal.
+// Progress is monotonic: events of restaurants and delivery arrive from separate
+// topics without a common order, so a step may jump the Order forward over one
+// that has not been reported yet, and a step already passed stays and is only
+// added to the history. A known outcome ends progress: later steps only join
+// the history.
 var transitions = []transitionRow{
 	{source: node(StatePlaced), trigger: TriggerAuthorizePayment, target: to(StatePaid), guard: occurredAtIsPresent},
 	{source: node(StatePaid), trigger: TriggerAuthorizePayment, target: stay, guard: occurredAtIsPresent},
@@ -257,7 +257,7 @@ var transitions = []transitionRow{
 	{source: node(StateDelivered), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
 
 	{source: node(CompoundOpen), trigger: TriggerCancel, target: to(StateCancelled), guard: requestedAtIsPresent},
-	{source: node(CompoundOpen), trigger: TriggerRecordFact, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundOpen), trigger: TriggerUpdateDetails, target: stay, guard: occurredAtIsPresent},
 }
 
 // repeats are strict repeats of an applied transition with an explicit
@@ -297,7 +297,7 @@ func (row transitionRow) targetOf(from State) State {
 
 // TriggerOf names the allowed transition that takes an Order from one State to
 // another. Every transition that moves a State has its own target, so the pair
-// identifies the trigger; a change that keeps the State is named record_fact.
+// identifies the trigger; a change that keeps the State is named update_details.
 // False — no allowed transition joins them.
 func TriggerOf(from, to State) (Trigger, bool) {
 	for _, trigger := range allTriggers {

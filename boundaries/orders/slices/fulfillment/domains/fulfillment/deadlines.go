@@ -16,7 +16,7 @@ const (
 )
 
 // NextDeadline is the nearest active deadline; zero means the process waits
-// for a fact without a deadline.
+// for a signal without a deadline.
 func (p *Process) NextDeadline() time.Time {
 	var next time.Time
 	consider := func(active bool, deadline time.Time) {

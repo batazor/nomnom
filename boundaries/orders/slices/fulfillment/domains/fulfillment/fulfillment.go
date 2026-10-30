@@ -1,5 +1,5 @@
 // Package fulfillment is the domain model of the Order Fulfillment process:
-// the journal of confirmed steps, facts of neighbouring contexts and deadlines. Operations return decisions instead of performing
+// the journal of confirmed steps, signals of neighbouring contexts and deadlines. Operations return decisions instead of performing
 // side effects; the model reads no clock and generates no randomness, so the
 // caller passes the time and executes the steps (ADR 5, FR-483).
 package fulfillment
@@ -131,7 +131,7 @@ func (p *Process) Outcome() (Outcome, string) {
 	return "", ""
 }
 
-// closing reports that the outcome is chosen and facts no longer change the route.
+// closing reports that the outcome is chosen and signals no longer change the route.
 func (p *Process) closing() bool {
 	return p.failure != nil || p.done || p.final != ""
 }

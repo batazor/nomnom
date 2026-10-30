@@ -46,7 +46,7 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
   `orders.v1.order-changes`: JSON `{"__typename":"Order","id":"<order_id>"}`, ключ партиции —
   `order_id`. Это не Integration Event: его не потребляет ни один bounded context, в нём нет
   данных заказа, envelope ADR 25 не нужен. Через `ProcessStore` проходят все изменения заказа:
-  размещение, Fulfillment Facts, отмена, завершение. Поэтому уведомление не теряется и не
+  размещение, шаги Fulfillment, отмена, завершение. Поэтому уведомление не теряется и не
   обгоняет commit (ADR 13).
 - **Kitchen и Courier — по тому же образцу.** `restaurants` при каждой записи Restaurant Order
   и Restaurant кладёт `{"__typename":"Kitchen","restaurantId":…}` в

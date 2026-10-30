@@ -113,7 +113,7 @@ func (h *harness) declinePayment(activity string) { h.declined[activity] = true 
 
 func (h *harness) signalAt(after time.Duration, name, eventID string) {
 	h.env.RegisterDelayedCallback(func() {
-		h.env.SignalWorkflow(name, temporal.Fact{EventID: eventID, OccurredAt: h.env.Now()})
+		h.env.SignalWorkflow(name, temporal.SignalPayload{EventID: eventID, OccurredAt: h.env.Now()})
 	}, after)
 }
 
@@ -223,7 +223,7 @@ func TestWorkflowExtendsPreparationOnDelay(t *testing.T) {
 	h.signalAt(time.Minute, temporal.SignalRestaurantOrderAccepted, "accepted")
 	h.signalAt(2*time.Minute, temporal.SignalCourierAssignedToDelivery, "assigned")
 	h.env.RegisterDelayedCallback(func() {
-		h.env.SignalWorkflow(temporal.SignalPreparationDelayed, temporal.Fact{
+		h.env.SignalWorkflow(temporal.SignalPreparationDelayed, temporal.SignalPayload{
 			EventID:         "delayed",
 			ExpectedReadyAt: h.env.Now().Add(40 * time.Minute),
 		})

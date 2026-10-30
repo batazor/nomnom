@@ -163,6 +163,51 @@ func TestSettlingStatesMigrationDerivesStateFromFacts(t *testing.T) {
 	}
 }
 
+// The journal becomes the transition history: facts map to their triggers, the
+// courier assignment stays in orders and a cancellation joins with its time.
+func TestOrderTransitionsMigrationMapsFacts(t *testing.T) {
+	ctx := context.Background()
+	cfg := database.Config{DSN: emptyOrdersDatabase(t), MaxConns: 1}
+	require.NoError(t, migration.Apply(ctx, cfg, migrationsBefore(t, "00013_order_transitions.up.sql")))
+
+	conn, err := pgx.Connect(ctx, cfg.DSN)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	_, err = conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version, priority, cancelled_at, negative_outcome, cancellation_code)
+		VALUES ('order-1', 'customer-1', 'restaurant-1', 'berlin', 10, 'EUR', 'cancelled', now(), 1, 'STANDARD', now(), 'failure', 'delivery_failed')`)
+	require.NoError(t, err)
+	mapped := map[string]string{
+		"payment_authorized":  "authorize_payment",
+		"restaurant_accepted": "confirm",
+		"restaurant_rejected": "reject",
+		"preparation_started": "start_preparation",
+		"ready_for_pickup":    "mark_ready",
+		"picked_up":           "pick_up",
+		"delivery_completed":  "deliver",
+		"delivery_failed":     "fail_delivery",
+	}
+	want := []string{"cancel"}
+	for fact, trigger := range mapped {
+		_, err := conn.Exec(ctx, `INSERT INTO order_facts (order_id, fact, occurred_at) VALUES ('order-1', $1, now())`, fact)
+		require.NoError(t, err)
+		want = append(want, trigger)
+	}
+	_, err = conn.Exec(ctx, `INSERT INTO order_facts (order_id, fact, occurred_at) VALUES ('order-1', 'courier_assigned', now())`)
+	require.NoError(t, err)
+
+	require.NoError(t, migration.Apply(ctx, cfg, repository.Migrations))
+
+	rows, err := conn.Query(ctx, `SELECT trigger FROM order_transitions WHERE order_id = 'order-1'`)
+	require.NoError(t, err)
+	got, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	assert.ElementsMatch(t, want, got)
+	var journal *string
+	require.NoError(t, conn.QueryRow(ctx, `SELECT to_regclass('order_facts')::text`).Scan(&journal))
+	assert.Nil(t, journal)
+}
+
 // migrationsBefore is the order migration set without first and every later file.
 func migrationsBefore(t *testing.T, first string) migration.Set {
 	t.Helper()

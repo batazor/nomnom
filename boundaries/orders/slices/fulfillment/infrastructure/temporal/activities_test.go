@@ -17,7 +17,7 @@ import (
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/closure/completeorder"
 	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpaymentauthorization"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
 	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -146,7 +146,7 @@ func TestActivitiesDoNotRetryPermanentErrors(t *testing.T) {
 	}
 }
 
-// AC-825: a repeated payment Activity records the fact once with the workflow time.
+// AC-825: a repeated payment Activity records the payload once with the workflow time.
 func TestRecordPaymentAuthorizationActivityIsIdempotent(t *testing.T) {
 	a, store := activities(t, order.StatePlaced)
 	paymentStep := temporal.StepInput{
@@ -159,7 +159,7 @@ func TestRecordPaymentAuthorizationActivityIsIdempotent(t *testing.T) {
 	require.NoError(t, a.RecordPaymentAuthorization(context.Background(), paymentStep))
 
 	snapshot, _ := store.Snapshot(orderID)
-	assert.Equal(t, []order.RecordedFact{{Fact: order.FactPaymentAuthorized, OccurredAt: paymentStep.DecidedAt}}, snapshot.Facts)
+	assert.Equal(t, []order.AppliedTransition{{Trigger: order.TriggerAuthorizePayment, OccurredAt: paymentStep.DecidedAt}}, snapshot.Transitions)
 	assert.Empty(t, store.OutboxRecords())
 }
 
@@ -172,7 +172,7 @@ func TestRecordPaymentAuthorizationActivityRequiresDecidedAt(t *testing.T) {
 
 	require.Error(t, err)
 	snapshot, _ := store.Snapshot(orderID)
-	assert.Empty(t, snapshot.Facts)
+	assert.Empty(t, snapshot.Transitions)
 }
 
 func TestCompleteOrderActivityIsIdempotent(t *testing.T) {

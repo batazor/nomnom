@@ -10,7 +10,7 @@ import (
 	"nomnom/orders/slices/order/applications/closure/completeorder"
 	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
 	"nomnom/orders/slices/order/applications/errorkind"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpaymentauthorization"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
 	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order"

@@ -76,6 +76,7 @@ func (o *Order) Cancel(requestedAt time.Time, reason CancellationReason) (Transi
 	if err != nil {
 		return TransitionResult{}, err
 	}
+	o.remember(TriggerCancel, requestedAt)
 	o.cancellation = reason
 	o.cancelledAt = requestedAt
 	o.events = append(o.events, OrderCancelled{OrderID: o.id, MarketID: o.marketID, RequestedAt: requestedAt, Reason: reason})

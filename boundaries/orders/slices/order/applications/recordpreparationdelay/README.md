@@ -11,7 +11,7 @@
 
 Handler: [`recordpreparationdelay.go`](recordpreparationdelay.go), тесты: [`recordpreparationdelay_test.go`](recordpreparationdelay_test.go).
 
-- **Поведение:** `Input{EventID, OrderID, OccurredAt, ExpectedReadyAt}` → `Order.ExpectReadyAt`; `ExpectedReadyAt` обязателен. Задержка — не Fulfillment Fact: каждая заменяет срок, названный раньше (`RestaurantOrderAccepted` или прежней задержкой).
+- **Поведение:** `Input{EventID, OrderID, OccurredAt, ExpectedReadyAt}` → `Order.ExpectReadyAt`; `ExpectedReadyAt` обязателен. Задержка — не шаг FSM: каждая заменяет срок, названный раньше (`RestaurantOrderAccepted` или прежней задержкой).
 - **Порты и поток:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; общий поток — [`fulfillment.Reflector`](../fulfillment/README.md), уведомление workflow несёт `ExpectedReadyAt`.
 - **Inbox consumer:** `orders.recordpreparationdelay`.
 - **Outcomes:** `applied`, `ignored_late` (`Order` в `completed`/`cancelled`), `duplicate`. Сохранение `Order` кладёт Order Change Notification для `orderChanged`.

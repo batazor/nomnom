@@ -17,11 +17,11 @@ import (
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/confirmorder"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliverycompletion"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordorderready"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpickup"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -31,7 +31,7 @@ import (
 )
 
 // AC-446: the worker runs the Order Fulfillment Workflow end to end against a
-// real Temporal Server; inbound facts go through the application handlers.
+// real Temporal Server; inbound signals go through the application handlers.
 // AC-471: the Order lives in PostgreSQL, so another process placed it and the
 // worker completes it there. Temporal and PostgreSQL run in testcontainers.
 func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
@@ -104,7 +104,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 		require.Eventually(t, func() bool { return activityCompleted(ctx, t, temporalClient, workflowID, name) },
 			20*time.Second, 100*time.Millisecond, "activity %s did not complete", name)
 	}
-	type fact func(ctx context.Context, eventID string) error
+	type signal func(ctx context.Context, eventID string) error
 	confirm := confirmorder.NewHandler(store, store, store, port)
 	assign := recordcourierassignment.NewHandler(store, store, store, port, store, orderdi.NewProcessStore(store, nil))
 	ready := recordorderready.NewHandler(store, store, store, port)
@@ -112,7 +112,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	complete := recorddeliverycompletion.NewHandler(store, store, store, port)
 	// Inbox в PostgreSQL переживает прогоны: event_id уникален для заказа, иначе
 	// повторный прогон на той же базе принимает факты за duplicates.
-	send := func(eventID string, f fact) { require.NoError(t, f(ctx, string(orderID)+":"+eventID)) }
+	send := func(eventID string, f signal) { require.NoError(t, f(ctx, string(orderID)+":"+eventID)) }
 	now := time.Now().UTC()
 
 	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID, RestaurantID: "restaurant-1"}))

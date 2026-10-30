@@ -28,8 +28,8 @@ func WithPlacedAt(placedAt time.Time) Option {
 	return func(snapshot *order.Snapshot) { snapshot.PlacedAt = placedAt }
 }
 
-func WithFacts(facts ...order.RecordedFact) Option {
-	return func(snapshot *order.Snapshot) { snapshot.Facts = facts }
+func WithTransitions(transitions ...order.AppliedTransition) Option {
+	return func(snapshot *order.Snapshot) { snapshot.Transitions = transitions }
 }
 
 func WithMarket(marketID string) Option {

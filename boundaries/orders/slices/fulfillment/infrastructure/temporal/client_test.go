@@ -43,7 +43,7 @@ func startRequest() fulfillment.StartRequest {
 func TestClientSignalsWithStartOnOrderPlaced(t *testing.T) {
 	c, temporalClient := newClient(t)
 	temporalClient.On("SignalWithStartWorkflow", mock.Anything, "order:order-1", temporal.SignalOrderPlaced,
-		temporal.Fact{EventID: "event-1", OccurredAt: placedAt},
+		temporal.SignalPayload{EventID: "event-1", OccurredAt: placedAt},
 		wantStartOptions, temporal.WorkflowName, temporal.Input{OrderID: orderID, Policy: policy()}).
 		Return(mocks.NewWorkflowRun(t), nil)
 
@@ -58,7 +58,7 @@ func TestClientStartsScheduledOrderWithItsWindow(t *testing.T) {
 	window, err := order.NewDeliveryWindow(start, start.Add(15*time.Minute))
 	require.NoError(t, err)
 	temporalClient.On("SignalWithStartWorkflow", mock.Anything, "order:order-1", temporal.SignalOrderPlaced,
-		temporal.Fact{EventID: "event-1", OccurredAt: placedAt},
+		temporal.SignalPayload{EventID: "event-1", OccurredAt: placedAt},
 		wantStartOptions, temporal.WorkflowName, temporal.Input{
 			OrderID:        orderID,
 			Policy:         policy(),
@@ -121,7 +121,7 @@ func TestClientNotifiesWithIntegrationEventName(t *testing.T) {
 		t.Run(string(tt.kind), func(t *testing.T) {
 			c, temporalClient := newClient(t)
 			temporalClient.On("SignalWorkflow", mock.Anything, "order:order-1", "", tt.signal,
-				temporal.Fact{EventID: "event-1", OccurredAt: occurredAt, Reason: "r"}).Return(nil)
+				temporal.SignalPayload{EventID: "event-1", OccurredAt: occurredAt, Reason: "r"}).Return(nil)
 
 			require.NoError(t, c.Notify(context.Background(), fulfillment.Notification{
 				OrderID: orderID, EventID: "event-1", Kind: tt.kind, OccurredAt: occurredAt, Reason: "r",

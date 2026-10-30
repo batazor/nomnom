@@ -8,7 +8,7 @@
 ### Requirement: Order хранится в PostgreSQL с optimistic concurrency
 **ID:** FR-437
 
-`order.Repository` SHALL сохранять `Order`, позиции и Fulfillment Facts в PostgreSQL. `Save` MUST отклонять запись, если версия в хранилище отличается от загруженной.
+`order.Repository` SHALL сохранять `Order`, позиции и историю переходов в PostgreSQL. `Save` MUST отклонять запись, если версия в хранилище отличается от загруженной.
 
 #### Scenario: Конкурентное изменение
 **ID:** AC-468

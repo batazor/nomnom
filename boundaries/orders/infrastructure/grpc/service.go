@@ -200,16 +200,16 @@ func cancellationOutcome(outcome requestordercancellation.Outcome) ordersv1.Canc
 
 func orderView(view orderdetails.View) *ordersv1.Order {
 	result := &ordersv1.Order{
-		OrderId:          string(view.OrderID),
-		CustomerId:       string(view.CustomerID),
-		RestaurantId:     string(view.RestaurantID),
-		MarketId:         view.MarketID.String(),
-		Items:            make([]*ordersv1.OrderItem, 0, len(view.Items)),
-		Total:            money(view.Total),
-		Priority:         orderPriority[view.Service.Priority()],
-		State:            orderState(view.State),
-		PlacedAt:         timestamppb.New(view.PlacedAt),
-		FulfillmentFacts: make([]*ordersv1.FulfillmentFact, 0, len(view.Facts)),
+		OrderId:      string(view.OrderID),
+		CustomerId:   string(view.CustomerID),
+		RestaurantId: string(view.RestaurantID),
+		MarketId:     view.MarketID.String(),
+		Items:        make([]*ordersv1.OrderItem, 0, len(view.Items)),
+		Total:        money(view.Total),
+		Priority:     orderPriority[view.Service.Priority()],
+		State:        orderState(view.State),
+		PlacedAt:     timestamppb.New(view.PlacedAt),
+		Transitions:  make([]*ordersv1.OrderTransition, 0, len(view.Transitions)),
 	}
 	for _, item := range view.Items {
 		result.Items = append(result.Items, &ordersv1.OrderItem{
@@ -219,12 +219,14 @@ func orderView(view orderdetails.View) *ordersv1.Order {
 			UnitPrice:  money(item.UnitPrice),
 		})
 	}
-	for _, fact := range view.Facts {
-		result.FulfillmentFacts = append(result.FulfillmentFacts, &ordersv1.FulfillmentFact{
-			Kind:       string(fact.Fact),
-			OccurredAt: timestamppb.New(fact.OccurredAt),
-			Reason:     fact.Reason,
+	for _, applied := range view.Transitions {
+		result.Transitions = append(result.Transitions, &ordersv1.OrderTransition{
+			Trigger:    string(applied.Trigger),
+			OccurredAt: timestamppb.New(applied.OccurredAt),
 		})
+	}
+	if !view.CourierAssignedAt.IsZero() {
+		result.CourierAssignedAt = timestamppb.New(view.CourierAssignedAt)
 	}
 	if view.Cancellation != nil {
 		result.Cancellation = &ordersv1.Cancellation{

@@ -18,7 +18,7 @@ type Snapshot struct {
 	PlacedAt           time.Time
 	State              State
 	Version            uint64
-	Facts              []RecordedFact
+	Transitions        []AppliedTransition
 	CancellationReason CancellationReason
 	CancelledAt        time.Time
 	Expected           ExpectedTimes
@@ -36,7 +36,7 @@ func (o *Order) Snapshot() Snapshot {
 		PlacedAt:           o.placedAt,
 		State:              o.state,
 		Version:            o.version,
-		Facts:              o.Facts(),
+		Transitions:        o.Transitions(),
 		CancellationReason: o.cancellation,
 		CancelledAt:        o.cancelledAt,
 		Expected:           o.expected,
@@ -53,22 +53,31 @@ func Restore(snapshot Snapshot) (*Order, error) {
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[FulfillmentFact]struct{}, len(snapshot.Facts))
-	for _, fact := range snapshot.Facts {
-		if _, duplicate := seen[fact.Fact]; duplicate || !isKnownFact(fact.Fact) {
-			return nil, fmt.Errorf("%w: fact %q", ErrInvalidSnapshot, fact.Fact)
+	seen := make(map[Trigger]struct{}, len(snapshot.Transitions))
+	for _, applied := range snapshot.Transitions {
+		if _, duplicate := seen[applied.Trigger]; duplicate || !isKnownTrigger(applied.Trigger) {
+			return nil, fmt.Errorf("%w: transition %q", ErrInvalidSnapshot, applied.Trigger)
 		}
-		seen[fact.Fact] = struct{}{}
+		seen[applied.Trigger] = struct{}{}
 	}
 	order.placedAt = snapshot.PlacedAt
 	order.state = snapshot.State
 	order.version = snapshot.Version
-	order.facts = append([]RecordedFact(nil), snapshot.Facts...)
+	order.transitions = append([]AppliedTransition(nil), snapshot.Transitions...)
 	order.cancellation = snapshot.CancellationReason
 	order.cancelledAt = snapshot.CancelledAt
 	order.expected = snapshot.Expected
 	order.deliveryWindow = snapshot.DeliveryWindow
 	return order, nil
+}
+
+func isKnownTrigger(trigger Trigger) bool {
+	for _, candidate := range allTriggers {
+		if candidate == trigger {
+			return true
+		}
+	}
+	return false
 }
 
 func isKnownState(state State) bool {

@@ -37,12 +37,12 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), saved.Version())
 	assert.Equal(t, order.StatePreparing, saved.State())
-	// Confirm records restaurant_accepted with the transition (AC-563); facts
+	// Confirm keeps its moment in the history (AC-563); transitions
 	// load in the order they occurred.
-	assert.Equal(t, []order.RecordedFact{
-		{Fact: order.FactRestaurantAccepted, OccurredAt: acceptedAt},
-		{Fact: order.FactPreparationStarted, OccurredAt: preparingAt},
-	}, saved.Facts())
+	assert.Equal(t, []order.AppliedTransition{
+		{Trigger: order.TriggerConfirm, OccurredAt: acceptedAt},
+		{Trigger: order.TriggerStartPreparation, OccurredAt: preparingAt},
+	}, saved.Transitions())
 	assert.Equal(t, ordertest.New(t, id).Items(), saved.Items())
 }
 

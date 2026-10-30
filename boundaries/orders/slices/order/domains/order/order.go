@@ -64,7 +64,7 @@ type Order struct {
 	placedAt       time.Time
 	state          State
 	version        uint64
-	facts          []RecordedFact
+	transitions    []AppliedTransition
 	cancellation   CancellationReason
 	cancelledAt    time.Time
 	expected       ExpectedTimes
@@ -178,10 +178,10 @@ func calculateTotal(items []Item) (vo.Money, error) {
 	return total, nil
 }
 
-// Confirm reflects restaurant Order Acceptance and records when it happened
-// as the restaurant_accepted fact, in the same change of the Order.
+// Confirm reflects restaurant Order Acceptance and keeps when it happened in
+// the history, in the same change of the Order.
 func (o *Order) Confirm(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(TriggerConfirm, FactRestaurantAccepted, occurredAt, "")
+	return o.applyStep(TriggerConfirm, occurredAt)
 }
 
 // Complete records the successful outcome chosen by the fulfillment process
@@ -191,6 +191,7 @@ func (o *Order) Complete(completedAt time.Time) (TransitionResult, error) {
 	if err != nil {
 		return TransitionResult{}, err
 	}
+	o.remember(TriggerComplete, completedAt)
 	o.events = append(o.events, OrderCompleted{OrderID: o.id, MarketID: o.marketID, PlacedAt: o.placedAt, CompletedAt: completedAt})
 	return result, nil
 }

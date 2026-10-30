@@ -52,7 +52,7 @@ func (c *Client) Start(ctx context.Context, request fulfillment.StartRequest) er
 		return errors.New("start order fulfillment workflow: restaurant_id is required")
 	}
 	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(string(request.OrderID)), SignalOrderPlaced,
-		Fact{EventID: request.EventID, OccurredAt: request.OccurredAt},
+		SignalPayload{EventID: request.EventID, OccurredAt: request.OccurredAt},
 		c.startOptions(request), WorkflowName, c.input(request))
 	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 		return fmt.Errorf("signal-with-start order fulfillment workflow: %w", err)
@@ -65,7 +65,7 @@ func (c *Client) Notify(ctx context.Context, notification fulfillment.Notificati
 	if !ok {
 		return fmt.Errorf("no signal for fulfillment kind %q", notification.Kind)
 	}
-	err := c.temporal.SignalWorkflow(ctx, WorkflowID(string(notification.OrderID)), "", signal, Fact{
+	err := c.temporal.SignalWorkflow(ctx, WorkflowID(string(notification.OrderID)), "", signal, SignalPayload{
 		EventID:         notification.EventID,
 		OccurredAt:      notification.OccurredAt,
 		Reason:          notification.Reason,

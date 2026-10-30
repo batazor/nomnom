@@ -20,14 +20,14 @@ import (
 
 	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/confirmorder"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliverycompletion"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordorderready"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpickup"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -71,7 +71,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, notifier),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(notifier),
 		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, notifier, store, store),
-		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store),
+		RecordCourierRelease:     recordcourierrelease.NewHandler(store, store, store, store, store),
 		RecordPickup:             recordpickup.NewHandler(store, store, store, notifier),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, notifier),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, notifier),

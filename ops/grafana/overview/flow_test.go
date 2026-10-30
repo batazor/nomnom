@@ -18,7 +18,7 @@ func TestFlowQueries(t *testing.T) {
 		panels []Panel
 		want   []string
 	}{
-		"orders":      {orderFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="order"`, `nomnom_fsm_trigger!~"record_fact"`}},
+		"orders":      {orderFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="order"`, `nomnom_fsm_trigger!~"update_details"`}},
 		"restaurants": {kitchenFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="restaurant_order"`, `nomnom_fsm_trigger!~"report_delay"`}},
 		"delivery":    {deliveryFlowPanels(sc), []string{`nomnom_fsm_aggregate_type="delivery"`, `nomnom_fsm_trigger!~"unassign"`}},
 	} {

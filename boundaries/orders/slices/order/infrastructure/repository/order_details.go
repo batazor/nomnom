@@ -23,7 +23,7 @@ import (
 // OrderDetailsProjectionVersion is the shape of order_details.details. A change
 // of the document increments it: catch-up at process start projects every row
 // of an older version again.
-const OrderDetailsProjectionVersion = 5
+const OrderDetailsProjectionVersion = 6
 
 // projectionBatch bounds the Orders projected again in one pass of catch-up
 // and rebuild; each Order is projected in its own transaction.
@@ -35,15 +35,17 @@ const projectionLockKey int64 = 0x6f72645f64657461
 // detailsDocument is the stored form of orderdetails.Details without the
 // columns order_id, customer_id, market_id and placed_at.
 type detailsDocument struct {
-	RestaurantID string                `json:"restaurant_id"`
-	Items        []itemDocument        `json:"items"`
-	Priority     string                `json:"priority"`
-	PremiumFee   *moneyDocument        `json:"premium_fee"`
-	Total        moneyDocument         `json:"total"`
-	State        string                `json:"state"`
-	Facts        []factDocument        `json:"facts"`
-	Expected     expectedDocument      `json:"expected"`
-	Cancellation *cancellationDocument `json:"cancellation"`
+	RestaurantID string               `json:"restaurant_id"`
+	Items        []itemDocument       `json:"items"`
+	Priority     string               `json:"priority"`
+	PremiumFee   *moneyDocument       `json:"premium_fee"`
+	Total        moneyDocument        `json:"total"`
+	State        string               `json:"state"`
+	Transitions  []transitionDocument `json:"transitions"`
+	// CourierAssignedAt is null without a courier (projection version 6).
+	CourierAssignedAt *time.Time            `json:"courier_assigned_at"`
+	Expected          expectedDocument      `json:"expected"`
+	Cancellation      *cancellationDocument `json:"cancellation"`
 	// DeliveryWindow is null for an ASAP Order (projection version 3).
 	DeliveryWindow *windowDocument `json:"delivery_window"`
 }
@@ -65,10 +67,9 @@ type moneyDocument struct {
 	Currency string `json:"currency"`
 }
 
-type factDocument struct {
-	Fact       string    `json:"fact"`
+type transitionDocument struct {
+	Trigger    string    `json:"trigger"`
 	OccurredAt time.Time `json:"occurred_at"`
-	Reason     string    `json:"reason"`
 }
 
 // expectedDocument keeps a deadline nobody named as null.
@@ -84,14 +85,15 @@ type cancellationDocument struct {
 	CancelledAt time.Time `json:"cancelled_at"`
 }
 
-func newDetailsDocument(snap order.Snapshot, total vo.Money) detailsDocument {
+func newDetailsDocument(snap order.Snapshot, total vo.Money, courierAssignedAt *time.Time) detailsDocument {
 	doc := detailsDocument{
-		RestaurantID: string(snap.RestaurantID),
-		Items:        make([]itemDocument, 0, len(snap.Items)),
-		Priority:     string(snap.Service.Priority()),
-		Total:        moneyDocument{Amount: total.Amount().String(), Currency: total.Currency()},
-		State:        string(snap.State),
-		Facts:        make([]factDocument, 0, len(snap.Facts)),
+		RestaurantID:      string(snap.RestaurantID),
+		Items:             make([]itemDocument, 0, len(snap.Items)),
+		Priority:          string(snap.Service.Priority()),
+		Total:             moneyDocument{Amount: total.Amount().String(), Currency: total.Currency()},
+		State:             string(snap.State),
+		Transitions:       make([]transitionDocument, 0, len(snap.Transitions)),
+		CourierAssignedAt: courierAssignedAt,
 		Expected: expectedDocument{
 			ReadyAt:     nullTime(snap.Expected.ReadyAt),
 			PickupAt:    nullTime(snap.Expected.PickupAt),
@@ -109,8 +111,8 @@ func newDetailsDocument(snap order.Snapshot, total vo.Money) detailsDocument {
 			UnitPrice:  moneyDocument{Amount: item.UnitPrice().Amount().String(), Currency: item.UnitPrice().Currency()},
 		})
 	}
-	for _, fact := range snap.Facts {
-		doc.Facts = append(doc.Facts, factDocument{Fact: string(fact.Fact), OccurredAt: fact.OccurredAt, Reason: fact.Reason})
+	for _, applied := range snap.Transitions {
+		doc.Transitions = append(doc.Transitions, transitionDocument{Trigger: string(applied.Trigger), OccurredAt: applied.OccurredAt})
 	}
 	if !snap.DeliveryWindow.IsZero() {
 		doc.DeliveryWindow = &windowDocument{Start: snap.DeliveryWindow.Start(), End: snap.DeliveryWindow.End()}
@@ -147,16 +149,17 @@ func (d detailsDocument) details(id order.ID, customerID order.CustomerID, marke
 		return orderdetails.Details{}, fmt.Errorf("order %s priority: %w", id, err)
 	}
 	result := orderdetails.Details{
-		OrderID:      id,
-		CustomerID:   customerID,
-		MarketID:     market,
-		RestaurantID: order.RestaurantID(d.RestaurantID),
-		Items:        make([]orderdetails.Item, 0, len(d.Items)),
-		Service:      service,
-		Total:        total,
-		State:        order.State(d.State),
-		PlacedAt:     placedAt.UTC(),
-		Facts:        make([]orderdetails.Fact, 0, len(d.Facts)),
+		OrderID:           id,
+		CustomerID:        customerID,
+		MarketID:          market,
+		RestaurantID:      order.RestaurantID(d.RestaurantID),
+		Items:             make([]orderdetails.Item, 0, len(d.Items)),
+		Service:           service,
+		Total:             total,
+		State:             order.State(d.State),
+		PlacedAt:          placedAt.UTC(),
+		Transitions:       make([]order.AppliedTransition, 0, len(d.Transitions)),
+		CourierAssignedAt: utcTime(d.CourierAssignedAt),
 		Expected: order.ExpectedTimes{
 			ReadyAt:     utcTime(d.Expected.ReadyAt),
 			PickupAt:    utcTime(d.Expected.PickupAt),
@@ -179,9 +182,9 @@ func (d detailsDocument) details(id order.ID, customerID order.CustomerID, marke
 			MenuItemID: order.MenuItemID(item.MenuItemID), Name: item.Name, Quantity: item.Quantity, UnitPrice: price,
 		})
 	}
-	for _, fact := range d.Facts {
-		result.Facts = append(result.Facts, orderdetails.Fact{
-			Fact: order.FulfillmentFact(fact.Fact), OccurredAt: fact.OccurredAt.UTC(), Reason: fact.Reason,
+	for _, applied := range d.Transitions {
+		result.Transitions = append(result.Transitions, order.AppliedTransition{
+			Trigger: order.Trigger(applied.Trigger), OccurredAt: applied.OccurredAt.UTC(),
 		})
 	}
 	if d.Cancellation != nil {
@@ -198,7 +201,13 @@ func (d detailsDocument) details(id order.ID, customerID order.CustomerID, marke
 // the active transaction. A row of a newer Order version is kept: catch-up of
 // an older snapshot never overwrites a later change.
 func (s *Store) projectDetails(ctx context.Context, snap order.Snapshot, version uint64, total vo.Money) error {
-	document, err := json.Marshal(newDetailsDocument(snap, total))
+	var courierAssignedAt *time.Time
+	err := s.queryRow(ctx, psql.Select("CASE WHEN courier_id IS NULL THEN NULL ELSE courier_assigned_at END").
+		From("orders").Where(sq.Eq{"id": snap.ID}), &courierAssignedAt)
+	if err != nil {
+		return fmt.Errorf("read courier assignment of %s: %w", snap.ID, err)
+	}
+	document, err := json.Marshal(newDetailsDocument(snap, total, courierAssignedAt))
 	if err != nil {
 		return fmt.Errorf("encode details of %s: %w", snap.ID, err)
 	}

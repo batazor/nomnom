@@ -46,10 +46,10 @@ func setupWithPolicy(t *testing.T, policy orderdetails.CancellationPolicy, seede
 
 // AC-126: an authorized subject receives the full view.
 func TestGetOrderReturnsView(t *testing.T) {
-	pickedUp := order.RecordedFact{Fact: order.FactPickedUp, OccurredAt: ordertest.PlacedAt.Add(time.Hour)}
+	pickedUp := order.AppliedTransition{Trigger: order.TriggerPickUp, OccurredAt: ordertest.PlacedAt.Add(time.Hour)}
 	handler, _ := setup(t, ordertest.New(t, "order-1",
 		ordertest.WithState(order.StateCancelled),
-		ordertest.WithFacts(pickedUp),
+		ordertest.WithTransitions(pickedUp),
 	))
 
 	view, err := handler.Handle(context.Background(), getorder.Query{Subject: customer, OrderID: "order-1"})
@@ -65,7 +65,7 @@ func TestGetOrderReturnsView(t *testing.T) {
 		Total:        ordertest.Money(t, "20"),
 		State:        order.StateCancelled,
 		PlacedAt:     ordertest.PlacedAt,
-		Facts:        []orderdetails.Fact{{Fact: order.FactPickedUp, OccurredAt: pickedUp.OccurredAt}},
+		Transitions:  []order.AppliedTransition{{Trigger: order.TriggerPickUp, OccurredAt: pickedUp.OccurredAt}},
 		Cancellation: &orderdetails.Cancellation{
 			Outcome:     order.OutcomeCancellation,
 			ReasonCode:  "customer_requested",

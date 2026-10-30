@@ -12,7 +12,7 @@ import (
 )
 
 // TriggerOf relies on every transition that moves a State having its own target;
-// a change that keeps the State is named record_fact.
+// a change that keeps the State is named update_details.
 func TestTriggerOfNamesEveryAllowedTransition(t *testing.T) {
 	for _, from := range allStates {
 		for _, trigger := range allTriggers {
@@ -24,7 +24,7 @@ func TestTriggerOfNamesEveryAllowedTransition(t *testing.T) {
 			named, ok := TriggerOf(from, to)
 			require.True(t, ok, "from=%s to=%s", from, to)
 			if to == from {
-				trigger = TriggerRecordFact
+				trigger = TriggerUpdateDetails
 			}
 			assert.Equal(t, trigger, named, "from=%s to=%s", from, to)
 		}
@@ -181,18 +181,18 @@ func TestOnlyCancelledAndCompletedAreFinal(t *testing.T) {
 	}
 }
 
-// AC-563: confirmation keeps the moment of Order Acceptance as a fact.
+// AC-563: confirmation keeps the moment of Order Acceptance in the history.
 func TestConfirmRecordsRestaurantAcceptance(t *testing.T) {
 	order := newTestOrder(t)
 	acceptedAt := testNow.Add(3 * time.Minute)
 
 	_, err := order.Confirm(acceptedAt)
 	require.NoError(t, err)
-	assert.Equal(t, []RecordedFact{{Fact: FactRestaurantAccepted, OccurredAt: acceptedAt}}, order.Facts())
+	assert.Equal(t, []AppliedTransition{{Trigger: TriggerConfirm, OccurredAt: acceptedAt}}, order.Transitions())
 
 	_, err = order.Confirm(acceptedAt.Add(time.Minute))
 	require.ErrorAs(t, err, new(AlreadyInState))
-	assert.Len(t, order.Facts(), 1, "a repeated confirmation records nothing")
+	assert.Len(t, order.Transitions(), 1, "a repeated confirmation records nothing")
 
 	_, err = newTestOrder(t).Confirm(time.Time{})
 	assert.Equal(t, GuardFailed{Reason: "occurred_at_required"}, err)

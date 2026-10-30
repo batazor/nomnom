@@ -4,14 +4,14 @@ import (
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/confirmorder"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliverycompletion"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordorderready"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpickup"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -66,7 +66,7 @@ func (c Consumer) Handlers(workflow ConsumerWorkflow) ordermessaging.Handlers {
 		RecordPreparationDelay:   telemetry.Instrument(uc, observability.RecordPreparationDelay, recordpreparationdelay.NewHandler(store, store, store, workflow).Handle),
 		RelayPreparationIssue:    telemetry.Instrument(uc, observability.RelayPreparationIssue, relaypreparationissue.NewHandler(workflow).Handle),
 		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow, store, store).Handle),
-		RecordCourierRelease:     telemetry.Instrument(uc, observability.RecordCourierRelease, recordcourierrelease.NewHandler(store, store, store, store).Handle),
+		RecordCourierRelease:     telemetry.Instrument(uc, observability.RecordCourierRelease, recordcourierrelease.NewHandler(store, store, store, store, store).Handle),
 		RecordPickup:             telemetry.Instrument(uc, observability.RecordPickup, recordpickup.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryCompletion: telemetry.Instrument(uc, observability.RecordDeliveryCompletion, recorddeliverycompletion.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryFailure:    telemetry.Instrument(uc, observability.RecordDeliveryFailure, recorddeliveryfailure.NewHandler(store, store, store, workflow).Handle),

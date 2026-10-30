@@ -136,27 +136,27 @@ packages:
             pkgname: customersimulator_test
       Notifier:
         configs:
-          - dir: slices/order/applications/fulfillmentfacts/confirmorder
+          - dir: slices/order/applications/fulfillmentsteps/confirmorder
             pkgname: confirmorder_test
           - dir: slices/order/applications/fulfillment
             pkgname: fulfillment_test
-          - dir: slices/order/applications/fulfillmentfacts/recordcourierassignment
+          - dir: slices/order/applications/fulfillmentsteps/recordcourierassignment
             pkgname: recordcourierassignment_test
           - dir: slices/order/applications/recordcourierrelease
             pkgname: recordcourierrelease_test
-          - dir: slices/order/applications/fulfillmentfacts/recorddeliverycompletion
+          - dir: slices/order/applications/fulfillmentsteps/recorddeliverycompletion
             pkgname: recorddeliverycompletion_test
-          - dir: slices/order/applications/fulfillmentfacts/recorddeliveryfailure
+          - dir: slices/order/applications/fulfillmentsteps/recorddeliveryfailure
             pkgname: recorddeliveryfailure_test
-          - dir: slices/order/applications/fulfillmentfacts/recordorderready
+          - dir: slices/order/applications/fulfillmentsteps/recordorderready
             pkgname: recordorderready_test
-          - dir: slices/order/applications/fulfillmentfacts/recordpickup
+          - dir: slices/order/applications/fulfillmentsteps/recordpickup
             pkgname: recordpickup_test
           - dir: slices/order/applications/recordpreparationdelay
             pkgname: recordpreparationdelay_test
-          - dir: slices/order/applications/fulfillmentfacts/recordpreparationstarted
+          - dir: slices/order/applications/fulfillmentsteps/recordpreparationstarted
             pkgname: recordpreparationstarted_test
-          - dir: slices/order/applications/fulfillmentfacts/rejectorder
+          - dir: slices/order/applications/fulfillmentsteps/rejectorder
             pkgname: rejectorder_test
           - dir: slices/order/applications/relaypreparationissue
             pkgname: relaypreparationissue_test
@@ -199,7 +199,7 @@ packages:
           pkgname: messaging_test
       Changes:
         configs:
-          - dir: slices/order/applications/fulfillmentfacts/recordcourierassignment
+          - dir: slices/order/applications/fulfillmentsteps/recordcourierassignment
             pkgname: recordcourierassignment_test
           - dir: slices/order/applications/recordcourierrelease
             pkgname: recordcourierrelease_test

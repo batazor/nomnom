@@ -61,7 +61,7 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 			return fmt.Errorf("insert order item %s/%s: %w", snap.ID, item.MenuItemID(), err)
 		}
 	}
-	if err := s.saveFacts(ctx, snap); err != nil {
+	if err := s.saveTransitions(ctx, snap); err != nil {
 		return err
 	}
 	return s.projectDetails(ctx, snap, snap.Version+1, created.Total())
@@ -96,20 +96,20 @@ func (s *Store) Save(ctx context.Context, changed *order.Order) error {
 		}
 		return fmt.Errorf("%w: order %s version %d", usecase.ErrConcurrencyConflict, snap.ID, snap.Version)
 	}
-	if err := s.saveFacts(ctx, snap); err != nil {
+	if err := s.saveTransitions(ctx, snap); err != nil {
 		return err
 	}
 	return s.projectDetails(ctx, snap, snap.Version+1, changed.Total())
 }
 
-func (s *Store) saveFacts(ctx context.Context, snap order.Snapshot) error {
-	for _, fact := range snap.Facts {
-		_, err := s.exec(ctx, psql.Insert("order_facts").
-			Columns("order_id", "fact", "occurred_at", "reason").
-			Values(snap.ID, fact.Fact, fact.OccurredAt, fact.Reason).
-			Suffix("ON CONFLICT (order_id, fact) DO NOTHING"))
+func (s *Store) saveTransitions(ctx context.Context, snap order.Snapshot) error {
+	for _, applied := range snap.Transitions {
+		_, err := s.exec(ctx, psql.Insert("order_transitions").
+			Columns("order_id", "trigger", "occurred_at").
+			Values(snap.ID, applied.Trigger, applied.OccurredAt).
+			Suffix("ON CONFLICT (order_id, trigger) DO NOTHING"))
 		if err != nil {
-			return fmt.Errorf("insert fact %s of %s: %w", fact.Fact, snap.ID, err)
+			return fmt.Errorf("insert transition %s of %s: %w", applied.Trigger, snap.ID, err)
 		}
 	}
 	return nil
@@ -177,7 +177,7 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	if snap.Items, err = s.items(ctx, id); err != nil {
 		return order.Snapshot{}, err
 	}
-	if snap.Facts, err = s.facts(ctx, id); err != nil {
+	if snap.Transitions, err = s.transitions(ctx, id); err != nil {
 		return order.Snapshot{}, err
 	}
 	return snap, nil
@@ -215,23 +215,23 @@ func (s *Store) items(ctx context.Context, id order.ID) ([]order.Item, error) {
 	return items, rows.Err()
 }
 
-func (s *Store) facts(ctx context.Context, id order.ID) ([]order.RecordedFact, error) {
-	rows, err := s.query(ctx, psql.Select("fact", "occurred_at", "reason").
-		From("order_facts").Where(sq.Eq{"order_id": id}).OrderBy("occurred_at", "fact"))
+func (s *Store) transitions(ctx context.Context, id order.ID) ([]order.AppliedTransition, error) {
+	rows, err := s.query(ctx, psql.Select("trigger", "occurred_at").
+		From("order_transitions").Where(sq.Eq{"order_id": id}).OrderBy("occurred_at", "trigger"))
 	if err != nil {
-		return nil, fmt.Errorf("load facts of %s: %w", id, err)
+		return nil, fmt.Errorf("load transitions of %s: %w", id, err)
 	}
 	defer rows.Close()
-	var facts []order.RecordedFact
+	var transitions []order.AppliedTransition
 	for rows.Next() {
-		var fact order.RecordedFact
-		if err := rows.Scan(&fact.Fact, &fact.OccurredAt, &fact.Reason); err != nil {
-			return nil, fmt.Errorf("scan fact of %s: %w", id, err)
+		var applied order.AppliedTransition
+		if err := rows.Scan(&applied.Trigger, &applied.OccurredAt); err != nil {
+			return nil, fmt.Errorf("scan transition of %s: %w", id, err)
 		}
-		fact.OccurredAt = fact.OccurredAt.UTC()
-		facts = append(facts, fact)
+		applied.OccurredAt = applied.OccurredAt.UTC()
+		transitions = append(transitions, applied)
 	}
-	return facts, rows.Err()
+	return transitions, rows.Err()
 }
 
 // deliveryWindow reads the nullable window columns: both NULL is an ASAP

@@ -26,7 +26,7 @@ func flowPanel(title, what, expr string) Panel {
 }
 
 func orderFlowPanels(sc Scope) []Panel {
-	return []Panel{flowPanel("Order flow", "Потоки заказов", fsmFlow(sc, "order", "record_fact"))}
+	return []Panel{flowPanel("Order flow", "Потоки заказов", fsmFlow(sc, "order", "update_details"))}
 }
 
 func kitchenFlowPanels(sc Scope) []Panel {

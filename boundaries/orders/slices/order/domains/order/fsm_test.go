@@ -35,7 +35,7 @@ func TestTransitionMatrix(t *testing.T) {
 		}
 		for _, trigger := range []Trigger{
 			TriggerConfirm, TriggerStartPreparation, TriggerMarkReady, TriggerPickUp,
-			TriggerReject, TriggerFailDelivery, TriggerDeliver, TriggerRecordFact,
+			TriggerReject, TriggerFailDelivery, TriggerDeliver, TriggerUpdateDetails,
 		} {
 			outcomes[trigger] = stays(state)
 		}
@@ -53,7 +53,7 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerReject:           {to: StateRejected},
 			TriggerFailDelivery:     {to: StateDeliveryFailed},
 			TriggerDeliver:          {to: StateDelivered},
-			TriggerRecordFact:       stays(StatePlaced),
+			TriggerUpdateDetails:    stays(StatePlaced),
 		},
 		StatePaid: {
 			TriggerAuthorizePayment: stays(StatePaid),
@@ -66,7 +66,7 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerReject:           {to: StateRejected},
 			TriggerFailDelivery:     {to: StateDeliveryFailed},
 			TriggerDeliver:          {to: StateDelivered},
-			TriggerRecordFact:       stays(StatePaid),
+			TriggerUpdateDetails:    stays(StatePaid),
 		},
 		StateConfirmed: {
 			TriggerAuthorizePayment: invalid,
@@ -79,7 +79,7 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerReject:           {to: StateRejected},
 			TriggerFailDelivery:     {to: StateDeliveryFailed},
 			TriggerDeliver:          {to: StateDelivered},
-			TriggerRecordFact:       stays(StateConfirmed),
+			TriggerUpdateDetails:    stays(StateConfirmed),
 		},
 		StatePreparing: {
 			TriggerAuthorizePayment: invalid,
@@ -92,7 +92,7 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerReject:           {to: StateRejected},
 			TriggerFailDelivery:     {to: StateDeliveryFailed},
 			TriggerDeliver:          {to: StateDelivered},
-			TriggerRecordFact:       stays(StatePreparing),
+			TriggerUpdateDetails:    stays(StatePreparing),
 		},
 		StateReady: {
 			TriggerAuthorizePayment: invalid,
@@ -105,7 +105,7 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerReject:           {to: StateRejected},
 			TriggerFailDelivery:     {to: StateDeliveryFailed},
 			TriggerDeliver:          {to: StateDelivered},
-			TriggerRecordFact:       stays(StateReady),
+			TriggerUpdateDetails:    stays(StateReady),
 		},
 		StatePickedUp: {
 			TriggerAuthorizePayment: invalid,
@@ -118,7 +118,7 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerReject:           {to: StateRejected},
 			TriggerFailDelivery:     {to: StateDeliveryFailed},
 			TriggerDeliver:          {to: StateDelivered},
-			TriggerRecordFact:       stays(StatePickedUp),
+			TriggerUpdateDetails:    stays(StatePickedUp),
 		},
 		StateRejected:       settling(StateRejected, invalid),
 		StateDeliveryFailed: settling(StateDeliveryFailed, invalid),

@@ -11,38 +11,38 @@ import (
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
 )
 
-// factBySignal maps Integration Event Signals to facts of the model.
-var factBySignal = map[string]fulfillment.FactKind{
-	SignalOrderPlaced:               fulfillment.FactOrderPlaced,
-	SignalPaymentAuthorized:         fulfillment.FactPaymentAuthorized,
-	SignalPaymentFailed:             fulfillment.FactPaymentFailed,
-	SignalRestaurantOrderAccepted:   fulfillment.FactRestaurantOrderAccepted,
-	SignalRestaurantOrderRejected:   fulfillment.FactRestaurantOrderRejected,
-	SignalPreparationStarted:        fulfillment.FactPreparationStarted,
-	SignalPreparationDelayed:        fulfillment.FactPreparationDelayed,
-	SignalPreparationFailed:         fulfillment.FactPreparationFailed,
-	SignalRestaurantOrderReady:      fulfillment.FactRestaurantOrderReady,
-	SignalCourierAssignedToDelivery: fulfillment.FactCourierAssignedToDelivery,
-	SignalDeliveryPickedUp:          fulfillment.FactDeliveryPickedUp,
-	SignalDeliveryCompleted:         fulfillment.FactDeliveryCompleted,
-	SignalDeliveryFailed:            fulfillment.FactDeliveryFailed,
+// kindBySignal maps Integration Event Signals to kinds of the model.
+var kindBySignal = map[string]fulfillment.SignalKind{
+	SignalOrderPlaced:               fulfillment.SignalOrderPlaced,
+	SignalPaymentAuthorized:         fulfillment.SignalPaymentAuthorized,
+	SignalPaymentFailed:             fulfillment.SignalPaymentFailed,
+	SignalRestaurantOrderAccepted:   fulfillment.SignalRestaurantOrderAccepted,
+	SignalRestaurantOrderRejected:   fulfillment.SignalRestaurantOrderRejected,
+	SignalPreparationStarted:        fulfillment.SignalPreparationStarted,
+	SignalPreparationDelayed:        fulfillment.SignalPreparationDelayed,
+	SignalPreparationFailed:         fulfillment.SignalPreparationFailed,
+	SignalRestaurantOrderReady:      fulfillment.SignalRestaurantOrderReady,
+	SignalCourierAssignedToDelivery: fulfillment.SignalCourierAssignedToDelivery,
+	SignalDeliveryPickedUp:          fulfillment.SignalDeliveryPickedUp,
+	SignalDeliveryCompleted:         fulfillment.SignalDeliveryCompleted,
+	SignalDeliveryFailed:            fulfillment.SignalDeliveryFailed,
 }
 
 func (r *run) listen(ctx workflow.Context) error {
 	// Sorted names fix the order of coroutine creation for deterministic replay.
-	for _, name := range slices.Sorted(maps.Keys(factBySignal)) {
+	for _, name := range slices.Sorted(maps.Keys(kindBySignal)) {
 		channel := workflow.GetSignalChannel(ctx, name)
-		kind := factBySignal[name]
+		kind := kindBySignal[name]
 		workflow.Go(ctx, func(ctx workflow.Context) {
 			for {
-				var fact Fact
-				channel.Receive(ctx, &fact)
-				effect := r.process.Apply(fulfillment.Fact{
+				var payload SignalPayload
+				channel.Receive(ctx, &payload)
+				effect := r.process.Apply(fulfillment.Signal{
 					Kind:            kind,
-					EventID:         fact.EventID,
-					ExpectedReadyAt: fact.ExpectedReadyAt,
+					EventID:         payload.EventID,
+					ExpectedReadyAt: payload.ExpectedReadyAt,
 				}, workflow.Now(ctx))
-				r.receive(ctx, name, fact.EventID, effect)
+				r.receive(ctx, name, payload.EventID, effect)
 			}
 		})
 	}

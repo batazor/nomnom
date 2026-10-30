@@ -1,5 +1,5 @@
 // Package relaypreparationissue hands PreparationFailed of restaurants to the
-// fulfillment workflow. It is an orchestration input, not a Fulfillment Fact
+// fulfillment workflow. It is an orchestration input, not a step of the Order FSM
 // of the Order, so the use case changes no local state and uses no Inbox: the
 // workflow deduplicates it by event_id. PreparationDelayed changes the
 // expected ready time of the Order and belongs to recordpreparationdelay.

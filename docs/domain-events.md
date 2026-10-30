@@ -294,7 +294,7 @@ Domain Events, которые application-слой передаёт в Outbox po
 | `payments` | `PaymentRefunded` | Refund Payment | |
 | `payments` | `PaymentOperationDeclined` | Все финансовые операции, Apply Provider Callback, Apply Provider Operation Result | Отказ Provider без смены State `Payment` (кроме Authorization) |
 
-- Факты `orders` входящих сценариев (Fulfillment Fact) не создают Domain Event: они отражаются в `Order` и передаются workflow. Факт `payment_authorized` записывает сам workflow (Record Payment Authorization) — тоже без Domain Event и Integration Event.
+- Входящие сценарии `orders` не создают Domain Event: шаг применяется к FSM `Order` и передаётся workflow сигналом. Переход `authorize_payment` применяет сам workflow (Record Payment Authorization) — тоже без Domain Event и Integration Event.
 - Create Payment событие не публикует.
 
 ## Открытые вопросы

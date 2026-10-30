@@ -73,7 +73,7 @@ func (s *scheduledProcess) until(moment time.Time) *scheduledProcess {
 
 func (s *scheduledProcess) accepted() *scheduledProcess {
 	s.run()
-	s.fact(fulfillment.FactRestaurantOrderAccepted)
+	s.signal(fulfillment.SignalRestaurantOrderAccepted)
 	return s.run()
 }
 
@@ -104,10 +104,10 @@ func TestScheduledProcessRunsTheScheduledRoute(t *testing.T) {
 	s.until(windowPlan().CourierRequestAt)
 	assert.Equal(t, fulfillment.StepCreateDelivery, s.steps[len(s.steps)-1].Kind)
 
-	s.fact(fulfillment.FactCourierAssignedToDelivery)
-	s.fact(fulfillment.FactRestaurantOrderReady)
-	s.fact(fulfillment.FactDeliveryPickedUp)
-	s.fact(fulfillment.FactDeliveryCompleted)
+	s.signal(fulfillment.SignalCourierAssignedToDelivery)
+	s.signal(fulfillment.SignalRestaurantOrderReady)
+	s.signal(fulfillment.SignalDeliveryPickedUp)
+	s.signal(fulfillment.SignalDeliveryCompleted)
 	s.run()
 	assert.Equal(t, []string{
 		"authorize_payment", "record_payment_authorization", "confirm_slot", "plan_schedule", "request_restaurant_order",
@@ -137,7 +137,7 @@ func TestScheduledProcessArmsPreparationAtQueue(t *testing.T) {
 	// still the Preparation armed at QueueRestaurantOrder.
 	assert.Equal(t, plan.StartAt.Add(fulfillment.DefaultPolicy().PreparationTimeout), s.p.NextDeadline(),
 		"the courier assignment has no deadline")
-	s.fact(fulfillment.FactCourierAssignedToDelivery)
+	s.signal(fulfillment.SignalCourierAssignedToDelivery)
 	assert.Equal(t, plan.StartAt.Add(fulfillment.DefaultPolicy().PreparationTimeout), s.p.NextDeadline(),
 		"Preparation counts from QueueRestaurantOrder")
 }
@@ -236,11 +236,11 @@ func TestScheduledProcessPlansCompensation(t *testing.T) {
 				s.now = windowPlan().CourierRequestAt
 				s.accepted()
 				s.until(s.now)
-				s.fact(fulfillment.FactCourierAssignedToDelivery)
-				s.fact(fulfillment.FactRestaurantOrderReady)
-				s.fact(fulfillment.FactDeliveryPickedUp)
+				s.signal(fulfillment.SignalCourierAssignedToDelivery)
+				s.signal(fulfillment.SignalRestaurantOrderReady)
+				s.signal(fulfillment.SignalDeliveryPickedUp)
 				s.run()
-				s.fact(fulfillment.FactDeliveryFailed)
+				s.signal(fulfillment.SignalDeliveryFailed)
 			},
 			outcome: fulfillment.OutcomeFailure, reason: fulfillment.ReasonDeliveryFailed,
 			saga: []fulfillment.StepKind{fulfillment.StepRefundPayment, fulfillment.StepFailOrCancelOrder},
@@ -266,7 +266,7 @@ func TestScheduledProcessRefusesDelayBeforeQueue(t *testing.T) {
 	s.now = windowPlan().ReplanAt.Add(-time.Hour)
 	s.accepted()
 
-	effect := s.p.Apply(fulfillment.Fact{Kind: fulfillment.FactPreparationDelayed, EventID: "delay-1", ExpectedReadyAt: windowPlan().PlannedReadyAt}, s.now)
+	effect := s.p.Apply(fulfillment.Signal{Kind: fulfillment.SignalPreparationDelayed, EventID: "delay-1", ExpectedReadyAt: windowPlan().PlannedReadyAt}, s.now)
 
 	assert.Equal(t, fulfillment.Refused, effect.Verdict)
 	assert.Equal(t, "not queued", effect.Reason)

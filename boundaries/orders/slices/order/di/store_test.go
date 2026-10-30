@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentfacts/recordcourierassignment"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
