@@ -26,6 +26,7 @@ for (const frame of context.panel.data.series) {
   names.add(target);
 }
 return {
+  animation: false,
   backgroundColor: "transparent",
   tooltip: { trigger: "item" },
   series: [{
