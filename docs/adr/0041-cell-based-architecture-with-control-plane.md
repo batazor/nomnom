@@ -50,36 +50,46 @@ Router ячеек — публичный gateway; всё, что обслужи�
 
 ### Control plane
 
-Глобальный, один на систему: boundary `boundaries/controlplane` (Go, PostgreSQL), gRPC API
-`nomnom.controlplane.v1.ControlPlaneService`.
+Глобальный, один на систему: boundary `boundaries/controlplane` (Go) — контроллер Kubernetes без
+своей базы данных и бизнес-API. Реализация — change `replace-controlplane-api-with-crds`; пока он
+не выполнен, код работает на прежних gRPC API и PostgreSQL.
 
-- Владеет реестром Cell (`cell_id` и Kubernetes Service её Cosmo Router — точки входа Cell),
-  реестром Market, их Market Placement и Previous Placement.
-- Записи — `RegisterCell`, `CreateMarket` — только для `platform#manage_markets` (оператор,
-  [ADR 18](0018-spicedb-for-authorization.md)). Повтор с теми же значениями идемпотентен, с другими —
-  `ALREADY_EXISTS`. Market создаётся сразу размещённым в существующей Cell.
-- `ArchiveMarket` (тоже `platform#manage_markets`) архивирует Market: он уходит из `ListMarkets`, из
-  списка Market и с публичного gateway (его `HTTPRoute` удаляется), строка реестра остаётся, и
-  `market_id` больше не создаётся (`ALREADY_EXISTS`, `MARKET_ARCHIVED`). Повтор — успех с
-  `archived = false`. Удаления Market нет: id не переиспользуется. Так прогоны kind e2e, которым
-  нужен свой Market на прогон, убирают его в cleanup.
-- Чтение `ListMarkets` — для оператора; архивные Market не возвращаются.
+- Реестр — cluster-scoped ресурсы `Cell` и `Market` группы `controlplane.nomnom.dev/v1alpha1`,
+  единственный источник правды. `Cell` хранит Kubernetes Service своего Cosmo Router — точку входа
+  Cell. `Market` хранит название, валюту, часовой пояс и `cellRef` — Market Placement. Идентификатор
+  — `metadata.name`. Реестр занимает мало места и меняется редко, поэтому отдельная БД ему не нужна,
+  а объявления хранятся в git.
+- Запись — `kubectl apply` от субъекта с `ClusterRole` `nomnom-topology-editor`; доступ задаёт
+  Kubernetes RBAC, а не SpiceDB. Повтор с теми же значениями ничего не меняет. Формат значений и
+  неизменяемость полей проверяет API server (CRD schema и CEL): другие значения для известного id
+  отклоняются.
+- Существование Cell и допустимость часового пояса проверяет контроллер: CEL не видит другие объекты
+  и базу IANA. Результат — условие `Ready` в `status` (`CellNotFound`, `InvalidTimeZone`,
+  `RoutesUnavailable`). Такой Market не публикуется, но не мешает остальным; появилась Cell — он
+  опубликуется сам. Цена — часть ошибок оператор видит не при записи, а в `status`.
+- Архивирование — `spec.archived: true`, обратно не возвращается. Market уходит из списка Market и с
+  публичного gateway (его `HTTPRoute` удаляется), а ресурс остаётся. Удаление `Market` и `Cell`
+  отклоняет `ValidatingAdmissionPolicy`: `market_id` не используется повторно. Так прогоны kind e2e,
+  которым нужен свой Market на прогон, убирают его в cleanup.
 - **Маршруты публичного gateway пишет control plane.** Из реестра он строит ресурсы Gateway API в
   неймспейсе публичного gateway и применяет их server-side apply: `HTTPRoute` на каждое размещение
   Market (см. «Маршрутизация») и список Market для выбора в UI — `ConfigMap`, который Envoy отдаёт
   сам по `GET /markets` через `HTTPRouteFilter` `directResponse`. Права ServiceAccount control plane
-  — только запись `HTTPRoute`, `HTTPRouteFilter` и `ConfigMap` в этом неймспейсе и удаление своих
-  `HTTPRoute` Market, которых нет в реестре (архивных). Запись оператора
-  сначала фиксируется в БД, затем применяются ресурсы; ошибка применения возвращается оператору как
-  `UNAVAILABLE`, и повтор той же команды (идемпотентный) применяет их снова. При старте control
-  plane один раз приводит ресурсы к реестру.
+  — чтение `Cell` и `Market`, запись только их `status`, запись `HTTPRoute`, `HTTPRouteFilter` и
+  `ConfigMap` в этом неймспейсе и удаление своих `HTTPRoute` Market, которых нет в реестре
+  (архивных). `spec` реестра он не меняет.
+- Reconcile идёт одним ключом на всю топологию: событие `Cell`, `Market` или управляемого ресурса
+  запускает применение полного набора по одному. Поэтому удалённый вручную маршрут возвращается без
+  перезапуска, а после сбоя применения контроллер сам повторяет его с backoff. Ready — после первого
+  успешного применения.
 - Глобальными, вне ячеек, остаются также identity (Dex, [ADR 35](0035-browser-login-via-dex-and-pkce.md))
   и SpiceDB.
 
 **Control plane не находится в горячем пути.** Ни ячейки, ни gateway не обращаются к control plane
 на запрос: маршруты и список Market — ресурсы Kubernetes, Envoy держит последнюю полученную
 конфигурацию и при недоступном control plane или контроллере Envoy Gateway продолжает маршрутизировать
-по ней (static stability). Недоступный control plane останавливает только изменение топологии.
+по ней (static stability). Недоступный control plane только откладывает изменение топологии: API
+server принимает запись, а маршруты применятся после его возвращения.
 
 ### Data plane и `market_id`
 
@@ -146,12 +156,11 @@ Placement, и Previous Placement (`@{cell_id}`) одинаково для зап
 
 - В kind один control plane, одна Cell `cell-1` и один Market `berlin`. Публичный API Cosmo Router
   `cell-1` публикуется через публичный gateway по маршруту `/m/berlin`. Internal gateway `cell-1` —
-  текущий internal gateway; он же обслуживает маршруты control plane (`controlplane-v1-reads`,
-  `controlplane-v1-commands`). `cell-1` и `berlin` регистрирует Job seed chart `ops/kind/demo`
-  (`files/seed.json`) от имени оператора через `RegisterCell` и `CreateMarket`, идемпотентно; не
-  chart bootstrap ([ADR 34](0034-declarative-kind-bootstrap.md)): он ставится до charts
-  приложений, и control plane к нему ещё не запущен. Bootstrap даёт control plane PostgreSQL,
-  preshared key SpiceDB и JWKS.
+  текущий internal gateway. `cell-1` и `berlin` — ресурсы chart `ops/kind/demo`, а не chart
+  bootstrap ([ADR 34](0034-declarative-kind-bootstrap.md)): CRD ставит chart `controlplane`, а
+  bootstrap идёт раньше него. CRD и политика запрета удаления лежат в `templates/` chart с
+  `helm.sh/resource-policy: keep`: Helm обновляет их при upgrade и не удаляет при uninstall. Та же
+  аннотация стоит на `Cell` и `Market` chart `demo`.
 - Второй Cell в kind нет и не будет: стенд её не вытянет, а стратегия расширения ниже не
   реализуется и не проверяется на стенде.
 - Подписки Cosmo Streams ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)) Cosmo Router
@@ -163,8 +172,8 @@ Placement, и Previous Placement (`@{cell_id}`) одинаково для зап
 
 **Рост — новый Market в новой Cell.** Те же Helm charts
 ([ADR 12](0012-helm-charts-per-deployable-application.md)) с values ячейки в своих неймспейсах;
-затем `RegisterCell` и `CreateMarket` в ней. Cell в другом кластере — backend маршрута через
-`Backend` Envoy Gateway вместо Service.
+затем ресурсы `Cell` и `Market` в кластере control plane. Cell в другом кластере — backend маршрута
+через `Backend` Envoy Gateway вместо Service.
 
 **Market не делится между Cell.** Город, который перерос типовой размер Cell, получает свою Cell
 большего размера; масштабирование внутри неё — дело каждого сервиса (реплики, партиции Kafka,
@@ -216,6 +225,8 @@ Outbox, Inbox и Kafka не нужно — их ничто не переноси
   identity control plane ([ADR 27](0027-service-identity-via-projected-serviceaccount-tokens.md)).
 - Оркестрация переноса в control plane — workflow Temporal в своём Temporal; ячейки не знают друг
   о друге, данные и переводы идут через worker control plane.
+- Изменяемый `cellRef` и Previous Placement в `spec` ресурса `Market`: сейчас `cellRef` неизменяем,
+  а история размещений должна храниться в git вместе с объявлением. Состояние переноса — в `status`.
 
 ## Consequences
 
@@ -227,7 +238,10 @@ Market; рост — добавление Cell, а не раздувание о�
 Цена: эксплуатация умножается на число Cell; каждый клиентский путь несёт Market; история заказов и
 пул курьеров видны в пределах Market. Глобальные компоненты в пути запроса — публичный gateway, Dex
 и SpiceDB; control plane в нём не участвует, но получает право писать маршруты публичного gateway.
-Перенос Market не реализован: до него Market навсегда остаётся в Cell, где создан. После переноса
+Реестр живёт в etcd кластера control plane: его потеря теряет архивные Market, не объявленные в git,
+а запрет повторного `market_id` держится на политике кластера, которую администратор может снять.
+Управление реестром доступно через `kubectl`, продуктовому интерфейсу понадобится свой API поверх
+ресурсов. Перенос Market не реализован: до него Market навсегда остаётся в Cell, где создан. После переноса
 Previous Placement не освобождается никогда: данные Market лежат в нескольких Cell, UI собирает
 историю заказов из всех размещений, и каждый следующий перенос добавляет ещё одно. Глобальная
 аналитика по всем Market — отдельное решение.
