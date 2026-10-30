@@ -4,7 +4,7 @@ Adapters are named ``Database<Port>`` after the application or domain port they 
 over ``Database``, the pool of the payments database; names do not carry the storage
 technology.
 
-``migrations/*.sql`` owns ``payment_events``, ``payment_snapshots`` and the projections
+``migrations/*.sql`` owns ``payment_events``, ``payment_snapshots``, ``subject_keys`` and the projections
 ``payments`` and ``payment_operations``; the migrations touch only these tables.
 """
 
@@ -20,6 +20,7 @@ from .repositories import (
     DatabasePaymentRepository,
     DatabaseProviderMessageInbox,
 )
+from .subject_keys import DatabaseSubjectKeys
 
 __all__ = [
     "DatabasePaymentOperationHistory",
@@ -27,6 +28,7 @@ __all__ = [
     "DatabasePaymentRepository",
     "DatabasePaymentStatusReader",
     "DatabaseProviderMessageInbox",
+    "DatabaseSubjectKeys",
     "ProjectionMismatch",
     "ProjectionRebuilder",
     "RebuildResult",

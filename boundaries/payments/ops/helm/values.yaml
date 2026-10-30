@@ -216,6 +216,14 @@ spicedb:
     name: ""
     key: "preshared-key"
 
+# Мастер-ключ ключей субъектов (crypto-shredding, локальный ADR 2): не короче 32 символов.
+# Secret создаётся развёртыванием, не этим chart; name обязателен. Потеря значения делает
+# нечитаемыми все ключи субъектов, поэтому его нельзя перегенерировать при живой базе.
+eventStore:
+  subjectKekSecret:
+    name: ""
+    key: "kek"
+
 # PostgreSQL (ADR 8, локальный ADR 1). Connection URI (postgresql://…) берётся из внешнего Secret
 # (env DATABASE__URI) и не хранится в values; без uriSecret.name переменная не задаётся и процесс
 # не стартует.

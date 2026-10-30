@@ -36,11 +36,12 @@ from slices.payment.domains.payment import (
     PaymentRefunded,
     PaymentState,
     RequesterKind,
+    SealedSubject,
 )
 
 # Поднимается при любом изменении формы снапшота или смысла evolve: снапшот другой версии
 # не используется, состояние собирается из всего потока.
-SNAPSHOT_SCHEMA_VERSION = 2
+SNAPSHOT_SCHEMA_VERSION = 3
 
 type Payload = dict[str, Any]
 
@@ -86,16 +87,30 @@ def _decode_money(value: Mapping[str, str]) -> Money:
     return Money.parse(value["amount"], value["currency"])
 
 
+def _encode_subject(subject: str | SealedSubject) -> str | Payload:
+    if isinstance(subject, str):
+        return subject
+    return {"key_id": subject.key_id, "nonce": subject.nonce, "ciphertext": subject.ciphertext}
+
+
+def _decode_subject(value: str | Mapping[str, str]) -> str | SealedSubject:
+    if isinstance(value, str):
+        return value
+    return SealedSubject(value["key_id"], value["nonce"], value["ciphertext"])
+
+
 def _encode_requester(requester: OperationRequester) -> Payload:
     return {
         "kind": requester.kind.value,
-        "id": requester.id,
+        "id": _encode_subject(requester.id),
         "delegate": requester.delegate,
     }
 
 
-def _decode_requester(value: Mapping[str, str | None]) -> OperationRequester:
-    return OperationRequester(RequesterKind(value["kind"]), str(value["id"]), value["delegate"])
+def _decode_requester(value: Mapping[str, Any]) -> OperationRequester:
+    return OperationRequester(
+        RequesterKind(value["kind"]), _decode_subject(value["id"]), value["delegate"]
+    )
 
 
 _TEXT = _Field(str, str)
@@ -131,7 +146,7 @@ _SCHEMAS: dict[str, _EventSchema] = {
     "PaymentCreated": _EventSchema(PaymentCreated, 1, _PAYMENT_FACT),
     "PaymentOperationRequested": _EventSchema(
         PaymentOperationRequested,
-        2,
+        3,
         {
             "operation_id": _OPERATION_ID,
             "payment_id": _PAYMENT_ID,
@@ -188,6 +203,8 @@ _TYPE_OF = {schema.event_class: name for name, schema in _SCHEMAS.items()}
 UPCASTERS: dict[tuple[str, int], Callable[[Payload], Payload]] = {
     # До версии 2 автор не записывался: он неизвестен, и подставлять значение нельзя.
     ("PaymentOperationRequested", 1): lambda payload: {**payload, "requested_by": None},
+    # Версия 3 разрешает запечатанный идентификатор; форма версии 2 остаётся допустимой.
+    ("PaymentOperationRequested", 2): lambda payload: payload,
 }
 
 

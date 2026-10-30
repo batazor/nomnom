@@ -21,7 +21,15 @@ from .events import (
     PaymentRefunded,
 )
 from .fsm import PaymentState, ensure_allowed
-from .ids import OperationId, OperationKind, OperationRequester, OrderId, PaymentId
+from .ids import (
+    OperationId,
+    OperationKind,
+    OperationRequester,
+    OrderId,
+    PaymentId,
+    RequesterKind,
+    SealedSubject,
+)
 from .model import PaymentModel
 from .operation import (
     OperationAlreadyPendingError,
@@ -103,6 +111,9 @@ def _create(state: PaymentModel | None, command: CreatePayment) -> list[PaymentD
 
 
 def _request(payment: PaymentModel, command: RequestOperation) -> list[PaymentDomainEvent]:
+    requester = command.requested_by
+    if requester.kind is RequesterKind.USER and not isinstance(requester.id, SealedSubject):
+        raise ValueError("user identifier must be sealed")
     ensure_allowed(payment.state, rules_of(command.kind).trigger)
     if payment.has_pending_operation:
         raise OperationAlreadyPendingError(payment.id)

@@ -17,6 +17,7 @@ from slices.payment.domains.payment import (
     PaymentDomainEvent,
     PaymentId,
     PaymentPermission,
+    SealedSubject,
     TransitionResult,
 )
 
@@ -34,6 +35,7 @@ __all__ = [
     "ProviderOperationRequest",
     "ProviderOperationStatus",
     "ProviderUnavailableError",
+    "SubjectSealer",
 ]
 
 
@@ -142,6 +144,14 @@ class PaymentTransitionObserver(Protocol):
 
     def rejected(self, error: InvalidTransitionError) -> None:
         """Note a trigger the transition table does not allow in the current state."""
+        ...
+
+
+class SubjectSealer(Protocol):
+    """Encrypts a user identifier under the key of that user (crypto-shredding, local ADR 2)."""
+
+    def seal(self, subject_id: str) -> SealedSubject:
+        """Return the sealed identifier; the key is created in the active Unit of Work."""
         ...
 
 

@@ -40,6 +40,10 @@ _Avoid_: Transaction, attempt
 Тот, кто запросил Payment Operation: пользователь или сервис, для пользователя также сервис-делегат. Неизвестен у операций, записанных до появления поля.
 _Avoid_: Actor, initiator
 
+**Sealed Subject**:
+Идентификатор пользователя, зашифрованный ключом этого пользователя; удаление ключа делает его нечитаемым ([ADR 2](docs/adr/0002-event-sourcing-for-payment.md#crypto-shredding)).
+_Avoid_: Masked ID, pseudonym
+
 **Payment Event Stream**:
 Неизменяемая последовательность событий одного Payment, источник истины его состояния ([ADR 2](docs/adr/0002-event-sourcing-for-payment.md)).
 _Avoid_: Audit log, journal

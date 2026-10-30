@@ -338,6 +338,23 @@ class StartupMigrationTest(unittest.TestCase):
             table = conn.execute("SELECT to_regclass('payment_events')").fetchone()
         self.assertEqual(table, (None,))
 
+    def test_plaintext_user_in_the_stream_stops_the_subject_keys_migration(self) -> None:
+        uri = self._empty_database()
+        settings = database.Config(DATABASE__URI=uri)
+        messaging, payments = MIGRATIONS
+        before = _PaymentsBeforeSubjectKeys(payments.storage_id, payments.package)
+        migrate(settings, [messaging, before])
+        with psycopg.connect(uri) as conn:
+            conn.execute(
+                "INSERT INTO payment_events (payment_id, version, event_type, schema_version, "
+                "payload, traceparent, recorded_at) VALUES ('p', 2, "
+                "'PaymentOperationRequested', 2, "
+                """'{"requested_by": {"kind": "user", "id": "operator-1"}}', '', now())"""
+            )
+
+        with self.assertRaisesRegex(psycopg.errors.RaiseException, "plaintext user"):
+            migrate(settings, MIGRATIONS)
+
     def test_migration_gives_up_on_a_locked_table(self) -> None:
         uri = self._empty_database()
         settings = database.Config(DATABASE__URI=uri)
@@ -388,7 +405,16 @@ class _PaymentsBeforeEvents(MigrationSet):
     @override
     def migrations(self) -> MigrationList:
         applied = super().migrations()
-        return MigrationList([m for m in applied if not m.id.startswith("00003")])
+        return MigrationList([m for m in applied if m.id[:5] in {"00001", "00002"}])
+
+
+class _PaymentsBeforeSubjectKeys(MigrationSet):
+    """The payments set as deployed before crypto-shredding (local ADR 2)."""
+
+    @override
+    def migrations(self) -> MigrationList:
+        applied = super().migrations()
+        return MigrationList([m for m in applied if not m.id.startswith("00004")])
 
 
 class _PaymentsBeforeMarkets(MigrationSet):
@@ -458,6 +484,7 @@ class EntrypointResourceOrderTest(unittest.TestCase):
         env = {
             "DATABASE__URI": "postgresql://payments@127.0.0.1:1/x",
             "EVENT_STORE__SNAPSHOT_EVERY": "5",
+            "EVENT_STORE__SUBJECT_KEK": "k" * 32,
         }
         with (
             patch.dict(os.environ, env, clear=True),

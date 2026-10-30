@@ -149,6 +149,23 @@ extraEnv:
 
 Secret-ресурсы chart не создаёт.
 
+## Забвение пользователя
+
+Идентификатор пользователя в `requested_by` хранится зашифрованным ключом этого пользователя ([локальный ADR 2](../docs/adr/0002-event-sourcing-for-payment.md#crypto-shredding)). Удаление ключа делает записи нечитаемыми, события при этом не меняются:
+
+```bash
+kubectl -n nomnom-payments exec deploy/payments -- python -m entrypoints.payments_admin.main subjects forget <user-id>
+```
+
+```bash
+kubectl -n nomnom-payments exec deploy/payments -- python -m entrypoints.payments_admin.main payments history <payment-id>
+```
+
+- `forget` необратим и идемпотентен. Идентификатор передаётся аргументом, поэтому остаётся в истории shell и может попасть в audit log Kubernetes.
+- `history` показывает автора операции со статусом `known`, `forgotten` или `unknown` (операция старше поля).
+- Команда затрагивает только журнал `payments`. Срок хранения бэкапов базы определяет реальное время забвения: в них остаётся ключ, защищённый KEK.
+- `eventStore.subjectKekSecret.name` обязателен. В Secret ключ `kek`, не короче 32 символов. Потеря значения делает старые записи нечитаемыми, а платежи продолжают работать.
+
 ## Security
 
 По умолчанию контейнер запускается с `runAsNonRoot: true`, `allowPrivilegeEscalation: false`,

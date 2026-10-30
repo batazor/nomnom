@@ -48,6 +48,7 @@ from ..ports import (
     PaymentTransitionObserver,
     ProviderOperationRequest,
     ProviderOperationStatus,
+    SubjectSealer,
 )
 from ..provider_results import (
     AppliedProviderResult,
@@ -94,6 +95,7 @@ class PaymentOperationExecutor:
         operation_ids: PaymentOperationIdSource,
         applier: ProviderResultApplier,
         transitions: PaymentTransitionObserver,
+        subjects: SubjectSealer,
     ) -> None:
         self._uow = uow
         self._payments = payments
@@ -103,6 +105,7 @@ class PaymentOperationExecutor:
         self._operation_ids = operation_ids
         self._applier = applier
         self._transitions = transitions
+        self._subjects = subjects
 
     def execute(
         self, subject: Subject, payment_id: str, idempotency_key: str, kind: OperationKind
@@ -130,7 +133,7 @@ class PaymentOperationExecutor:
         rules = rules_of(kind)
         require_permission(self._permissions, subject, rules.permission, PaymentResource(target))
 
-        reservation = self._reserve(target, key, kind, _requester(subject))
+        reservation = self._reserve(target, key, kind, subject)
         operation = reservation.operation
         if operation.is_completed:
             return PaymentOperationResult.of(operation, reservation.payment_state, replayed=True)
@@ -153,12 +156,19 @@ class PaymentOperationExecutor:
             applied.operation, applied.payment_state, replayed=not applied.applied
         )
 
+    def _requester(self, subject: Subject) -> OperationRequester:
+        kind = RequesterKind(subject.kind.value)
+        identifier = (
+            subject.id if kind is RequesterKind.SERVICE else self._subjects.seal(subject.id)
+        )
+        return OperationRequester(kind, identifier, subject.delegate)
+
     def _reserve(
         self,
         payment_id: PaymentId,
         key: str,
         kind: OperationKind,
-        requested_by: OperationRequester,
+        subject: Subject,
     ) -> _Reservation:
         operation_id = self._operation_ids.new_operation_id()
         requested_at = self._clock.now()
@@ -179,7 +189,7 @@ class PaymentOperationExecutor:
                 raise IdempotencyKeyConflictError(key)
             try:
                 operation = payment.request_operation(
-                    operation_id, kind, key, requested_at, requested_by
+                    operation_id, kind, key, requested_at, self._requester(subject)
                 )
             except InvalidTransitionError as error:
                 self._transitions.rejected(error)
@@ -201,7 +211,3 @@ class PaymentOperationExecutor:
         # sees it. Requests of this Payment conflict on its stream and the Unit of Work
         # retries them.
         return self._uow.run(reserve)
-
-
-def _requester(subject: Subject) -> OperationRequester:
-    return OperationRequester(RequesterKind(subject.kind.value), subject.id, subject.delegate)

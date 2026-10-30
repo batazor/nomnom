@@ -15,7 +15,15 @@ from typing import Any, override
 import psycopg
 import pytest
 from opentelemetry import trace
-from payment_fakes import MARKET, NOW, ORCHESTRATOR, REQUESTER, FakePaymentProvider, FakePermissions
+from payment_fakes import (
+    MARKET,
+    NOW,
+    ORCHESTRATOR,
+    REQUESTER,
+    SUBJECT_KEK,
+    FakePaymentProvider,
+    FakePermissions,
+)
 
 from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
@@ -55,6 +63,7 @@ from slices.payment.infrastructure.repository import (
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
     DatabaseProviderMessageInbox,
+    DatabaseSubjectKeys,
 )
 
 AUTHORIZED_TYPE = "nomnom.payments.v1.PaymentAuthorized"
@@ -361,6 +370,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
             operation_ids=_Ids(),
             applier=ProviderResultApplier(self.payments, self.outbox, _Clock(), FsmMetrics()),
             transitions=FsmMetrics(),
+            subjects=DatabaseSubjectKeys(self.database, SUBJECT_KEK),
         )
         handler = AuthorizePaymentHandler(executor)
         command = AuthorizePaymentInput(

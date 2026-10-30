@@ -37,6 +37,7 @@ from slices.payment.domains.payment import (
     PaymentOperationDeclined,
     PaymentState,
     RequesterKind,
+    SealedSubject,
 )
 
 KEY = "order-1:authorize"
@@ -98,10 +99,11 @@ class AuthorizePaymentTest(unittest.TestCase):
             AuthorizePaymentInput(subject=user, payment_id=self.payment_id, idempotency_key=KEY)
         )
 
-        self.assertEqual(
-            self.kit.operation(result.operation_id).requested_by,
-            OperationRequester(RequesterKind.USER, "operator-1", "bff"),
-        )
+        requester = self.kit.operation(result.operation_id).requested_by
+        assert requester is not None
+        assert isinstance(requester.id, SealedSubject)
+        self.assertEqual((requester.kind, requester.delegate), (RequesterKind.USER, "bff"))
+        self.assertEqual(self.kit.subjects.reveal(requester.id), "operator-1")
 
     def test_ac_405_declined_authorization_fails_payment(self) -> None:
         self.kit.provider.respond(

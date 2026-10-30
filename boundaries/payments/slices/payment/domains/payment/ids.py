@@ -24,11 +24,24 @@ class RequesterKind(StrEnum):
 
 
 @dataclass(frozen=True)
+class SealedSubject:
+    """Identifier of a user encrypted under the key of that user; opaque to the domain."""
+
+    key_id: str
+    nonce: str
+    ciphertext: str
+
+
+@dataclass(frozen=True)
 class OperationRequester:
-    """Who requested a Payment Operation; ``delegate`` is the service acting for a user."""
+    """Who requested a Payment Operation; ``delegate`` is the service acting for a user.
+
+    A new user identifier is always sealed, a service identifier stays plain: a service is
+    not a person. A plain user identifier exists only in streams older than sealing.
+    """
 
     kind: RequesterKind
-    id: str
+    id: str | SealedSubject
     delegate: str | None = None
 
 

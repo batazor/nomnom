@@ -82,6 +82,7 @@ class FsmMetricsTest(unittest.TestCase):
                 self.kit.payments, self.kit.outbox, self.kit.clock, self.fsm
             ),
             transitions=self.fsm,
+            subjects=self.kit.subjects,
         )
 
     def test_applied_transitions_count_after_commit(self) -> None:

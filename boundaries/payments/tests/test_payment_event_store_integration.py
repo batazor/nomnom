@@ -264,7 +264,7 @@ class PaymentEventStoreTest(unittest.TestCase):
         payment.complete_operation(OperationId("op-c"), OperationOutcome.success(), NOW)
         # Одним commit: Requested, Succeeded, Captured — версии 5, 6, 7.
         self.assertEqual(self.payments.save(payment), 7)
-        self.assertEqual(self.snapshot_row(), (7, 2))
+        self.assertEqual(self.snapshot_row(), (7, 3))
         self.assertEqual(self.rows("SELECT count(*) FROM payment_snapshots"), [(1,)])
 
     def test_ac_1036_rollback_keeps_neither_events_nor_snapshot(self) -> None:
@@ -334,7 +334,7 @@ class PaymentEventStoreTest(unittest.TestCase):
 
     def test_ac_1038_load_applies_only_the_tail(self) -> None:
         full = self.snapshotted()
-        self.assertEqual(self.snapshot_row(), (5, 2))
+        self.assertEqual(self.snapshot_row(), (5, 3))
         self.reader.get_metrics_data()
 
         with mock.patch.object(repositories, "read_events", wraps=repositories.read_events) as read:
@@ -373,7 +373,7 @@ class PaymentEventStoreTest(unittest.TestCase):
             payment.request_operation(operation, OperationKind.CAPTURE, key, NOW, REQUESTER)
             payment.complete_operation(operation, OperationOutcome.declined("no"), NOW)
             self.payments.save(payment)
-        self.assertEqual(self.snapshot_row(), (10, 2))
+        self.assertEqual(self.snapshot_row(), (10, 3))
         self.assertEqual(self.stored().version, 10)
 
     def test_ac_1041_unreadable_snapshot_of_the_current_schema_is_an_error(self) -> None:
@@ -420,7 +420,7 @@ class PaymentEventStoreTest(unittest.TestCase):
         )
         self.assertEqual(self.payments.save(payment), 5)
 
-        self.assertEqual(self.snapshot_row("payment-g"), (5, 2))
+        self.assertEqual(self.snapshot_row("payment-g"), (5, 3))
         stored = self.stored("payment-g")
         self.assertEqual([op.requested_by for op in stored.operations], [None, REQUESTER])
         self.assertEqual(
@@ -432,7 +432,7 @@ class PaymentEventStoreTest(unittest.TestCase):
                     "payment-g",
                 )
             ],
-            [1, 2],
+            [1, 3],
         )
 
     def test_gap_in_the_stream_is_an_error(self) -> None:

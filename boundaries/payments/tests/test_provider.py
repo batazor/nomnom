@@ -76,7 +76,11 @@ class FakeProviderTest(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"PROVIDER__KIND": "stripe", "EVENT_STORE__SNAPSHOT_EVERY": "5"},
+                {
+                    "PROVIDER__KIND": "stripe",
+                    "EVENT_STORE__SNAPSHOT_EVERY": "5",
+                    "EVENT_STORE__SUBJECT_KEK": "k" * 32,
+                },
                 clear=True,
             ),
             self.assertRaises(ValidationError),

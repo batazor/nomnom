@@ -118,7 +118,7 @@ class ProjectionRebuilderTest(unittest.TestCase):
 
         self.assertEqual(result.snapshots, 1)
         rows = self.table("payment_snapshots")
-        self.assertEqual([(row[0], row[1], row[2]) for row in rows], [(payment_id, 5, 2)])
+        self.assertEqual([(row[0], row[1], row[2]) for row in rows], [(payment_id, 5, 3)])
         self.assertEqual(self.rebuilder.check(), [])
         stored = self.payments.get(payment_id)
         assert stored is not None
@@ -270,7 +270,11 @@ class ProjectionRebuilderTest(unittest.TestCase):
 
     def run_admin(self, *args: str) -> tuple[int, dict[str, Any]]:
         stdout = io.StringIO()
-        env = {"DATABASE__URI": self.uri, "EVENT_STORE__SNAPSHOT_EVERY": str(SNAPSHOT_EVERY)}
+        env = {
+            "DATABASE__URI": self.uri,
+            "EVENT_STORE__SNAPSHOT_EVERY": str(SNAPSHOT_EVERY),
+            "EVENT_STORE__SUBJECT_KEK": "k" * 32,
+        }
         with (
             mock.patch.dict(os.environ, env, clear=True),
             mock.patch.object(admin.telemetry, "configure_process_logging"),

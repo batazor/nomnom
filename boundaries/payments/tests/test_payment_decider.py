@@ -31,6 +31,7 @@ from slices.payment.domains.payment import (
     PaymentState,
     RequesterKind,
     RequestOperation,
+    SealedSubject,
     crosses_snapshot_boundary,
     decide,
     evolve,
@@ -44,7 +45,9 @@ AMOUNT = Money.parse("25.00", "EUR")
 OPERATION = OperationId("op-1")
 FACT = (PAYMENT, ORDER, MARKET, AMOUNT)
 CREATED = PaymentCreated(*FACT)
-REQUESTER = OperationRequester(RequesterKind.USER, "operator-1", "bff")
+REQUESTER = OperationRequester(
+    RequesterKind.USER, SealedSubject("key-1", "nonce", "ciphertext"), "bff"
+)
 
 
 def requested(kind: OperationKind) -> PaymentOperationRequested:
@@ -121,6 +124,14 @@ class DecideTest(unittest.TestCase):
             decide(fold([CREATED]), CreatePayment(*FACT))
         with self.assertRaises(ValueError):
             decide(None, CreatePayment(PAYMENT, ORDER, MARKET, Money.parse("0", "EUR")))
+
+    def test_plain_user_identifier_is_rejected(self) -> None:
+        plain = OperationRequester(RequesterKind.USER, "operator-1")
+        with self.assertRaisesRegex(ValueError, "sealed"):
+            decide(
+                fold([CREATED]),
+                RequestOperation(OPERATION, OperationKind.AUTHORIZE, "key-1", NOW, plain),
+            )
 
     def test_commands_of_a_missing_payment_are_rejected(self) -> None:
         with self.assertRaises(ValueError):

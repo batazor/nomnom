@@ -9,7 +9,11 @@ from .database import (
     DEFAULT_DATABASE_MAX_CONNS,
 )
 from .duration import parse_duration
-from .event_store import EVENT_STORE_SNAPSHOT_EVERY_ENV, EventStoreSettings
+from .event_store import (
+    EVENT_STORE_SNAPSHOT_EVERY_ENV,
+    EVENT_STORE_SUBJECT_KEK_ENV,
+    EventStoreSettings,
+)
 from .identity import (
     IDENTITY_AUDIENCE_ENV,
     IDENTITY_ISSUER_ENV,
@@ -70,6 +74,7 @@ __all__ = [
     "DEFAULT_TELEMETRY_FLUSH_TIMEOUT",
     "DRAIN_TIMEOUT_ENV",
     "EVENT_STORE_SNAPSHOT_EVERY_ENV",
+    "EVENT_STORE_SUBJECT_KEK_ENV",
     "IDENTITY_AUDIENCE_ENV",
     "IDENTITY_ISSUER_ENV",
     "IDENTITY_JWKS_FILE_ENV",

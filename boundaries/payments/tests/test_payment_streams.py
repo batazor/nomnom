@@ -165,7 +165,7 @@ class VersioningTest(unittest.TestCase):
                 OperationRequester(RequesterKind.SERVICE, "worker"),
             )
         )
-        self.assertEqual(encoded.schema_version, 2)
+        self.assertEqual(encoded.schema_version, 3)
         self.assertEqual(
             encoded.payload["requested_by"], {"kind": "service", "id": "worker", "delegate": None}
         )

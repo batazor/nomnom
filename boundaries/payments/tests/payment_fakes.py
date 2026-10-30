@@ -67,6 +67,7 @@ from slices.payment.infrastructure.repository import (
     DatabasePaymentRepository,
     DatabasePaymentStatusReader,
     DatabaseProviderMessageInbox,
+    DatabaseSubjectKeys,
 )
 from slices.payment.infrastructure.repository.event_codec import decode_event, encode_event
 from slices.payment.infrastructure.repository.event_store import append_events, read_events
@@ -83,7 +84,11 @@ MARKET = MarketId("berlin")
 # Снапшот почти на каждый commit: все сценарии use cases проходят и через него.
 SNAPSHOT_EVERY = 2
 # EVENT_STORE__SNAPSHOT_EVERY обязателен: без него load_settings падает.
-REQUIRED_EVENT_STORE_ENV = {"EVENT_STORE__SNAPSHOT_EVERY": "5"}
+SUBJECT_KEK = "test-subject-kek-with-at-least-32-characters"
+REQUIRED_EVENT_STORE_ENV = {
+    "EVENT_STORE__SNAPSHOT_EVERY": "5",
+    "EVENT_STORE__SUBJECT_KEK": SUBJECT_KEK,
+}
 # Only facts with a contract reach the Outbox of the real mapper.
 _UNPUBLISHED = (PaymentCreated, PaymentOperationRequested, PaymentOperationSucceeded)
 
@@ -243,11 +248,12 @@ class PaymentsTestKit:
         self.database = database
         with database.connection() as conn:
             conn.execute(
-                "TRUNCATE payment_events, payment_snapshots, payments, payment_operations, "
-                "payments_outbox, inbox"
+                "TRUNCATE subject_keys, payment_events, payment_snapshots, payments, "
+                "payment_operations, payments_outbox, inbox"
             )
         self.uow = CountingUnitOfWork(DatabaseUnitOfWork(database))
         self.payments = StalePaymentRepository(database, SNAPSHOT_EVERY)
+        self.subjects = DatabaseSubjectKeys(database, SUBJECT_KEK)
         self.history = DatabasePaymentOperationHistory(database)
         self.statuses = DatabasePaymentStatusReader(database)
         self.outbox = FailingOutbox(DatabasePaymentOutbox(database, PickledEventsMapper()))
@@ -268,6 +274,7 @@ class PaymentsTestKit:
             operation_ids=self.ids,
             applier=self.applier(),
             transitions=self.transitions,
+            subjects=self.subjects,
         )
 
     def applier(self) -> ProviderResultApplier:

@@ -96,6 +96,7 @@ class DomainMetricsTest(unittest.TestCase):
                 self.kit.transitions,
             ),
             transitions=self.kit.transitions,
+            subjects=self.kit.subjects,
         )
 
     def test_commit_records_events(self) -> None:

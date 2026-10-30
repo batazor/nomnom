@@ -37,6 +37,7 @@ from .ids import (
     OrderId,
     PaymentId,
     RequesterKind,
+    SealedSubject,
 )
 from .model import PaymentModel
 from .operation import (
@@ -127,6 +128,7 @@ __all__ = [
     "PaymentTrigger",
     "RequestOperation",
     "RequesterKind",
+    "SealedSubject",
     "SpecificationResult",
     "TransitionResult",
     "UnknownOperationKindError",

@@ -53,6 +53,7 @@ from slices.payment.infrastructure.repository import (
     DatabasePaymentRepository,
     DatabasePaymentStatusReader,
     DatabaseProviderMessageInbox,
+    DatabaseSubjectKeys,
 )
 
 
@@ -140,6 +141,10 @@ class PaymentContainer(containers.DeclarativeContainer):
     payments = providers.Singleton(
         DatabasePaymentRepository, database, event_store_settings.provided.snapshot_every
     )
+    # Per-user keys of crypto-shredding: requested_by is sealed before the stream (local ADR 2).
+    subjects = providers.Singleton(
+        DatabaseSubjectKeys, database, event_store_settings.provided.subject_kek
+    )
     statuses = providers.Singleton(DatabasePaymentStatusReader, database)
     outbox = providers.Singleton(
         ObservedOutbox,
@@ -161,6 +166,7 @@ class PaymentContainer(containers.DeclarativeContainer):
         operation_ids=ids,
         applier=applier,
         transitions=fsm_metrics,
+        subjects=subjects,
     )
     # Every use case is decorated in the composition root: span "usecase <name>" and
     # nomnom.usecase.duration (docs/observability.md#use-cases).

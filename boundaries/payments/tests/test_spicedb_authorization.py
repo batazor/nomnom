@@ -42,6 +42,7 @@ VIEW = (PaymentPermission.VIEW, PaymentPermission.VIEW_OPERATIONS)
 REQUIRED_ENV = {
     "DATABASE__URI": "postgresql://payments@localhost/payments",
     "EVENT_STORE__SNAPSHOT_EVERY": "5",
+    "EVENT_STORE__SUBJECT_KEK": "test-subject-kek-with-at-least-32-characters",
 }
 
 
