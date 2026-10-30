@@ -19,7 +19,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <kafka.version>4.3.1</kafka.version>
     <protobuf.version>3.25.5</protobuf.version>
-    <jackson.version>2.21.2</jackson.version>
+    <jackson.version>2.21.7</jackson.version>
   </properties>
 
   <dependencies>
