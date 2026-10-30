@@ -145,34 +145,29 @@ func acknowledge[E any]() cqrs.GroupEventHandler {
 	return cqrs.NewGroupEventHandler(func(context.Context, *E) error { return nil })
 }
 
-// isDuplicate reports an Inbox duplicate of the reflecting use cases, whose
-// Result has the shape of fulfillment.Reflection.
+// isDuplicate reports an Inbox duplicate of the use cases with an Inbox.
 func isDuplicate(out any) bool {
-	type reflection = struct {
-		Outcome          fulfillment.Outcome
-		WorkflowNotified bool
-	}
 	switch r := out.(type) {
 	case confirmorder.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case rejectorder.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordpreparationstarted.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordorderready.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordpreparationdelay.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordcourierassignment.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordcourierrelease.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordpickup.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recorddeliverycompletion.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recorddeliveryfailure.Result:
-		return reflection(r).Outcome == fulfillment.OutcomeDuplicate
+		return r.Outcome == fulfillment.OutcomeDuplicate
 	case startfulfillment.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate
 	default:

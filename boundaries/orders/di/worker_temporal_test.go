@@ -74,11 +74,11 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(orderdi.NewFulfillmentModule(orderdi.FulfillmentDependencies{
+	worker := NewTemporalWorker(cfg, fulfillmentdi.NewActivities(NewFulfillmentOrders(orderdi.NewFulfillmentModule(orderdi.FulfillmentDependencies{
 		Store:     orderdi.NewProcessStore(store, nil),
 		Scheduled: cfg.ScheduledOrder,
 		Telemetry: observability.UseCases(),
-	}), testNeighbours()))
+	})), testNeighbours()))
 	require.NoError(t, worker.Start(ctx))
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()
@@ -97,7 +97,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 		_, err := deployment.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{BuildID: cfg.Temporal.BuildID})
 		return err == nil
 	}, 20*time.Second, 100*time.Millisecond, "version %s did not become current", cfg.Temporal.BuildID)
-	port := fulfillmenttemporal.NewClient(temporalClient, NewFulfillmentPolicy(cfg.Fulfillment))
+	port := newFulfillmentPort(temporalClient, cfg.Fulfillment)
 	workflowID := fulfillmenttemporal.WorkflowID(string(orderID))
 
 	waitActivity := func(name string) {

@@ -78,24 +78,40 @@ linters:
               desc: adapters не зависят от composition root
             - pkg: nomnom/orders/cmd
               desc: adapters не зависят от процессов
-        # Соседний слайс использует use cases order, а не его адаптеры (ADR 5).
-        order-infrastructure:
+        # Слайс order и слайс fulfillment друг друга не импортируют: порты каждого
+        # реализует composition root (ADR 5).
+        order-slice:
+          files:
+            - "**/slices/order/**"
+            - "!$test"
+            - "!**/ordertest/**"
+            - "!**/repositorytest/**"
+          deny:
+            - pkg: nomnom/orders/slices/fulfillment
+              desc: порт fulfillment реализует composition root
+            - pkg: nomnom/orders/slices/simulator
+              desc: order не знает о simulator
+        fulfillment-slice:
           files:
             - "**/slices/fulfillment/**"
+            - "!$test"
+          deny:
+            - pkg: nomnom/orders/slices/order
+              desc: потребность объявляет applications/orders, реализует composition root
+            - pkg: nomnom/orders/slices/simulator
+              desc: fulfillment не знает о simulator
+        # Simulator — клиент use cases order, а не его адаптеров и di (ADR 5).
+        simulator-slice:
+          files:
             - "**/slices/simulator/**"
             - "!$test"
           deny:
             - pkg: nomnom/orders/slices/order/infrastructure
               desc: адаптеры слайса order собирает его di
-        # Запросы к соседям строятся из view use case, а не из агрегата (ADR 5).
-        order-aggregate:
-          files:
-            - "**/slices/fulfillment/applications/**"
-            - "**/slices/fulfillment/infrastructure/neighbours/**"
-            - "!$test"
-          deny:
-            - pkg: nomnom/orders/slices/order/domains
-              desc: запрос к соседу строится из getfulfillmentorder.View
+            - pkg: nomnom/orders/slices/order/di
+              desc: use cases слайса order раздаёт composition root
+            - pkg: nomnom/orders/slices/fulfillment
+              desc: simulator не знает о fulfillment
         generated-code:
           files:
             - "**/orders/pkg/**"

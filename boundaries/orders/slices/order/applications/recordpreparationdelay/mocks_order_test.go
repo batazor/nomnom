@@ -2,7 +2,7 @@
 // github.com/vektra/mockery
 // template: testify
 
-package fulfillment_test
+package recordpreparationdelay_test
 
 import (
 	"context"

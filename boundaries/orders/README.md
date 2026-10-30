@@ -352,7 +352,7 @@ Kafka(event_id) → orders consumer → Transactional Inbox → application hand
 | `DeliveryPickedUp` / `DeliveryCompleted` / `DeliveryFailed` | `delivery` | Record Pickup / Delivery Completion / Delivery Failure |
 | `CancellationRequested` (Update) | клиент через `orders` | Request Order Cancellation |
 
-Положительное событие, которого текущий Workflow Stage не ждёт, логируется и игнорируется. Отрицательные факты (`RestaurantOrderRejected`, в том числе после Acceptance, `PreparationFailed`, `DeliveryFailed`, `PaymentFailed`) в незавершённом workflow ведут в Saga. Событие после завершения workflow обрабатывается по policy, которую документирует каждый use case; сейчас `Reflector` возвращает `ignored_late`.
+Положительное событие, которого текущий Workflow Stage не ждёт, логируется и игнорируется. Отрицательные факты (`RestaurantOrderRejected`, в том числе после Acceptance, `PreparationFailed`, `DeliveryFailed`, `PaymentFailed`) в незавершённом workflow ведут в Saga. Событие после завершения workflow обрабатывается по policy, которую документирует каждый use case; сейчас такие use cases возвращают `ignored_late`.
 
 ### Signal, Update, Query
 

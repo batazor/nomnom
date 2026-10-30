@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/domains/order"
 )
 
 // AC-635: the Activity table decides retryability for every usecase.ErrorKind.
@@ -27,9 +26,8 @@ func TestClassifyKeepsErrorTypes(t *testing.T) {
 		wantType string
 	}{
 		{usecase.InvalidInput("step", "x"), ErrTypeInvalidInput},
-		{order.ErrOrderNotFound, ErrTypeOrderNotFound},
-		{order.InvalidTransition{}, ErrTypeInvalidTransition},
-		{order.GuardFailed{Reason: "completed_at_required"}, ErrTypeInvalidTransition},
+		{usecase.WithKind(usecase.KindNotFound, errors.New("order not found")), ErrTypeOrderNotFound},
+		{usecase.WithKind(usecase.KindDomainRule, errors.New("invalid transition")), ErrTypeInvalidTransition},
 	}
 	for _, tt := range tests {
 		var applicationErr *temporal.ApplicationError

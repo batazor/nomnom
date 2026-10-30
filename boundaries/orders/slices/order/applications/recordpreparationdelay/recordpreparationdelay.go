@@ -6,6 +6,8 @@ package recordpreparationdelay
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"nomnom/orders/pkg/unitofwork"
@@ -32,7 +34,10 @@ type Result struct {
 }
 
 type Handler struct {
-	reflector fulfillment.Reflector
+	uow      unitofwork.UnitOfWork
+	inbox    unitofwork.Inbox
+	orders   order.Repository
+	workflow fulfillment.Notifier
 }
 
 func NewHandler(
@@ -41,24 +46,73 @@ func NewHandler(
 	orders order.Repository,
 	workflow fulfillment.Notifier,
 ) Handler {
-	return Handler{reflector: fulfillment.NewReflector(uow, inbox, orders, workflow)}
+	return Handler{uow: uow, inbox: inbox, orders: orders, workflow: workflow}
 }
 
-func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
-	if in.ExpectedReadyAt.IsZero() {
-		return Result{}, usecase.InvalidInput("expected_ready_at", "is required")
+func (in Input) validate() error {
+	switch {
+	case in.ExpectedReadyAt.IsZero():
+		return usecase.InvalidInput("expected_ready_at", "is required")
+	case in.EventID == "":
+		return usecase.InvalidInput("event_id", "is required")
+	case in.OrderID == "":
+		return usecase.InvalidInput("order_id", "is required")
+	case in.OccurredAt.IsZero():
+		return usecase.InvalidInput("occurred_at", "is required")
 	}
-	signal := fulfillment.InboundSignal{
-		Consumer:        Consumer,
+	return nil
+}
+
+// Handle runs unitofwork.AcceptOnce { load Order → replace the ready time → save } and hands
+// the signal to the workflow after commit, also for a duplicate: a crash between
+// commit and the notification is repaired by redelivery. An error of the
+// notification is returned, so the event is not acknowledged; a closed workflow
+// is a no-op.
+func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
+	if err := in.validate(); err != nil {
+		return Result{}, err
+	}
+	var outcome fulfillment.Outcome
+	accepted, err := unitofwork.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, func(ctx context.Context) error {
+		var err error
+		outcome, err = h.replace(ctx, in)
+		return err
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	if !accepted {
+		outcome = fulfillment.OutcomeDuplicate
+	}
+
+	err = h.workflow.Notify(ctx, fulfillment.Notification{
 		EventID:         in.EventID,
 		OrderID:         in.OrderID,
 		Kind:            fulfillment.KindPreparationDelayed,
 		OccurredAt:      in.OccurredAt,
 		ExpectedReadyAt: in.ExpectedReadyAt,
-	}
-	reflection, err := h.reflector.Reflect(ctx, signal, func(current *order.Order) error {
-		_, err := current.ExpectReadyAt(in.OccurredAt, in.ExpectedReadyAt)
-		return err
 	})
-	return Result(reflection), err
+	switch {
+	case err == nil:
+		return Result{Outcome: outcome, WorkflowNotified: true}, nil
+	case errors.Is(err, fulfillment.ErrWorkflowNotFound):
+		return Result{Outcome: outcome}, nil
+	default:
+		return Result{Outcome: outcome}, fmt.Errorf("notify order fulfillment workflow: %w", err)
+	}
+}
+
+// replace applies the signal to the Order inside the Inbox unit of work; only
+// an applied signal saves the Order.
+func (h Handler) replace(ctx context.Context, in Input) (fulfillment.Outcome, error) {
+	current, err := h.orders.Get(ctx, in.OrderID)
+	if err != nil {
+		return "", err
+	}
+	_, err = current.ExpectReadyAt(in.OccurredAt, in.ExpectedReadyAt)
+	outcome, err := fulfillment.ClassifySignal(current, err)
+	if err != nil || outcome != fulfillment.OutcomeApplied {
+		return outcome, err
+	}
+	return outcome, h.orders.Save(ctx, current)
 }

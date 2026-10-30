@@ -15,7 +15,6 @@ import (
 	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
-	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	orderdi "nomnom/orders/slices/order/di"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 )
@@ -106,7 +105,7 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 		return errors.Join(err, c.closeResources())
 	}
 
-	workflow := fulfillmenttemporal.NewClient(temporal, NewFulfillmentPolicy(c.cfg.Fulfillment))
+	workflow := newFulfillmentPort(temporal, c.cfg.Fulfillment)
 	streams := ordermessaging.Streams(c.handlers.Handlers(workflow))
 	c.router, err = messaging.NewConsumerRouter(messaging.ConsumerConfig{
 		ConsumerGroup: c.cfg.Kafka.ConsumerGroup,

@@ -7,10 +7,12 @@ package recordcourierassignment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
@@ -41,7 +43,10 @@ type Result struct {
 }
 
 type Handler struct {
-	reflector   fulfillment.Reflector
+	uow         unitofwork.UnitOfWork
+	inbox       unitofwork.Inbox
+	orders      order.Repository
+	workflow    fulfillment.Notifier
 	assignments order.CourierAssignments
 	changes     syncorderrelationships.Changes
 }
@@ -54,36 +59,92 @@ func NewHandler(
 	assignments order.CourierAssignments,
 	changes syncorderrelationships.Changes,
 ) Handler {
-	return Handler{
-		reflector:   fulfillment.NewReflector(uow, inbox, orders, workflow),
-		assignments: assignments,
-		changes:     changes,
+	return Handler{uow: uow, inbox: inbox, orders: orders, workflow: workflow, assignments: assignments, changes: changes}
+}
+
+func (in Input) validate() error {
+	switch {
+	case in.EventID == "":
+		return usecase.InvalidInput("event_id", "is required")
+	case in.OrderID == "":
+		return usecase.InvalidInput("order_id", "is required")
+	case in.OccurredAt.IsZero():
+		return usecase.InvalidInput("occurred_at", "is required")
+	}
+	return nil
+}
+
+// Handle runs unitofwork.AcceptOnce { load Order → store the assignment → save }
+// and hands the signal to the workflow after commit, also for a duplicate: a
+// crash between commit and the notification is repaired by redelivery. An error
+// of the notification is returned, so the event is not acknowledged; a closed
+// workflow is a no-op.
+func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
+	if err := in.validate(); err != nil {
+		return Result{}, err
+	}
+	var outcome fulfillment.Outcome
+	accepted, err := unitofwork.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, func(ctx context.Context) error {
+		var err error
+		outcome, err = h.record(ctx, in)
+		return err
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	if !accepted {
+		outcome = fulfillment.OutcomeDuplicate
+	}
+
+	err = h.workflow.Notify(ctx, fulfillment.Notification{
+		OrderID:    in.OrderID,
+		EventID:    in.EventID,
+		Kind:       fulfillment.KindCourierAssigned,
+		OccurredAt: in.OccurredAt,
+	})
+	switch {
+	case err == nil:
+		return Result{Outcome: outcome, WorkflowNotified: true}, nil
+	case errors.Is(err, fulfillment.ErrWorkflowNotFound):
+		return Result{Outcome: outcome}, nil
+	default:
+		return Result{Outcome: outcome}, fmt.Errorf("notify order fulfillment workflow: %w", err)
 	}
 }
 
-func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
-	signal := fulfillment.InboundSignal{
-		Consumer:   Consumer,
-		EventID:    in.EventID,
-		OrderID:    in.OrderID,
-		Kind:       fulfillment.KindCourierAssigned,
-		OccurredAt: in.OccurredAt,
+// record applies the signal inside the Inbox unit of work. The assignment moves
+// no State, so the FSM only admits it: a final Order makes the signal late. A
+// later event of the same Order is a reassignment and replaces the assignment,
+// its expected pickup time and, for another Delivery, order#delivery; the Order
+// is saved, so order_details and the Order Change Notification follow the
+// assignment. An out-of-order event, or an event without names that moves no
+// expected time, changes nothing and is already applied.
+func (h Handler) record(ctx context.Context, in Input) (fulfillment.Outcome, error) {
+	current, err := h.orders.Get(ctx, in.OrderID)
+	if err != nil {
+		return "", err
 	}
-	// The assignment moves no State. A later event of the same Order is a
-	// reassignment and replaces the assignment, its expected pickup time and,
-	// for another Delivery, order#delivery; the Order is saved, so order_details
-	// and the Order Change Notification follow the assignment.
-	reflection, err := h.reflector.ReflectDetails(ctx, signal, func(current *order.Order) error {
-		return current.AdmitCourierAssignment(in.OccurredAt)
-	}, func(ctx context.Context, current *order.Order) (bool, error) {
-		superseded, err := h.assign(ctx, in)
-		if err != nil || !superseded {
-			return false, err
-		}
-		expected, err := current.ExpectPickupAt(in.OccurredAt, in.ExpectedPickupAt)
-		return expected || in.DeliveryID != "" && in.CourierID != "", err
-	})
-	return Result(reflection), err
+	outcome, err := fulfillment.ClassifySignal(current, current.AdmitCourierAssignment(in.OccurredAt))
+	if err != nil || outcome != fulfillment.OutcomeApplied {
+		return outcome, err
+	}
+
+	superseded, err := h.assign(ctx, in)
+	if err != nil {
+		return "", err
+	}
+	if !superseded {
+		return fulfillment.OutcomeAlreadyApplied, nil
+	}
+	moved, err := current.ExpectPickupAt(in.OccurredAt, in.ExpectedPickupAt)
+	if err != nil {
+		return "", err
+	}
+	named := in.DeliveryID != "" && in.CourierID != ""
+	if !moved && !named {
+		return fulfillment.OutcomeAlreadyApplied, nil
+	}
+	return fulfillment.OutcomeApplied, h.orders.Save(ctx, current)
 }
 
 // assign runs in the Inbox unit of work. Whether the event supersedes the

@@ -7,51 +7,17 @@ import (
 
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
-	"nomnom/orders/slices/order/applications/closure/completeorder"
-	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
-	"nomnom/orders/slices/order/applications/errorkind"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
-	"nomnom/orders/slices/order/applications/getfulfillmentorder"
-	"nomnom/orders/slices/order/applications/planschedule"
-	"nomnom/orders/slices/order/domains/order"
+	"nomnom/orders/slices/fulfillment/applications/orders"
 )
 
-type CompleteOrder interface {
-	Handle(ctx context.Context, in completeorder.Input) (completeorder.Result, error)
-}
-
-type RecordPaymentAuthorization interface {
-	Handle(ctx context.Context, in recordpaymentauthorization.Input) (recordpaymentauthorization.Result, error)
-}
-
-type FailOrCancelOrder interface {
-	Handle(ctx context.Context, in failorcancelorder.Input) (failorcancelorder.Result, error)
-}
-
-// PlanSchedule is the Plan Schedule use case of the order slice (FR-677).
-type PlanSchedule interface {
-	Handle(ctx context.Context, in planschedule.Input) (order.SchedulePlan, error)
-}
-
-// GetFulfillmentOrder is the query of the order slice that gives the data of the
-// stored Order to build requests to neighbours from.
-type GetFulfillmentOrder interface {
-	Handle(ctx context.Context, q getfulfillmentorder.Query) (getfulfillmentorder.View, error)
-}
-
 // Activities are the only side effects of the workflow. They call the client
-// ports of applications/neighbours and the use cases of the order slice.
-// Errors of invalid input, a missing Order or a forbidden transition are not
-// retried.
+// ports of applications/neighbours and the port of applications/orders. Errors
+// of invalid input, a missing Order or a forbidden transition are not retried.
 type Activities struct {
-	Orders        GetFulfillmentOrder
-	Payments      neighbours.Payments
-	Restaurants   neighbours.Restaurants
-	Delivery      neighbours.Delivery
-	RecordPayment RecordPaymentAuthorization
-	Complete      CompleteOrder
-	Finalize      FailOrCancelOrder
-	Plan          PlanSchedule
+	Orders      orders.Orders
+	Payments    neighbours.Payments
+	Restaurants neighbours.Restaurants
+	Delivery    neighbours.Delivery
 }
 
 func (a *Activities) AuthorizePayment(ctx context.Context, in StepInput) (PaymentDecision, error) {
@@ -92,7 +58,7 @@ func (a *Activities) RefundPayment(ctx context.Context, in StepInput) error {
 // restaurant_order_id. A Scheduled Order carries its Delivery Window and the
 // planned_ready_at of the first plan from the input (FR-683).
 func (a *Activities) RequestRestaurantOrder(ctx context.Context, in StepInput) (RestaurantOrderRequested, error) {
-	request, err := request(ctx, a.Orders, in, func(current getfulfillmentorder.View, key string) neighbours.RestaurantOrderRequest {
+	request, err := request(ctx, a.Orders, in, func(current orders.Order, key string) neighbours.RestaurantOrderRequest {
 		r := neighbours.NewRestaurantOrderRequest(current, key)
 		if current.DeliveryWindow != nil {
 			r.Schedule = &neighbours.RestaurantOrderSchedule{
@@ -164,7 +130,7 @@ func (a *Activities) PlanSchedule(ctx context.Context, in StepInput) (Plan, erro
 	if in.OrderID == "" || in.IdempotencyKey == "" {
 		return Plan{}, classify(usecase.InvalidInput("step", "order_id and idempotency_key are required"))
 	}
-	plan, err := a.Plan.Handle(ctx, planschedule.Input{OrderID: order.ID(in.OrderID), PlannedReadyAt: in.PlannedReadyAt})
+	plan, err := a.Orders.PlanSchedule(ctx, in.OrderID, in.PlannedReadyAt)
 	if err != nil {
 		return Plan{}, classify(err)
 	}
@@ -200,56 +166,48 @@ func (a *Activities) CancelDelivery(ctx context.Context, in StepInput) error {
 	return classify(a.Delivery.Cancel(ctx, request))
 }
 
-// RecordPaymentAuthorization runs the recordpaymentauthorization use case
-// after the approved Authorization; a repeat after commit is a no-op. The
+// RecordPaymentAuthorization records the payment on the Order after the approved Authorization; a repeat after commit is a no-op. The
 // decision moment is the workflow time in the input and is required.
 func (a *Activities) RecordPaymentAuthorization(ctx context.Context, in StepInput) error {
 	if in.DecidedAt.IsZero() {
 		return classify(usecase.InvalidInput("step", "decided_at is required"))
 	}
-	_, err := a.RecordPayment.Handle(ctx, recordpaymentauthorization.Input{OrderID: order.ID(in.OrderID), AuthorizedAt: in.DecidedAt})
-	return classify(err)
+	return classify(a.Orders.RecordPaymentAuthorization(ctx, in.OrderID, in.DecidedAt))
 }
 
-// CompleteOrder runs the completeorder use case; a repeat after commit is a
+// CompleteOrder completes the Order; a repeat after commit is a
 // no-op. The completion moment is the workflow time in the input, identical on
 // every attempt, and is required.
 func (a *Activities) CompleteOrder(ctx context.Context, in StepInput) error {
 	if in.DecidedAt.IsZero() {
 		return classify(usecase.InvalidInput("step", "decided_at is required"))
 	}
-	_, err := a.Complete.Handle(ctx, completeorder.Input{OrderID: order.ID(in.OrderID), CompletedAt: in.DecidedAt})
-	return classify(err)
+	return classify(a.Orders.Complete(ctx, in.OrderID, in.DecidedAt))
 }
 
-// FailOrCancelOrder runs the failorcancelorder use case with the workflow decision.
+// FailOrCancelOrder records the workflow decision on the Order.
 func (a *Activities) FailOrCancelOrder(ctx context.Context, in FinalizeInput) error {
-	outcome := order.OutcomeFailure
-	if in.Outcome == OutcomeCancellation {
-		outcome = order.OutcomeCancellation
-	}
-	_, err := a.Finalize.Handle(ctx, failorcancelorder.Input{
-		OrderID:    order.ID(in.OrderID),
-		Outcome:    outcome,
+	return classify(a.Orders.FailOrCancel(ctx, orders.FinalDecision{
+		OrderID:    in.OrderID,
+		Outcome:    in.Outcome,
 		ReasonCode: in.ReasonCode,
 		DecidedAt:  in.DecidedAt,
-	})
-	return classify(err)
+	}))
 }
 
 // request loads the Order of a step and builds the request to a neighbour
-// from its view: Activities load → build the request → call → classify.
+// from it: Activities load → build the request → call → classify.
 // Data of the Order, such as its market_id (ADR 41), is read here on every
 // attempt and never added to Input, StepInput or workflow state: workflows
 // started before a field existed have no such input in their Event History,
 // while the stored Order always has it, so running and replayed workflows stay
 // deterministic and need no versioning.
-func request[R any](ctx context.Context, orders GetFulfillmentOrder, in StepInput, build func(getfulfillmentorder.View, string) R) (R, error) {
+func request[R any](ctx context.Context, port orders.Orders, in StepInput, build func(orders.Order, string) R) (R, error) {
 	var zero R
 	if in.OrderID == "" || in.IdempotencyKey == "" {
 		return zero, classify(usecase.InvalidInput("step", "order_id and idempotency_key are required"))
 	}
-	current, err := orders.Handle(ctx, getfulfillmentorder.Query{OrderID: order.ID(in.OrderID)})
+	current, err := port.Get(ctx, in.OrderID)
 	if err != nil {
 		return zero, classify(err)
 	}
@@ -294,7 +252,7 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	if r := retryabilityByKind[errorkind.Classify(err)]; r.nonRetryable {
+	if r := retryabilityByKind[usecase.KindOf(err)]; r.nonRetryable {
 		return temporal.NewNonRetryableApplicationError(err.Error(), r.errType, err)
 	}
 	return err

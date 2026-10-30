@@ -4,42 +4,40 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-
-	"nomnom/orders/slices/order/applications/fulfillment"
 )
 
-var signalByKind = map[fulfillment.Kind]string{
-	fulfillment.KindRestaurantAccepted: SignalRestaurantOrderAccepted,
-	fulfillment.KindRestaurantRejected: SignalRestaurantOrderRejected,
-	fulfillment.KindPreparationStarted: SignalPreparationStarted,
-	fulfillment.KindPreparationDelayed: SignalPreparationDelayed,
-	fulfillment.KindPreparationFailed:  SignalPreparationFailed,
-	fulfillment.KindReadyForPickup:     SignalRestaurantOrderReady,
-	fulfillment.KindCourierAssigned:    SignalCourierAssignedToDelivery,
-	fulfillment.KindPickedUp:           SignalDeliveryPickedUp,
-	fulfillment.KindDeliveryCompleted:  SignalDeliveryCompleted,
-	fulfillment.KindDeliveryFailed:     SignalDeliveryFailed,
+// ErrWorkflowNotFound is returned when the workflow of an Order does not exist
+// or is already closed.
+var ErrWorkflowNotFound = errors.New("order fulfillment workflow not found or closed")
+
+// ErrCancellationRefused is returned when the workflow refuses a Cancellation
+// Request in its current Workflow Stage.
+var ErrCancellationRefused = errors.New("order fulfillment workflow refused cancellation")
+
+// StartRequest carries OrderPlaced of the Order. RestaurantID is the fairness
+// key of the workflow; DeliveryWindow set starts the scheduled route.
+type StartRequest struct {
+	OrderID        string
+	RestaurantID   string
+	EventID        string
+	OccurredAt     time.Time
+	DeliveryWindow *DeliveryWindow
 }
 
-// Client implements the application port fulfillment on a Temporal client.
+// Client addresses the workflow of an Order on a Temporal client.
 type Client struct {
 	temporal client.Client
 	policy   Policy
 }
 
-var (
-	_ fulfillment.Starter               = (*Client)(nil)
-	_ fulfillment.Notifier              = (*Client)(nil)
-	_ fulfillment.CancellationRequester = (*Client)(nil)
-)
-
-// NewClient binds the port to a Temporal client; policy becomes the input of
-// every workflow started by this client.
+// NewClient binds to a Temporal client; policy becomes the input of every
+// workflow started by this client.
 func NewClient(temporal client.Client, policy Policy) *Client {
 	return &Client{temporal: temporal, policy: policy}
 }
@@ -47,11 +45,11 @@ func NewClient(temporal client.Client, policy Policy) *Client {
 // Start starts the workflow with OrderPlaced as its first Signal
 // (SignalWithStart): the running workflow is reused and deduplicates the
 // event_id, a closed one is not started again.
-func (c *Client) Start(ctx context.Context, request fulfillment.StartRequest) error {
+func (c *Client) Start(ctx context.Context, request StartRequest) error {
 	if request.RestaurantID == "" {
 		return errors.New("start order fulfillment workflow: restaurant_id is required")
 	}
-	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(string(request.OrderID)), SignalOrderPlaced,
+	_, err := c.temporal.SignalWithStartWorkflow(ctx, WorkflowID(request.OrderID), SignalOrderPlaced,
 		SignalPayload{EventID: request.EventID, OccurredAt: request.OccurredAt},
 		c.startOptions(request), WorkflowName, c.input(request))
 	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
@@ -60,31 +58,20 @@ func (c *Client) Start(ctx context.Context, request fulfillment.StartRequest) er
 	return nil
 }
 
-func (c *Client) Notify(ctx context.Context, notification fulfillment.Notification) error {
-	signal, ok := signalByKind[notification.Kind]
-	if !ok {
-		return fmt.Errorf("no signal for fulfillment kind %q", notification.Kind)
-	}
-	err := c.temporal.SignalWorkflow(ctx, WorkflowID(string(notification.OrderID)), "", signal, SignalPayload{
-		EventID:         notification.EventID,
-		OccurredAt:      notification.OccurredAt,
-		Reason:          notification.Reason,
-		ExpectedReadyAt: notification.ExpectedReadyAt,
-	})
+// Signal hands an Integration Event Signal to the workflow of an Order.
+func (c *Client) Signal(ctx context.Context, orderID, signal string, payload SignalPayload) error {
+	err := c.temporal.SignalWorkflow(ctx, WorkflowID(orderID), "", signal, payload)
 	return mapError(err, "signal order fulfillment workflow")
 }
 
-func (c *Client) RequestCancellation(ctx context.Context, request fulfillment.CancellationRequest) error {
+// RequestCancellation passes a Cancellation Request by Update, idempotently by
+// its RequestID.
+func (c *Client) RequestCancellation(ctx context.Context, orderID string, request CancellationRequest) error {
 	handle, err := c.temporal.UpdateWorkflow(ctx, client.UpdateWorkflowOptions{
-		WorkflowID: WorkflowID(string(request.OrderID)),
-		UpdateID:   request.RequestID,
-		UpdateName: UpdateCancellationRequested,
-		Args: []any{CancellationRequest{
-			RequestID:   request.RequestID,
-			RequestedBy: request.RequestedBy.String(),
-			RequestedAt: request.RequestedAt,
-			Reason:      request.Reason,
-		}},
+		WorkflowID:   WorkflowID(orderID),
+		UpdateID:     request.RequestID,
+		UpdateName:   UpdateCancellationRequested,
+		Args:         []any{request},
 		WaitForStage: client.WorkflowUpdateStageCompleted,
 	})
 	if err == nil {
@@ -96,24 +83,20 @@ func (c *Client) RequestCancellation(ctx context.Context, request fulfillment.Ca
 // startOptions keys the workflow by its restaurant for Task Queue Fairness:
 // workflow tasks and Activities inherit the key, so a restaurant at its peak
 // does not hold back the tasks of the others.
-func (c *Client) startOptions(request fulfillment.StartRequest) client.StartWorkflowOptions {
+func (c *Client) startOptions(request StartRequest) client.StartWorkflowOptions {
 	return client.StartWorkflowOptions{
-		ID:                       WorkflowID(string(request.OrderID)),
+		ID:                       WorkflowID(request.OrderID),
 		TaskQueue:                TaskQueue,
 		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		Priority:                 temporal.Priority{FairnessKey: string(request.RestaurantID)},
+		Priority:                 temporal.Priority{FairnessKey: request.RestaurantID},
 	}
 }
 
 // input carries the Delivery Window of OrderPlaced: it chooses the scheduled
 // route of a Scheduled Order.
-func (c *Client) input(request fulfillment.StartRequest) Input {
-	in := Input{OrderID: string(request.OrderID), Policy: c.policy}
-	if !request.DeliveryWindow.IsZero() {
-		in.DeliveryWindow = &DeliveryWindow{Start: request.DeliveryWindow.Start(), End: request.DeliveryWindow.End()}
-	}
-	return in
+func (c *Client) input(request StartRequest) Input {
+	return Input{OrderID: request.OrderID, Policy: c.policy, DeliveryWindow: request.DeliveryWindow}
 }
 
 func mapError(err error, operation string) error {
@@ -123,9 +106,9 @@ func mapError(err error, operation string) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &notFound):
-		return fmt.Errorf("%s: %w: %w", operation, fulfillment.ErrWorkflowNotFound, err)
+		return fmt.Errorf("%s: %w: %w", operation, ErrWorkflowNotFound, err)
 	case errors.As(err, &application) && application.Type() == ErrTypeCancellationRefused:
-		return fmt.Errorf("%s: %w: %w", operation, fulfillment.ErrCancellationRefused, err)
+		return fmt.Errorf("%s: %w: %w", operation, ErrCancellationRefused, err)
 	default:
 		return fmt.Errorf("%s: %w", operation, err)
 	}

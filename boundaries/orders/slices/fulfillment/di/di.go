@@ -5,17 +5,18 @@ package di
 import (
 	gatewayclient "nomnom/orders/infrastructure/gateway"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
+	"nomnom/orders/slices/fulfillment/applications/orders"
 
 	"github.com/google/wire"
 
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
-	orderdi "nomnom/orders/slices/order/di"
 )
 
 // WorkerSet — Activities fulfillment orders-worker и адаптеры соседних
-// контекстов. Use cases Order даёт слайс order (orderdi.FulfillmentSet).
+// контекстов. Порт orders.Orders даёт composition root поверх use cases слайса
+// order: слайсы друг друга не импортируют.
 var WorkerSet = wire.NewSet(NewNeighbours, NewActivities)
 
 // Neighbours — адаптеры payments, restaurants и delivery для Activities
@@ -40,18 +41,14 @@ func NewNeighbours(gateway config.InternalGatewayConfig, identity config.Identit
 	}, func() { _ = conn.Close() }, nil
 }
 
-// NewActivities собирает Activities fulfillment поверх use cases слайса order и
+// NewActivities собирает Activities fulfillment поверх порта Order и
 // адаптеров соседних контекстов. Workflow-код зависимостей не получает: внешние
 // операции выполняются только этими Activities (ADR 5).
-func NewActivities(order *orderdi.FulfillmentModule, neighbours Neighbours) *fulfillmenttemporal.Activities {
+func NewActivities(order orders.Orders, neighbours Neighbours) *fulfillmenttemporal.Activities {
 	return &fulfillmenttemporal.Activities{
-		Orders:        order.GetOrder,
-		Payments:      neighbours.Payments,
-		Restaurants:   neighbours.Restaurants,
-		Delivery:      neighbours.Delivery,
-		RecordPayment: order.RecordPayment,
-		Complete:      order.Complete,
-		Finalize:      order.Finalize,
-		Plan:          order.Plan,
+		Orders:      order,
+		Payments:    neighbours.Payments,
+		Restaurants: neighbours.Restaurants,
+		Delivery:    neighbours.Delivery,
 	}
 }

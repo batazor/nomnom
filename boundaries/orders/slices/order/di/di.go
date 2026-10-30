@@ -29,8 +29,8 @@ import (
 
 // Provider sets слайса order. Composition root процесса (корневой di) выбирает
 // нужные: инфраструктура — RepositorySet и TelemetrySet, use cases процесса —
-// APISet, ConsumerSet или FulfillmentSet; Activities orders-worker собирает слайс
-// fulfillment (slices/fulfillment/di) поверх FulfillmentSet. Новый порт
+// APISet, ConsumerSet или FulfillmentSet; на FulfillmentSet он реализует порт
+// Order для Activities слайса fulfillment. Новый порт
 // добавляется полем в структуру зависимостей набора и provider'ом; позиционных
 // конструкторов нет.
 var (

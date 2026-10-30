@@ -11,10 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 	sdktemporal "go.temporal.io/sdk/temporal"
 
+	"nomnom/orders/di"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 	"nomnom/orders/slices/order/applications/planschedule"
+	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
@@ -31,11 +33,13 @@ func scheduledActivities(t *testing.T) (*temporal.Activities, *MockRestaurants, 
 	preparation := NewMockPreparation(t)
 	delivery := NewMockDeliveryDuration(t)
 	return &temporal.Activities{
-		Orders:      getfulfillmentorder.NewHandler(store),
-		Restaurants: restaurants,
-		Plan: planschedule.NewHandler(store, preparation, delivery, order.SchedulePolicy{
-			PreparationBuffer: 5 * time.Minute, ReplanLead: 30 * time.Minute,
+		Orders: di.NewFulfillmentOrders(&orderdi.FulfillmentModule{
+			GetOrder: getfulfillmentorder.NewHandler(store),
+			Plan: planschedule.NewHandler(store, preparation, delivery, order.SchedulePolicy{
+				PreparationBuffer: 5 * time.Minute, ReplanLead: 30 * time.Minute,
+			}),
 		}),
+		Restaurants: restaurants,
 	}, restaurants, preparation, delivery
 }
 

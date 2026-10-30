@@ -13,10 +13,7 @@ import (
 	"go.temporal.io/sdk/mocks"
 	sdktemporal "go.temporal.io/sdk/temporal"
 
-	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
-	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/domains/order"
 )
 
 func newClient(t *testing.T) (*temporal.Client, *mocks.Client) {
@@ -35,8 +32,8 @@ var wantStartOptions = client.StartWorkflowOptions{
 
 var placedAt = time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
 
-func startRequest() fulfillment.StartRequest {
-	return fulfillment.StartRequest{OrderID: orderID, RestaurantID: "restaurant-1", EventID: "event-1", OccurredAt: placedAt}
+func startRequest() temporal.StartRequest {
+	return temporal.StartRequest{OrderID: orderID, RestaurantID: "restaurant-1", EventID: "event-1", OccurredAt: placedAt}
 }
 
 // FR-638: OrderPlaced starts the workflow with a stable identity as its first Signal.
@@ -55,8 +52,6 @@ func TestClientSignalsWithStartOnOrderPlaced(t *testing.T) {
 func TestClientStartsScheduledOrderWithItsWindow(t *testing.T) {
 	c, temporalClient := newClient(t)
 	start := placedAt.Add(7 * time.Hour)
-	window, err := order.NewDeliveryWindow(start, start.Add(15*time.Minute))
-	require.NoError(t, err)
 	temporalClient.On("SignalWithStartWorkflow", mock.Anything, "order:order-1", temporal.SignalOrderPlaced,
 		temporal.SignalPayload{EventID: "event-1", OccurredAt: placedAt},
 		wantStartOptions, temporal.WorkflowName, temporal.Input{
@@ -66,7 +61,7 @@ func TestClientStartsScheduledOrderWithItsWindow(t *testing.T) {
 		}).
 		Return(mocks.NewWorkflowRun(t), nil)
 	request := startRequest()
-	request.DeliveryWindow = window
+	request.DeliveryWindow = &temporal.DeliveryWindow{Start: start, End: start.Add(15 * time.Minute)}
 
 	require.NoError(t, c.Start(context.Background(), request))
 }
@@ -100,34 +95,12 @@ func TestClientStartFailureIsReturned(t *testing.T) {
 	require.ErrorIs(t, c.Start(context.Background(), startRequest()), cause)
 }
 
-func TestClientNotifiesWithIntegrationEventName(t *testing.T) {
-	occurredAt := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
-	tests := []struct {
-		kind   fulfillment.Kind
-		signal string
-	}{
-		{fulfillment.KindRestaurantAccepted, temporal.SignalRestaurantOrderAccepted},
-		{fulfillment.KindRestaurantRejected, temporal.SignalRestaurantOrderRejected},
-		{fulfillment.KindPreparationStarted, temporal.SignalPreparationStarted},
-		{fulfillment.KindPreparationDelayed, temporal.SignalPreparationDelayed},
-		{fulfillment.KindPreparationFailed, temporal.SignalPreparationFailed},
-		{fulfillment.KindReadyForPickup, temporal.SignalRestaurantOrderReady},
-		{fulfillment.KindCourierAssigned, temporal.SignalCourierAssignedToDelivery},
-		{fulfillment.KindPickedUp, temporal.SignalDeliveryPickedUp},
-		{fulfillment.KindDeliveryCompleted, temporal.SignalDeliveryCompleted},
-		{fulfillment.KindDeliveryFailed, temporal.SignalDeliveryFailed},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.kind), func(t *testing.T) {
-			c, temporalClient := newClient(t)
-			temporalClient.On("SignalWorkflow", mock.Anything, "order:order-1", "", tt.signal,
-				temporal.SignalPayload{EventID: "event-1", OccurredAt: occurredAt, Reason: "r"}).Return(nil)
+func TestClientSignalsWorkflowOfOrder(t *testing.T) {
+	c, temporalClient := newClient(t)
+	payload := temporal.SignalPayload{EventID: "event-1", OccurredAt: placedAt, Reason: "r"}
+	temporalClient.On("SignalWorkflow", mock.Anything, "order:order-1", "", temporal.SignalDeliveryPickedUp, payload).Return(nil)
 
-			require.NoError(t, c.Notify(context.Background(), fulfillment.Notification{
-				OrderID: orderID, EventID: "event-1", Kind: tt.kind, OccurredAt: occurredAt, Reason: "r",
-			}))
-		})
-	}
+	require.NoError(t, c.Signal(context.Background(), orderID, temporal.SignalDeliveryPickedUp, payload))
 }
 
 // AC-444: a missing or closed workflow is ErrWorkflowNotFound.
@@ -136,35 +109,21 @@ func TestClientMapsNotFoundSignal(t *testing.T) {
 	temporalClient.On("SignalWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(serviceerror.NewNotFound("workflow execution already completed"))
 
-	err := c.Notify(context.Background(), fulfillment.Notification{
-		OrderID: orderID, EventID: "event-1", Kind: fulfillment.KindPickedUp,
-	})
+	err := c.Signal(context.Background(), orderID, temporal.SignalDeliveryPickedUp, temporal.SignalPayload{EventID: "event-1"})
 
-	require.ErrorIs(t, err, fulfillment.ErrWorkflowNotFound)
-}
-
-func TestClientRejectsUnknownKind(t *testing.T) {
-	c, _ := newClient(t)
-
-	require.Error(t, c.Notify(context.Background(), fulfillment.Notification{OrderID: orderID, EventID: "e", Kind: "unknown"}))
+	require.ErrorIs(t, err, temporal.ErrWorkflowNotFound)
 }
 
 func TestClientRequestsCancellationByUpdate(t *testing.T) {
 	requestedAt := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
-	request := fulfillment.CancellationRequest{
-		OrderID:     orderID,
-		RequestID:   "cancel-1",
-		RequestedBy: authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"},
-		RequestedAt: requestedAt,
-		Reason:      "changed mind",
+	request := temporal.CancellationRequest{
+		RequestID: "cancel-1", RequestedBy: "user:customer-1", RequestedAt: requestedAt, Reason: "changed mind",
 	}
 	wantOptions := client.UpdateWorkflowOptions{
-		WorkflowID: "order:order-1",
-		UpdateID:   "cancel-1",
-		UpdateName: temporal.UpdateCancellationRequested,
-		Args: []any{temporal.CancellationRequest{
-			RequestID: "cancel-1", RequestedBy: "user:customer-1", RequestedAt: requestedAt, Reason: "changed mind",
-		}},
+		WorkflowID:   "order:order-1",
+		UpdateID:     "cancel-1",
+		UpdateName:   temporal.UpdateCancellationRequested,
+		Args:         []any{request},
 		WaitForStage: client.WorkflowUpdateStageCompleted,
 	}
 	tests := []struct {
@@ -177,12 +136,12 @@ func TestClientRequestsCancellationByUpdate(t *testing.T) {
 		{
 			name:    "refused by validator",
 			result:  sdktemporal.NewApplicationError("refused", temporal.ErrTypeCancellationRefused),
-			wantErr: fulfillment.ErrCancellationRefused,
+			wantErr: temporal.ErrCancellationRefused,
 		},
 		{
 			name:    "workflow closed",
 			update:  serviceerror.NewNotFound("closed"),
-			wantErr: fulfillment.ErrWorkflowNotFound,
+			wantErr: temporal.ErrWorkflowNotFound,
 		},
 	}
 	for _, tt := range tests {
@@ -196,7 +155,7 @@ func TestClientRequestsCancellationByUpdate(t *testing.T) {
 				temporalClient.On("UpdateWorkflow", mock.Anything, wantOptions).Return(handle, nil)
 			}
 
-			err := c.RequestCancellation(context.Background(), request)
+			err := c.RequestCancellation(context.Background(), orderID, request)
 
 			if tt.wantErr == nil {
 				require.NoError(t, err)

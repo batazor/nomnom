@@ -87,7 +87,10 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	module := di.NewModule(dependencies)
 	simulatorConfig := cfg.Simulator
 	pool := NewDatabasePool(store)
-	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, pool, authorizer, module)
+	handler := module.PlaceOrder
+	usecaseHandler := module.GetOrder
+	handler2 := module.RequestOrderCancellation
+	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, pool, authorizer, handler, usecaseHandler, handler2)
 	if err != nil {
 		cleanup5()
 		cleanup4()
@@ -144,13 +147,14 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 		Telemetry: useCases,
 	}
 	fulfillmentModule := di.NewFulfillmentModule(fulfillmentDependencies)
+	orders := NewFulfillmentOrders(fulfillmentModule)
 	neighbours, cleanup3, err := di3.NewNeighbours(internalGatewayConfig, identityConfig)
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
-	activities := di3.NewActivities(fulfillmentModule, neighbours)
+	activities := di3.NewActivities(orders, neighbours)
 	temporalWorker := NewTemporalWorker(cfg, activities)
 	return temporalWorker, func() {
 		cleanup3()
@@ -216,4 +220,7 @@ var (
 	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
 	storeSet = wire.NewSet(NewStore, di.RepositorySet)
+	// simulatorUseCasesSet раздаёт слайсу simulator только нужные ему use cases
+	// слайса order: его di соседний слайс не импортирует.
+	simulatorUseCasesSet = wire.NewSet(wire.FieldsOf(new(*di.Module), "PlaceOrder", "GetOrder", "RequestOrderCancellation"))
 )

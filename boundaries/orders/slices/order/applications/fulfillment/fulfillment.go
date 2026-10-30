@@ -1,7 +1,7 @@
 // Package fulfillment is the application port of the Order Fulfillment Workflow
 // shared by the use cases of the order slice. It is not a use case: it declares
 // how handlers start the workflow, hand signals to it and request
-// cancellation, and the common flow that reflects inbound signals in an Order.
+// cancellation, and how the result of an inbound signal is classified.
 // Temporal specifics (Workflow ID, Signal/Update names) belong to the adapter.
 package fulfillment
 

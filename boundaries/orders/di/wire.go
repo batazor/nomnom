@@ -10,6 +10,7 @@ import (
 	"nomnom/orders/pkg/config"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	orderdi "nomnom/orders/slices/order/di"
+	"nomnom/orders/slices/simulator/applications/switchsimulator"
 	simulatordi "nomnom/orders/slices/simulator/di"
 )
 
@@ -33,6 +34,9 @@ var (
 	// storeSet — store процесса на схеме, мигрированной наборами di/schema,
 	// в ролях портов слайса order.
 	storeSet = wire.NewSet(NewStore, orderdi.RepositorySet)
+	// simulatorUseCasesSet раздаёт слайсу simulator только нужные ему use cases
+	// слайса order: его di соседний слайс не импортирует.
+	simulatorUseCasesSet = wire.NewSet(wire.FieldsOf(new(*orderdi.Module), "PlaceOrder", "GetOrder", "RequestOrderCancellation"))
 )
 
 // Injectors процессов orders: каждый cmd/* вызывает свой и передаёт результат
@@ -40,12 +44,12 @@ var (
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
-	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, NewDatabasePool, simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, NewDatabasePool, simulatorUseCasesSet, wire.Bind(new(switchsimulator.Authorizer), new(orderdi.Authorizer)), simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
 	return nil, nil, nil
 }
 
 func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
-	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.FulfillmentSet, fulfillmentdi.WorkerSet, NewTemporalWorker)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.FulfillmentSet, NewFulfillmentOrders, fulfillmentdi.WorkerSet, NewTemporalWorker)
 	return nil, nil, nil
 }
 

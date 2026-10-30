@@ -1,6 +1,6 @@
 // Package neighbours declares the client ports of payments, restaurants and
 // delivery that the Activities of the Order Fulfillment Workflow call, their
-// request DTOs and how a request is built from the view of the Order. Adapters
+// request DTOs and how a request is built from the Order. Adapters
 // (infrastructure/neighbours, grpcclient) implement the ports; the Temporal
 // adapter only uses them.
 package neighbours
@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"nomnom/orders/slices/order/applications/getfulfillmentorder"
+	"nomnom/orders/slices/fulfillment/applications/orders"
 )
 
 // Priority is the Premium Priority of the Order the kitchen starts it by.
@@ -131,7 +131,7 @@ type Delivery interface {
 }
 
 // NewPaymentRequest addresses the payment of the Order under the step key.
-func NewPaymentRequest(current getfulfillmentorder.View, idempotencyKey string) PaymentRequest {
+func NewPaymentRequest(current orders.Order, idempotencyKey string) PaymentRequest {
 	return PaymentRequest{
 		OrderID:        current.OrderID,
 		CustomerID:     current.CustomerID,
@@ -143,7 +143,7 @@ func NewPaymentRequest(current getfulfillmentorder.View, idempotencyKey string) 
 }
 
 // NewRestaurantOrderRequest carries the composition of the Order to restaurants.
-func NewRestaurantOrderRequest(current getfulfillmentorder.View, idempotencyKey string) RestaurantOrderRequest {
+func NewRestaurantOrderRequest(current orders.Order, idempotencyKey string) RestaurantOrderRequest {
 	items := make([]RestaurantOrderItem, 0, len(current.Items))
 	for _, item := range current.Items {
 		items = append(items, RestaurantOrderItem{MenuItemID: item.MenuItemID, Quantity: item.Quantity})
@@ -158,12 +158,12 @@ func NewRestaurantOrderRequest(current getfulfillmentorder.View, idempotencyKey 
 }
 
 // NewSlotRequest addresses the slot reservation of the Order under the step key.
-func NewSlotRequest(current getfulfillmentorder.View, idempotencyKey string) SlotRequest {
+func NewSlotRequest(current orders.Order, idempotencyKey string) SlotRequest {
 	return SlotRequest{OrderID: current.OrderID, IdempotencyKey: idempotencyKey}
 }
 
 // NewDeliveryRequest addresses the delivery of the Order under the step key.
-func NewDeliveryRequest(current getfulfillmentorder.View, idempotencyKey string) DeliveryRequest {
+func NewDeliveryRequest(current orders.Order, idempotencyKey string) DeliveryRequest {
 	return DeliveryRequest{
 		OrderID:        current.OrderID,
 		MarketID:       current.MarketID,

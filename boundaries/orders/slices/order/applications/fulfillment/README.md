@@ -1,6 +1,6 @@
 # Fulfillment port
 
-Package не является use case. Он объявляет единственный application-порт Order Fulfillment Workflow, общий для use cases слайса `order`, и общий поток отражения входящих сигналов.
+Package не является use case. Он объявляет единственный application-порт Order Fulfillment Workflow, общий для use cases слайса `order`, и политику классификации входящих сигналов.
 
 ## Порты
 
@@ -10,17 +10,19 @@ Package не является use case. Он объявляет единстве
 | `Notifier` | `confirmorder`, `rejectorder`, `record…` | Передача сигнала с исходным `event_id`; workflow дедуплицирует по нему; закрытый workflow — `ErrWorkflowNotFound` |
 | `CancellationRequester` | `requestordercancellation` | Передача Cancellation Request с `RequestID` и исходным subject; бизнес-отказ workflow — `ErrCancellationRefused` |
 
-`KindPreparationDelayed` (с `ExpectedReadyAt`) и `KindPreparationFailed` — не шаги FSM `Order`: задержка только заменяет срок готовности `Order` (Record Preparation Delay через `Reflector`, `InboundSignal.ExpectedReadyAt` уходит в уведомление), неудачу consumer передаёт workflow без изменения агрегата.
+`KindPreparationDelayed` (с `ExpectedReadyAt`) и `KindPreparationFailed` — не шаги FSM `Order`: задержка только заменяет срок готовности `Order` (Record Preparation Delay, `ExpectedReadyAt` уходит в уведомление), неудачу consumer передаёт workflow без изменения агрегата.
 
-Порт остаётся в слайсе `order` как контракт его use cases; реализует его слайс [`fulfillment`](../../../fulfillment/README.md), и `order` его не импортирует. Выбор Signal, Update или `SignalWithStart`, Workflow ID `order:<order_id>` и имена сигналов — ответственность Temporal-адаптера [`slices/fulfillment/infrastructure/temporal`](../../../fulfillment/infrastructure/temporal/README.md); правила процесса (маршрут, сроки, допустимость отмены, компенсации) — доменной модели `slices/fulfillment/domains/fulfillment`.
+Порт остаётся в слайсе `order` как контракт его use cases; на Temporal-клиенте слайса [`fulfillment`](../../../fulfillment/README.md) его реализует composition root (`di/workflow.go`), и слайсы друг друга не импортируют. Выбор Signal, Update или `SignalWithStart`, Workflow ID `order:<order_id>` и имена сигналов — ответственность Temporal-адаптера [`slices/fulfillment/infrastructure/temporal`](../../../fulfillment/infrastructure/temporal/README.md); правила процесса (маршрут, сроки, допустимость отмены, компенсации) — доменной модели `slices/fulfillment/domains/fulfillment`.
 
-## Reflector
+## Поток входящего сигнала
 
-`Reflector` выполняет insert-first протокол Inbox для 8 входящих use cases:
+Каждый из 9 входящих use cases (`confirmorder`, `rejectorder`, `record…`) пишет insert-first протокол Inbox сам, общего handler'а нет: они различаются тем, что читают, проверяют и сохраняют.
 
 ```text
-application.AcceptOnce: UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → Save } → commit → Notify(event_id)
+unitofwork.AcceptOnce: UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → ClassifySignal → Save } → commit → Notify(event_id)
 ```
+
+Общая здесь только политика `ClassifySignal`:
 
 | Результат доменного метода | Outcome | Сохраняется |
 | --- | --- | --- |
@@ -29,6 +31,6 @@ application.AcceptOnce: UoW { Inbox.Accept(consumer, event_id) → load Order �
 | `InvalidTransition` для `completed`/`cancelled` | `ignored_late` | Inbox |
 | Inbox duplicate | `duplicate` | ничего |
 
-`ReflectDetails` отражает сигнал, который не двигает State: `admit` даёт FSM отказать финальному `Order` (`ignored_late`), а `ChangeDetails` работает внутри того же unit of work до `Save`; его ошибка откатывает Inbox record. Изменение (`changed`) — `applied` и `Save`, его отсутствие — `already_applied` без `Save`. Так Record Courier Assignment пишет назначение и `order#delivery` до commit (dual-write rule `docs/security.md`), в том числе при reassignment.
+Record Courier Assignment не двигает State: FSM только допускает сигнал (финальный `Order` — `ignored_late`), а назначение и `order#delivery` пишутся до commit в том же unit of work (dual-write rule `docs/security.md`), в том числе при reassignment. Изменение — `applied` и `Save`, его отсутствие — `already_applied` без `Save`.
 
 Workflow уведомляется во всех успешных ветках, включая duplicate: это восстанавливает сбой между commit и уведомлением при повторной доставке. Ошибка уведомления возвращается вызывающему consumer, чтобы сообщение не было подтверждено. Решение и отличие от формулировки event-driven документации описаны в OpenSpec change `implement-orders-application-layer`.

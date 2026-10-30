@@ -6,6 +6,7 @@
 slices/fulfillment/
   domains/fulfillment/        Process, Policy, Stage, Outcome, Signal, Step, Effect
   applications/neighbours/    client-порты payments, restaurants, delivery, их DTO и построение запросов из Order
+  applications/orders/        порт Order: что Activities нужно от Order на языке процесса
   infrastructure/temporal/    workflow, signals, activities, client, search attribute
   infrastructure/neighbours/  client-адаптеры payments, restaurants, delivery для Activities
   di/                         WorkerSet: адаптеры соседей и Activities orders-worker
@@ -31,6 +32,8 @@ slices/fulfillment/
 
 ## Зависимости
 
-`infrastructure` → `domains/fulfillment`, `applications/neighbours` (порты соседей: Activities их вызывают, `infrastructure/neighbours` и `grpcclient` реализуют, не завися от `temporal`), порт `slices/order/applications/fulfillment` (его реализует `Client`) и use cases `order/applications/{recordpaymentauthorization,completeorder,failorcancelorder,planschedule}` (их вызывают Activities). `di` объявляет роль хранилища Activities (`Store`: Unit of Work, repository, Outbox) и использует телеметрию слайса `order`; composition root связывает роль с `ProcessStore` слайса `order`. Слайс `order` не импортирует `fulfillment`.
+`infrastructure` → `domains/fulfillment`, `applications/neighbours` (порты соседей: Activities их вызывают, `infrastructure/neighbours` и `grpcclient` реализуют, не завися от `temporal`) и `applications/orders` (порт Order: Activities его вызывают).
+
+Слайс не импортирует `slices/order`, это проверяет `depguard`. Оба направления связывает composition root `nomnom/orders/di`, единственное место, где встречаются два словаря: `di/fulfillment_orders.go` реализует порт Order поверх use cases слайса `order` и назначает их ошибкам `usecase.ErrorKind`, а `di/workflow.go` реализует порт `fulfillment` слайса `order` на Temporal-клиенте этого слайса.
 
 Temporal-адаптер и его внешние имена описаны в [`infrastructure/temporal`](infrastructure/temporal/README.md).

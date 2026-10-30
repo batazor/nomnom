@@ -13,7 +13,11 @@ import (
 
 	gatewayclient "nomnom/orders/infrastructure/gateway"
 	"nomnom/orders/pkg/config"
-	orderdi "nomnom/orders/slices/order/di"
+	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
+	"nomnom/orders/slices/order/applications/getorder"
+	"nomnom/orders/slices/order/applications/orderdetails"
+	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
@@ -34,8 +38,12 @@ type Module struct {
 
 // NewModule проверяет секцию simulator (без неё cmd/orders не стартует,
 // AC-765) и открывает lazy connection к restaurants через internal gateway.
+// Use cases слайса order раздаёт composition root.
 func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig,
-	catalog config.CatalogConfig, pool *pgxpool.Pool, authorizer orderdi.Authorizer, order *orderdi.Module,
+	catalog config.CatalogConfig, pool *pgxpool.Pool, authorizer switchsimulator.Authorizer,
+	placeOrder usecase.Handler[placeorder.Input, placeorder.Result],
+	getOrder usecase.Handler[getorder.Query, orderdetails.View],
+	requestCancellation usecase.Handler[requestordercancellation.Input, requestordercancellation.Result],
 ) (*Module, func(), error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
@@ -56,9 +64,9 @@ func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig,
 	customer := customersimulator.New(customersimulator.Dependencies{
 		Switch:              state,
 		Catalog:             restaurants.New(conn, markets, catalog.Timeout),
-		PlaceOrder:          order.PlaceOrder,
-		GetOrder:            order.GetOrder,
-		RequestCancellation: order.RequestOrderCancellation,
+		PlaceOrder:          placeOrder,
+		GetOrder:            getOrder,
+		RequestCancellation: requestCancellation,
 		//nolint:gosec // simulated choices, not security-sensitive.
 		Random:     rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 		Keys:       uuidKeys{},

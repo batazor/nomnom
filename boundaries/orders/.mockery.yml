@@ -138,8 +138,6 @@ packages:
         configs:
           - dir: slices/order/applications/fulfillmentsteps/confirmorder
             pkgname: confirmorder_test
-          - dir: slices/order/applications/fulfillment
-            pkgname: fulfillment_test
           - dir: slices/order/applications/fulfillmentsteps/recordcourierassignment
             pkgname: recordcourierassignment_test
           - dir: slices/order/applications/recordcourierrelease
@@ -205,12 +203,29 @@ packages:
             pkgname: recordcourierrelease_test
   # Ports replaced by tests of their consumers, generated next to those tests.
   nomnom/orders/slices/order/domains/order:
+    config:
+      filename: "mocks_{{.SrcPackageName}}_test.go"
     interfaces:
       Repository:
-        config:
-          dir: slices/order/applications/fulfillment
-          filename: mocks_test.go
-          pkgname: fulfillment_test
+        configs:
+          - dir: slices/order/applications/fulfillmentsteps/confirmorder
+            pkgname: confirmorder_test
+          - dir: slices/order/applications/fulfillmentsteps/recordcourierassignment
+            pkgname: recordcourierassignment_test
+          - dir: slices/order/applications/fulfillmentsteps/recorddeliverycompletion
+            pkgname: recorddeliverycompletion_test
+          - dir: slices/order/applications/fulfillmentsteps/recorddeliveryfailure
+            pkgname: recorddeliveryfailure_test
+          - dir: slices/order/applications/fulfillmentsteps/recordorderready
+            pkgname: recordorderready_test
+          - dir: slices/order/applications/fulfillmentsteps/recordpickup
+            pkgname: recordpickup_test
+          - dir: slices/order/applications/recordpreparationdelay
+            pkgname: recordpreparationdelay_test
+          - dir: slices/order/applications/fulfillmentsteps/recordpreparationstarted
+            pkgname: recordpreparationstarted_test
+          - dir: slices/order/applications/fulfillmentsteps/rejectorder
+            pkgname: rejectorder_test
   nomnom/orders/slices/order/applications/orderdetails:
     interfaces:
       CancellationPolicy:

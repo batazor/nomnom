@@ -35,7 +35,7 @@ sequenceDiagram
 Handler: [`recordpreparationstarted.go`](recordpreparationstarted.go), unit-тесты: [`recordpreparationstarted_test.go`](recordpreparationstarted_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt}` → `Order.RecordPreparationStarted`: монотонный переход в `preparing`.
-- **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; общий поток — [`fulfillment.Reflector`](../../fulfillment/README.md).
+- **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; поток входящего сигнала — [`fulfillment`](../../fulfillment/README.md#поток-входящего-сигнала).
 - **Inbox consumer:** `orders.recordpreparationstarted`; повтор `event_id` даёт outcome `duplicate` и повторное уведомление workflow с тем же `event_id`.
 - **Outcomes:** `applied`, `already_applied` (повтор шага под новым `event_id`), `ignored_late` (`Order` в `completed`/`cancelled`, `event_id` фиксируется), `duplicate`. Закрытый workflow не является ошибкой (`WorkflowNotified=false`); прочая ошибка уведомления возвращается, чтобы событие было доставлено повторно.
 - **Outbox:** не пишется — исходящее Integration Event для этого сценария не определено.

@@ -14,11 +14,13 @@ import (
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
+	"nomnom/orders/di"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/closure/completeorder"
 	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
 	"nomnom/orders/slices/order/applications/getfulfillmentorder"
+	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
@@ -31,13 +33,15 @@ func activities(t *testing.T, state order.State) (*temporal.Activities, *reposit
 	store := repositorytest.Open(t)
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
 	return &temporal.Activities{
-		Orders:        getfulfillmentorder.NewHandler(store),
-		Payments:      NewMockPayments(t),
-		Restaurants:   NewMockRestaurants(t),
-		Delivery:      NewMockDelivery(t),
-		RecordPayment: recordpaymentauthorization.NewHandler(store, store),
-		Complete:      completeorder.NewHandler(store, store, store),
-		Finalize:      failorcancelorder.NewHandler(store, store, store),
+		Orders: di.NewFulfillmentOrders(&orderdi.FulfillmentModule{
+			GetOrder:      getfulfillmentorder.NewHandler(store),
+			RecordPayment: recordpaymentauthorization.NewHandler(store, store),
+			Complete:      completeorder.NewHandler(store, store, store),
+			Finalize:      failorcancelorder.NewHandler(store, store, store),
+		}),
+		Payments:    NewMockPayments(t),
+		Restaurants: NewMockRestaurants(t),
+		Delivery:    NewMockDelivery(t),
 	}, store
 }
 
