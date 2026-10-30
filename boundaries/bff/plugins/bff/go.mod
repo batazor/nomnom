@@ -12,8 +12,8 @@ require (
 require (
 	buf.build/gen/go/nomnom/delivery/grpc/go v1.6.2-20261030084627-2e2e4e0040d5.1
 	buf.build/gen/go/nomnom/delivery/protocolbuffers/go v1.36.12-20261030084627-2e2e4e0040d5.2
-	buf.build/gen/go/nomnom/orders/grpc/go v1.6.2-20261030165204-a8cdcf328914.1
-	buf.build/gen/go/nomnom/orders/protocolbuffers/go v1.36.12-20261030165204-a8cdcf328914.2
+	buf.build/gen/go/nomnom/orders/grpc/go v1.6.2-20261030170202-9cd012038d91.1
+	buf.build/gen/go/nomnom/orders/protocolbuffers/go v1.36.12-20261030170202-9cd012038d91.2
 	buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030084627-27ccc405ec08.1
 	buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030084627-27ccc405ec08.2
 	github.com/MicahParks/keyfunc/v3 v3.8.2
