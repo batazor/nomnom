@@ -2,6 +2,7 @@ package temporal
 
 import (
 	"context"
+	"errors"
 
 	"go.temporal.io/sdk/temporal"
 
@@ -226,34 +227,21 @@ func (a *Activities) delivery(ctx context.Context, in StepInput) (neighbours.Del
 	return request(ctx, a.Orders, in, neighbours.NewDeliveryRequest)
 }
 
-// retryability is how an Activity reports an error kind: a non-retryable
-// application error of the given type, or the error as is, retried by the
-// Retry Policy.
-type retryability struct {
-	nonRetryable bool
-	errType      string
-}
-
-// retryabilityByKind covers every usecase.ErrorKind: a retry cannot fix
-// invalid input, a missing Order or a refusal of the domain; everything else,
-// including transport failures of neighbours, stays retryable.
-var retryabilityByKind = map[usecase.ErrorKind]retryability{
-	usecase.KindInvalidInput:  {nonRetryable: true, errType: ErrTypeInvalidInput},
-	usecase.KindNotFound:      {nonRetryable: true, errType: ErrTypeOrderNotFound},
-	usecase.KindDomainRule:    {nonRetryable: true, errType: ErrTypeInvalidTransition},
-	usecase.KindAlreadyExists: {},
-	usecase.KindConflict:      {},
-	usecase.KindUnavailable:   {},
-	usecase.KindPermission:    {},
-	usecase.KindInternal:      {},
-}
-
+// classify reports an error that a retry cannot fix as a non-retryable
+// application error of its type: invalid input, a missing Order or a step the
+// Order refuses. Everything else, including transport failures of neighbours,
+// is returned as is and retried by the Retry Policy.
 func classify(err error) error {
-	if err == nil {
+	switch {
+	case err == nil:
 		return nil
+	case errors.Is(err, usecase.ErrInvalidInput):
+		return temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeInvalidInput, err)
+	case errors.Is(err, orders.ErrOrderNotFound):
+		return temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeOrderNotFound, err)
+	case errors.Is(err, orders.ErrStepRefused):
+		return temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeInvalidTransition, err)
+	default:
+		return err
 	}
-	if r := retryabilityByKind[usecase.KindOf(err)]; r.nonRetryable {
-		return temporal.NewNonRetryableApplicationError(err.Error(), r.errType, err)
-	}
-	return err
 }

@@ -34,6 +34,6 @@ slices/fulfillment/
 
 `infrastructure` → `domains/fulfillment`, `applications/neighbours` (порты соседей: Activities их вызывают, `infrastructure/neighbours` и `grpcclient` реализуют, не завися от `temporal`) и `applications/orders` (порт Order: Activities его вызывают).
 
-Слайс не импортирует `slices/order`, это проверяет `depguard`. Оба направления связывает composition root `nomnom/orders/di`, единственное место, где встречаются два словаря: `di/fulfillment_orders.go` реализует порт Order поверх use cases слайса `order` и назначает их ошибкам `usecase.ErrorKind`, а `di/workflow.go` реализует порт `fulfillment` слайса `order` на Temporal-клиенте этого слайса.
+Слайс не импортирует `slices/order`, это проверяет `depguard`. Оба направления связывает composition root `nomnom/orders/di`, единственное место, где встречаются два словаря: `di/fulfillment_orders.go` реализует порт Order поверх use cases слайса `order` и переводит их ошибки в ошибки порта полной таблицей по `usecase.ErrorKind`, а `di/workflow.go` реализует порт `fulfillment` слайса `order` на Temporal-клиенте этого слайса.
 
 Temporal-адаптер и его внешние имена описаны в [`infrastructure/temporal`](infrastructure/temporal/README.md).

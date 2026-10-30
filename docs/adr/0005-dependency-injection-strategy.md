@@ -39,7 +39,7 @@ Bounded contexts взаимодействуют через согласован�
 
 Зависимости передаются через обычные Go-конструкторы. Wire генерирует код сборки зависимостей в composition root; provider sets группируются по функциональности и необходимым инфраструктурным компонентам. Импорты Wire и объявления сборки остаются за пределами доменной модели и обработчиков use cases. Запуск, остановка и освобождение ресурсов имеют явного владельца в composition root.
 
-Слайсы `order` и `fulfillment` не импортируют друг друга, это проверяет `depguard` (`boundaries/orders/.golangci.yml`). `fulfillment` объявляет порт `applications/orders`, а `order` — порт `applications/fulfillment`; оба реализует корневой `di`. Ошибки use cases `order` пересекают границу как `usecase.ErrorKind`. Слайс `simulator` получает use cases `order` через `wire.FieldsOf` корневого `di`.
+Слайсы `order` и `fulfillment` не импортируют друг друга, это проверяет `depguard` (`boundaries/orders/.golangci.yml`). `fulfillment` объявляет порт `applications/orders`, а `order` — порт `applications/fulfillment`; оба реализует корневой `di`. Порт объявляет и свои ошибки: `orders.ErrOrderNotFound` и `orders.ErrStepRefused`. Корневой `di` переводит в них ошибки use cases `order` полной таблицей по `usecase.ErrorKind`, а Activities знают только ошибки порта. Слайс `simulator` получает use cases `order` через `wire.FieldsOf` корневого `di`.
 
 Зависимости внедряются в Temporal Activities и компоненты worker при запуске приложения. Детерминированный workflow-код не обращается к DI-контейнеру и не получает через DI клиенты для внешних операций. Все внешние операции выполняются через Activities.
 

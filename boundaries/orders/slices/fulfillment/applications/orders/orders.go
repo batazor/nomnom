@@ -1,15 +1,26 @@
 // Package orders declares what the Activities of the Order Fulfillment Workflow
 // need from the Order, in the language of the process. The fulfillment slice does
 // not import the order slice: the composition root (nomnom/orders/di) implements
-// the port over the use cases of that slice and assigns usecase.ErrorKind to
-// their errors.
+// the port over the use cases of that slice and translates their errors to the
+// errors of this port.
 package orders
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
+)
+
+// A retry cannot fix these errors of the port, nor usecase.ErrInvalidInput. Any
+// other error stays retryable.
+var (
+	// ErrOrderNotFound is returned when the Order does not exist.
+	ErrOrderNotFound = errors.New("order not found")
+	// ErrStepRefused is returned when the Order refuses a step of the process in
+	// its current state.
+	ErrStepRefused = errors.New("order refused the step")
 )
 
 // Item is a position of the Order that restaurants prepares.

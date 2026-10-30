@@ -1,7 +1,8 @@
 // Package errorkind classifies the errors of the order slice use cases into
 // usecase.ErrorKind. It is the only place that knows which application or
 // domain error belongs to which kind: inbound adapters (gRPC, Kafka consumer,
-// Temporal Activities, telemetry) translate kinds with their own tables, so a
+// telemetry) and the composition root for the port of the fulfillment slice
+// translate kinds with their own tables, so a
 // new domain error is assigned a kind here and every adapter handles it the
 // same way (FR-545).
 //

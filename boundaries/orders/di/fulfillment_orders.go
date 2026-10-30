@@ -20,8 +20,7 @@ import (
 
 // FulfillmentOrders реализует порт orders.Orders слайса fulfillment поверх use
 // cases слайса order. Это единственное место, где встречаются словари двух
-// слайсов: ошибки use cases получают usecase.ErrorKind, а Activities читают
-// только его.
+// слайсов: ошибки use cases переводятся в ошибки порта.
 type FulfillmentOrders struct {
 	module *orderdi.FulfillmentModule
 }
@@ -36,7 +35,7 @@ func NewFulfillmentOrders(module *orderdi.FulfillmentModule) orders.Orders {
 func (o FulfillmentOrders) Get(ctx context.Context, orderID string) (orders.Order, error) {
 	view, err := o.module.GetOrder.Handle(ctx, getfulfillmentorder.Query{OrderID: order.ID(orderID)})
 	if err != nil {
-		return orders.Order{}, withOrderKind(err)
+		return orders.Order{}, portError(err)
 	}
 	items := make([]orders.Item, 0, len(view.Items))
 	for _, item := range view.Items {
@@ -60,12 +59,12 @@ func (o FulfillmentOrders) Get(ctx context.Context, orderID string) (orders.Orde
 
 func (o FulfillmentOrders) RecordPaymentAuthorization(ctx context.Context, orderID string, authorizedAt time.Time) error {
 	_, err := o.module.RecordPayment.Handle(ctx, recordpaymentauthorization.Input{OrderID: order.ID(orderID), AuthorizedAt: authorizedAt})
-	return withOrderKind(err)
+	return portError(err)
 }
 
 func (o FulfillmentOrders) Complete(ctx context.Context, orderID string, completedAt time.Time) error {
 	_, err := o.module.Complete.Handle(ctx, completeorder.Input{OrderID: order.ID(orderID), CompletedAt: completedAt})
-	return withOrderKind(err)
+	return portError(err)
 }
 
 func (o FulfillmentOrders) FailOrCancel(ctx context.Context, decision orders.FinalDecision) error {
@@ -79,13 +78,13 @@ func (o FulfillmentOrders) FailOrCancel(ctx context.Context, decision orders.Fin
 		ReasonCode: decision.ReasonCode,
 		DecidedAt:  decision.DecidedAt,
 	})
-	return withOrderKind(err)
+	return portError(err)
 }
 
 func (o FulfillmentOrders) PlanSchedule(ctx context.Context, orderID string, plannedReadyAt time.Time) (orders.Plan, error) {
 	plan, err := o.module.Plan.Handle(ctx, planschedule.Input{OrderID: order.ID(orderID), PlannedReadyAt: plannedReadyAt})
 	if err != nil {
-		return orders.Plan{}, withOrderKind(err)
+		return orders.Plan{}, portError(err)
 	}
 	return orders.Plan{
 		PlannedReadyAt:   plan.PlannedReadyAt,
@@ -106,10 +105,28 @@ func negativeOutcome(outcome fulfillment.Outcome) (order.NegativeOutcome, error)
 	}
 }
 
-// withOrderKind назначает ошибке use case слайса order её usecase.ErrorKind.
-func withOrderKind(err error) error {
+// portErrorByKind покрывает каждый usecase.ErrorKind: ретрай не исправит
+// невалидный ввод, отсутствующий Order и отказ домена. Для остальных видов у
+// порта нет своей ошибки, и она остаётся как есть, поэтому Activity её ретраит.
+var portErrorByKind = map[usecase.ErrorKind]error{
+	usecase.KindInvalidInput:  usecase.ErrInvalidInput,
+	usecase.KindNotFound:      orders.ErrOrderNotFound,
+	usecase.KindDomainRule:    orders.ErrStepRefused,
+	usecase.KindAlreadyExists: nil,
+	usecase.KindConflict:      nil,
+	usecase.KindUnavailable:   nil,
+	usecase.KindPermission:    nil,
+	usecase.KindInternal:      nil,
+}
+
+// portError переводит ошибку use case слайса order в ошибку порта.
+func portError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return usecase.WithKind(errorkind.Classify(err), err)
+	target := portErrorByKind[errorkind.Classify(err)]
+	if target == nil {
+		return err
+	}
+	return fmt.Errorf("%w: %w", target, err)
 }
