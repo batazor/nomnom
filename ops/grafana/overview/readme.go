@@ -33,7 +33,7 @@ func rowsTable(b *strings.Builder, d Dashboard, root string) {
 		}
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(b, "Живых панелей: %d из %d. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.\n\n", live, total)
+	fmt.Fprintf(b, "Живых панелей: %d из %d. TODO-панели нет в dashboard: она появляется после смены статуса метрик в инвентаре и регенерации.\n\n", live, total)
 }
 
 // alertsTable — alert rules dashboard: какие активны, какие ждут метрик.

@@ -116,6 +116,12 @@ JSON — артефакт генератора: правки вносятся в
 | Invalid transitions | live | — |
 | Terminal transitions | live | — |
 
+### Flow
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Delivery steps | live | — |
+
 ### Domain metrics
 
 | Панель | Статус | Недостающие метрики |
@@ -127,12 +133,6 @@ JSON — артефакт генератора: правки вносятся в
 | Assignment latency | TODO | [`nomnom_delivery_assignment_latency_seconds`](../../../../docs/observability/metric-inventory.md#domain) |
 | Delivery duration | TODO | [`nomnom_delivery_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain) |
 
-### Flow
-
-| Панель | Статус | Недостающие метрики |
-| --- | --- | --- |
-| Delivery steps | live | — |
-
 ### Authorization
 
 | Панель | Статус | Недостающие метрики |
@@ -142,7 +142,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 29 из 46. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 29 из 46. TODO-панели нет в dashboard: она появляется после смены статуса метрик в инвентаре и регенерации.
 
 ## Alerts
 

@@ -47,7 +47,9 @@ func PlatformOverview() (Dashboard, error) {
 		{title: "Pods", scope: pods, panels: platformPods(pods)},
 		{title: "Certificates", scope: certs, panels: certificates(certs)},
 	} {
-		layout.Row(g.row(r))
+		if b, ok := g.row(r); ok {
+			layout.Row(b)
+		}
 	}
 	g.dash.RowsLayout(layout)
 	if len(g.errs) > 0 {

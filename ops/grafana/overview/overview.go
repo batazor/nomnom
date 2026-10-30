@@ -12,7 +12,6 @@ import (
 	dashboard "github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
 	"github.com/grafana/grafana-foundation-sdk/go/prometheus"
 	"github.com/grafana/grafana-foundation-sdk/go/resource"
-	"github.com/grafana/grafana-foundation-sdk/go/text"
 	"github.com/grafana/grafana-foundation-sdk/go/timeseries"
 
 	"nomnom/ops/grafana/inventory"
@@ -131,6 +130,8 @@ type PanelSummary struct {
 }
 
 type row struct {
+	// product — row вкладки Product: как идёт бизнес-процесс, а не как работает сервис.
+	product   bool
 	title     string
 	scope     Scope
 	collapsed bool
@@ -187,12 +188,12 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	if opts.Lifecycle {
 		rows = append(rows, row{title: "Domain Lifecycle", scope: main, collapsed: true, panels: lifecycle(main)})
 	}
-	if opts.Domain != nil {
-		rows = append(rows, row{title: "Domain metrics", scope: main, panels: opts.Domain(main)})
-	}
 	if opts.Process != nil {
 		process := Scope{Services: opts.Services, AllServices: true}
-		rows = append(rows, row{title: "Flow", scope: process, panels: opts.Process(process)})
+		rows = append(rows, row{title: "Flow", scope: process, product: true, panels: opts.Process(process)})
+	}
+	if opts.Domain != nil {
+		rows = append(rows, row{title: "Domain metrics", scope: main, product: true, panels: opts.Domain(main)})
 	}
 	if opts.Temporal != nil {
 		worker := Scope{Var: "worker", Services: []string{opts.Temporal.Worker}}
@@ -203,7 +204,7 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 		})
 	}
 	if opts.Kitchen {
-		rows = append(rows, row{title: "Kitchen", scope: main, collapsed: true, panels: kitchen(main)})
+		rows = append(rows, row{title: "Kitchen", scope: main, product: true, collapsed: true, panels: kitchen(main)})
 	}
 	if opts.Authorization {
 		rows = append(rows, row{title: "Authorization", scope: main, collapsed: true, panels: authorization(main)})
@@ -213,13 +214,30 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 		rows = append(rows, row{title: "Certificates", scope: certs, collapsed: true, panels: certificates(certs)})
 	}
 
-	layout := dashboard.Rows()
+	product, technical := dashboard.Rows(), dashboard.Rows()
+	var productRows, technicalRows int
 	for _, r := range rows {
-		if len(r.panels) > 0 {
-			layout.Row(g.row(r))
+		if len(r.panels) == 0 {
+			continue
+		}
+		b, ok := g.row(r)
+		switch {
+		case !ok:
+		case r.product:
+			product.Row(b)
+			productRows++
+		default:
+			technical.Row(b)
+			technicalRows++
 		}
 	}
-	g.dash.RowsLayout(layout)
+	if productRows > 0 {
+		g.dash.TabsLayout(dashboard.Tabs().
+			Tab(dashboard.Tab("Product").RowsLayout(product)).
+			Tab(dashboard.Tab("Technical").RowsLayout(technical)))
+	} else {
+		g.dash.RowsLayout(technical)
+	}
 	if len(g.errs) > 0 {
 		return Dashboard{}, fmt.Errorf("%s: %s", uid, strings.Join(g.errs, "; "))
 	}
@@ -231,28 +249,53 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	return Dashboard{UID: uid, Manifest: manifest, Rows: g.report}, nil
 }
 
-func (g *generator) row(r row) *dashboard.RowBuilder {
-	grid := dashboard.Grid()
+// row собирает живые панели в auto grid; false — живых панелей нет и row не выводится.
+// Панели, ждущие метрик, есть только в README dashboard. Живая панель без данных скрыта
+// правилом show/hide: метрика есть, но событий ещё не было.
+func (g *generator) row(r row) (*dashboard.RowBuilder, bool) {
+	grid := dashboard.AutoGrid().
+		MaxColumnCount(3).
+		ColumnWidthMode(dashboard.AutoGridLayoutSpecColumnWidthModeStandard).
+		RowHeightMode(dashboard.AutoGridLayoutSpecRowHeightModeStandard)
 	summary := RowSummary{Title: r.title}
-	for i, p := range r.panels {
+	live := 0
+	for _, p := range r.panels {
 		g.n++
 		key := fmt.Sprintf("panel-%d", g.n)
 		panel, ps := g.panel(p, r.scope)
+		summary.Panels = append(summary.Panels, ps)
+		if !ps.Live {
+			continue
+		}
+		live++
 		g.dash.Panel(key, panel.Id(float64(g.n)))
+		grid.Item(dashboard.AutoGridItem(key).ConditionalRendering(showWithData()))
 		if p.Sankey {
 			// Потоки не читаются в трети ширины; Sankey — единственная панель своего row.
-			grid.Item(dashboard.GridItem(key).X(0).Y(0).Width(24).Height(14))
-		} else {
-			grid.Item(dashboard.GridItem(key).X(int64(i%3) * 8).Y(int64(i/3) * 8).Width(8).Height(8))
+			grid.MaxColumnCount(1).
+				RowHeightMode(dashboard.AutoGridLayoutSpecRowHeightModeCustom).
+				RowHeight(sankeyHeight)
 		}
-		summary.Panels = append(summary.Panels, ps)
 	}
 	g.report = append(g.report, summary)
-	b := dashboard.Row(r.title).Collapse(r.collapsed).GridLayout(grid)
+	if live == 0 {
+		return nil, false
+	}
+	b := dashboard.Row(r.title).Collapse(r.collapsed).AutoGridLayout(grid)
 	if len(r.vars) > 0 {
 		b.Variables(r.vars)
 	}
-	return b
+	return b, true
+}
+
+// showWithData — правило «Has data»: панель без данных запроса не показывается.
+func showWithData() *dashboard.ConditionalRenderingGroupBuilder {
+	data := dashboard.NewConditionalRenderingDataKind()
+	data.Spec.Value = true
+	return dashboard.NewConditionalRenderingGroupBuilder().
+		Visibility(dashboard.ConditionalRenderingGroupSpecVisibilityShow).
+		Condition(dashboard.ConditionalRenderingGroupSpecConditionAnd).
+		Item(dashboard.ConditionalRenderingVariableKindOrConditionalRenderingDataKindOrConditionalRenderingTimeRangeSizeKind{ConditionalRenderingDataKind: data})
 }
 
 // panel рендерит живую панель на готовых запросах или TODO-панель.
@@ -296,8 +339,7 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 	}
 	b := dashboard.NewPanelBuilder().Title(p.Title)
 	if len(ready) == 0 {
-		return b.Description(p.Description).
-			Visualization(text.NewVisualizationV2Builder().Mode(text.TextModeMarkdown).Content(todo(p, sc, names))), summary
+		return b, summary
 	}
 
 	description := p.Description
@@ -385,30 +427,6 @@ func (g *generator) check(panel string, q Query, sc Scope) (bool, []string) {
 	return ready, missing
 }
 
-func todo(p Panel, sc Scope, missing []string) string {
-	var b strings.Builder
-	b.WriteString("**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](" + inventory.RepoURL + inventory.DocPath + ").\n\n")
-	b.WriteString("| Метрика | Статус для `" + strings.Join(sc.Services, "`, `") + "` |\n| --- | --- |\n")
-	for _, name := range missing {
-		m, _ := inventory.Lookup(name)
-		status := "не заявлена"
-		for _, s := range sc.Services {
-			if st, ok := m.Status[s]; ok {
-				status = string(st)
-				break
-			}
-		}
-		fmt.Fprintf(&b, "| [`%s`](%s) | %s |\n", name, inventory.Anchor(m.Section), status)
-	}
-	b.WriteString("\nЦелевой PromQL:\n\n```promql\n")
-	for _, q := range p.Queries {
-		b.WriteString(q.Expr + "\n")
-	}
-	b.WriteString("```\n")
-	return b.String()
-}
-
-// metricsOf — метрики панели без служебной target_info, для описания по умолчанию.
 func metricsOf(p Panel) []string {
 	var out []string
 	for _, q := range p.Queries {

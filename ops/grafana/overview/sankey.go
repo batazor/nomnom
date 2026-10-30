@@ -10,6 +10,9 @@ import (
 // колонки, поэтому цепочка состояний распадается на две несвязанные колонки.
 const sankeyPlugin = "volkovlabs-echarts-panel"
 
+// sankeyHeight — высота row с Sankey в пикселях: потоки не читаются в обычной панели.
+const sankeyHeight = 500
+
 // sankeyOption строит граф по сериям instant-запроса: узлы связи — в labels значения.
 // Нет серий — пустая панель.
 const sankeyOption = `const links = [];

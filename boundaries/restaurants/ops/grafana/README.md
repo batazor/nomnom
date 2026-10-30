@@ -135,18 +135,18 @@ JSON — артефакт генератора: правки вносятся в
 | Invalid transitions | live | — |
 | Terminal transitions | live | — |
 
+### Flow
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Kitchen flow | live | — |
+
 ### Domain metrics
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
 | Restaurant orders: received / accepted / rejected | TODO | [`nomnom_restaurants_orders_accepted_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_restaurants_orders_received_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_restaurants_orders_rejected_total`](../../../../docs/observability/metric-inventory.md#domain) |
 | Rejections by reason | TODO | [`nomnom_restaurants_orders_rejected_total`](../../../../docs/observability/metric-inventory.md#domain) |
-
-### Flow
-
-| Панель | Статус | Недостающие метрики |
-| --- | --- | --- |
-| Kitchen flow | live | — |
 
 ### Kitchen
 
@@ -167,7 +167,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 28 из 61. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 28 из 61. TODO-панели нет в dashboard: она появляется после смены статуса метрик в инвентаре и регенерации.
 
 ## Alerts
 

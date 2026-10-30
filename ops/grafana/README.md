@@ -31,7 +31,7 @@ make grafana-tools      # go install gcx
 
 1. Сервис экспортирует метрику, Alloy доставляет её в Grafana Cloud (проверено запросом series).
 2. В `inventory/inventory.go` статус метрики для этого service.name меняется на `Present`.
-3. `make grafana-generate` — TODO-панель заменяется запросами, README и инвентарь обновляются.
+3. `make grafana-generate` — панель появляется в dashboard, README и инвентарь обновляются.
 
 Генерация падает, если панель ссылается на метрику вне инвентаря, на незаявленный label или на high-cardinality label из `inventory.ForbiddenLabels`.
 

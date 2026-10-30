@@ -1,6 +1,7 @@
 package overview
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -54,6 +55,45 @@ func TestSankeyOptionUsesNodesAndLinks(t *testing.T) {
 	for _, want := range []string{`type: "sankey"`, "links", `labels.nomnom_fsm_from_state`, `labels.nomnom_fsm_to_state`} {
 		if !strings.Contains(sankeyOption, want) {
 			t.Errorf("нет %s", want)
+		}
+	}
+}
+
+// Product — первая вкладка там, где есть процесс или доменные метрики; все панели в auto
+// grid, скрываются без данных, а панелей, ждущих метрик, в dashboard нет.
+func TestDashboardsUseTabsAutoGridAndShowRules(t *testing.T) {
+	withAllPresent(t)
+	for ctx, d := range render(t) {
+		raw, err := json.Marshal(d.Manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(raw)
+		if strings.Contains(s, `"GridLayout"`) {
+			t.Errorf("%s: панели не в auto grid", ctx)
+		}
+		if !strings.Contains(s, `"ConditionalRenderingData"`) {
+			t.Errorf("%s: нет правила скрытия панелей без данных", ctx)
+		}
+		if ctx == "bff" {
+			continue
+		}
+		product, technical := strings.Index(s, `"title":"Product"`), strings.Index(s, `"title":"Technical"`)
+		if product < 0 || technical < product {
+			t.Errorf("%s: вкладки Product %d, Technical %d", ctx, product, technical)
+		}
+	}
+}
+
+func TestPanelsWaitingForMetricsAreNotInTheDashboard(t *testing.T) {
+	withStatus(t, inventory.Expected)
+	for ctx, d := range render(t) {
+		raw, err := json.Marshal(d.Manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "TODO") {
+			t.Errorf("%s: TODO-панель в dashboard", ctx)
 		}
 	}
 }
