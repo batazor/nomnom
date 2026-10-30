@@ -10,22 +10,17 @@ import (
 // колонки, поэтому цепочка состояний распадается на две несвязанные колонки.
 const sankeyPlugin = "volkovlabs-echarts-panel"
 
-// sankeyOption строит граф по строкам from, to, Value; узлы — все упомянутые
-// состояния. Нет строк — пустая панель.
-const sankeyOption = `const frame = context.panel.data.series[0];
-if (!frame) {
-  return {};
-}
-const column = (name) => frame.fields.find((field) => field.name === name).values;
-const from = column("from");
-const to = column("to");
-const value = column("Value");
-const links = [];
+// sankeyOption строит граф по сериям instant-запроса: узлы связи — в labels значения.
+// Нет серий — пустая панель.
+const sankeyOption = `const links = [];
 const names = new Set();
-for (let i = 0; i < frame.length; i++) {
-  links.push({ source: from[i], target: to[i], value: value[i] });
-  names.add(from[i]);
-  names.add(to[i]);
+for (const frame of context.panel.data.series) {
+  const field = frame.fields.find((candidate) => candidate.type === "number");
+  const source = field.labels.nomnom_fsm_from_state;
+  const target = field.labels.nomnom_fsm_to_state;
+  links.push({ source, target, value: field.values[field.values.length - 1] });
+  names.add(source);
+  names.add(target);
 }
 return {
   backgroundColor: "transparent",
@@ -35,7 +30,7 @@ return {
     nodeAlign: "left",
     emphasis: { focus: "adjacency" },
     lineStyle: { color: "gradient", curveness: 0.5 },
-    label: { color: context.grafana.theme.colors.text.primary },
+    label: { color: "#d8d9da" },
     data: Array.from(names).map((name) => ({ name })),
     links,
   }],
@@ -55,14 +50,4 @@ func (sankeyVisualization) Build() (dashboard.VizConfigKind, error) {
 			FieldConfig: *dashboard.NewFieldConfigSource(),
 		},
 	}, nil
-}
-
-// sankeyColumns даёт sankeyOption колонки from, to и Value без времени instant-запроса.
-func sankeyColumns() *dashboard.TransformationBuilder {
-	return dashboard.NewTransformationBuilder().
-		Group("organize").
-		Options(map[string]any{
-			"excludeByName": map[string]bool{"Time": true},
-			"renameByName":  map[string]string{"nomnom_fsm_from_state": "from", "nomnom_fsm_to_state": "to"},
-		})
 }

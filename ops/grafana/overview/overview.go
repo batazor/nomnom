@@ -307,7 +307,7 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 			Datasource(dashboard.NewDashboardv2DataQueryKindDatasourceBuilder().Name("${metrics}")).
 			Expr(q.Expr).LegendFormat(q.Legend).Range(!p.Sankey)
 		if p.Sankey {
-			query.Instant(true).Format(prometheus.PromQueryFormatTable)
+			query.Instant(true)
 		}
 		if inventory.ExemplarsEnabled && strings.Contains(q.Expr, "histogram_quantile") {
 			query.Exemplar(true)
@@ -319,7 +319,6 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		}
 	}
 	if p.Sankey {
-		group.Transformation(sankeyColumns())
 		return b.Description(description).Data(group).Visualization(sankeyVisualization{}), summary
 	}
 	return b.Description(description).Data(group).Visualization(viz), summary

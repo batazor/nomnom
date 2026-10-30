@@ -49,7 +49,7 @@ func TestOrderFlowIsOnlyInOrders(t *testing.T) {
 
 // Sankey строится из связей: узел один на состояние, иначе цепочка распадётся.
 func TestSankeyOptionUsesNodesAndLinks(t *testing.T) {
-	for _, want := range []string{`type: "sankey"`, "links", `column("from")`, `column("to")`, `column("Value")`} {
+	for _, want := range []string{`type: "sankey"`, "links", `labels.nomnom_fsm_from_state`, `labels.nomnom_fsm_to_state`} {
 		if !strings.Contains(sankeyOption, want) {
 			t.Errorf("нет %s", want)
 		}
