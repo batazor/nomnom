@@ -1,6 +1,6 @@
 # Profile grafana-cloud (ops/grafana-cloud/README.md): browser telemetry customer UI в
 # faro.receiver Alloy через listener telemetry публичного gateway
-# (manifests/observability/faro-route.yaml); CORS origin UI разрешён в alloy.yaml.
+# (manifests/observability/faro-route.yaml); CORS origin UI разрешён в alloy/apps.alloy.
 config:
   faroUrl: https://telemetry.nomnom.localhost:18085/collect
   appVersion: kind

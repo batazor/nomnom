@@ -1,0 +1,108 @@
+// Строка Faro — logfmt с полями app_*, page_url (уже без id, beforeSend SDK), session_id.
+loki.process "browser_logs" {
+  stage.logfmt {
+    mapping = {
+      environment = "app_environment",
+    }
+  }
+  stage.labels {
+    values = {
+      environment = "",
+    }
+  }
+  forward_to = [otelcol.receiver.loki.browser_logs.receiver]
+}
+
+otelcol.receiver.loki "browser_logs" {
+  output {
+    logs = [otelcol.processor.transform.browser_logs.input]
+  }
+}
+
+// Labels Faro → resource: сервис задан extra_log_labels, окружение — полем app_environment.
+otelcol.processor.transform "browser_logs" {
+  error_mode = "ignore"
+  log_statements {
+    context    = "log"
+    statements = [
+      `set(resource.attributes["service.name"], attributes["service_name"])`,
+      `set(resource.attributes["service.namespace"], attributes["service_namespace"])`,
+      `set(resource.attributes["deployment.environment.name"], attributes["environment"]) where attributes["environment"] != nil`,
+      `delete_matching_keys(attributes, "^(service_name|service_namespace|environment)$")`,
+    ]
+  }
+  output {
+    logs = [otelcol.processor.batch.signals.input]
+  }
+}
+
+// Logs (docs/observability.md#логи): JSON-строки stdout pods прикладных неймспейсов.
+// Поля записи поднимаются в OTLP: resource service.*, severity, trace_id/span_id —
+// переход log → trace в Grafana. Строка не-JSON уходит как есть, только с k8s.*.
+discovery.kubernetes "app_pods" {
+  role = "pod"
+  namespaces {
+    names = ["nomnom-orders", "nomnom-payments", "nomnom-delivery", "nomnom-restaurants", "nomnom-controlplane", "nomnom-bff"]
+  }
+}
+
+discovery.relabel "app_pods" {
+  targets = discovery.kubernetes.app_pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+}
+
+loki.source.kubernetes "app_pods" {
+  targets    = discovery.relabel.app_pods.output
+  forward_to = [otelcol.receiver.loki.app_logs.receiver]
+}
+
+otelcol.receiver.loki "app_logs" {
+  output {
+    logs = [otelcol.processor.transform.app_logs.input]
+  }
+}
+
+// Запись → OTLP. Body остаётся исходной строкой; из JSON поднимаются только идентификация
+// и trace context. Сервис берётся только из самой записи: строка не-JSON (вывод до
+// инициализации logger, например automemlimit) не получает service.*, её находят по k8s.*.
+otelcol.processor.transform "app_logs" {
+  error_mode = "ignore"
+  log_statements {
+    context    = "log"
+    statements = [
+      `set(resource.attributes["k8s.namespace.name"], attributes["namespace"])`,
+      `set(resource.attributes["k8s.pod.name"], attributes["pod"])`,
+      `set(resource.attributes["k8s.container.name"], attributes["container"])`,
+      `delete_matching_keys(attributes, "^(namespace|pod|container)$")`,
+      `merge_maps(cache, ParseJSON(body), "upsert") where IsMatch(body, "^\\{")`,
+      // Схема логов nomnom: плоские ключи service.*, severity, trace_id, span_id.
+      `set(resource.attributes["service.name"], cache["service.name"]) where cache["service.name"] != nil`,
+      `set(resource.attributes["service.namespace"], cache["service.namespace"]) where cache["service.namespace"] != nil`,
+      `set(resource.attributes["service.version"], cache["service.version"]) where cache["service.version"] != nil`,
+      `set(resource.attributes["service.instance.id"], cache["service.instance.id"]) where cache["service.instance.id"] != nil`,
+      `set(resource.attributes["deployment.environment.name"], cache["deployment.environment.name"]) where cache["deployment.environment.name"] != nil`,
+      `set(severity_text, cache["severity"]) where cache["severity"] != nil`,
+      `set(trace_id.string, cache["trace_id"]) where cache["trace_id"] != nil`,
+      `set(span_id.string, cache["span_id"]) where cache["span_id"] != nil`,
+      // Cosmo Router (BFF) пишет JSON своей схемы (level, msg, service=@wundergraph/router);
+      // идентификация BFF — из boundaries/bff/config.production.yaml (telemetry.service_name).
+      `set(resource.attributes["service.name"], "bff") where cache["service"] == "@wundergraph/router" and resource.attributes["k8s.namespace.name"] == "nomnom-bff"`,
+      `set(resource.attributes["service.namespace"], "nomnom") where cache["service"] == "@wundergraph/router" and resource.attributes["k8s.namespace.name"] == "nomnom-bff"`,
+      `set(severity_text, ConvertCase(cache["level"], "upper")) where cache["service"] == "@wundergraph/router" and cache["level"] != nil`,
+    ]
+  }
+  output {
+    logs = [otelcol.processor.batch.signals.input]
+  }
+}

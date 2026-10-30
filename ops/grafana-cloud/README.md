@@ -19,7 +19,7 @@ make grafana-cloud-push            # overview dashboards → folder nomnom в st
 
 `push-dashboards.sh` собирает временный gcx config (token gcx кладёт в системный keychain) и загружает копии артефактов с annotation `grafana.app/folder: nomnom`: Editor в Grafana 13 создаёт dashboards в корне, но не может их читать и обновлять, а на созданный им folder получает права администратора. Закоммиченные артефакты не меняются.
 
-Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) добавляет к манифестам kustomization [`manifests/observability`](../kind/manifests/observability/kustomization.yaml): [`alloy.yaml`](../kind/manifests/observability/alloy.yaml) и Secret `grafana-cloud-otlp`, который `secretGenerator` собирает из `.env.grafana-cloud` (в кластер попадают только `GRAFANA_CLOUD_OTLP_*`; суффикс-хеш имени перезапускает Alloy при изменении файла). Без файла рендер Skaffold падает; с пустым endpoint, instance ID или token init container `require-grafana-cloud` не даёт Alloy стартовать, и status check завершается ошибкой ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)). Releases `orders` и `orders-consumer` получают [`values/grafana-cloud.yaml`](../kind/values/grafana-cloud.yaml). Без `GRAFANA_CLOUD=1` kind не меняется, `kind-e2e` в облако ничего не отправляет.
+Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) добавляет к манифестам kustomization [`manifests/observability`](../kind/manifests/observability/kustomization.yaml): [`alloy.yaml`](../kind/manifests/observability/alloy.yaml) с конфигурацией [`alloy/*.alloy`](../kind/manifests/observability/alloy) (ConfigMap `alloy` из `configMapGenerator`), [`kube-state-metrics.yaml`](../kind/manifests/observability/kube-state-metrics.yaml) и Secret `grafana-cloud-otlp`, который `secretGenerator` собирает из `.env.grafana-cloud` (в кластер попадают только `GRAFANA_CLOUD_OTLP_*`; суффикс-хеш имени перезапускает Alloy при изменении файла). Без файла рендер Skaffold падает; с пустым endpoint, instance ID или token init container `require-grafana-cloud` не даёт Alloy стартовать, и status check завершается ошибкой ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)). Releases `orders` и `orders-consumer` получают [`values/grafana-cloud.yaml`](../kind/values/grafana-cloud.yaml). Без `GRAFANA_CLOUD=1` kind не меняется, `kind-e2e` в облако ничего не отправляет.
 
 ## Лимиты free tier
 
@@ -27,11 +27,11 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) доб
 
 | Мера | Где |
 | --- | --- |
-| Метрики, traces и логи; profiles в pipeline Alloy нет | `alloy.yaml` |
-| Traces — только `service.namespace=nomnom` (internal gateway задаёт его resource attribute в EnvoyProxy); логи — только stdout pods прикладных неймспейсов, в индексе Loki лишь `service_name`, `service_namespace`, `environment`, `severity`, а `trace_id`, `span_id`, версия — structured metadata | `alloy.yaml` |
+| Метрики, traces и логи; profiles в pipeline Alloy нет | `alloy/*.alloy` |
+| Traces — только `service.namespace=nomnom` (internal gateway задаёт его resource attribute в EnvoyProxy); логи — только stdout pods прикладных неймспейсов; `service.*`, `deployment.environment.name` и `k8s.*` — resource attributes (index labels и structured metadata по правилам OTLP ingestion Loki), `trace_id`, `span_id`, `severity` — поля записи | `alloy/apps.alloy`, `alloy/logs.alloy` |
 | Только `service.namespace=nomnom`, остальной OTLP отбрасывается | `otelcol.processor.filter "nomnom"` |
-| Собственные метрики Alloy не отправляются | `alloy.yaml` |
-| Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, Envoy internal gateway только clusters GRPCRoute (~420 series), pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy.yaml` |
+| Собственные метрики Alloy не отправляются | `alloy/*.alloy` |
+| Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только база владельца, Envoy internal gateway только clusters GRPCRoute (~420 series), pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy/infra.alloy`, `kube-state-metrics.yaml` |
 | Экспорт раз в 60 s | `OTEL_METRIC_EXPORT_INTERVAL` |
 | Values профиля получают все releases orders, restaurants, delivery и payments (BFF — Cosmo, своя telemetry) | `skaffold.yaml`, `values/grafana-cloud.yaml` |
 | BFF (Cosmo Router): из метрик Router остаются `router.http.requests`, `.requests.error`, `.request.duration_milliseconds` с labels `wg.operation.type`, `wg.subgraph.name`, `http.status_code` | `values/bff-grafana-cloud.yaml`, `otelcol.processor.filter "nomnom"`, `otelcol.processor.transform "bff_metrics"` |

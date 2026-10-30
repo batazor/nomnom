@@ -11,7 +11,7 @@
 | Схема | `dashboard.grafana.app/v2` (Grafana 13) |
 | Доставка | Git Sync, repository [`ops/grafana/git-sync/platform.yaml`](../git-sync/platform.yaml) |
 | Генератор | [`ops/grafana`](../README.md), функция `overview.PlatformOverview` |
-| Источники | Alloy Prometheus scrape: `infra/spicedb`, `infra/postgresql`, `infra/kubernetes` ([`alloy.yaml`](../../kind/manifests/observability/alloy.yaml)) |
+| Источники | Alloy Prometheus scrape: `infra/spicedb`, `infra/postgresql`, `infra/kubernetes` ([`infra.alloy`](../../kind/manifests/observability/alloy/infra.alloy)) |
 
 ## Variables
 

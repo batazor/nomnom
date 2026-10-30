@@ -24,7 +24,7 @@ func main() {
 		server.RegisterService(&service.BffService_ServiceDesc, bff)
 	},
 		// Exporters come from the Router (telemetry.tracing); spans of the plugin
-		// get their own service so Alloy can admit them (wg.is_plugin, alloy.yaml).
+		// get their own service so Alloy can admit them (wg.is_plugin, alloy/apps.alloy).
 		routerplugin.WithTracing(),
 		routerplugin.WithServiceName("bff-plugin"),
 		routerplugin.WithServiceVersion(serviceVersion),

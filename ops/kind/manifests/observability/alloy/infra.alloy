@@ -1,0 +1,413 @@
+// Инфраструктура: Prometheus scrape → OTLP мимо фильтра nomnom (у этих метрик нет
+// service.namespace). Каждый источник ограничен allowlist метрик: квота series free tier.
+otelcol.receiver.prometheus "infra" {
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
+
+// SpiceDB: серверная сторона Check/Write, кэш dispatch и datastore. Health-check gRPC и
+// buckets datastore отбрасываются.
+discovery.kubernetes "spicedb" {
+  role = "pod"
+  namespaces {
+    names = ["nomnom-authz"]
+  }
+  selectors {
+    role  = "pod"
+    label = "app.kubernetes.io/name=spicedb"
+  }
+}
+
+discovery.relabel "spicedb" {
+  targets = discovery.kubernetes.spicedb.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_ip"]
+    target_label  = "__address__"
+    replacement   = "$1:9090"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+}
+
+prometheus.scrape "spicedb" {
+  targets         = discovery.relabel.spicedb.output
+  job_name        = "infra/spicedb"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.spicedb.receiver]
+}
+
+prometheus.relabel "spicedb" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "grpc_server_handled_total|grpc_server_handling_seconds_(bucket|sum|count)|spicedb_v1_check_permissionship_total|spicedb_dispatch_client_check(_from_cache)?_total|spicedb_datastore_query_latency_(sum|count)|process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["grpc_service"]
+    regex         = "grpc\\.health\\.v1\\.Health"
+    action        = "drop"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// PostgreSQL: по экспортеру на базу владельца (ADR 8) одного сервера postgres; DSN из
+// Secret alloy-postgres (chart ops/kind/bootstrap) — роль alloy (pg_monitor), не роль
+// сервиса. Только база владельца, без pg_settings. replication_slot —
+// слот Debezium <owner>_outbox (ADR 37): отставание CDC от WAL и активность слота.
+prometheus.exporter.postgres "orders" {
+  data_source_names  = [sys.env("POSTGRES_ORDERS_DSN")]
+  enabled_collectors = ["database", "stat_database", "replication_slot"]
+  autodiscovery {
+    enabled = false
+  }
+}
+
+prometheus.exporter.postgres "payments" {
+  data_source_names  = [sys.env("POSTGRES_PAYMENTS_DSN")]
+  enabled_collectors = ["database", "stat_database", "replication_slot"]
+  autodiscovery {
+    enabled = false
+  }
+}
+
+prometheus.exporter.postgres "delivery" {
+  data_source_names  = [sys.env("POSTGRES_DELIVERY_DSN")]
+  enabled_collectors = ["database", "stat_database", "replication_slot"]
+  autodiscovery {
+    enabled = false
+  }
+}
+
+discovery.relabel "postgres" {
+  targets = array.concat(
+    prometheus.exporter.postgres.orders.targets,
+    prometheus.exporter.postgres.payments.targets,
+    prometheus.exporter.postgres.delivery.targets,
+  )
+  rule {
+    source_labels = ["__meta_component_id"]
+    regex         = "prometheus\\.exporter\\.postgres\\.(.+)"
+    target_label  = "owner"
+  }
+  rule {
+    source_labels = ["owner"]
+    target_label  = "instance"
+    replacement   = "postgres-$1"
+  }
+  // Экспортер задаёт свой job (integrations/postgres), он важнее job_name scrape.
+  rule {
+    target_label = "job"
+    replacement  = "infra/postgresql"
+  }
+}
+
+prometheus.scrape "postgres" {
+  targets         = discovery.relabel.postgres.output
+  job_name        = "infra/postgresql"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.postgres.receiver]
+}
+
+prometheus.relabel "postgres" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "pg_up|pg_database_size_bytes|pg_stat_database_(numbackends|xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|conflicts|temp_bytes)|pg_replication_slot_slot_(current_wal_lsn|confirmed_flush_lsn|is_active)"
+    action        = "keep"
+  }
+  // stat_database и размер есть у каждой базы сервера: только база владельца
+  // (datname == owner); pg_up и слоты (без datname, сервер — владельца) проходят всегда.
+  rule {
+    source_labels = ["__name__", "datname", "owner"]
+    regex         = "pg_up;.*;.*|pg_replication_slot_.+;.*;.*|pg_(database_size_bytes|stat_database_.+);(orders;orders|payments;payments|delivery;delivery)"
+    action        = "keep"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// Valkey: по экспортеру на владельца (ADR 43); ACL-пользователь exporter без доступа к
+// ключам, пароль из Secret alloy-valkey (chart ops/kind/bootstrap).
+prometheus.exporter.redis "restaurants" {
+  redis_addr     = "valkey-restaurants.nomnom-data.svc.cluster.local:6379"
+  redis_user     = "exporter"
+  redis_password = sys.env("VALKEY_RESTAURANTS_PASSWORD")
+}
+
+discovery.relabel "valkey" {
+  targets = prometheus.exporter.redis.restaurants.targets
+  rule {
+    source_labels = ["__meta_component_id"]
+    regex         = "prometheus\\.exporter\\.redis\\.(.+)"
+    target_label  = "owner"
+  }
+  rule {
+    source_labels = ["owner"]
+    target_label  = "instance"
+    replacement   = "valkey-$1"
+  }
+  // Экспортер задаёт свой job (integrations/redis), он важнее job_name scrape.
+  rule {
+    target_label = "job"
+    replacement  = "infra/valkey"
+  }
+}
+
+prometheus.scrape "valkey" {
+  targets         = discovery.relabel.valkey.output
+  job_name        = "infra/valkey"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.valkey.receiver]
+}
+
+// Только метрики инвентаря (ops/grafana/inventory, раздел valkey): квота series free tier.
+prometheus.relabel "valkey" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "redis_up|redis_connected_clients|redis_memory_(used|max)_bytes|redis_commands_processed_total|redis_keyspace_(hits|misses)_total|redis_(evicted|expired)_keys_total|redis_db_keys"
+    action        = "keep"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// Kafka Connect с Debezium (ADR 37): JMX exporter :9404 (ops/kind/kafka-connect/metrics.yaml
+// уже ограничивает MBeans) — состояние коннекторов и задач, поток и отставание Debezium.
+discovery.kubernetes "kafka_connect" {
+  role = "pod"
+  namespaces {
+    names = ["nomnom-infra"]
+  }
+  selectors {
+    role  = "pod"
+    label = "app.kubernetes.io/name=kafka-connect"
+  }
+}
+
+discovery.relabel "kafka_connect" {
+  targets = discovery.kubernetes.kafka_connect.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_ip"]
+    target_label  = "__address__"
+    replacement   = "$1:9404"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+}
+
+prometheus.scrape "kafka_connect" {
+  targets         = discovery.relabel.kafka_connect.output
+  job_name        = "infra/kafka-connect"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.kafka_connect.receiver]
+}
+
+prometheus.relabel "kafka_connect" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "kafka_connect_(connector_status|connector_task_status|worker_.+)|debezium_metrics_(MilliSecondsBehindSource|TotalNumberOfEventsSeen|QueueRemainingCapacity|QueueTotalCapacity|Connected|MilliSecondsSinceLastEvent)"
+    action        = "keep"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// Lag consumer groups контекстов, которые читают Kafka сами (orders-consumer — Watermill,
+// restaurants); delivery и payments только публикуют Outbox через Debezium. Группы
+// <group>.dlq хранят разобранное в <stream>.dlq (docs/dlq.md): alert kafka-dlq-unresolved
+// считает неразобранное как конец partition DLQ минус их offset.
+prometheus.exporter.kafka "infra" {
+  kafka_uris          = ["kafka.nomnom-infra.svc.cluster.local:9092"]
+  groups_filter_regex = ["^(orders|restaurants)(\\.dlq)?$"]
+}
+
+prometheus.scrape "kafka" {
+  targets         = prometheus.exporter.kafka.infra.targets
+  job_name        = "infra/kafka"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.kafka.receiver]
+}
+
+// lag — дашборды; offsets групп и начало/конец partitions — только DLQ topics.
+prometheus.relabel "kafka" {
+  rule {
+    source_labels = ["__name__", "topic"]
+    separator     = ";"
+    regex         = "kafka_consumergroup_lag;.*|kafka_consumergroup_current_offset;.+\\.dlq|kafka_topic_partition_(current|oldest)_offset;.+\\.dlq"
+    action        = "keep"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// Internal gateway (ADR 15): stats Envoy на порту 19001 (NetworkPolicy internal-gateway-ingress
+// пускает только Alloy). Только clusters GRPCRoute и метрики, на которых строятся алерты:
+// retries (скрывают отказ backend'а), pending overflow, timeouts, connect failures,
+// исключённые passive health check endpoints и latency. upstream_rq_xx — HTTP-класс финального ответа после retries; gRPC-ошибки
+// приходят с HTTP 200, поэтому статус вызова смотрится по метрикам сервисов.
+discovery.kubernetes "internal_gateway" {
+  role = "pod"
+  namespaces {
+    names = ["envoy-gateway-system"]
+  }
+  selectors {
+    role  = "pod"
+    label = "gateway.envoyproxy.io/owning-gateway-name=internal"
+  }
+}
+
+discovery.relabel "internal_gateway" {
+  targets = discovery.kubernetes.internal_gateway.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_ip"]
+    target_label  = "__address__"
+    replacement   = "$1:19001"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+}
+
+prometheus.scrape "internal_gateway" {
+  targets         = discovery.relabel.internal_gateway.output
+  job_name        = "infra/internal-gateway"
+  metrics_path    = "/stats/prometheus"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.internal_gateway.receiver]
+}
+
+prometheus.relabel "internal_gateway" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "envoy_cluster_upstream_rq_(total|xx|retry|retry_success|retry_overflow|retry_limit_exceeded|pending_overflow|timeout)|envoy_cluster_upstream_cx_(connect_fail|active)|envoy_cluster_outlier_detection_ejections_(active|enforced_total)|envoy_cluster_external_upstream_rq_time_(bucket|sum|count)"
+    action        = "keep"
+  }
+  // Без xds_cluster, prometheus_stats и прочих служебных clusters Envoy.
+  rule {
+    source_labels = ["envoy_cluster_name"]
+    regex         = "grpcroute/.+"
+    action        = "keep"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// cert-manager controller: срок действия, плановое продление и Ready всех Certificate
+// кластера (CA, public gateway, ключ assertions BFF). Label namespace метрики —
+// неймспейс Certificate, pod controller'а в labels не нужен.
+discovery.kubernetes "cert_manager" {
+  role = "pod"
+  namespaces {
+    names = ["cert-manager"]
+  }
+  selectors {
+    role  = "pod"
+    label = "app.kubernetes.io/name=cert-manager,app.kubernetes.io/component=controller"
+  }
+}
+
+discovery.relabel "cert_manager" {
+  targets = discovery.kubernetes.cert_manager.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_ip"]
+    target_label  = "__address__"
+    replacement   = "$1:9402"
+  }
+}
+
+prometheus.scrape "cert_manager" {
+  targets         = discovery.relabel.cert_manager.output
+  job_name        = "infra/cert-manager"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.cert_manager.receiver]
+}
+
+prometheus.relabel "cert_manager" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "certmanager_certificate_(not_after|renewal)_timestamp_seconds|certmanager_certificate_ready_status"
+    action        = "keep"
+  }
+  // Только текущее состояние: series False/Unknown со значением 0 не нужны.
+  rule {
+    source_labels = ["__name__", "condition"]
+    regex         = "certmanager_certificate_ready_status;(False|Unknown)"
+    action        = "drop"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}
+
+// Pods nomnom-*: CPU, память и сеть из cAdvisor kubelet (через API server proxy),
+// restarts и readiness из kube-state-metrics.
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+discovery.relabel "cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc:443"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets           = discovery.relabel.cadvisor.output
+  job_name          = "infra/kubernetes"
+  scheme            = "https"
+  scrape_interval   = "60s"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  }
+  forward_to = [prometheus.relabel.pods.receiver]
+}
+
+prometheus.scrape "kube_state_metrics" {
+  targets         = [{"__address__" = "kube-state-metrics.nomnom-observability.svc:8080"}]
+  job_name        = "infra/kubernetes"
+  scrape_interval = "60s"
+  honor_labels    = true
+  forward_to      = [prometheus.relabel.pods.receiver]
+}
+
+prometheus.relabel "pods" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "container_cpu_usage_seconds_total|container_memory_working_set_bytes|container_network_(receive|transmit)_bytes_total|kube_pod_container_status_restarts_total|kube_pod_status_ready|kube_pod_container_status_waiting_reason"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["namespace"]
+    regex         = "nomnom-(orders|payments|delivery|restaurants|bff)"
+    action        = "keep"
+  }
+  // Readiness: достаточно condition="true"; false/unknown утроили бы series.
+  rule {
+    source_labels = ["__name__", "condition"]
+    regex         = "kube_pod_status_ready;(false|unknown)"
+    action        = "drop"
+  }
+  // cAdvisor отдаёт и pod-level cgroup (container=""), и pause (container="POD"):
+  // CPU и память считаются по контейнерам, сеть — только на уровне pod.
+  rule {
+    source_labels = ["__name__", "container"]
+    regex         = "container_(cpu_usage_seconds_total|memory_working_set_bytes);(|POD)"
+    action        = "drop"
+  }
+  rule {
+    source_labels = ["__name__", "interface"]
+    regex         = "container_network_.+;(lo|cilium.*|lxc.*)"
+    action        = "drop"
+  }
+  rule {
+    regex  = "id|image|name|endpoint|uid|interface"
+    action = "labeldrop"
+  }
+  forward_to = [otelcol.receiver.prometheus.infra.receiver]
+}

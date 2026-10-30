@@ -1,5 +1,5 @@
 # Faro collector customer UI на public gateway: https://telemetry.nomnom.localhost:${WEBHOOKS_HOST_PORT}/collect
-# → faro.receiver Alloy. Только POST /collect; CORS и rate limit — в faro.receiver (alloy.yaml).
+# → faro.receiver Alloy. Только POST /collect; CORS и rate limit — в faro.receiver (alloy/apps.alloy).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

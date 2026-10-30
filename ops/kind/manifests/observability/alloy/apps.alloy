@@ -1,0 +1,105 @@
+// OTLP приложений и Faro: приём traces/metrics, отбор процессов nomnom и series Router.
+// Квота free tier ограничена активными series: дальше уходят только метрики
+// service.namespace=nomnom; собственные метрики Alloy и profiles не отправляются.
+
+otelcol.receiver.otlp "apps" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    metrics = [otelcol.processor.memory_limiter.default.input]
+    traces  = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// Browser telemetry customer UI (Faro Web SDK, boundaries/ui/src/shared/telemetry):
+// публикуется public gateway на telemetry.nomnom.localhost (faro-route.yaml). Traces
+// идут через тот же фильтр nomnom (app.namespace = nomnom), логи и события — в Loki-путь.
+// Source maps не скачиваются: Alloy не ходит к origin браузера.
+faro.receiver "browser" {
+  extra_log_labels = {
+    service_name      = "customer-ui",
+    service_namespace = "nomnom",
+  }
+  server {
+    listen_address           = "0.0.0.0"
+    listen_port              = 12347
+    // Vite dev server customer UI (boundaries/ui, npm run dev) и образ UI за публичным
+    // gateway (values/ui-grafana-cloud.yaml).
+    cors_allowed_origins     = ["http://localhost:4173", "https://app.nomnom.localhost:18085"]
+    max_allowed_payload_size = "1MiB"
+    rate_limiting {
+      rate       = 50
+      burst_size = 100
+    }
+  }
+  sourcemaps {
+    download = false
+  }
+  output {
+    logs   = [loki.process.browser_logs.receiver]
+    traces = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+otelcol.processor.memory_limiter "default" {
+  check_interval = "1s"
+  limit          = "200MiB"
+  output {
+    metrics = [otelcol.processor.filter.nomnom.input]
+    traces  = [otelcol.processor.transform.router_plugin.input]
+  }
+}
+
+// Plugin BFF: Cosmo router-plugin задаёт resource сам (service.name, wg.is_plugin) и не
+// принимает другие attributes; namespace nomnom получает только он, по имени и флагу.
+otelcol.processor.transform "router_plugin" {
+  error_mode = "ignore"
+  trace_statements {
+    context    = "resource"
+    statements = [
+      `set(attributes["service.namespace"], "nomnom") where attributes["service.name"] == "bff-plugin" and attributes["wg.is_plugin"] == true`,
+    ]
+  }
+  output {
+    traces = [otelcol.processor.filter.nomnom.input]
+  }
+}
+
+// Только процессы nomnom: случайный OTLP-клиент в кластере не расходует квоту series.
+otelcol.processor.filter "nomnom" {
+  error_mode = "ignore"
+  metrics {
+    metric = [
+      "resource.attributes[\"service.namespace\"] != \"nomnom\"",
+      // Cosmo Router (BFF): только инструменты overview, остальное — квота series.
+      "resource.attributes[\"service.name\"] == \"bff\" and not IsMatch(name, \"^router\\\\.http\\\\.(requests|requests\\\\.error|request\\\\.duration_milliseconds)$\")",
+    ]
+  }
+  traces {
+    span = ["resource.attributes[\"service.namespace\"] != \"nomnom\""]
+  }
+  output {
+    metrics = [otelcol.processor.transform.bff_metrics.input]
+    traces  = [otelcol.processor.batch.signals.input]
+  }
+}
+
+// Labels Router: версии router и клиента, operation name/hash размножают series, а
+// dashboards BFF группируют только по типу операции, subgraph, HTTP-статусу и клиенту
+// (wg.client.name — GraphQL-Client-Name: nomnom-ui или unknown, единицы значений).
+otelcol.processor.transform "bff_metrics" {
+  error_mode = "ignore"
+  metric_statements {
+    context    = "datapoint"
+    statements = [
+      "keep_keys(attributes, [\"wg.operation.type\", \"wg.subgraph.name\", \"http.status_code\", \"wg.client.name\"]) where resource.attributes[\"service.name\"] == \"bff\"",
+    ]
+  }
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}

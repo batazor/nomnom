@@ -1,15 +1,28 @@
-# Alloy → Grafana Cloud (ADR 9) для Skaffold profile grafana-cloud: alloy.yaml, route Faro и
-# internal gateway (../gateway) со spans в Alloy; без профиля Skaffold применяет ../gateway
-# напрямую, и gateway spans не пишет. Secret grafana-cloud-otlp генерируется из
+# Alloy → Grafana Cloud (ADR 9) для Skaffold profile grafana-cloud: alloy.yaml (Alloy) с
+# конфигурацией alloy/*.alloy, kube-state-metrics.yaml, route Faro и internal gateway
+# (../gateway) со spans в Alloy; без профиля Skaffold применяет ../gateway напрямую, и gateway
+# spans не пишет. Secret grafana-cloud-otlp генерируется из
 # ops/grafana-cloud/.env.grafana-cloud (вне каталога kustomization, поэтому Skaffold передаёт
-# --load-restrictor LoadRestrictionsNone). Суффикс-хеш имени Secret перезапускает Alloy при
-# изменении файла. Без файла рендер падает сразу; пустые значения отвергает init container.
+# --load-restrictor LoadRestrictionsNone). Суффикс-хеш имени Secret и ConfigMap перезапускает
+# Alloy при изменении файла. Без файла рендер падает сразу; пустые значения отвергает init container.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - alloy.yaml
+  - kube-state-metrics.yaml
   - faro-route.yaml
   - ../gateway
+# Alloy загружает все *.alloy каталога /etc/alloy как один конфиг: компоненты ссылаются друг
+# на друга между файлами. apps — OTLP и Faro, logs — stdout pods и логи браузера, infra —
+# scrape инфраструктуры, export — batch и экспорт в Grafana Cloud.
+configMapGenerator:
+  - name: alloy
+    namespace: nomnom-observability
+    files:
+      - alloy/apps.alloy
+      - alloy/logs.alloy
+      - alloy/infra.alloy
+      - alloy/export.alloy
 secretGenerator:
   - name: grafana-cloud-otlp
     namespace: nomnom-observability
