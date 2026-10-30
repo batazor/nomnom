@@ -8,6 +8,8 @@ nomnom — сервис доставки еды, объединяющий кли
 
 Обязательный общий словарь, правила именования и границы Published Language зафиксированы в [Ubiquitous Language](docs/ubiquitous-language.md). Локальные индексы терминов каждого bounded context перечислены в [карте глоссариев](GLOSSARY-MAP.md).
 
+Схемы сервисов и их связей описаны моделью [LikeC4](docs/architecture/README.md): `make arch-dev`.
+
 Основные Commands, Queries, участие Temporal и Kafka, клиентские API composition scenarios и открытые продуктовые вопросы собраны в [матрице use cases](docs/use-cases.md).
 
 ## Архитектура верхнего уровня

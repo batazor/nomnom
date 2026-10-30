@@ -1,0 +1,196 @@
+views {
+  view index {
+    title 'Landscape'
+    description 'Клиенты, глобальный контур и Cell. Control plane не участвует в пути запроса.'
+    include
+      customer, staff, courier, operator, paymentProvider,
+      nomnom,
+      nomnom.*
+    exclude nomnom.observability
+    autoLayout TopBottom
+  }
+
+  view cell of nomnom.cell1 {
+    title 'Cell'
+    description 'Контексты вызывают друг друга только через internal gateway и обмениваются событиями через Kafka.'
+    include
+      *,
+      nomnom.publicGateway,
+      nomnom.spicedb,
+      nomnom.dex,
+      paymentProvider
+    autoLayout TopBottom
+  }
+
+  view orders of nomnom.cell1.orders {
+    title 'orders'
+    include
+      *,
+      nomnom.cell1.internalGateway,
+      nomnom.cell1.temporal,
+      nomnom.cell1.messaging,
+      nomnom.spicedb
+    autoLayout TopBottom
+  }
+
+  view restaurants of nomnom.cell1.restaurants {
+    title 'restaurants'
+    include
+      *,
+      nomnom.cell1.internalGateway,
+      nomnom.cell1.messaging,
+      nomnom.spicedb
+    autoLayout TopBottom
+  }
+
+  view delivery of nomnom.cell1.delivery {
+    title 'delivery'
+    include
+      *,
+      nomnom.cell1.internalGateway,
+      nomnom.cell1.router,
+      nomnom.cell1.temporal,
+      nomnom.cell1.messaging,
+      nomnom.spicedb
+    autoLayout TopBottom
+  }
+
+  view payments of nomnom.cell1.payments {
+    title 'payments'
+    include
+      *,
+      nomnom.cell1.internalGateway,
+      nomnom.publicGateway,
+      nomnom.cell1.messaging,
+      nomnom.spicedb,
+      paymentProvider
+    autoLayout TopBottom
+  }
+
+  view messaging of nomnom.cell1.messaging {
+    title 'Messaging'
+    description 'Кто пишет Outbox и кто читает топики.'
+    include
+      *,
+      nomnom.cell1.orders.db,
+      nomnom.cell1.restaurants.db,
+      nomnom.cell1.delivery.db,
+      nomnom.cell1.payments.db,
+      nomnom.cell1.orders.consumer,
+      nomnom.cell1.restaurants.consumer,
+      nomnom.cell1.delivery.api,
+      nomnom.cell1.router
+    autoLayout LeftRight
+  }
+
+  view controlplane of nomnom.controlplane {
+    title 'Control plane'
+    description 'Топология: реестр в Kubernetes API, маршруты публичного gateway.'
+    include
+      *,
+      operator,
+      nomnom.kubeApi,
+      nomnom.publicGateway,
+      nomnom.cell1.router
+    autoLayout LeftRight
+  }
+
+  dynamic view placeOrder {
+    title 'Place Order и Order Fulfillment'
+    description 'Основной маршрут заказа, без отказов и Saga.'
+    variant sequence
+
+    customer -> nomnom.ui 'оформляет заказ'
+    nomnom.ui -> nomnom.publicGateway 'POST /m/berlin/graphql'
+    nomnom.publicGateway -> nomnom.cell1.router 'снимает префикс, ставит X-Nomnom-Market'
+    nomnom.cell1.router -> nomnom.cell1.internalGateway 'PlaceOrder'
+    nomnom.cell1.internalGateway -> nomnom.cell1.orders.api 'PlaceOrder'
+    nomnom.cell1.orders.api -> nomnom.cell1.orders.db 'Order и OrderPlaced в Outbox одной транзакцией'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.orders.db 'читает Outbox'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.messaging.integrationEvents 'OrderPlaced'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.messaging.integrationEvents 'читает OrderPlaced'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.temporal 'SignalWithStart order:<order_id>'
+    nomnom.cell1.orders.worker -> nomnom.cell1.temporal 'получает задачи'
+    nomnom.cell1.orders.worker -> nomnom.cell1.internalGateway 'AuthorizePayment'
+    nomnom.cell1.internalGateway -> nomnom.cell1.payments.api 'Authorize'
+    nomnom.cell1.orders.worker -> nomnom.cell1.internalGateway 'RequestRestaurantOrder'
+    nomnom.cell1.internalGateway -> nomnom.cell1.restaurants.api 'ReceiveOrderRequest'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.messaging.integrationEvents 'RestaurantOrderAccepted'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.temporal 'Signal: заказ принят'
+    nomnom.cell1.orders.worker -> nomnom.cell1.internalGateway 'CreateDelivery'
+    nomnom.cell1.internalGateway -> nomnom.cell1.delivery.api 'CreateDelivery'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.messaging.integrationEvents 'CourierAssignedToDelivery, RestaurantOrderReady, DeliveryPickedUp'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.temporal 'Signals'
+    nomnom.cell1.orders.worker -> nomnom.cell1.internalGateway 'CapturePayment'
+    nomnom.cell1.internalGateway -> nomnom.cell1.payments.api 'Capture'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.messaging.integrationEvents 'DeliveryCompleted'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.temporal 'Signal: доставлено'
+    nomnom.cell1.orders.worker -> nomnom.cell1.orders.db 'CompleteOrder и OrderCompleted в Outbox'
+  }
+
+  dynamic view integrationEvent {
+    title 'Публикация Integration Event'
+    description 'Outbox, CDC и Inbox: доставка at-least-once, обработка идемпотентна.'
+    variant sequence
+
+    nomnom.cell1.restaurants.api -> nomnom.cell1.restaurants.db 'Kitchen Order и Outbox одной транзакцией'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.restaurants.db 'читает Outbox'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.messaging.schemaRegistry 'схема события'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.messaging.integrationEvents 'restaurant-order-events'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.messaging.integrationEvents 'читает, ack после commit'
+    nomnom.cell1.orders.consumer -> nomnom.cell1.orders.db 'Inbox и состояние одной транзакцией'
+  }
+
+  dynamic view subscription {
+    title 'GraphQL-подписка'
+    description 'Router читает Change Notifications сам, данные сущности получает через plugin. Без polling (ADR 36).'
+    variant sequence
+
+    nomnom.ui -> nomnom.publicGateway 'SSE /m/berlin/graphql'
+    nomnom.publicGateway -> nomnom.cell1.router 'открывает подписку'
+    nomnom.cell1.orders.api -> nomnom.cell1.orders.db 'изменение и Change Notification в Outbox'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.orders.db 'читает Outbox'
+    nomnom.cell1.messaging.debezium -> nomnom.cell1.messaging.changeNotifications 'order-changes'
+    nomnom.cell1.router -> nomnom.cell1.messaging.changeNotifications 'читает order-changes'
+    nomnom.cell1.router -> nomnom.cell1.internalGateway 'разрешает сущность'
+    nomnom.cell1.internalGateway -> nomnom.cell1.orders.api 'чтение Order'
+    nomnom.publicGateway <- nomnom.cell1.router 'событие подписки'
+    nomnom.ui <- nomnom.publicGateway 'событие подписки'
+  }
+
+  dynamic view login {
+    title 'Вход через Dex'
+    variant sequence
+
+    customer -> nomnom.ui 'нажимает «Войти»'
+    nomnom.ui -> nomnom.dex 'authorization code + PKCE'
+    nomnom.ui <- nomnom.dex 'access и refresh token'
+    nomnom.ui -> nomnom.publicGateway 'GraphQL с access token'
+    nomnom.publicGateway -> nomnom.cell1.router 'передаёт Authorization'
+    nomnom.cell1.router -> nomnom.dex 'JWKS'
+    nomnom.cell1.router -> nomnom.cell1.internalGateway 'вызов с user assertion BFF'
+    nomnom.cell1.internalGateway -> nomnom.cell1.orders.api 'вызов с user assertion BFF'
+    nomnom.cell1.orders.api -> nomnom.spicedb 'проверяет permission'
+  }
+
+  dynamic view publishRoutes {
+    title 'Публикация маршрутов Market'
+    description 'Изменение реестра доходит до gateway без участия ячеек. Запросы от control plane не зависят.'
+    variant sequence
+
+    operator -> nomnom.kubeApi 'kubectl apply Market'
+    nomnom.controlplane -> nomnom.kubeApi 'watch Cell и Market'
+    nomnom.controlplane -> nomnom.kubeApi 'server-side apply HTTPRoute и списка Market'
+    nomnom.publicGateway -> nomnom.kubeApi 'получает новую конфигурацию'
+    nomnom.ui -> nomnom.publicGateway 'GET /markets'
+  }
+
+  deployment view kindNamespaces {
+    title 'kind: неймспейсы'
+    description 'Тестовое окружение: один кластер, одна Cell cell-1, один Market berlin.'
+    include nomnomTest.**
+    // Только размещение: связи показаны на схемах модели.
+    exclude nomnomTest.** -> nomnomTest.**
+    autoLayout TopBottom
+  }
+}

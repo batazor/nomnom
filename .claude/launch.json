@@ -64,6 +64,19 @@
       },
       "port": 4180,
       "autoPort": false
+    },
+    {
+      "name": "architecture-likec4",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "likec4@1.60.0",
+        "start",
+        "docs/architecture",
+        "--port",
+        "4190"
+      ],
+      "port": 4190
     }
   ]
 }

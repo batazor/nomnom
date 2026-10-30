@@ -1,0 +1,137 @@
+// Словарь модели: виды элементов, виды связей и узлы развёртывания.
+specification {
+  element actor {
+    style {
+      shape person
+      color amber
+    }
+  }
+  element external {
+    style {
+      color muted
+    }
+  }
+  element system {
+    style {
+      color slate
+      opacity 8%
+    }
+  }
+  // Cell: полный изолированный экземпляр data plane (ADR 41).
+  element cell {
+    style {
+      color indigo
+      opacity 8%
+      border dashed
+    }
+  }
+  // Bounded context: граница модели и данных, не единица развёртывания.
+  element context {
+    style {
+      color primary
+      opacity 10%
+    }
+  }
+  // Запускаемый процесс со своим composition root.
+  element process {
+    style {
+      color primary
+    }
+  }
+  element frontend {
+    style {
+      shape browser
+      color green
+    }
+  }
+  element gateway {
+    style {
+      color sky
+    }
+  }
+  element platform {
+    style {
+      color secondary
+    }
+  }
+  element store {
+    style {
+      shape storage
+      color muted
+    }
+  }
+  element broker {
+    style {
+      color red
+      opacity 10%
+    }
+  }
+  element topic {
+    style {
+      shape queue
+      color red
+    }
+  }
+
+  relationship http {
+    technology 'HTTPS'
+    color sky
+    line solid
+  }
+  relationship graphql {
+    technology 'GraphQL'
+    color green
+    line solid
+  }
+  relationship grpc {
+    technology 'gRPC'
+    color primary
+    line solid
+  }
+  relationship kafka {
+    technology 'Kafka'
+    color red
+    line dashed
+  }
+  relationship cdc {
+    technology 'Debezium CDC'
+    color red
+    line dotted
+  }
+  relationship temporal {
+    technology 'Temporal'
+    color indigo
+    line solid
+  }
+  relationship data {
+    color muted
+    line solid
+  }
+  relationship authz {
+    technology 'SpiceDB API'
+    color amber
+    line solid
+  }
+  relationship oidc {
+    technology 'OIDC'
+    color amber
+    line dashed
+  }
+  relationship k8s {
+    technology 'Kubernetes API'
+    color slate
+    line solid
+  }
+
+  deploymentNode cluster {
+    style {
+      color slate
+    }
+  }
+  deploymentNode namespace {
+    style {
+      color indigo
+      opacity 8%
+    }
+  }
+}

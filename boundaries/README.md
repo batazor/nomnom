@@ -8,7 +8,7 @@
 
 Сервис [BFF](bff/README.md) находится в `boundaries/bff/` как самостоятельная application boundary и единая прикладная точка входа для клиентского API, но не является bounded context. Он не владеет доменной моделью или хранилищем доменных данных. BFF проектирует GraphQL API на WunderGraph Cosmo вокруг клиентских сценариев, получает доменные данные только через gRPC API сервисов-владельцев и преобразует их в клиентские представления. Бизнес-инварианты, проверка прав на конкретные действия, принадлежность ресурсов и tenant-изоляция остаются у владельцев соответствующих операций и данных.
 
-Допустимое направление синхронного взаимодействия клиента — `client → edge → Cosmo Router → BFF plugin → internal gateway → bounded context`. Клиенты не обращаются к внутренним gRPC/Connect API напрямую. BFF не читает базы данных контекстов, не публикует и не потребляет их Kafka-сообщения и не запускает Temporal workflow. Необходимые межсервисные взаимодействия между bounded contexts сохраняют собственные правила аутентификации и делегирования контекста. Платёжные webhooks обслуживаются интеграционными адаптерами `payments`, а health checks, metrics и другие служебные интерфейсы имеют отдельные технические маршруты и правила доступности. Решение зафиксировано в [локальном ADR 3 сервиса BFF](bff/docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md).
+Допустимое направление синхронного взаимодействия клиента — `client → edge → Cosmo Router → BFF plugin → internal gateway → bounded context`. Клиенты не обращаются к внутренним gRPC/Connect API напрямую. Plugin BFF не читает базы данных контекстов, не публикует и не потребляет их Kafka-сообщения и не запускает Temporal workflow; Change Notifications для GraphQL-подписок читает из Kafka сам Cosmo Router ([ADR 36](../docs/adr/0036-graphql-subscriptions-via-cosmo-streams.md)). Необходимые межсервисные взаимодействия между bounded contexts сохраняют собственные правила аутентификации и делегирования контекста. Платёжные webhooks обслуживаются интеграционными адаптерами `payments`, а health checks, metrics и другие служебные интерфейсы имеют отдельные технические маршруты и правила доступности. Решение зафиксировано в [локальном ADR 3 сервиса BFF](bff/docs/adr/0003-use-wundergraph-cosmo-for-the-bff.md).
 
 Архитектурные решения, относящиеся к отдельному контексту, хранятся внутри этого контекста в `docs/adr`. Общесистемные решения находятся в корневом [`docs/adr`](../docs/adr/).
 
@@ -206,8 +206,8 @@ Dependency Injection (DI) описывает зависимости vertical sli
 | --- | --- |
 | `orders` | PostgreSQL |
 | `restaurants` | MongoDB |
-| `payments` | Не выбрано; требуется отдельное решение |
-| `delivery` | Не выбрано; требуется отдельное решение |
+| `payments` | PostgreSQL |
+| `delivery` | PostgreSQL |
 
 Каждый сервис владеет своим логическим хранилищем и доступом к нему. BFF и соседние сервисы получают данные через API или интеграционные события, а не читают чужие таблицы или коллекции. Ссылки на понятия другого bounded context передаются и хранятся как идентификаторы; межконтекстные foreign keys не создаются.
 
@@ -284,7 +284,7 @@ boundaries/<service>/infrastructure/grpc/
 - каждый контекст владеет своим Outbox в своём основном хранилище и не использует Outbox другого контекста;
 - каждое интеграционное событие имеет стабильный `event_id`, передаваемый в Kafka header `event_id`; повтор операции после commit не создаёт второго события, потому что операции, пишущие Outbox, идемпотентны по idempotency key или `aggregate_version`;
 - publisher публикует записи одного key в порядке вставки и не пропускает упавшую публикацию (head-of-line blocking с alert'ом);
-- в `orders` Outbox реализуется через `watermill-sql` и Watermill Forwarder, Kafka key передаётся через metadata и partitioning marshaler, Forwarder работает как single active instance; для `restaurants`, `delivery` и `payments` библиотеки и выбор polling или CDC остаются открытыми;
+- Outbox всех контекстов доставляет в Kafka Debezium CDC ([ADR 37](../docs/adr/0037-outbox-delivery-via-debezium-cdc.md));
 - consumer интеграционных событий в `orders`, `restaurants`, `delivery` и `payments`, изменяющий своё состояние, использует Transactional Inbox: проверка `event_id`, изменение business state и запись Inbox выполняются в одной локальной транзакции, а Kafka acknowledgement — только после commit;
 - если обработчик публикует новое событие, Inbox, business state и Outbox фиксируются в одной транзакции;
 - уникальность `(consumer, event_id)` обеспечивается хранилищем: уникальным ограничением PostgreSQL, unique index MongoDB или эквивалентной атомарной защитой;

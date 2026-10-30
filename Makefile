@@ -31,7 +31,6 @@ buf-generate: ## сгенерировать stubs владельцев для в
 	@cd boundaries/restaurants/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/delivery/infrastructure/grpc && buf generate --template buf.gen.yaml
 	@cd boundaries/payments/infrastructure/grpc && buf generate --template buf.gen.yaml
-	@cd boundaries/controlplane/infrastructure/grpc && buf generate --template buf.gen.yaml
 kind-cluster: ## создать single-node кластер kind из ops/kind/cluster.yaml (существующий переиспользуется)
 	@test "$$(kind version | cut -d' ' -f2)" = "$(KIND_VERSION)" || { echo "kind $(KIND_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
 	@test "$$(skaffold version)" = "$(SKAFFOLD_VERSION)" || { echo "skaffold $(SKAFFOLD_VERSION) is required by ops/kind/versions.env" >&2; exit 1; }
@@ -128,6 +127,16 @@ semconv-tools: ## установить weaver $(WEAVER_VERSION) в GOBIN (brew w
 		dir=$$(mktemp -d) && curl -sSLf "$$url" -o "$$dir/w.tar.xz" && curl -sSLf "$$url.sha256" -o "$$dir/w.sha256" && \
 		(cd "$$dir" && [ "$$(shasum -a 256 w.tar.xz | cut -d' ' -f1)" = "$$(cut -d' ' -f1 w.sha256)" ]) && \
 		tar -xf "$$dir/w.tar.xz" -C "$$dir" && install -m 0755 "$$dir"/weaver-*/weaver "$$(go env GOPATH)/bin/weaver"
+
+## Архитектура сервисов (docs/architecture, ADR 44)
+LIKEC4_VERSION ?= 1.60.0
+LIKEC4 := npx --yes likec4@$(LIKEC4_VERSION)
+
+.PHONY: arch-dev arch-validate
+arch-dev: ## LikeC4: схемы архитектуры в браузере с обновлением при правке
+	@$(LIKEC4) start docs/architecture
+arch-validate: ## LikeC4: проверить модель docs/architecture
+	@$(LIKEC4) validate docs/architecture
 
 .PHONY: help
 help: ## показать цели

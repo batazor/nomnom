@@ -1,0 +1,266 @@
+// Текущая архитектура nomnom. Стратегия расширения ADR 41 (вторая Cell, Market Migration)
+// не реализована и в модель не входит.
+model {
+  customer = actor 'Customer' 'Заказывает еду и следит за заказом'
+  staff = actor 'Restaurant Staff' 'Управляет рестораном и готовит заказы'
+  courier = actor 'Courier' 'Принимает предложения и доставляет заказы'
+  operator = actor 'Оператор топологии' 'Объявляет Cell и Market через kubectl'
+
+  paymentProvider = external 'Payment Provider' {
+    description 'Авторизация, списание и возврат. В kind вместо него — sandbox в процессе payments (PROVIDER__KIND: fake).'
+  }
+
+  nomnom = system 'nomnom' 'Доставка еды: control plane и ячейки data plane' {
+    ui = frontend 'Customer UI' {
+      technology 'TypeScript, React, nginx'
+      description 'Доска заказа: Покупатель, Кухня, Курьер. Статический origin, данные — только через публичный API.'
+      link ../../boundaries/ui/README.md 'README'
+    }
+
+    publicGateway = gateway 'Public gateway' {
+      technology 'Envoy Gateway'
+      description 'Router ячеек: выбирает Cell по пути /m/{market_id}, ставит X-Nomnom-Market, сам отдаёт GET /markets.'
+      link ../adr/0041-cell-based-architecture-with-control-plane.md 'ADR 41'
+    }
+
+    dex = platform 'Dex' {
+      technology 'OIDC'
+      description 'Глобальный вход пользователей: authorization code + PKCE.'
+      link ../adr/0035-browser-login-via-dex-and-pkce.md 'ADR 35'
+    }
+
+    spicedb = platform 'SpiceDB' {
+      technology 'SpiceDB'
+      description 'Глобальный authorization graph. Проверку выполняет сервис-владелец операции.'
+      link ../adr/0018-spicedb-for-authorization.md 'ADR 18'
+    }
+
+    kubeApi = platform 'Kubernetes API' {
+      technology 'CRD, Gateway API'
+      description 'Хранит реестр Cell и Market и маршруты публичного gateway.'
+    }
+
+    controlplane = process 'Control plane' {
+      technology 'Go, Kubernetes controller'
+      description 'Строит маршруты Market и список Market из реестра. Без БД и бизнес-API, вне горячего пути.'
+      link ../../boundaries/controlplane/README.md 'README'
+    }
+
+    observability = platform 'Observability' {
+      technology 'OpenTelemetry, Alloy, Grafana'
+      description 'Traces, metrics, logs и profiles всех процессов.'
+      link ../observability.md 'Документация'
+    }
+
+    cell1 = cell 'Cell' {
+      description 'Изолированный экземпляр data plane. Вызовов между Cell нет. В kind одна — cell-1.'
+
+      router = process 'Cosmo Router + plugin BFF' {
+        technology 'WunderGraph Cosmo, Go plugin'
+        description 'GraphQL API для клиентов. Plugin ходит к контекстам через internal gateway и не владеет данными.'
+        link ../../boundaries/bff/README.md 'README'
+      }
+
+      internalGateway = gateway 'Internal gateway' {
+        technology 'Envoy Gateway, GRPCRoute'
+        description 'Единственный путь синхронных вызовов бизнес-API. Обход запрещён NetworkPolicy.'
+        link ../adr/0015-использовать-internal-gateway-для-синхронных-вызовов-бизнес-api.md 'ADR 15'
+      }
+
+      orders = context 'orders' {
+        technology 'Go'
+        description 'Оформленный заказ и оркестрация его жизненного цикла.'
+        link ../../boundaries/orders/README.md 'README'
+
+        api = process 'orders' {
+          technology 'Go, gRPC'
+          description 'API заказа: Place Order, чтения, запрос отмены.'
+        }
+        consumer = process 'orders-consumer' {
+          technology 'Go, Watermill'
+          description 'Inbox: стартует Fulfillment, передаёт факты соседей в workflow, синхронизирует связи SpiceDB.'
+        }
+        worker = process 'orders-worker' {
+          technology 'Go, Temporal'
+          description 'Order Fulfillment Workflow и его Activities.'
+        }
+        db = store 'orders DB' {
+          technology 'PostgreSQL'
+          description 'Order, Inbox, Outbox.'
+        }
+      }
+
+      restaurants = context 'restaurants' {
+        technology 'TypeScript'
+        description 'Рестораны, меню, принятие заказа и приготовление.'
+        link ../../boundaries/restaurants/README.md 'README'
+
+        api = process 'restaurants' {
+          technology 'TypeScript, gRPC'
+          description 'Каталог, управление рестораном, кухня.'
+        }
+        consumer = process 'restaurants-consumer' {
+          technology 'TypeScript, Kafka'
+          description 'Wait Time Statistics и обновление кеша каталога по своим событиям.'
+        }
+        db = store 'restaurants DB' {
+          technology 'MongoDB'
+          description 'Restaurant, Menu, Kitchen Order, Inbox, Outbox.'
+        }
+        cache = store 'Кеш каталога' {
+          technology 'Valkey'
+          description 'Cache-aside с TTL (ADR 43).'
+        }
+      }
+
+      delivery = context 'delivery' {
+        technology 'Rust'
+        description 'Курьеры, предложения, назначение и выполнение доставки.'
+        link ../../boundaries/delivery/README.md 'README'
+
+        api = process 'delivery' {
+          technology 'Rust, gRPC'
+          description 'API курьера и доставки; consumer своих фактов для Delivery Duration Statistics.'
+        }
+        worker = process 'delivery-worker' {
+          technology 'Rust, Temporal'
+          description 'Assignment Workflow: поиск курьера.'
+        }
+        db = store 'delivery DB' {
+          technology 'PostgreSQL'
+          description 'Courier, Delivery, Outbox.'
+        }
+        tracks = store 'Поток позиций' {
+          technology 'Valkey'
+          description 'Pub/Sub позиций курьера.'
+        }
+      }
+
+      payments = context 'payments' {
+        technology 'Python'
+        description 'Авторизация, списание, возвраты.'
+        link ../../boundaries/payments/README.md 'README'
+
+        api = process 'payments' {
+          technology 'Python, gRPC'
+          description 'gRPC API и webhooks платёжного провайдера.'
+        }
+        db = store 'payments DB' {
+          technology 'PostgreSQL'
+          description 'Payment, Outbox.'
+        }
+      }
+
+      messaging = broker 'Messaging' {
+        description 'Доставка Outbox и Change Notifications внутри Cell.'
+
+        debezium = process 'Debezium' {
+          technology 'Kafka Connect'
+          description 'Читает Outbox контекстов и публикует записи в Kafka.'
+          link ../adr/0037-outbox-delivery-via-debezium-cdc.md 'ADR 37'
+        }
+        schemaRegistry = platform 'Schema Registry' {
+          technology 'Confluent Schema Registry'
+          description 'Схемы Integration Events.'
+        }
+        integrationEvents = topic 'Integration Events' {
+          technology 'Kafka'
+          description 'order-events, order-relationships, restaurant-order-events, restaurant-events, menu-events, delivery-events, payment-events.'
+        }
+        changeNotifications = topic 'Change Notifications' {
+          technology 'Kafka'
+          description 'order-changes, kitchen-changes, courier-changes, courier-pool-changes (ADR 36).'
+        }
+      }
+
+      temporal = platform 'Temporal' {
+        technology 'Temporal'
+        description 'Состояние workflow: Order Fulfillment и Assignment.'
+      }
+    }
+  }
+
+  // Клиенты
+  customer -[http]-> nomnom.ui 'работает с доской заказа'
+  staff -[http]-> nomnom.ui 'работает с доской заказа'
+  courier -[http]-> nomnom.ui 'работает с доской заказа'
+  nomnom.publicGateway -[http]-> nomnom.ui 'отдаёт статику' {
+    description 'listener app'
+  }
+  nomnom.ui -[graphql]-> nomnom.publicGateway 'запросы и SSE-подписки /m/{market_id}/graphql' {
+    description 'listener api'
+  }
+  nomnom.ui -[oidc]-> nomnom.dex 'вход через публичный gateway' {
+    description 'listener auth'
+  }
+  nomnom.publicGateway -[graphql]-> nomnom.cell1.router 'маршрут Market в Cell'
+
+  // Control plane
+  operator -[k8s]-> nomnom.kubeApi 'kubectl apply Cell и Market'
+  nomnom.controlplane -[k8s]-> nomnom.kubeApi 'читает реестр, пишет HTTPRoute и список Market'
+  nomnom.publicGateway -[k8s]-> nomnom.kubeApi 'получает конфигурацию через Envoy Gateway'
+
+  // Синхронные вызовы через internal gateway
+  nomnom.cell1.router -[oidc]-> nomnom.dex 'проверяет access token по JWKS'
+  nomnom.cell1.router -[grpc]-> nomnom.cell1.internalGateway 'бизнес-API с user assertion'
+  nomnom.cell1.orders.api -[grpc]-> nomnom.cell1.internalGateway 'каталог и резервирование слота'
+  nomnom.cell1.orders.worker -[grpc]-> nomnom.cell1.internalGateway 'Activities: платёж, кухня, доставка'
+  nomnom.cell1.internalGateway -[grpc]-> nomnom.cell1.orders.api 'OrdersService'
+  nomnom.cell1.internalGateway -[grpc]-> nomnom.cell1.restaurants.api 'RestaurantsService'
+  nomnom.cell1.internalGateway -[grpc]-> nomnom.cell1.delivery.api 'DeliveryService'
+  nomnom.cell1.internalGateway -[grpc]-> nomnom.cell1.payments.api 'PaymentsService'
+
+  // Хранилища и кеши
+  nomnom.cell1.orders.api -[data]-> nomnom.cell1.orders.db 'Order и Outbox'
+  nomnom.cell1.orders.consumer -[data]-> nomnom.cell1.orders.db 'Inbox, Order и Outbox'
+  nomnom.cell1.orders.worker -[data]-> nomnom.cell1.orders.db 'Order и Outbox'
+  nomnom.cell1.restaurants.api -[data]-> nomnom.cell1.restaurants.db 'агрегаты и Outbox'
+  nomnom.cell1.restaurants.api -[data]-> nomnom.cell1.restaurants.cache 'чтение каталога'
+  nomnom.cell1.restaurants.consumer -[data]-> nomnom.cell1.restaurants.db 'Inbox и статистика'
+  nomnom.cell1.restaurants.consumer -[data]-> nomnom.cell1.restaurants.cache 'обновляет каталог'
+  nomnom.cell1.delivery.api -[data]-> nomnom.cell1.delivery.db 'агрегаты и Outbox'
+  nomnom.cell1.delivery.api -[data]-> nomnom.cell1.delivery.tracks 'публикует позиции'
+  nomnom.cell1.delivery.worker -[data]-> nomnom.cell1.delivery.db 'шаги назначения и Outbox'
+  nomnom.cell1.payments.api -[data]-> nomnom.cell1.payments.db 'Payment и Outbox'
+  nomnom.cell1.router -[data]-> nomnom.cell1.delivery.tracks 'подписка на позиции (только SUBSCRIBE)'
+
+  // Authorization
+  nomnom.cell1.orders.api -[authz]-> nomnom.spicedb 'проверки и связи'
+  nomnom.cell1.orders.consumer -[authz]-> nomnom.spicedb 'синхронизирует связи order'
+  nomnom.cell1.restaurants.api -[authz]-> nomnom.spicedb 'проверки и связи'
+  nomnom.cell1.delivery.api -[authz]-> nomnom.spicedb 'проверки и связи'
+  nomnom.cell1.payments.api -[authz]-> nomnom.spicedb 'проверки'
+
+  // Temporal
+  nomnom.cell1.orders.api -[temporal]-> nomnom.cell1.temporal 'клиент Order Fulfillment'
+  nomnom.cell1.orders.consumer -[temporal]-> nomnom.cell1.temporal 'SignalWithStart и Signal'
+  nomnom.cell1.orders.worker -[temporal]-> nomnom.cell1.temporal 'task queue orders'
+  nomnom.cell1.delivery.api -[temporal]-> nomnom.cell1.temporal 'клиент Assignment Workflow'
+  nomnom.cell1.delivery.worker -[temporal]-> nomnom.cell1.temporal 'task queue delivery'
+
+  // Outbox → Kafka
+  nomnom.cell1.messaging.debezium -[cdc]-> nomnom.cell1.orders.db 'читает Outbox'
+  nomnom.cell1.messaging.debezium -[cdc]-> nomnom.cell1.restaurants.db 'читает Outbox'
+  nomnom.cell1.messaging.debezium -[cdc]-> nomnom.cell1.delivery.db 'читает Outbox'
+  nomnom.cell1.messaging.debezium -[cdc]-> nomnom.cell1.payments.db 'читает Outbox'
+  nomnom.cell1.messaging.debezium -[http]-> nomnom.cell1.messaging.schemaRegistry 'схемы Integration Events'
+  nomnom.cell1.messaging.debezium -[kafka]-> nomnom.cell1.messaging.integrationEvents 'публикует'
+  nomnom.cell1.messaging.debezium -[kafka]-> nomnom.cell1.messaging.changeNotifications 'публикует'
+
+  // Потребители Kafka. У payment-events потребителей пока нет: исход платежа orders получает ответом gRPC.
+  nomnom.cell1.orders.consumer -[kafka]-> nomnom.cell1.messaging.integrationEvents 'order-events, order-relationships, restaurant-order-events, delivery-events'
+  nomnom.cell1.restaurants.consumer -[kafka]-> nomnom.cell1.messaging.integrationEvents 'restaurant-order-events, restaurant-events, menu-events'
+  nomnom.cell1.delivery.api -[kafka]-> nomnom.cell1.messaging.integrationEvents 'delivery-events'
+  nomnom.cell1.router -[kafka]-> nomnom.cell1.messaging.changeNotifications 'подписки Cosmo Streams'
+
+  // Платежи
+  nomnom.cell1.payments.api -[http]-> paymentProvider 'авторизация, списание, возврат'
+  paymentProvider -[http]-> nomnom.publicGateway 'webhook результата' {
+    description 'listener webhooks'
+  }
+  nomnom.publicGateway -[http]-> nomnom.cell1.payments.api 'webhooks провайдера'
+
+  // Телеметрия
+  nomnom.cell1 -> nomnom.observability 'OTLP'
+  nomnom.controlplane -> nomnom.observability 'OTLP'
+}
