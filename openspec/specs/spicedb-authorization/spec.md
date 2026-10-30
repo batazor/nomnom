@@ -8,7 +8,7 @@
 ### Requirement: Общая schema и grants развёртывания
 **ID:** FR-434
 
-Система SHALL хранить authorization schema в `authorization/schema.zed`, а grants `service` identities — в `authorization/bootstrap.yaml` с assertions, проверяемыми `zed validate`. Fulfillment-команды MUST быть permissions `platform:nomnom`, выданными relation `fulfillment`; действия диспетчера доставки — permission `dispatch_delivery`, выданной relation `operator`; offer доставки заказа выбранному курьеру — permission `offer_delivery`, выданной relations `operator` и `dispatcher`.
+Система SHALL хранить authorization schema в `authorization/schema.zed`, а grants `service` identities — в `authorization/bootstrap.yaml` с assertions, проверяемыми `zed validate`. Fulfillment-команды MUST быть permissions `platform:nomnom`, выданными relation `fulfillment`.
 
 #### Scenario: Grant orders-worker
 **ID:** AC-464
@@ -16,11 +16,22 @@
 - **WHEN** выполняется `make authz-validate`
 - **THEN** `service:orders-worker` имеет `manage_payments`, `coordinate_fulfillment` и `coordinate_delivery` на `platform:nomnom`, а другой service — нет
 
+### Requirement: Права диспетчера доставки
+**ID:** FR-726
+
+Действия диспетчера доставки SHALL быть permission `platform:nomnom` `dispatch_delivery`, выданной relation `operator`. Offer доставки заказа выбранному курьеру MUST быть permission `offer_delivery`, выданной relations `operator` и `dispatcher`; `service` identities, включая `service:orders-worker`, MUST NOT получать ни одну из них.
+
 #### Scenario: Grant диспетчера
 **ID:** AC-695
 
 - **WHEN** выполняется `make authz-validate`
 - **THEN** operator платформы имеет `dispatch_delivery`, а курьер и `service:orders-worker` — нет
+
+#### Scenario: Offer выбранному курьеру не у workflow
+**ID:** AC-989
+
+- **WHEN** выполняется `make authz-validate`
+- **THEN** `service:orders-worker` не имеет `offer_delivery`, а schema выдаёт её только relations `operator` и `dispatcher`
 
 ### Requirement: Контекст проверяет permission в SpiceDB
 **ID:** FR-435
