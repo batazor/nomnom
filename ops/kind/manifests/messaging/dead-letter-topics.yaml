@@ -9,6 +9,14 @@
 #   restaurants.v1.restaurant-order-events.dlq — группы orders и restaurants (Wait Time Statistics)
 #   delivery.v1.delivery-events.dlq          — группы orders и restaurants
 #   orders.v1.order-relationships.dlq        — группа orders (внутренний стрим, ADR 18)
+#
+# Здесь же объявляются служебные topics Kafka Connect (ADR 37, chart ../../kafka-connect/chart):
+# cleanup.policy=compact, у nomnom-cdc-configs одна partition — без этого Connect не стартует.
+# Connect создаёт их сам, но Connect, работавший во время перезапуска Redpanda (emptyDir), успевает
+# пересоздать их auto create брокера с cleanup.policy=delete и тремя partitions. Существующему
+# topic возвращается compact; nomnom-cdc-configs с другим числом partitions пересоздаётся —
+# partitions не уменьшить, а коннекторы при каждом deploy заново регистрируют hook Jobs
+# контекстов. Partitions offsets и status — значения Connect по умолчанию.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -50,6 +58,12 @@ spec:
             # 30 дней: окно разбора DLQ (docs/dlq.md).
             - name: RETENTION_MS
               value: "2592000000"
+            # topic:partitions служебных topics Kafka Connect (CONFIG/OFFSET/STATUS_STORAGE_TOPIC).
+            - name: CONNECT_TOPICS
+              value: >-
+                nomnom-cdc-configs:1
+                nomnom-cdc-offsets:25
+                nomnom-cdc-status:5
           command:
             - sh
             - -ec
@@ -65,6 +79,30 @@ spec:
                 fi
                 rpk topic describe "$topic" -X brokers="$BROKERS" --print-configs \
                   | grep -E "^retention.ms[[:space:]]+$RETENTION_MS[[:space:]]"
+              done
+              partitions_of() {
+                rpk topic describe "$1" -X brokers="$BROKERS" -s | awk '$1 == "PARTITIONS" {print $2}'
+              }
+              for entry in $CONNECT_TOPICS; do
+                topic=${entry%%:*}
+                partitions=${entry##*:}
+                if [ "$topic" = nomnom-cdc-configs ] \
+                    && current=$(partitions_of "$topic" 2>/dev/null) && [ "$current" != "$partitions" ]; then
+                  rpk topic delete "$topic" -X brokers="$BROKERS"
+                  echo "deleted $topic with $current partitions"
+                fi
+                if rpk topic create "$topic" -X brokers="$BROKERS" --partitions "$partitions" --replicas 1 \
+                    --topic-config cleanup.policy=compact; then
+                  echo "created $topic"
+                else
+                  rpk topic alter-config "$topic" -X brokers="$BROKERS" --set cleanup.policy=compact
+                  echo "configured $topic"
+                fi
+                rpk topic describe "$topic" -X brokers="$BROKERS" --print-configs \
+                  | grep -E "^cleanup.policy[[:space:]]+compact[[:space:]]"
+                if [ "$topic" = nomnom-cdc-configs ]; then
+                  test "$(partitions_of "$topic")" = "$partitions"
+                fi
               done
           resources:
             requests:

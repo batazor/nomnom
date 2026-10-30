@@ -244,6 +244,8 @@ deploy:
         # Kafka и Temporal dev server для orders-consumer (ADR 28) нужны до установки charts:
         # consumer подключается к ним при startup. DLQ topics consumers объявляются здесь же,
         # до charts: retention — контракт разбора DLQ, а не дефолт auto create (docs/dlq.md).
+        # Тот же Job объявляет служебные topics Kafka Connect (compact): auto create брокера после
+        # перезапуска Redpanda создал бы их с delete, и Connect не стартовал бы.
         # Spec Job неизменяем, поэтому прошлый Job удаляется перед apply.
         - host:
             command:

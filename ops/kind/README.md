@@ -68,7 +68,9 @@ make kind-down
   consumer подключается к ним при startup. Egress разрешён `manifests/netpol/app-infrastructure.yaml`.
   Тот же hook после Kafka запускает Job `dead-letter-topics`
   ([`manifests/messaging/dead-letter-topics.yaml`](manifests/messaging/dead-letter-topics.yaml)): DLQ
-  consumers объявляются явно — retention 30 дней, одна partition ([Разбор DLQ](../../docs/dlq.md)).
+  consumers объявляются явно — retention 30 дней, одна partition ([Разбор DLQ](../../docs/dlq.md)); там же
+  служебные topics Kafka Connect (`nomnom-cdc-*`, `cleanup.policy=compact`, у `nomnom-cdc-configs` одна partition), которые
+  Connect, работавший во время перезапуска Redpanda, иначе пересоздал бы auto create брокера.
 - `orders-worker` (Temporal worker Order Fulfillment Workflow) — release chart `orders` с
   `values-worker.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml): тот же образ,
   своя `command`, без Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
