@@ -1,0 +1,103 @@
+# Redpanda Console — web UI Kafka для ручной работы со стендом: topics и записи с headers (в том
+# числе <stream>.dlq), consumer groups и их offsets (<group>.dlq), коннекторы Debezium в Kafka
+# Connect. Не входит в skaffold: ставится по запросу make kind-console, снимается
+# make kind-console-down, чтобы не занимать память ноутбука по умолчанию.
+#
+# Console без enterprise-лицензии не разграничивает права: в UI можно удалять записи и сдвигать
+# offsets групп. Разбор DLQ — только командой dlq контекста (docs/dlq.md): сдвиг offset
+# <group>.dlq из UI не пишет журнал discard, а публикация из UI — без redriven_from.
+# Payload Integration Events — бинарный protobuf, в одном стриме несколько типов событий;
+# serde.protobuf Console сопоставляет один тип на topic, поэтому payload показывается raw,
+# а headers envelope (event_type, aggregate_id, reason_poisoned …) — текстом.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: console
+  namespace: nomnom-infra
+  labels:
+    app.kubernetes.io/name: console
+data:
+  config.yaml: |
+    kafka:
+      brokers: [kafka.nomnom-infra.svc.cluster.local:9092]
+    kafkaConnect:
+      enabled: true
+      clusters:
+        - name: outbox
+          url: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
+    analytics:
+      enabled: false
+    server:
+      listenPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console
+  namespace: nomnom-infra
+  labels:
+    app.kubernetes.io/name: console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: console
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 99
+        runAsGroup: 99
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: console
+          image: docker.io/redpandadata/console:v3.13.1@sha256:d72608f64c65a5631adca6c99b44d157cefb9edb0473ed58451f91affcfcfa1b
+          env:
+            - name: CONFIG_FILEPATH
+              value: /etc/console/config.yaml
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /admin/health
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/console
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: console
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: console
+  namespace: nomnom-infra
+  labels:
+    app.kubernetes.io/name: console
+spec:
+  selector:
+    app.kubernetes.io/name: console
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

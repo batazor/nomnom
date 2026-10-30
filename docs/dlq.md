@@ -65,6 +65,8 @@ kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/
 
 5. Повторить `dlq list`: список пуст или содержит только оставленное намеренно. Проверить, что redriven-события дошли: лог handler'а, состояние Order, отсутствие новой записи в DLQ с тем же `event_id`.
 
+Записи DLQ с headers в kind удобно смотреть в Redpanda Console: `make kind-console`, topic `<stream>.dlq` ([ops/kind](../ops/kind/README.md)). Payload — бинарный protobuf, он показывается raw; `reason_poisoned`, `consumer_group_poisoned`, `event_type`, `aggregate_id` видны в headers. Console — только для просмотра: удаление записей и сдвиг offset `<group>.dlq` из UI обходят журнал discard, публикация из UI идёт без `redriven_from`.
+
 Команды идут разово в pod consumer'а: там уже есть конфигурация Kafka (`KAFKA__BROKERS`, `KAFKA__CONSUMER_GROUP`) и разрешённый egress. Прерванная команда продолжает с последней разобранной записи: offset `<group>.dlq` коммитится после каждой.
 
 ## Ограничения

@@ -7,6 +7,8 @@ export GATEWAY_API_VERSION
 export KIND_CLUSTER_NAME ?= nomnom-test
 # Host-порт extraPortMappings ops/kind/cluster.yaml: NodePort 30085 (public gateway).
 export WEBHOOKS_HOST_PORT ?= 18085
+# Локальный порт port-forward Redpanda Console (make kind-console).
+KAFKA_CONSOLE_PORT ?= 18086
 KIND_SCRIPTS := ops/kind/scripts
 # Skaffold запускается из каталога конфигурации: его пути относительны рабочему каталогу.
 SKAFFOLD := cd ops/kind/skaffold && skaffold
@@ -16,7 +18,7 @@ SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # kind-deploy — full (нужен make kind-test).
 skaffold_app_flags = --module apps $(SKAFFOLD_FLAGS) $(if $(filter core,$(or $(KIND_STAND),$(1))),-p core) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
-.PHONY: buf-check buf-breaking buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop
+.PHONY: buf-check buf-breaking buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop kind-console kind-console-down
 buf-check: buf-breaking ## проверить формат, lint, компилируемость и совместимость всех Protobuf-модулей
 	@buf format --diff --exit-code
 	@buf lint
@@ -61,6 +63,13 @@ kind-down: ## удалить тестовый кластер (несуществ
 	@kind delete cluster --name '$(KIND_CLUSTER_NAME)'
 kind-grafana-cloud-stop: ## остановить Alloy → Grafana Cloud, чтобы не расходовать квоту free tier
 	@kubectl --context kind-$(KIND_CLUSTER_NAME) -n nomnom-observability scale deployment/alloy --replicas=0
+kind-console: ## Redpanda Console (Kafka UI) на http://localhost:$(KAFKA_CONSOLE_PORT); по умолчанию не ставится
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) apply -f ops/kind/manifests/messaging/console.yaml
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) -n nomnom-infra rollout status deployment/console --timeout=180s
+	@echo "Redpanda Console: http://localhost:$(KAFKA_CONSOLE_PORT) (Ctrl+C останавливает port-forward, pod остаётся)"
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) -n nomnom-infra port-forward svc/console $(KAFKA_CONSOLE_PORT):8080
+kind-console-down: ## удалить Redpanda Console
+	@kubectl --context kind-$(KIND_CLUSTER_NAME) delete -f ops/kind/manifests/messaging/console.yaml --ignore-not-found
 kind-e2e: ## полный неинтерактивный прогон для CI; KIND_KEEP=1 сохраняет кластер
 	@$(KIND_SCRIPTS)/e2e.sh
 

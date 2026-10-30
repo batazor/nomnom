@@ -24,6 +24,7 @@ make kind-test      # тесты Chainsaw; NetworkPolicy применяются 
 make kind-policies  # применить NetworkPolicy (kubectl apply -k manifests/netpol); kind-policies-delete — удалить
 make kind-diagnostics
 make kind-local-ca  # корень локального CA в ops/kind/.artifacts/nomnom-local-ca.crt (выводит путь)
+make kind-console   # Redpanda Console (Kafka UI) по запросу, port-forward на localhost:18086; kind-console-down — удалить
 make kind-down
 ```
 
@@ -33,6 +34,7 @@ make kind-down
 | `WEBHOOKS_HOST_PORT` | `18085` | host-порт для NodePort `30085` public gateway: webhooks и публичный API клиентов |
 | `KIND_STAND` | `full` для kind-deploy, `core` для kind-dev | `core` — без fixtures проверок (net-probe, grpc-caller); `make kind-test` требует `full` |
 | `KIND_KEEP` | `0` | `1` — не удалять кластер после `make kind-e2e` |
+| `KAFKA_CONSOLE_PORT` | `18086` | локальный порт port-forward `make kind-console` |
 
 Все команды явно используют контекст `kind-${KIND_CLUSTER_NAME}`. Отчёт проверок (JUnit) и
 диагностика сохраняются в `ops/kind/.artifacts/`.
@@ -87,6 +89,12 @@ make kind-down
   `replication-slot-*`). Состояние:
   `kubectl -n nomnom-infra exec deploy/kafka-connect -- curl -s localhost:8083/connectors?expand=status`.
   Topics создаются при первой публикации.
+- Redpanda Console ([`manifests/messaging/console.yaml`](manifests/messaging/console.yaml)) — web UI
+  Kafka: topics и записи с headers (в том числе `<stream>.dlq`), consumer groups и offsets,
+  коннекторы Kafka Connect. По умолчанию не ставится, чтобы не занимать память: `make kind-console`
+  применяет манифест, ждёт rollout и держит port-forward на `http://localhost:${KAFKA_CONSOLE_PORT}`
+  (Ctrl+C останавливает только port-forward), `make kind-console-down` удаляет. Авторизации и
+  разграничения прав в Console нет; разбор DLQ — только командой `dlq` ([Разбор DLQ](../../docs/dlq.md)).
 - `restaurants-consumer` ([ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md),
   [ADR 28](../../docs/adr/0028-selective-use-of-watermill-cqrs.md)) — release chart `restaurants` с
   `values-consumer.yaml` и [`values/restaurants-consumer.yaml`](values/restaurants-consumer.yaml): тот же
@@ -219,7 +227,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера |
+| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
 
 ## Internal gateway
 
