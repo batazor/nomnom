@@ -2,14 +2,14 @@ import { create } from "@bufbuild/protobuf";
 import { durationMs } from "@bufbuild/protobuf/wkt";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { RestaurantChangeResult } from "../../slices/restaurant/applications/restaurant-view/restaurant-view.ts";
-import type { PremiumFeeChange } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
-import type { ScheduledOrderSettingsValue } from "../../slices/restaurant/domains/restaurant/restaurant.ts";
-import { requireField, transportError } from "./errors.ts";
+import {
+  requireField,
+  transportError,
+} from "../../../../infrastructure/grpc/errors.ts";
 import type {
   Money,
   ScheduledOrderSettings,
-} from "./gen/nomnom/restaurants/v1/restaurants_pb.js";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
   CloseRestaurantResponseSchema,
   OpenRestaurantResponseSchema,
@@ -17,11 +17,28 @@ import {
   SetOpeningHoursResponseSchema,
   SetScheduledOrderSettingsResponseSchema,
   UpdateRestaurantResponseSchema,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { CloseRestaurantHandler } from "../../applications/close-restaurant/close-restaurant.ts";
+import type { OpenRestaurantHandler } from "../../applications/open-restaurant/open-restaurant.ts";
+import type { RestaurantChangeResult } from "../../applications/restaurant-view/restaurant-view.ts";
+import type { SetOpeningHoursHandler } from "../../applications/set-opening-hours/set-opening-hours.ts";
+import type { SetScheduledOrderSettingsHandler } from "../../applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
+import type {
+  PremiumFeeChange,
+  UpdateRestaurantHandler,
+} from "../../applications/update-restaurant/update-restaurant.ts";
+import type { ScheduledOrderSettingsValue } from "../../domains/restaurant/restaurant.ts";
 import { toRestaurantMessage } from "./messages.ts";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+
+export type OpeningRpcDependencies = Readonly<{
+  closeRestaurant: Pick<CloseRestaurantHandler, "execute">;
+  openRestaurant: Pick<OpenRestaurantHandler, "execute">;
+  setOpeningHours: Pick<SetOpeningHoursHandler, "execute">;
+  setScheduledOrderSettings: Pick<SetScheduledOrderSettingsHandler, "execute">;
+  updateRestaurant: Pick<UpdateRestaurantHandler, "execute">;
+}>;
 
 type OpeningRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -103,7 +120,7 @@ const toOpeningResponse = (result: RestaurantChangeResult) => ({
  * successful no-op with `changed = false` and no new fact (AC-209).
  */
 export const createOpeningRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: OpeningRpcDependencies,
   subjects: SubjectResolver,
 ): OpeningRpcs => {
   const openingCommand = async (

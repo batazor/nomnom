@@ -1,23 +1,39 @@
 import { create } from "@bufbuild/protobuf";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
-import type { KitchenBoardQuery } from "../../slices/restaurantorder/applications/kitchen-board/kitchen-board.ts";
-import { requireField, transportError } from "./errors.ts";
+import {
+  requireField,
+  transportError,
+} from "../../../../infrastructure/grpc/errors.ts";
 import {
   GetKitchenQueueResponseSchema,
   ListActiveRestaurantOrdersResponseSchema,
   ListIncomingOrdersResponseSchema,
   ListScheduledOrdersResponseSchema,
   type RestaurantsService,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { GetKitchenQueueHandler } from "../../applications/get-kitchen-queue/get-kitchen-queue.ts";
+import type { KitchenBoardQuery } from "../../applications/kitchen-board/kitchen-board.ts";
+import type { ListActiveRestaurantOrdersHandler } from "../../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import type { ListIncomingOrdersHandler } from "../../applications/list-incoming-orders/list-incoming-orders.ts";
+import type { ListScheduledOrdersHandler } from "../../applications/list-scheduled-orders/list-scheduled-orders.ts";
 import {
   toActiveRestaurantOrderMessage,
   toIncomingOrderMessage,
   toKitchenQueueEntryMessage,
   toScheduledOrderMessage,
 } from "./messages.ts";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+
+export type KitchenBoardRpcDependencies = Readonly<{
+  getKitchenQueue: Pick<GetKitchenQueueHandler, "execute">;
+  listActiveRestaurantOrders: Pick<
+    ListActiveRestaurantOrdersHandler,
+    "execute"
+  >;
+  listIncomingOrders: Pick<ListIncomingOrdersHandler, "execute">;
+  listScheduledOrders: Pick<ListScheduledOrdersHandler, "execute">;
+}>;
 
 type KitchenBoardRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -32,7 +48,7 @@ type KitchenBoardRpcs = Pick<
  * require `restaurant#operate_kitchen` through the query's own access port.
  */
 export const createKitchenBoardRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: KitchenBoardRpcDependencies,
   subjects: SubjectResolver,
 ): KitchenBoardRpcs => {
   /** Resolves the caller and the restaurant of a kitchen board query. */

@@ -1,14 +1,20 @@
 import { create } from "@bufbuild/protobuf";
 import type { ServiceImpl } from "@connectrpc/connect";
-import { transportError } from "./errors.ts";
+import { transportError } from "../../../../infrastructure/grpc/errors.ts";
 import {
   GetSimulatorResponseSchema,
   type RestaurantsService,
   SetSimulatorEnabledResponseSchema,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { GetSimulatorHandler } from "../../applications/get-simulator/get-simulator.ts";
+import type { SetSimulatorEnabledHandler } from "../../applications/set-simulator-enabled/set-simulator-enabled.ts";
+
+export type SimulatorRpcDependencies = Readonly<{
+  getSimulator: Pick<GetSimulatorHandler, "execute">;
+  setSimulatorEnabled: Pick<SetSimulatorEnabledHandler, "execute">;
+}>;
 
 type SimulatorRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -17,7 +23,7 @@ type SimulatorRpcs = Pick<
 
 /** Demo Simulator RPCs of operators (FR-604). */
 export const createSimulatorRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: SimulatorRpcDependencies,
   subjects: SubjectResolver,
 ): SimulatorRpcs => ({
   async getSimulator(_request, context) {

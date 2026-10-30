@@ -1,8 +1,9 @@
 import { create } from "@bufbuild/protobuf";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
-import type { CookCommand } from "../../slices/cook/applications/change-cook/change-cook.ts";
-import type { CookView } from "../../slices/cook/applications/cook-view/cook-view.ts";
-import { requireField, transportError } from "./errors.ts";
+import {
+  requireField,
+  transportError,
+} from "../../../../infrastructure/grpc/errors.ts";
 import {
   CookSchema,
   GetCookPoolResponseSchema,
@@ -11,10 +12,24 @@ import {
   type RestaurantsService,
   RetireCookResponseSchema,
   TakeCookOffLineResponseSchema,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { CookCommand } from "../../applications/change-cook/change-cook.ts";
+import type { CookView } from "../../applications/cook-view/cook-view.ts";
+import type { GetCookPoolHandler } from "../../applications/get-cook-pool/get-cook-pool.ts";
+import type { HireCookHandler } from "../../applications/hire-cook/hire-cook.ts";
+import type { PutCookOnLineHandler } from "../../applications/put-cook-on-line/put-cook-on-line.ts";
+import type { RetireCookHandler } from "../../applications/retire-cook/retire-cook.ts";
+import type { TakeCookOffLineHandler } from "../../applications/take-cook-off-line/take-cook-off-line.ts";
+
+export type CookPoolRpcDependencies = Readonly<{
+  getCookPool: Pick<GetCookPoolHandler, "execute">;
+  hireCook: Pick<HireCookHandler, "execute">;
+  putCookOnLine: Pick<PutCookOnLineHandler, "execute">;
+  retireCook: Pick<RetireCookHandler, "execute">;
+  takeCookOffLine: Pick<TakeCookOffLineHandler, "execute">;
+}>;
 
 type CookPoolRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -36,7 +51,7 @@ const toCookMessage = (view: CookView) =>
 
 /** Cook Pool RPCs of restaurant staff (FR-614..FR-616). */
 export const createCookPoolRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: CookPoolRpcDependencies,
   subjects: SubjectResolver,
 ): CookPoolRpcs => {
   /** Resolves the caller and the addressed cook of a line command. */

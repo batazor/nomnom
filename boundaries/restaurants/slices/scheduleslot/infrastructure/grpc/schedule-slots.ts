@@ -1,23 +1,44 @@
 import { create } from "@bufbuild/protobuf";
-import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
   type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import { requireField, transportError } from "./errors.ts";
+import {
+  requireField,
+  transportError,
+} from "../../../../infrastructure/grpc/errors.ts";
+import { DeliveryWindowSchema } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/restaurants_pb.js";
 import {
   ConfirmScheduledSlotResponseSchema,
   ListScheduledSlotsResponseSchema,
   ReleaseScheduledSlotResponseSchema,
   ReserveScheduledSlotResponseSchema,
   type RestaurantsService,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
-import { toDeliveryWindowMessage } from "./messages.ts";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { ConfirmScheduledSlotHandler } from "../../applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
+import type { ListScheduledSlotsHandler } from "../../applications/list-scheduled-slots/list-scheduled-slots.ts";
+import type { ReleaseScheduledSlotHandler } from "../../applications/release-scheduled-slot/release-scheduled-slot.ts";
+import type { ReserveScheduledSlotHandler } from "../../applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
+import type { DeliveryWindow } from "../../domains/scheduleslot/scheduleslot.ts";
+
+export type ScheduleSlotRpcDependencies = Readonly<{
+  confirmScheduledSlot: Pick<ConfirmScheduledSlotHandler, "execute">;
+  listScheduledSlots: Pick<ListScheduledSlotsHandler, "execute">;
+  releaseScheduledSlot: Pick<ReleaseScheduledSlotHandler, "execute">;
+  reserveScheduledSlot: Pick<ReserveScheduledSlotHandler, "execute">;
+}>;
+
+/** Delivery Window `[start, end)` of a scheduled order. */
+const toDeliveryWindowMessage = (window: DeliveryWindow) =>
+  create(DeliveryWindowSchema, {
+    start: timestampFromDate(window.start),
+    end: timestampFromDate(window.end),
+  });
 
 type ScheduleSlotRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -34,7 +55,7 @@ type ScheduleSlotRpcs = Pick<
  * (`slot_unavailable`), not a gRPC error.
  */
 export const createScheduleSlotRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: ScheduleSlotRpcDependencies,
   subjects: SubjectResolver,
 ): ScheduleSlotRpcs => {
   const caller = async (context: HandlerContext) =>

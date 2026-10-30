@@ -5,20 +5,33 @@ import {
   type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import type { Subject } from "../../pkg/authz/subject.ts";
-import type { MenuItemChangeResult } from "../../slices/menu/applications/menu-support/menu-support.ts";
-import { requireField, transportError } from "./errors.ts";
+import {
+  requireField,
+  transportError,
+} from "../../../../infrastructure/grpc/errors.ts";
 import {
   AddMenuItemResponseSchema,
   CreateMenuResponseSchema,
   type RestaurantsService,
   SetMenuItemAvailabilityResponseSchema,
   UpdateMenuItemResponseSchema,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { AddMenuItemHandler } from "../../applications/add-menu-item/add-menu-item.ts";
+import type { CreateMenuHandler } from "../../applications/create-menu/create-menu.ts";
+import type { MenuItemChangeResult } from "../../applications/menu-support/menu-support.ts";
+import type { SetMenuItemAvailabilityHandler } from "../../applications/set-menu-item-availability/set-menu-item-availability.ts";
+import type { UpdateMenuItemHandler } from "../../applications/update-menu-item/update-menu-item.ts";
 import { toMenuItemMessage } from "./messages.ts";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+
+export type MenuRpcDependencies = Readonly<{
+  addMenuItem: Pick<AddMenuItemHandler, "execute">;
+  createMenu: Pick<CreateMenuHandler, "execute">;
+  setMenuItemAvailability: Pick<SetMenuItemAvailabilityHandler, "execute">;
+  updateMenuItem: Pick<UpdateMenuItemHandler, "execute">;
+}>;
 
 type MenuRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -38,7 +51,7 @@ const toMenuItemChange = (result: MenuItemChangeResult) => ({
  * price are checked here.
  */
 export const createMenuRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: MenuRpcDependencies,
   subjects: SubjectResolver,
 ): MenuRpcs => {
   const caller = async (

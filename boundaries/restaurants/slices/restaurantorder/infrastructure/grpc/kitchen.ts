@@ -6,8 +6,10 @@ import {
   type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import type { KitchenCommand } from "../../slices/restaurantorder/applications/kitchen-command/kitchen-command.ts";
-import { requireField, transportError } from "./errors.ts";
+import {
+  requireField,
+  transportError,
+} from "../../../../infrastructure/grpc/errors.ts";
 import {
   AcceptRestaurantOrderResponseSchema,
   MarkRestaurantOrderAssembledResponseSchema,
@@ -17,11 +19,28 @@ import {
   ReportPreparationFailureResponseSchema,
   type RestaurantsService,
   StartNextPreparationResponseSchema,
-} from "./gen/nomnom/restaurants/v1/service_pb.js";
+} from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
+import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
+import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
+import type { AcceptOrderHandler } from "../../applications/accept-order/accept-order.ts";
+import type { KitchenCommand } from "../../applications/kitchen-command/kitchen-command.ts";
+import type { MarkAssembledHandler } from "../../applications/mark-assembled/mark-assembled.ts";
+import type { MarkReadyForPickupHandler } from "../../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import type { RejectOrderHandler } from "../../applications/reject-order/reject-order.ts";
+import type { ReportPreparationDelayHandler } from "../../applications/report-preparation-delay/report-preparation-delay.ts";
+import type { ReportPreparationFailureHandler } from "../../applications/report-preparation-failure/report-preparation-failure.ts";
+import type { StartPreparationHandler } from "../../applications/start-preparation/start-preparation.ts";
 import { toRestaurantOrderMessage } from "./messages.ts";
-import { withRequestRevision } from "./revision.ts";
-import type { RestaurantsServiceDependencies } from "./service.ts";
-import type { SubjectResolver } from "./subject.ts";
+
+export type KitchenRpcDependencies = Readonly<{
+  acceptRestaurantOrder: Pick<AcceptOrderHandler, "execute">;
+  markRestaurantOrderAssembled: Pick<MarkAssembledHandler, "execute">;
+  markRestaurantOrderReady: Pick<MarkReadyForPickupHandler, "execute">;
+  rejectRestaurantOrder: Pick<RejectOrderHandler, "execute">;
+  reportPreparationDelay: Pick<ReportPreparationDelayHandler, "execute">;
+  reportPreparationFailure: Pick<ReportPreparationFailureHandler, "execute">;
+  startPreparation: Pick<StartPreparationHandler, "execute">;
+}>;
 
 type KitchenRpcs = Pick<
   ServiceImpl<typeof RestaurantsService>,
@@ -36,7 +55,7 @@ type KitchenRpcs = Pick<
 
 /** Kitchen command RPCs over one addressed Restaurant Order. */
 export const createKitchenRpcs = (
-  dependencies: RestaurantsServiceDependencies,
+  dependencies: KitchenRpcDependencies,
   subjects: SubjectResolver,
 ): KitchenRpcs => {
   /** Resolves the caller and the addressed Restaurant Order of a kitchen command. */
