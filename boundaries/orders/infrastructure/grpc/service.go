@@ -282,8 +282,16 @@ func orderState(state order.State) ordersv1.OrderState {
 	switch state {
 	case order.StatePlaced:
 		return ordersv1.OrderState_ORDER_STATE_PLACED
+	case order.StatePaid:
+		return ordersv1.OrderState_ORDER_STATE_PAID
 	case order.StateConfirmed:
 		return ordersv1.OrderState_ORDER_STATE_CONFIRMED
+	case order.StatePreparing:
+		return ordersv1.OrderState_ORDER_STATE_PREPARING
+	case order.StateReady:
+		return ordersv1.OrderState_ORDER_STATE_READY
+	case order.StatePickedUp:
+		return ordersv1.OrderState_ORDER_STATE_PICKED_UP
 	case order.StateCancelled:
 		return ordersv1.OrderState_ORDER_STATE_CANCELLED
 	case order.StateCompleted:

@@ -18,31 +18,78 @@ type expectedOutcome struct {
 func TestTransitionMatrix(t *testing.T) {
 	invalid := expectedOutcome{invalid: true}
 	already := expectedOutcome{already: true}
+	stays := func(state State) expectedOutcome { return expectedOutcome{to: state} }
+	closed := func(repeat Trigger) map[Trigger]expectedOutcome {
+		outcomes := map[Trigger]expectedOutcome{}
+		for _, trigger := range allTriggers {
+			outcomes[trigger] = invalid
+		}
+		outcomes[repeat] = already
+		return outcomes
+	}
 	matrix := map[State]map[Trigger]expectedOutcome{
 		StatePlaced: {
-			TriggerConfirm:    {to: StateConfirmed},
-			TriggerCancel:     {to: StateCancelled},
-			TriggerComplete:   invalid,
-			TriggerRecordFact: {to: StatePlaced},
+			TriggerAuthorizePayment: {to: StatePaid},
+			TriggerConfirm:          {to: StateConfirmed},
+			TriggerStartPreparation: {to: StatePreparing},
+			TriggerMarkReady:        {to: StateReady},
+			TriggerPickUp:           {to: StatePickedUp},
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         invalid,
+			TriggerRecordFact:       stays(StatePlaced),
+		},
+		StatePaid: {
+			TriggerAuthorizePayment: stays(StatePaid),
+			TriggerConfirm:          {to: StateConfirmed},
+			TriggerStartPreparation: {to: StatePreparing},
+			TriggerMarkReady:        {to: StateReady},
+			TriggerPickUp:           {to: StatePickedUp},
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         invalid,
+			TriggerRecordFact:       stays(StatePaid),
 		},
 		StateConfirmed: {
-			TriggerConfirm:    already,
-			TriggerCancel:     {to: StateCancelled},
-			TriggerComplete:   {to: StateCompleted},
-			TriggerRecordFact: {to: StateConfirmed},
+			TriggerAuthorizePayment: invalid,
+			TriggerConfirm:          already,
+			TriggerStartPreparation: {to: StatePreparing},
+			TriggerMarkReady:        {to: StateReady},
+			TriggerPickUp:           {to: StatePickedUp},
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         {to: StateCompleted},
+			TriggerRecordFact:       stays(StateConfirmed),
 		},
-		StateCancelled: {
-			TriggerConfirm:    invalid,
-			TriggerCancel:     already,
-			TriggerComplete:   invalid,
-			TriggerRecordFact: invalid,
+		StatePreparing: {
+			TriggerAuthorizePayment: invalid,
+			TriggerConfirm:          stays(StatePreparing),
+			TriggerStartPreparation: stays(StatePreparing),
+			TriggerMarkReady:        {to: StateReady},
+			TriggerPickUp:           {to: StatePickedUp},
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         {to: StateCompleted},
+			TriggerRecordFact:       stays(StatePreparing),
 		},
-		StateCompleted: {
-			TriggerConfirm:    invalid,
-			TriggerCancel:     invalid,
-			TriggerComplete:   already,
-			TriggerRecordFact: invalid,
+		StateReady: {
+			TriggerAuthorizePayment: invalid,
+			TriggerConfirm:          stays(StateReady),
+			TriggerStartPreparation: stays(StateReady),
+			TriggerMarkReady:        stays(StateReady),
+			TriggerPickUp:           {to: StatePickedUp},
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         {to: StateCompleted},
+			TriggerRecordFact:       stays(StateReady),
 		},
+		StatePickedUp: {
+			TriggerAuthorizePayment: invalid,
+			TriggerConfirm:          stays(StatePickedUp),
+			TriggerStartPreparation: stays(StatePickedUp),
+			TriggerMarkReady:        stays(StatePickedUp),
+			TriggerPickUp:           stays(StatePickedUp),
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         {to: StateCompleted},
+			TriggerRecordFact:       stays(StatePickedUp),
+		},
+		StateCancelled: closed(TriggerCancel),
+		StateCompleted: closed(TriggerComplete),
 	}
 	input := TransitionInput{RequestedAt: testNow, OccurredAt: testNow}
 

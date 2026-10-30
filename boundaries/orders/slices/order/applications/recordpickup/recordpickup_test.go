@@ -32,7 +32,7 @@ func TestHandleByOrderState(t *testing.T) {
 		wantState order.State
 		wantFacts []order.RecordedFact
 	}{
-		{name: "placed", outcome: fulfillment.OutcomeApplied, wantState: order.StatePlaced, wantFacts: []order.RecordedFact{recorded}},
+		{name: "placed", outcome: fulfillment.OutcomeApplied, wantState: order.StatePickedUp, wantFacts: []order.RecordedFact{recorded}},
 		{
 			name:      "already recorded",
 			options:   []ordertest.Option{ordertest.WithFacts(recorded)},

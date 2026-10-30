@@ -36,7 +36,7 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	saved, err := store.Get(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), saved.Version())
-	assert.Equal(t, order.StateConfirmed, saved.State())
+	assert.Equal(t, order.StatePreparing, saved.State())
 	// Confirm records restaurant_accepted with the transition (AC-563); facts
 	// load in the order they occurred.
 	assert.Equal(t, []order.RecordedFact{

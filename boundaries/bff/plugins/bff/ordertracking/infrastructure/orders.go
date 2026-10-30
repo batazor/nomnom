@@ -36,7 +36,11 @@ var (
 
 var orderStates = map[ordersv1.OrderState]string{
 	ordersv1.OrderState_ORDER_STATE_PLACED:    "placed",
+	ordersv1.OrderState_ORDER_STATE_PAID:      "paid",
 	ordersv1.OrderState_ORDER_STATE_CONFIRMED: "confirmed",
+	ordersv1.OrderState_ORDER_STATE_PREPARING: "preparing",
+	ordersv1.OrderState_ORDER_STATE_READY:     "ready",
+	ordersv1.OrderState_ORDER_STATE_PICKED_UP: "picked_up",
 	ordersv1.OrderState_ORDER_STATE_CANCELLED: "cancelled",
 	ordersv1.OrderState_ORDER_STATE_COMPLETED: "completed",
 }

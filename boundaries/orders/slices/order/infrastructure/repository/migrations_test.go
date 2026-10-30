@@ -81,6 +81,51 @@ func TestPremiumPriorityMigrationMakesExistingOrdersStandard(t *testing.T) {
 	require.ErrorContains(t, err, "orders_premium_fee_by_priority")
 }
 
+// Open Orders move to the furthest state their facts reached; closed Orders and
+// Orders without progress facts stay.
+func TestFulfillmentStatesMigrationDerivesStateFromFacts(t *testing.T) {
+	ctx := context.Background()
+	cfg := database.Config{DSN: emptyOrdersDatabase(t), MaxConns: 1}
+	require.NoError(t, migration.Apply(ctx, cfg, migrationsBefore(t, "00011_fulfillment_states.up.sql")))
+
+	conn, err := pgx.Connect(ctx, cfg.DSN)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	tests := []struct {
+		id, state string
+		facts     []string
+		want      string
+	}{
+		{"placed", "placed", nil, "placed"},
+		{"paid", "placed", []string{"payment_authorized"}, "paid"},
+		{"confirmed", "confirmed", []string{"payment_authorized", "restaurant_accepted", "courier_assigned"}, "confirmed"},
+		{"preparing", "confirmed", []string{"restaurant_accepted", "preparation_started"}, "preparing"},
+		{"ready", "confirmed", []string{"preparation_started", "ready_for_pickup"}, "ready"},
+		{"picked-up", "confirmed", []string{"ready_for_pickup", "picked_up", "delivery_completed"}, "picked_up"},
+		{"out-of-order", "placed", []string{"payment_authorized", "preparation_started"}, "preparing"},
+		{"cancelled", "cancelled", []string{"preparation_started"}, "cancelled"},
+		{"completed", "completed", []string{"picked_up"}, "completed"},
+	}
+	for _, tt := range tests {
+		_, err := conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version, priority)
+			VALUES ($1, 'customer-1', 'restaurant-1', 'berlin', 10, 'EUR', $2, now(), 1, 'STANDARD')`, tt.id, tt.state)
+		require.NoError(t, err)
+		for _, fact := range tt.facts {
+			_, err := conn.Exec(ctx, `INSERT INTO order_facts (order_id, fact, occurred_at) VALUES ($1, $2, now())`, tt.id, fact)
+			require.NoError(t, err)
+		}
+	}
+
+	require.NoError(t, migration.Apply(ctx, cfg, repository.Migrations))
+
+	for _, tt := range tests {
+		var state string
+		require.NoError(t, conn.QueryRow(ctx, `SELECT state FROM orders WHERE id = $1`, tt.id).Scan(&state))
+		assert.Equal(t, tt.want, state, tt.id)
+	}
+}
+
 // migrationsBefore is the order migration set without first and every later file.
 func migrationsBefore(t *testing.T, first string) migration.Set {
 	t.Helper()

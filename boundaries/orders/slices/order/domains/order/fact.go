@@ -5,8 +5,10 @@ import (
 	"time"
 )
 
-// FulfillmentFact is a business result of restaurants or delivery reflected in an
-// Order. Facts are Order data, not Order States: waiting stages belong to the workflow.
+// FulfillmentFact is a business result of restaurants or delivery kept in the
+// journal of an Order: when it happened and why. The position of the Order is its
+// State alone and is never derived from the journal; waiting stages belong to
+// the workflow.
 type FulfillmentFact string
 
 const (
@@ -61,48 +63,44 @@ func isKnownFact(fact FulfillmentFact) bool {
 }
 
 func (o *Order) RecordRestaurantRejection(occurredAt time.Time, reason string) (TransitionResult, error) {
-	return o.recordFact(FactRestaurantRejected, occurredAt, reason)
+	return o.recordFact(TriggerRecordFact, FactRestaurantRejected, occurredAt, reason)
 }
 
-// RecordPaymentAuthorization records the approved Authorization. It is admitted
-// only in placed: the restaurant is requested after it, so a confirmed Order
-// already passed the payment.
+// RecordPaymentAuthorization records the approved Authorization and moves the
+// Order to paid. Unlike the facts of neighbours it never arrives late: the
+// workflow records it before it requests the restaurant.
 func (o *Order) RecordPaymentAuthorization(occurredAt time.Time) (TransitionResult, error) {
-	if o.state != StatePlaced {
-		return TransitionResult{}, InvalidTransition{From: o.state, Trigger: TriggerRecordFact}
-	}
-	return o.recordFact(FactPaymentAuthorized, occurredAt, "")
+	return o.recordFact(TriggerAuthorizePayment, FactPaymentAuthorized, occurredAt, "")
 }
 
 func (o *Order) RecordPreparationStarted(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(FactPreparationStarted, occurredAt, "")
+	return o.recordFact(TriggerStartPreparation, FactPreparationStarted, occurredAt, "")
 }
 
 func (o *Order) RecordReadyForPickup(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(FactReadyForPickup, occurredAt, "")
+	return o.recordFact(TriggerMarkReady, FactReadyForPickup, occurredAt, "")
 }
 
 func (o *Order) RecordCourierAssignment(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(FactCourierAssigned, occurredAt, "")
+	return o.recordFact(TriggerRecordFact, FactCourierAssigned, occurredAt, "")
 }
 
 func (o *Order) RecordPickup(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(FactPickedUp, occurredAt, "")
+	return o.recordFact(TriggerPickUp, FactPickedUp, occurredAt, "")
 }
 
 func (o *Order) RecordDeliveryCompletion(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(FactDeliveryCompleted, occurredAt, "")
+	return o.recordFact(TriggerRecordFact, FactDeliveryCompleted, occurredAt, "")
 }
 
 func (o *Order) RecordDeliveryFailure(occurredAt time.Time, reason string) (TransitionResult, error) {
-	return o.recordFact(FactDeliveryFailed, occurredAt, reason)
+	return o.recordFact(TriggerRecordFact, FactDeliveryFailed, occurredAt, reason)
 }
 
-// recordFact lets the FSM decide admissibility by state first, then enforces
-// that each fact is recorded at most once. Facts are not ordered here: the
-// sequence of Preparation and Delivery belongs to their owning contexts.
-func (o *Order) recordFact(fact FulfillmentFact, occurredAt time.Time, reason string) (TransitionResult, error) {
-	result, err := transition(o.state, TriggerRecordFact, TransitionInput{OccurredAt: occurredAt})
+// recordFact lets the FSM decide the transition by state first, then enforces
+// that each fact is in the journal at most once.
+func (o *Order) recordFact(trigger Trigger, fact FulfillmentFact, occurredAt time.Time, reason string) (TransitionResult, error) {
+	result, err := transition(o.state, trigger, TransitionInput{OccurredAt: occurredAt})
 	if err != nil {
 		return TransitionResult{}, err
 	}

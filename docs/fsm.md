@@ -214,39 +214,63 @@ aggregate_type, from_state, trigger, to_state, result
 
 ## Order
 
-Statechart aggregate `Order` в `orders`; реализация — `boundaries/orders/slices/order/domains/order/fsm.go`. Fulfillment Facts — данные `Order`, а не states; их запись — targetless `record_fact`.
+Statechart aggregate `Order` в `orders`; реализация — `boundaries/orders/slices/order/domains/order/fsm.go`. Положение заказа в Fulfillment — только его state; клиентский статус BFF отображает из state, а не вычисляет из фактов. Fulfillment Facts — журнал: когда шаг произошёл и почему, решения по нему не принимаются.
 
 Compound states:
 
 | Compound state | Входит | Смысл |
 | --- | --- | --- |
-| `open` | `placed`, `confirmed` | Open Order: Fulfillment не завершён; Order можно отменить и записать Fulfillment Fact |
+| `open` | `placed`, `paid`, `confirmed`, `preparing`, `ready`, `picked_up` | Open Order: Fulfillment не завершён; Order можно отменить и записать Fulfillment Fact |
 | `closed` | `cancelled`, `completed` | Closed Order: terminal states (`IsFinal()`) |
 
 ```mermaid
 stateDiagram-v2
     [*] --> placed: Place
     state open {
-        placed --> confirmed: confirm
+        placed --> paid: authorize_payment
+        paid --> confirmed: confirm
+        confirmed --> preparing: start_preparation
+        preparing --> ready: mark_ready
+        ready --> picked_up: pick_up
     }
     state closed {
         cancelled
         completed
     }
     confirmed --> completed: complete
+    preparing --> completed: complete
+    ready --> completed: complete
+    picked_up --> completed: complete
     open --> cancelled: cancel
     open --> open: record_fact (stay)
     closed --> [*]
 ```
 
+На диаграмме — основной путь. Переходы монотонны: факты `restaurants` и `delivery` приходят из разных топиков без общего порядка, поэтому факт может перепрыгнуть ещё не сообщённый шаг, а факт уже пройденного шага не двигает заказ назад и только дописывается в журнал. Заказ никогда не идёт назад.
+
+Строка — исход `trigger` из `state`; `→ x` — переход, `stay` — state не меняется, факт пишется в журнал:
+
+| state | `authorize_payment` | `confirm` | `start_preparation` | `mark_ready` | `pick_up` | `complete` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `placed` | → `paid` | → `confirmed` | → `preparing` | → `ready` | → `picked_up` | invalid |
+| `paid` | `stay` | → `confirmed` | → `preparing` | → `ready` | → `picked_up` | invalid |
+| `confirmed` | invalid | `AlreadyInState` | → `preparing` | → `ready` | → `picked_up` | → `completed` |
+| `preparing` | invalid | `stay` | `stay` | → `ready` | → `picked_up` | → `completed` |
+| `ready` | invalid | `stay` | `stay` | `stay` | → `picked_up` | → `completed` |
+| `picked_up` | invalid | `stay` | `stay` | `stay` | `stay` | → `completed` |
+
+Для всех этих trigger guard — `occurred_at` задан, иначе `GuardFailed{occurred_at_required}`.
+
+Строки на compound state:
+
 | source | trigger | guard | target | failure |
 | --- | --- | --- | --- | --- |
-| `placed` | `confirm` | — | `confirmed` | — |
-| `confirmed` | `complete` | `occurred_at` задан | `completed` | `GuardFailed{occurred_at_required}` |
 | `open` | `cancel` | `requested_at` задан | `cancelled` | `GuardFailed{requested_at_required}` |
 | `open` | `record_fact` | `occurred_at` задан | `stay` | `GuardFailed{occurred_at_required}` |
 
-Строгие повторы с явным `AlreadyInState`:
+`record_fact` не двигает заказ. Им записываются данные: `courier_assigned` (курьера могут снять и назначить другого, это ортогонально цепочке, см. `CourierAssignment`), отрицательные `restaurant_rejected` и `delivery_failed` (итог выбирает Saga через `cancel`), `delivery_completed` (итог — `complete` от workflow) и сроки `ExpectedTimes`.
+
+Повтор факта на `stay` — `FactAlreadyRecorded`. Строгие повторы с явным `AlreadyInState`:
 
 | from_state | trigger | Исход |
 | --- | --- | --- |
@@ -254,9 +278,9 @@ stateDiagram-v2
 | `cancelled` | `cancel` | `AlreadyInState{cancelled}` |
 | `completed` | `complete` | `AlreadyInState{completed}` |
 
-Все остальные пары `state × trigger` дают `InvalidTransition`: `placed × complete` (Completion только после подтверждения), любой trigger из `closed`, кроме повторов. `record_fact` для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). Факт `payment_authorized` (Record Payment Authorization) допускается только в `placed`: ресторан запрашивается после него, поэтому `confirmed` Order оплату уже прошёл; в другом state — `InvalidTransition`. Отдельного state оплаты нет: клиентский статус `PAID` BFF вычисляет из факта, окно отмены не меняется. Failure пока завершается тем же `cancelled` с видом итога `failure`.
+Все остальные пары `state × trigger` дают `InvalidTransition`: `placed × complete` и `paid × complete` (Completion только после подтверждения), любой trigger из `closed`, кроме повторов. Факт для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). `authorize_payment` допускается только в `placed` и `paid`: ресторан запрашивается после оплаты, поэтому заказ дальше `paid` оплату уже прошёл. Failure пока завершается тем же `cancelled` с видом итога `failure`.
 
-`AcceptsCancellation()` и `IsFinal()` — принадлежность к `open` и `closed`, а не ручные списки states.
+`AcceptsCancellation()` и `IsFinal()` — принадлежность к `open` и `closed`, а не ручные списки states. Окно отмены от положения внутри `open` не зависит.
 
 ## Kitchen / Preparation
 

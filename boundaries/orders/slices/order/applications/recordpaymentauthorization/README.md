@@ -34,7 +34,7 @@ Handler: [`recordpaymentauthorization.go`](recordpaymentauthorization.go), те�
 
 - **Вход:** `Input{OrderID, AuthorizedAt}` от Activity (`service` identity внутри `orders`, отдельной authorization нет). `AuthorizedAt` — время Workflow (`StepInput.DecidedAt`), одинаковое во всех попытках Activity.
 - **Порядок:** `UnitOfWork { Orders.Get → Order.RecordPaymentAuthorization(AuthorizedAt) → Save }`; `Save` store процесса пишет `order_details` и Change Notification `orderChanged`.
-- **Результат:** `recorded` или `already_recorded` (повтор Activity без изменений); `Order` не в `placed` — `InvalidTransition`.
+- **Результат:** `recorded` или `already_recorded` (повтор Activity без изменений); `Order` дальше `paid` — `InvalidTransition`.
 - **Outbox:** Integration Event не публикуется — соседним контекстам факт не нужен.
 - **Требования:** FR-639, AC-829, AC-830 в OpenSpec change `start-fulfillment-and-pay-before-kitchen`.
 

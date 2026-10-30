@@ -113,16 +113,20 @@ AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → P
 
 Компенсации — orchestration-based Saga. Workflow ведёт журнал подтверждённых шагов и вызывает только применимые compensation Activities (`CancelDelivery`, `CancelRestaurantOrder`, `ReleaseSlotReservation`, `CancelPaymentAuthorization`, `RefundPayment`), каждая со стабильным idempotency key, timeout, retry policy и telemetry. Резервация окна запланированного заказа существует с Place Order, поэтому журнал содержит её с начала: при отказе оплаты, отмене или неудаче до Pickup workflow вызывает `ReleaseSlotReservation` (ключ `order_id + release_slot`); после Pickup окно отработало и не освобождается, неподтверждённая резервация (`slot_unavailable`) — тоже.
 
-Ресторан запрашивается только после оплаты: маршрут `AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → …`. Шаг `RecordPaymentAuthorization` вызывает use case слайса `order`, который записывает в `Order` Fulfillment Fact `payment_authorized` с моментом решения (время Workflow); повтор Activity — no-op, компенсации у шага нет — факт остаётся в `Order` как история. Restaurant Order создаёт только `RequestRestaurantOrder` (RPC `ReceiveOrderRequest`); `restaurants` не создаёт его из `OrderPlaced`. Иначе кухня видела неоплаченный заказ: её факты могли опередить шаг `RequestRestaurantOrder` (workflow отклонял их и падал по таймауту приёмки), а при отказе оплаты Saga не отменяла Restaurant Order, и кухня могла его приготовить. Поэтому при отказе Authorization Restaurant Order не существует и `CancelRestaurantOrder` не нужен. Цена — кухня видит заказ позже на время Authorization.
+Ресторан запрашивается только после оплаты: маршрут `AuthorizePayment → RecordPaymentAuthorization → RequestRestaurantOrder → …`. Шаг `RecordPaymentAuthorization` вызывает use case слайса `order`, который записывает в `Order` Fulfillment Fact `payment_authorized` с моментом решения (время Workflow) и переводит его в `paid`; повтор Activity — no-op, компенсации у шага нет — факт остаётся в `Order` как история. Restaurant Order создаёт только `RequestRestaurantOrder` (RPC `ReceiveOrderRequest`); `restaurants` не создаёт его из `OrderPlaced`. Иначе кухня видела неоплаченный заказ: её факты могли опередить шаг `RequestRestaurantOrder` (workflow отклонял их и падал по таймауту приёмки), а при отказе оплаты Saga не отменяла Restaurant Order, и кухня могла его приготовить. Поэтому при отказе Authorization Restaurant Order не существует и `CancelRestaurantOrder` не нужен. Цена — кухня видит заказ позже на время Authorization.
 
 ### State ownership
 
 | Что | Владелец |
 | --- | --- |
-| Order State (`placed`, `confirmed`, `cancelled`, `completed`), Fulfillment Facts, инварианты | `Order` в PostgreSQL `orders` |
+| Order State (`placed`, `paid`, `confirmed`, `preparing`, `ready`, `picked_up`, `cancelled`, `completed`), журнал Fulfillment Facts, инварианты | `Order` в PostgreSQL `orders` |
 | Workflow Stage: стадия, результаты шагов, обработанные `event_id`, таймеры, журнал compensation | Temporal Event History |
 | Доставка интеграционных событий | Kafka + Outbox/Inbox |
 | Клиентские чтения | CQRS read model |
+
+Order State — результат шагов Fulfillment, Workflow Stage — ожидание следующего: `preparing` значит «приготовление началось», а ждёт ли процесс готовности и с каким таймером, знает только workflow. Раньше прогресс хранился только фактами, а статус BFF вычислял из их набора: это был неявный автомат в другом сервисе. Теперь положение заказа — один state, а факты — журнал времени и причин (модель переходов — [FSM](../../../../docs/fsm.md#order)).
+
+Факты `restaurants` и `delivery` приходят из разных топиков, поэтому переходы монотонны: факт может перепрыгнуть несообщённый шаг, а отставший только дописывается в журнал. Строгий порядок давал бы `InvalidTransition`, откат Inbox и повторы на нормальной перестановке событий. Порядок шагов по-прежнему задаёт workflow, `Order` его не проверяет. Назначение курьера — данные (`CourierAssignment`), а не state: оно ортогонально цепочке и может быть снято.
 | Authorization | SpiceDB в use case владельца |
 
 Workflow не читает БД. Stage публикуется низкокардинальным Search Attribute и не становится Order State.

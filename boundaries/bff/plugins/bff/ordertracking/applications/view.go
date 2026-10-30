@@ -155,19 +155,14 @@ var endReasonOfCode = map[string]EndReason{
 	"payment_capture_declined":      EndPaymentDeclined,
 }
 
-// status computes the customer status from the Order State and its facts;
-// an unknown state is an error, not a guess.
+// status computes the customer status from the Order State; an unknown state
+// is an error, not a guess.
 func status(order OrderSnapshot) (Status, error) {
-	has := func(kind string) bool {
-		return slices.ContainsFunc(order.Facts, func(f Fact) bool { return f.Kind == kind })
-	}
 	switch order.State {
 	case "placed":
-		// The workflow records the payment before it requests the restaurant.
-		if has("payment_authorized") {
-			return StatusPaid, nil
-		}
 		return StatusReceived, nil
+	case "paid":
+		return StatusPaid, nil
 	case "completed":
 		return StatusDelivered, nil
 	case "cancelled":
@@ -176,20 +171,18 @@ func status(order OrderSnapshot) (Status, error) {
 		}
 		return StatusCancelled, nil
 	case "confirmed":
-		switch {
-		case has("picked_up"):
-			return StatusPickedUp, nil
-		case has("ready_for_pickup"):
-			return StatusReadyForPickup, nil
-		case has("preparation_started"):
-			return StatusPreparing, nil
 		// A confirmed scheduled Order waits for the start the plan gave it
 		// (FR-685): the kitchen starts it for its window, not now.
-		case order.DeliveryWindow != nil:
+		if order.DeliveryWindow != nil {
 			return StatusScheduled, nil
-		default:
-			return StatusConfirmed, nil
 		}
+		return StatusConfirmed, nil
+	case "preparing":
+		return StatusPreparing, nil
+	case "ready":
+		return StatusReadyForPickup, nil
+	case "picked_up":
+		return StatusPickedUp, nil
 	}
 	return "", fmt.Errorf("unknown order state %q", order.State)
 }

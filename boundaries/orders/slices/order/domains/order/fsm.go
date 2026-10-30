@@ -12,12 +12,19 @@ type State string
 
 const (
 	StatePlaced    State = "placed"
+	StatePaid      State = "paid"
 	StateConfirmed State = "confirmed"
+	StatePreparing State = "preparing"
+	StateReady     State = "ready"
+	StatePickedUp  State = "picked_up"
 	StateCancelled State = "cancelled"
 	StateCompleted State = "completed"
 )
 
-var allStates = [...]State{StatePlaced, StateConfirmed, StateCancelled, StateCompleted}
+var allStates = [...]State{
+	StatePlaced, StatePaid, StateConfirmed, StatePreparing, StateReady, StatePickedUp,
+	StateCancelled, StateCompleted,
+}
 
 // CompoundState is a named group of States in the Ubiquitous Language. It is
 // never persisted or published: an Order is always in exactly one State.
@@ -44,7 +51,11 @@ var parent = map[node]node{
 	node(CompoundOpen):   topLevel,
 	node(CompoundClosed): topLevel,
 	node(StatePlaced):    node(CompoundOpen),
+	node(StatePaid):      node(CompoundOpen),
 	node(StateConfirmed): node(CompoundOpen),
+	node(StatePreparing): node(CompoundOpen),
+	node(StateReady):     node(CompoundOpen),
+	node(StatePickedUp):  node(CompoundOpen),
 	node(StateCancelled): node(CompoundClosed),
 	node(StateCompleted): node(CompoundClosed),
 }
@@ -78,15 +89,25 @@ func (s State) AcceptsCancellation() bool { return isIn(s, CompoundOpen) }
 type Trigger string
 
 const (
-	TriggerConfirm  Trigger = "confirm"
-	TriggerCancel   Trigger = "cancel"
-	TriggerComplete Trigger = "complete"
-	// TriggerRecordFact records a fulfillment fact reported by a neighbouring
-	// context; its target state equals the source state.
+	TriggerAuthorizePayment Trigger = "authorize_payment"
+	TriggerConfirm          Trigger = "confirm"
+	TriggerStartPreparation Trigger = "start_preparation"
+	TriggerMarkReady        Trigger = "mark_ready"
+	TriggerPickUp           Trigger = "pick_up"
+	TriggerCancel           Trigger = "cancel"
+	TriggerComplete         Trigger = "complete"
+	// TriggerRecordFact records data that does not advance the Order: a courier
+	// assignment, a negative fact the Saga acts on, a delivery completion and a
+	// reported deadline. Its target state equals the source state.
 	TriggerRecordFact Trigger = "record_fact"
 )
 
-var allTriggers = [...]Trigger{TriggerConfirm, TriggerCancel, TriggerComplete, TriggerRecordFact}
+// allTriggers starts with TriggerRecordFact: TriggerOf names a change that
+// keeps the State by it, whichever trigger stayed.
+var allTriggers = [...]Trigger{
+	TriggerRecordFact, TriggerAuthorizePayment, TriggerConfirm, TriggerStartPreparation,
+	TriggerMarkReady, TriggerPickUp, TriggerCancel, TriggerComplete,
+}
 
 type TransitionInput struct {
 	RequestedAt time.Time
@@ -162,9 +183,47 @@ func occurredAtIsPresent(input TransitionInput) error {
 
 // transitions is the single source of truth for allowed transitions; a row
 // on a CompoundState applies to every State inside it.
+//
+// Progress is monotonic: facts of restaurants and delivery arrive from separate
+// topics without a common order, so a fact may jump the Order forward over a
+// step that has not been reported yet, and a fact of a step already passed stays
+// and is only added to the journal of facts.
 var transitions = []transitionRow{
-	{source: node(StatePlaced), trigger: TriggerConfirm, target: to(StateConfirmed)},
+	{source: node(StatePlaced), trigger: TriggerAuthorizePayment, target: to(StatePaid), guard: occurredAtIsPresent},
+	{source: node(StatePaid), trigger: TriggerAuthorizePayment, target: stay, guard: occurredAtIsPresent},
+
+	{source: node(StatePlaced), trigger: TriggerConfirm, target: to(StateConfirmed), guard: occurredAtIsPresent},
+	{source: node(StatePaid), trigger: TriggerConfirm, target: to(StateConfirmed), guard: occurredAtIsPresent},
+	{source: node(StatePreparing), trigger: TriggerConfirm, target: stay, guard: occurredAtIsPresent},
+	{source: node(StateReady), trigger: TriggerConfirm, target: stay, guard: occurredAtIsPresent},
+	{source: node(StatePickedUp), trigger: TriggerConfirm, target: stay, guard: occurredAtIsPresent},
+
+	{source: node(StatePlaced), trigger: TriggerStartPreparation, target: to(StatePreparing), guard: occurredAtIsPresent},
+	{source: node(StatePaid), trigger: TriggerStartPreparation, target: to(StatePreparing), guard: occurredAtIsPresent},
+	{source: node(StateConfirmed), trigger: TriggerStartPreparation, target: to(StatePreparing), guard: occurredAtIsPresent},
+	{source: node(StatePreparing), trigger: TriggerStartPreparation, target: stay, guard: occurredAtIsPresent},
+	{source: node(StateReady), trigger: TriggerStartPreparation, target: stay, guard: occurredAtIsPresent},
+	{source: node(StatePickedUp), trigger: TriggerStartPreparation, target: stay, guard: occurredAtIsPresent},
+
+	{source: node(StatePlaced), trigger: TriggerMarkReady, target: to(StateReady), guard: occurredAtIsPresent},
+	{source: node(StatePaid), trigger: TriggerMarkReady, target: to(StateReady), guard: occurredAtIsPresent},
+	{source: node(StateConfirmed), trigger: TriggerMarkReady, target: to(StateReady), guard: occurredAtIsPresent},
+	{source: node(StatePreparing), trigger: TriggerMarkReady, target: to(StateReady), guard: occurredAtIsPresent},
+	{source: node(StateReady), trigger: TriggerMarkReady, target: stay, guard: occurredAtIsPresent},
+	{source: node(StatePickedUp), trigger: TriggerMarkReady, target: stay, guard: occurredAtIsPresent},
+
+	{source: node(StatePlaced), trigger: TriggerPickUp, target: to(StatePickedUp), guard: occurredAtIsPresent},
+	{source: node(StatePaid), trigger: TriggerPickUp, target: to(StatePickedUp), guard: occurredAtIsPresent},
+	{source: node(StateConfirmed), trigger: TriggerPickUp, target: to(StatePickedUp), guard: occurredAtIsPresent},
+	{source: node(StatePreparing), trigger: TriggerPickUp, target: to(StatePickedUp), guard: occurredAtIsPresent},
+	{source: node(StateReady), trigger: TriggerPickUp, target: to(StatePickedUp), guard: occurredAtIsPresent},
+	{source: node(StatePickedUp), trigger: TriggerPickUp, target: stay, guard: occurredAtIsPresent},
+
 	{source: node(StateConfirmed), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
+	{source: node(StatePreparing), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
+	{source: node(StateReady), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
+	{source: node(StatePickedUp), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
+
 	{source: node(CompoundOpen), trigger: TriggerCancel, target: to(StateCancelled), guard: requestedAtIsPresent},
 	{source: node(CompoundOpen), trigger: TriggerRecordFact, target: stay, guard: occurredAtIsPresent},
 }
@@ -205,8 +264,9 @@ func (row transitionRow) targetOf(from State) State {
 }
 
 // TriggerOf names the allowed transition that takes an Order from one State to
-// another. Every allowed transition of a State has its own target, so the
-// pair identifies the trigger; false — no allowed transition joins them.
+// another. Every transition that moves a State has its own target, so the pair
+// identifies the trigger; a change that keeps the State is named record_fact.
+// False — no allowed transition joins them.
 func TriggerOf(from, to State) (Trigger, bool) {
 	for _, trigger := range allTriggers {
 		row, err := resolve(from, trigger)

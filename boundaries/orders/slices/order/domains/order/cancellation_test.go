@@ -120,8 +120,11 @@ func testReason(t *testing.T) CancellationReason {
 	return reason
 }
 
-func TestOnlyPlacedAndConfirmedAcceptCancellation(t *testing.T) {
-	accepts := map[State]bool{StatePlaced: true, StateConfirmed: true, StateCancelled: false, StateCompleted: false}
+func TestOnlyOpenStatesAcceptCancellation(t *testing.T) {
+	accepts := map[State]bool{
+		StatePlaced: true, StatePaid: true, StateConfirmed: true, StatePreparing: true, StateReady: true, StatePickedUp: true,
+		StateCancelled: false, StateCompleted: false,
+	}
 	require.Len(t, accepts, len(allStates))
 	for _, state := range allStates {
 		assert.Equal(t, accepts[state], state.AcceptsCancellation(), state)

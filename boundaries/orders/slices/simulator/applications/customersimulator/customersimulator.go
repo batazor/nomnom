@@ -183,7 +183,7 @@ func (c *Customer) cancel(ctx context.Context, orderID order.ID) {
 		slog.ErrorContext(ctx, "simulator: get order failed", slog.String("order_id", string(orderID)), telemetry.LogErrorKey, err)
 		return
 	}
-	if view.State != order.StatePlaced {
+	if view.State != order.StatePlaced && view.State != order.StatePaid {
 		return
 	}
 	result, err := c.deps.RequestCancellation.Handle(ctx, requestordercancellation.Input{

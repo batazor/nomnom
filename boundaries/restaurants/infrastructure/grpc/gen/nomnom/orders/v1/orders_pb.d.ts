@@ -399,6 +399,26 @@ export enum OrderState {
    * @generated from enum value: ORDER_STATE_COMPLETED = 4;
    */
   COMPLETED = 4,
+
+  /**
+   * @generated from enum value: ORDER_STATE_PAID = 5;
+   */
+  PAID = 5,
+
+  /**
+   * @generated from enum value: ORDER_STATE_PREPARING = 6;
+   */
+  PREPARING = 6,
+
+  /**
+   * @generated from enum value: ORDER_STATE_READY = 7;
+   */
+  READY = 7,
+
+  /**
+   * @generated from enum value: ORDER_STATE_PICKED_UP = 8;
+   */
+  PICKED_UP = 8,
 }
 
 /**

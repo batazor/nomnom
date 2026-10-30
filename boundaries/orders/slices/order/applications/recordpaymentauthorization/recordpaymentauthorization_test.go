@@ -37,7 +37,7 @@ func TestRecordsPaymentOnce(t *testing.T) {
 	assert.Equal(t, recordpaymentauthorization.Result{Outcome: recordpaymentauthorization.OutcomeRecorded}, first)
 	assert.Equal(t, recordpaymentauthorization.Result{Outcome: recordpaymentauthorization.OutcomeAlreadyRecorded}, retried)
 	snapshot, _ := store.Snapshot("order-1")
-	assert.Equal(t, order.StatePlaced, snapshot.State)
+	assert.Equal(t, order.StatePaid, snapshot.State)
 	assert.Equal(t, uint64(2), snapshot.Version)
 	assert.Equal(t, []order.RecordedFact{{Fact: order.FactPaymentAuthorized, OccurredAt: authorizedAt}}, snapshot.Facts)
 	assert.Empty(t, store.OutboxRecords(), "no Integration Event")

@@ -181,7 +181,7 @@ func TestUnitOfWorkRetriesVersionConflict(t *testing.T) {
 	assert.Equal(t, 2, attempts)
 	saved, err := store.Get(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, order.StateConfirmed, saved.State())
+	assert.Equal(t, order.StatePreparing, saved.State(), "the late confirmation does not move the Order back")
 	got := collectUnitOfWork(t, reader)
 	assert.Equal(t, map[string]int64{"write_conflict": 1}, got.retries)
 	assert.Equal(t, map[string]int64{"rolled_back": 1, "committed": 1}, got.transactions)

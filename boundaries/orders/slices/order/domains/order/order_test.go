@@ -11,7 +11,8 @@ import (
 	"nomnom/orders/slices/order/domains/order/vo"
 )
 
-// TriggerOf relies on every allowed transition of a State having its own target.
+// TriggerOf relies on every transition that moves a State having its own target;
+// a change that keeps the State is named record_fact.
 func TestTriggerOfNamesEveryAllowedTransition(t *testing.T) {
 	for _, from := range allStates {
 		for _, trigger := range allTriggers {
@@ -22,11 +23,16 @@ func TestTriggerOfNamesEveryAllowedTransition(t *testing.T) {
 			to := row.targetOf(from)
 			named, ok := TriggerOf(from, to)
 			require.True(t, ok, "from=%s to=%s", from, to)
+			if to == from {
+				trigger = TriggerRecordFact
+			}
 			assert.Equal(t, trigger, named, "from=%s to=%s", from, to)
 		}
 	}
 	_, ok := TriggerOf(StateCompleted, StatePlaced)
 	assert.False(t, ok)
+	_, ok = TriggerOf(StatePreparing, StateConfirmed)
+	assert.False(t, ok, "an Order never moves back")
 }
 
 func TestOrderLifecycleUsesStrictTypedOutcomes(t *testing.T) {
@@ -162,7 +168,10 @@ func newTestOrder(t *testing.T) *Order {
 }
 
 func TestOnlyCancelledAndCompletedAreFinal(t *testing.T) {
-	final := map[State]bool{StatePlaced: false, StateConfirmed: false, StateCancelled: true, StateCompleted: true}
+	final := map[State]bool{
+		StatePlaced: false, StatePaid: false, StateConfirmed: false, StatePreparing: false, StateReady: false, StatePickedUp: false,
+		StateCancelled: true, StateCompleted: true,
+	}
 	require.Len(t, final, len(allStates))
 	for _, state := range allStates {
 		assert.Equal(t, final[state], state.IsFinal(), state)
