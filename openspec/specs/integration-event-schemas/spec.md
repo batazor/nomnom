@@ -8,7 +8,7 @@ TBD - created by archiving change add-event-schema-registry. Update Purpose afte
 ### Requirement: Схемы Integration Events регистрируются из buf
 **ID:** FR-712
 
-Схемы Integration Events SHALL регистрироваться в Schema Registry только шагом деплоя `schema-registration` из buf image модулей контекстов: файлы из явного списка `ops/schema-registration/event-files.yaml` вместе с импортированными файлами репозитория. Producers, SMT и consumers MUST NOT регистрировать схемы.
+Схемы Integration Events SHALL регистрироваться в Schema Registry только шагом деплоя `schema-registration` из файлов buf-модулей контекстов, скомпилированных компилятором buf: файлы из явного списка `ops/schema-registration/event-files.yaml` вместе с импортированными файлами репозитория. Producers, SMT и consumers MUST NOT регистрировать схемы.
 
 #### Scenario: Повторная регистрация
 **ID:** AC-972
