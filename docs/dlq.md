@@ -16,7 +16,7 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 
 ## Процедура
 
-Сигналы: alert `<context>-kafka-poison` (`nomnom.messaging.poison.messages`) — новый dead letter; лог `integration event sent to DLQ` с `error_class` и `detail`, у `restaurants-consumer` — WARN-лог `restaurants.delivery-picked-up dead-lettered …`; alert `<context>-kafka-dlq-unresolved` — записи группы не разобраны сутки. Неразобранное считается как конец partition DLQ минус offset `<group>.dlq` (без commit — минус начало topic).
+Сигналы: alert `<context>-kafka-poison` (`nomnom.messaging.poison.messages`) — новый dead letter; лог `integration event sent to DLQ` с `error_class` и `detail`, у `restaurants-consumer` — WARN-лог `restaurants.wait-time dead-lettered …`; alert `<context>-kafka-dlq-unresolved` — записи группы не разобраны сутки. Неразобранное считается как конец partition DLQ минус offset `<group>.dlq` (без commit — минус начало topic).
 
 Команда разбора у каждого контекста своя, контракт один (аргументы, вывод, offset `<group>.dlq`):
 
