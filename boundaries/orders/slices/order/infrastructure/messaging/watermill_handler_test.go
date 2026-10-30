@@ -201,6 +201,18 @@ func TestScheduledOrderPlacedStartsWorkflowWithWindow(t *testing.T) {
 	c.noPoison(t)
 }
 
+// The kitchen confirms the cancellation the workflow itself asked for: it needs
+// no action and is not a poisoned event.
+func TestRestaurantOrderCancelledIsAcknowledged(t *testing.T) {
+	c := startConsumer(t, ordertest.New(t, "order-1"))
+
+	c.publish(t, ordermessaging.RestaurantOrderEventsTopic, "event-cancelled", &restaurantsv1.RestaurantOrderCancelled{OrderId: "order-1", Reason: "customer_requested"})
+
+	snapshot, _ := c.store.Snapshot("order-1")
+	assert.Equal(t, order.StatePlaced, snapshot.State, "the Order is cancelled by the workflow, not by this event")
+	c.noPoison(t)
+}
+
 // AC-822: own OrderCompleted and OrderCancelled are acknowledged without a dead letter.
 func TestOwnFinalEventsAreAcknowledged(t *testing.T) {
 	// The workflow is not started: c.starter expects no call.

@@ -49,7 +49,7 @@ Custom `CommandEventMarshaler`: имя — `event_type` envelope (полное �
 
 | Consumer slice | Стрим (пример) | События → use case |
 | --- | --- | --- |
-| `orders/slices/order` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → Confirm Order; `RestaurantOrderRejected` → Reject Order; `PreparationStarted` → Record Preparation Started; `RestaurantOrderReady` → Record Order Ready; `PreparationDelayed`, `PreparationFailed` → только workflow Signal |
+| `orders/slices/order` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → Confirm Order; `RestaurantOrderRejected` → Reject Order; `PreparationStarted` → Record Preparation Started; `RestaurantOrderReady` → Record Order Ready; `PreparationDelayed`, `PreparationFailed` → только workflow Signal; `RestaurantOrderCancelled` — подтверждается без действия |
 | `orders/slices/order` | `delivery.v1.delivery-events` | `CourierAssignedToDelivery` → Record Courier Assignment; `DeliveryPickedUp` → Record Pickup; `DeliveryCompleted` → Record Delivery Completion; `DeliveryFailed` → Record Delivery Failure |
 
 Источник списка — [orders README](../boundaries/orders/README.md). `PaymentAuthorized` и `PaymentFailed` `orders` из Kafka не читает: в порте `fulfillment` нет соответствующих Kind, workflow получает результат оплаты через Activity. Неизвестный `event_type` в стриме — poison.

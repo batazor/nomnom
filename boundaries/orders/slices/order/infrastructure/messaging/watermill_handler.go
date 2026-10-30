@@ -14,6 +14,8 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
+
 	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/confirmorder"
@@ -71,6 +73,9 @@ func Streams(h Handlers) []messaging.Stream {
 				handle(h.RecordOrderReady.Handle, toRecordOrderReady),
 				handle(h.RecordPreparationDelay.Handle, toRecordPreparationDelay),
 				handle(h.RelayPreparationIssue.Handle, toPreparationFailed),
+				// The confirmation of CancelRestaurantOrder, which the workflow itself
+				// called: it already has the result and the Order changes nothing.
+				acknowledge[restaurantsv1.RestaurantOrderCancelled](),
 			},
 		},
 		{
