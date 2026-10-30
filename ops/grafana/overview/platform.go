@@ -76,11 +76,11 @@ const spicedbAPI = `grpc_service=~"authzed\\.api\\.v1\\..+"`
 
 func spicedbPanels(sc Scope) []Panel {
 	return []Panel{
-		{Title: "Requests by method", Unit: "ops", Queries: []Query{{Sum("grpc_method", sc.Rate("grpc_server_handled_total", spicedbAPI)), "{{grpc_method}}"}}},
+		{Title: "Requests by method", Unit: "ops", Queries: []Query{rateBy(sc, "grpc_method", "grpc_server_handled_total", spicedbAPI)}},
 		{Title: "Errors by method and code", Unit: "ops", Queries: []Query{{Sum("grpc_method, grpc_code", sc.Rate("grpc_server_handled_total", spicedbAPI, `grpc_code!="OK"`)), "{{grpc_method}} {{grpc_code}}"}},
 			Description: "Ответы SpiceDB не OK. Клиенты fail-closed: такие ответы становятся отказом в доступе."},
 		{Title: "Latency p95 by method", Unit: "s", Queries: []Query{{Expr: sc.Quantile("0.95", "grpc_method", "grpc_server_handling_seconds", spicedbAPI), Legend: "{{grpc_method}}"}}},
-		{Title: "CheckPermission results", Unit: "ops", Queries: []Query{{Sum("permissionship", sc.Rate("spicedb_v1_check_permissionship_total", `method="CheckPermission"`)), "{{permissionship}}"}},
+		{Title: "CheckPermission results", Unit: "ops", Queries: []Query{rateBy(sc, "permissionship", "spicedb_v1_check_permissionship_total", `method="CheckPermission"`)},
 			Description: "NO_PERMISSION — решение политики, не сбой."},
 		{Title: "Dispatch cache hit ratio", Unit: "percentunit", Queries: []Query{{
 			Sum("", sc.Rate("spicedb_dispatch_client_check_from_cache_total")) + " / " + Sum("", sc.Rate("spicedb_dispatch_client_check_total")), "hit ratio"}}},
@@ -123,7 +123,7 @@ func platformPods(sc Scope) []Panel {
 		}},
 		{Title: "Restarts by pod", Unit: "short", Queries: []Query{{Sum("namespace, pod", sc.Increase("kube_pod_container_status_restarts_total")), "{{namespace}}/{{pod}}"}}},
 		{Title: "Waiting containers by reason", Unit: "short", Queries: []Query{{Sum("namespace, reason", sc.Gauge("kube_pod_container_status_waiting_reason")), "{{namespace}} {{reason}}"}}},
-		{Title: "CPU by namespace", Unit: "short", Queries: []Query{{Sum("namespace", sc.Rate("container_cpu_usage_seconds_total")), "{{namespace}}"}}},
+		{Title: "CPU by namespace", Unit: "short", Queries: []Query{rateBy(sc, "namespace", "container_cpu_usage_seconds_total")}},
 		{Title: "Memory working set by namespace", Unit: "bytes", Queries: []Query{{Sum("namespace", sc.Gauge("container_memory_working_set_bytes")), "{{namespace}}"}}},
 		{Title: "Network by namespace", Unit: "Bps", Queries: []Query{
 			{Sum("namespace", sc.Rate("container_network_receive_bytes_total")), "{{namespace}} rx"},
@@ -170,7 +170,7 @@ func cdcPanels(sc Scope) []Panel {
 	return []Panel{
 		{Title: "Connector tasks by status", Unit: "short", Queries: []Query{{Sum("connector, status", sc.Gauge("kafka_connect_connector_task_status")), "{{connector}} {{status}}"}},
 			Description: "Задача `failed` — Outbox контекста не доставляется: `GET /connectors/<name>/status`, после исправления — restart задачи."},
-		{Title: "Events published", Unit: "ops", Queries: []Query{{Sum("name", sc.Rate("debezium_metrics_TotalNumberOfEventsSeen")), "{{name}}"}},
+		{Title: "Events published", Unit: "ops", Queries: []Query{rateBy(sc, "name", "debezium_metrics_TotalNumberOfEventsSeen")},
 			Description: "Записи Outbox, прочитанные из журнала базы и отправленные в Kafka."},
 		{Title: "Lag behind source", Unit: "ms", Queries: []Query{{Max("name", sc.Gauge("debezium_metrics_MilliSecondsBehindSource")), "{{name}}"}},
 			Description: "От commit записи Outbox до её обработки коннектором; −1 до первого события задачи."},

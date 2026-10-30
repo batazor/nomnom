@@ -109,6 +109,11 @@ func (s Scope) Quantile(q, by, histogram string, matchers ...string) string {
 	return fmt.Sprintf("histogram_quantile(%s, %s)", q, Sum(group, s.Rate(histogram+"_bucket", matchers...)))
 }
 
+// rateBy — запрос rate() по одному label с этим же label в легенде.
+func rateBy(s Scope, label, metric string, matchers ...string) Query {
+	return Query{Sum(label, s.Rate(metric, matchers...)), "{{" + label + "}}"}
+}
+
 // Sum агрегирует выражение; пустой by — sum без группировки.
 func Sum(by, inner string) string {
 	if by == "" {

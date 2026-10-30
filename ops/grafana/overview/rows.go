@@ -122,7 +122,7 @@ func latencyUnit(o Options) string {
 
 func (g *generator) saturation(sc Scope) (Panel, Panel) {
 	cpu := Panel{Title: "CPU", Unit: "short", Description: "Используемые CPU-ядра процесса (rate process.cpu.time).",
-		Queries: []Query{{Sum("job", sc.Rate("process_cpu_time_seconds_total")), "{{job}}"}}}
+		Queries: []Query{rateBy(sc, "job", "process_cpu_time_seconds_total")}}
 	memory := Panel{Title: "Memory", Unit: "bytes", Description: "Память процесса.",
 		Queries: []Query{{Sum("job", sc.Gauge("process_memory_usage_bytes")), "{{job}}"}}}
 	if g.opts.Language == Go {
@@ -138,7 +138,7 @@ func (g *generator) runtime(sc Scope) []Panel {
 	case Go:
 		return []Panel{
 			{Title: "Heap and runtime memory", Unit: "bytes", Queries: []Query{{Sum("job, go_memory_type", sc.Gauge("go_memory_used_bytes")), "{{job}} {{go_memory_type}}"}, {Max("job", sc.Gauge("go_memory_gc_goal_bytes")), "{{job}} GC goal"}, {Max("job", sc.Gauge("go_memory_limit_bytes")), "{{job}} GOMEMLIMIT"}}},
-			{Title: "Allocation rate", Unit: "Bps", Queries: []Query{{Sum("job", sc.Rate("go_memory_allocated_bytes_total")), "{{job}}"}}},
+			{Title: "Allocation rate", Unit: "Bps", Queries: []Query{rateBy(sc, "job", "go_memory_allocated_bytes_total")}},
 			{Title: "Goroutines", Unit: "short", Queries: []Query{{Sum("job", sc.Gauge("go_goroutine_count")), "{{job}}"}}},
 			{Title: "GOMAXPROCS", Unit: "short", Queries: []Query{{Max("job", sc.Gauge("go_processor_limit")), "{{job}}"}}},
 		}
@@ -152,12 +152,12 @@ func (g *generator) runtime(sc Scope) []Panel {
 		return []Panel{
 			{Title: "GC collections", Unit: "ops", Queries: []Query{{Sum("cpython_gc_generation", sc.Rate("cpython_gc_collections_total")), "gen {{cpython_gc_generation}}"}}},
 			{Title: "Threads (gRPC worker pool)", Unit: "short", Queries: []Query{{Sum("instance", sc.Gauge("process_thread_count")), "{{instance}}"}}},
-			{Title: "CPU by mode", Unit: "short", Queries: []Query{{Sum("cpu_mode", sc.Rate("process_cpu_time_seconds_total")), "{{cpu_mode}}"}}},
+			{Title: "CPU by mode", Unit: "short", Queries: []Query{rateBy(sc, "cpu_mode", "process_cpu_time_seconds_total")}},
 		}
 	case Rust:
 		return []Panel{
 			{Title: "Threads", Unit: "short", Queries: []Query{{Sum("instance", sc.Gauge("process_thread_count")), "{{instance}}"}}},
-			{Title: "CPU by mode", Unit: "short", Queries: []Query{{Sum("cpu_mode", sc.Rate("process_cpu_time_seconds_total")), "{{cpu_mode}}"}}},
+			{Title: "CPU by mode", Unit: "short", Queries: []Query{rateBy(sc, "cpu_mode", "process_cpu_time_seconds_total")}},
 		}
 	}
 	return nil
@@ -169,15 +169,15 @@ func (g *generator) dependencies(sc Scope) []Panel {
 	if o.GRPCClients {
 		gateway := `rpc_method!~"authzed.*"`
 		panels = append(panels,
-			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{{Sum("rpc_method", sc.Rate(rpcClient+"_count", gateway)), "{{rpc_method}}"}}},
+			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{rateBy(sc, "rpc_method", rpcClient+"_count", gateway)}},
 			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + spanLabel("rpc_response_status_code")}, Queries: []Query{{Sum("rpc_method, rpc_response_status_code", sc.Rate(rpcClient+"_count", gateway, codesTechnical)), "{{rpc_method}} {{rpc_response_status_code}}"}}},
 			Panel{Title: "gRPC via internal gateway: p95", Unit: "s", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "rpc_method", rpcClient, gateway), "{{rpc_method}}"}}},
 		)
 	}
 	if o.GraphQL {
 		panels = append(panels,
-			Panel{Title: "Subgraph calls: rate", Unit: "ops", Queries: []Query{{Sum("wg_subgraph_name", sc.Rate("router_http_requests_total", subgraphCall)), "{{wg_subgraph_name}}"}}},
-			Panel{Title: "Subgraph calls: errors", Unit: "ops", Traces: []string{"kind=client && status=error"}, Queries: []Query{{Sum("wg_subgraph_name", sc.Rate("router_http_requests_error_total", subgraphCall)), "{{wg_subgraph_name}}"}}},
+			Panel{Title: "Subgraph calls: rate", Unit: "ops", Queries: []Query{rateBy(sc, "wg_subgraph_name", "router_http_requests_total", subgraphCall)}},
+			Panel{Title: "Subgraph calls: errors", Unit: "ops", Traces: []string{"kind=client && status=error"}, Queries: []Query{rateBy(sc, "wg_subgraph_name", "router_http_requests_error_total", subgraphCall)}},
 			Panel{Title: "Subgraph calls: p95", Unit: "ms", Queries: []Query{{sc.Quantile("0.95", "wg_subgraph_name", router, subgraphCall), "{{wg_subgraph_name}}"}}},
 		)
 	}
@@ -186,7 +186,7 @@ func (g *generator) dependencies(sc Scope) []Panel {
 		dbSpan := `kind=client && span.db.system.name="` + string(o.Database) + `"`
 		panels = append(panels,
 			Panel{Title: string(o.Database) + ": operations", Unit: "ops", Traces: []string{"", dbSpan + " && " + spanLabel("error_type")}, Queries: []Query{
-				{Sum("db_operation_name", sc.Rate("db_client_operation_duration_seconds_count", db)), "{{db_operation_name}}"},
+				rateBy(sc, "db_operation_name", "db_client_operation_duration_seconds_count", db),
 				{Sum("error_type", sc.Rate("db_client_operation_duration_seconds_count", db, `error_type!=""`)), "error {{error_type}}"},
 			}},
 			Panel{Title: string(o.Database) + ": p95 by operation", Unit: "s", Traces: []string{dbSpan + " && " + spanLabel("db_operation_name") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "db_operation_name", "db_client_operation_duration_seconds", db), "{{db_operation_name}}"}}},
@@ -228,13 +228,13 @@ func (g *generator) kafka(sc Scope) []Panel {
 	var processed Query
 	if k.Watermill {
 		consumed = []Query{{Sum("handler_name, acked", sc.Rate("watermill_consumer_subscriber_messages_received_total")), "{{handler_name}} acked={{acked}}"}}
-		failures = []Query{{Sum("handler_name", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "{{handler_name}}"}}
+		failures = []Query{rateBy(sc, "handler_name", "watermill_consumer_handler_execution_time_seconds_count", `success="false"`)}
 		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	} else {
-		consumed = []Query{{Sum("messaging_destination_name", sc.Rate("messaging_client_consumed_messages_total")), "{{messaging_destination_name}}"}}
+		consumed = []Query{rateBy(sc, "messaging_destination_name", "messaging_client_consumed_messages_total")}
 		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
 	}
-	failures = append(failures, Query{Sum("nomnom_error_class", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "{{nomnom_error_class}}"})
+	failures = append(failures, rateBy(sc, "nomnom_error_class", "nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`))
 	produce := Panel{Title: "Produced (Outbox, Debezium)", Unit: "ops", Queries: produced,
 		Description: "События Outbox, которые коннектор `" + k.Connector + "` прочитал из журнала базы и отправил в Kafka (ADR 37)."}
 	outbox := []Panel{
@@ -270,7 +270,7 @@ func (g *generator) kafka(sc Scope) []Panel {
 func useCases(sc Scope) []Panel {
 	uc := "nomnom_usecase_duration_seconds"
 	return []Panel{
-		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate(uc+"_count")), "{{nomnom_outcome}}"}},
+		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{rateBy(sc, "nomnom_outcome", uc+"_count")},
 			Description: "success, rejected (отказ по правилам use case) и error (технический сбой)."},
 		{Title: "Rejections by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="rejected" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="rejected"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
 		{Title: "Errors by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="error" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="error"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
@@ -280,10 +280,10 @@ func useCases(sc Scope) []Panel {
 
 func transactions(sc Scope) []Panel {
 	return []Panel{
-		{Title: "Transactions by outcome", Unit: "ops", Queries: []Query{{Sum("nomnom_outcome", sc.Rate("nomnom_uow_transactions_total")), "{{nomnom_outcome}}"}},
+		{Title: "Transactions by outcome", Unit: "ops", Queries: []Query{rateBy(sc, "nomnom_outcome", "nomnom_uow_transactions_total")},
 			Description: "committed, rolled_back и commit_failed Unit of Work."},
 		{Title: "Transaction duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_uow_duration_seconds")},
-		{Title: "Retries by conflict", Unit: "ops", Queries: []Query{{Sum("nomnom_reason", sc.Rate("nomnom_uow_retries_total")), "{{nomnom_reason}}"}},
+		{Title: "Retries by conflict", Unit: "ops", Queries: []Query{rateBy(sc, "nomnom_reason", "nomnom_uow_retries_total")},
 			Description: "serialization, deadlock, write_conflict — классы retry Unit of Work."},
 	}
 }
@@ -332,7 +332,7 @@ func kitchen(sc Scope) []Panel {
 			{Sum("", sc.Gauge("nomnom_kitchen_ready_for_pickup")), "ready for pickup"},
 		}},
 		{Title: "Preparation duration", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_kitchen_preparation_duration_seconds")},
-		{Title: "Delays", Unit: "ops", Queries: []Query{{Sum("nomnom_reason", sc.Rate("nomnom_kitchen_delays_total")), "{{nomnom_reason}}"}}},
+		{Title: "Delays", Unit: "ops", Queries: []Query{rateBy(sc, "nomnom_reason", "nomnom_kitchen_delays_total")}},
 	}
 }
 
@@ -356,7 +356,7 @@ func pods(sc Scope) []Panel {
 		{Title: "Restarts", Unit: "short", Queries: []Query{{Sum("pod", sc.Increase("kube_pod_container_status_restarts_total")), "{{pod}}"}}},
 		{Title: "Waiting containers by reason", Unit: "short", Queries: []Query{{Sum("reason", sc.Gauge("kube_pod_container_status_waiting_reason")), "{{reason}}"}},
 			Description: "CrashLoopBackOff, ImagePullBackOff и т. п.: контейнер не запущен."},
-		{Title: "CPU by pod", Unit: "short", Queries: []Query{{Sum("pod", sc.Rate("container_cpu_usage_seconds_total")), "{{pod}}"}},
+		{Title: "CPU by pod", Unit: "short", Queries: []Query{rateBy(sc, "pod", "container_cpu_usage_seconds_total")},
 			Description: "Ядра CPU (cAdvisor), включая то, что runtime не видит (GC, sidecar-процессы контейнера)."},
 		{Title: "Memory working set by pod", Unit: "bytes", Queries: []Query{{Sum("pod", sc.Gauge("container_memory_working_set_bytes")), "{{pod}}"}}},
 		{Title: "Network by pod", Unit: "Bps", Queries: []Query{
@@ -369,10 +369,10 @@ func pods(sc Scope) []Panel {
 func authorization(sc Scope) []Panel {
 	checks := "nomnom_authz_checks_total"
 	return []Panel{
-		{Title: "Checks by result", Unit: "ops", Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks)), "{{nomnom_authz_result}}"}}},
+		{Title: "Checks by result", Unit: "ops", Queries: []Query{rateBy(sc, "nomnom_authz_result", checks)}},
 		{Title: "Denied by permission", Unit: "ops", Queries: []Query{{Sum("nomnom_authz_resource_type, nomnom_authz_permission", sc.Rate(checks, `nomnom_authz_result="denied"`)), "{{nomnom_authz_resource_type}}#{{nomnom_authz_permission}}"}},
 			Description: "DENIED — решение политики, не сбой SpiceDB."},
-		{Title: "Errors and timeouts", Unit: "ops", Traces: []string{`kind=client && span.rpc.method=~"authzed.*" && status=error`}, Queries: []Query{{Sum("nomnom_authz_result", sc.Rate(checks, `nomnom_authz_result=~"error|timeout"`)), "{{nomnom_authz_result}}"}},
+		{Title: "Errors and timeouts", Unit: "ops", Traces: []string{`kind=client && span.rpc.method=~"authzed.*" && status=error`}, Queries: []Query{rateBy(sc, "nomnom_authz_result", checks, `nomnom_authz_result=~"error|timeout"`)},
 			Description: "Технические сбои проверки; fail-closed превращает их в отказ клиенту."},
 		{Title: "Check latency", Unit: "s", Queries: sc.Percentiles("", "", "nomnom_authz_check_duration_seconds")},
 	}
