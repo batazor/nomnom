@@ -239,7 +239,12 @@ func (g *generator) row(r row) *dashboard.RowBuilder {
 		key := fmt.Sprintf("panel-%d", g.n)
 		panel, ps := g.panel(p, r.scope)
 		g.dash.Panel(key, panel.Id(float64(g.n)))
-		grid.Item(dashboard.GridItem(key).X(int64(i%3) * 8).Y(int64(i/3) * 8).Width(8).Height(8))
+		if p.Sankey {
+			// Потоки не читаются в трети ширины; Sankey — единственная панель своего row.
+			grid.Item(dashboard.GridItem(key).X(0).Y(0).Width(24).Height(14))
+		} else {
+			grid.Item(dashboard.GridItem(key).X(int64(i%3) * 8).Y(int64(i/3) * 8).Width(8).Height(8))
+		}
 		summary.Panels = append(summary.Panels, ps)
 	}
 	g.report = append(g.report, summary)

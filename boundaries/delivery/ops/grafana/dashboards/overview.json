@@ -3533,8 +3533,8 @@
                       "spec": {
                         "x": 0,
                         "y": 0,
-                        "width": 8,
-                        "height": 8,
+                        "width": 24,
+                        "height": 14,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-42"
