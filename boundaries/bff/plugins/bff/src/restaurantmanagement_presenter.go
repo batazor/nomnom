@@ -4,7 +4,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/restaurantmanagement/applications"
 )
 
 func restaurantOpeningPayload(result applications.OpeningResult) *service.RestaurantOpeningPayload {

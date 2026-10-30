@@ -17,8 +17,8 @@ import {
   ScheduleSlot,
   type ScheduleSlotRepository,
 } from "../../domains/scheduleslot/scheduleslot.ts";
-import type { SlotReservationAccess } from "../access-control.ts";
-import { windowAvailability } from "../window-availability.ts";
+import type { SlotReservationAccess } from "../access-control/access-control.ts";
+import { windowAvailability } from "../window-availability/window-availability.ts";
 
 export type ReserveScheduledSlot = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */

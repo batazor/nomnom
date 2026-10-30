@@ -1,7 +1,7 @@
 // Read adapters of the facts `restaurantorder` takes from the `restaurant` and
 // `menu` slices. They read the same collections through the owning slices'
 // repositories, so they join the active Unit of Work like any other read.
-import type { CookRestaurants } from "../../../cook/applications/cook-workload.ts";
+import type { CookRestaurants } from "../../../cook/applications/cook-workload/cook-workload.ts";
 import type { MenuRepository } from "../../../menu/domains/menu/menu.ts";
 import type {
   MarketId,

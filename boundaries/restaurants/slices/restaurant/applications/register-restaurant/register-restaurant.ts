@@ -9,8 +9,11 @@ import {
 import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
-} from "../access-control.ts";
-import { type RestaurantView, toRestaurantView } from "../restaurant-view.ts";
+} from "../access-control/access-control.ts";
+import {
+  type RestaurantView,
+  toRestaurantView,
+} from "../restaurant-view/restaurant-view.ts";
 
 export type RegisterRestaurant = Readonly<{
   subject: Subject;

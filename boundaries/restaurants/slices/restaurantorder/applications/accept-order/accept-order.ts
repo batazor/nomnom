@@ -11,14 +11,14 @@ import type {
   PreparationItem,
   RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenStaffAccess } from "../access-control.ts";
-import type { KitchenCommand } from "../kitchen-command.ts";
-import { loadRestaurantOrder } from "../load-restaurant-order.ts";
-import { saveAndPublish } from "../publish-order-change.ts";
+import type { KitchenStaffAccess } from "../access-control/access-control.ts";
+import type { KitchenCommand } from "../kitchen-command/kitchen-command.ts";
+import { loadRestaurantOrder } from "../load-restaurant-order/load-restaurant-order.ts";
+import { saveAndPublish } from "../publish-order-change/publish-order-change.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-view.ts";
+} from "../restaurant-order-view/restaurant-order-view.ts";
 
 /**
  * `expectedReadyAt` is the ready time named by the kitchen; without it the

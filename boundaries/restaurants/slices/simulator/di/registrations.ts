@@ -9,7 +9,7 @@ import type { Logger } from "../../../pkg/telemetry/logger.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { RestaurantOrderCradle } from "../../restaurantorder/di/registrations.ts";
-import type { SimulatorAccess } from "../applications/access-control.ts";
+import type { SimulatorAccess } from "../applications/access-control/access-control.ts";
 import { GetSimulatorHandler } from "../applications/get-simulator/get-simulator.ts";
 import { SetSimulatorEnabledHandler } from "../applications/set-simulator-enabled/set-simulator-enabled.ts";
 import { KitchenSimulator } from "../applications/simulate-kitchen/simulate-kitchen.ts";

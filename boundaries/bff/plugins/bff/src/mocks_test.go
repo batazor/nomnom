@@ -7,13 +7,13 @@ package main
 import (
 	"context"
 
-	applications1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
-	applications3 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
-	applications5 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
-	applications4 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
-	applications2 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
-	applications0 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
+	applications1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/catalog/applications"
+	applications3 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/checkout/applications"
+	applications5 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/courier/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/courierpool/applications"
+	applications4 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/kitchen/applications"
+	applications2 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/ordertracking/applications"
+	applications0 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/restaurantmanagement/applications"
 	mock "github.com/stretchr/testify/mock"
 )
 

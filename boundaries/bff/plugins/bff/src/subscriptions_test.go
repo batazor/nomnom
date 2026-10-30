@@ -10,10 +10,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	courierapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications"
+	courierapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/courier/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	kitchenapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
+	kitchenapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/kitchen/applications"
 )
 
 // ADR 36: a courierChanged event resolves only the courier of the access

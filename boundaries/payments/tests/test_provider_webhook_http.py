@@ -9,7 +9,11 @@ from typing import override
 import pytest
 from payment_fakes import PaymentsTestKit
 
-from infrastructure.provider import (
+from infrastructure.repository import Database
+from pkg.lifecycle import HttpWorker, LifecycleError, WorkerGroup
+from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
+from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
+from slices.payment.infrastructure.provider import (
     MAX_BODY_BYTES,
     SIGNATURE_HEADER,
     WEBHOOK_PATH,
@@ -17,10 +21,6 @@ from infrastructure.provider import (
     create_webhook_handler,
     sign_payload,
 )
-from infrastructure.repository import Database
-from pkg.lifecycle import HttpWorker, LifecycleError, WorkerGroup
-from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
-from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET = "whsec_test"

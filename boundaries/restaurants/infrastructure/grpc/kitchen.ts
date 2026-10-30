@@ -6,7 +6,7 @@ import {
   type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import type { KitchenCommand } from "../../slices/restaurantorder/applications/kitchen-command.ts";
+import type { KitchenCommand } from "../../slices/restaurantorder/applications/kitchen-command/kitchen-command.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   AcceptRestaurantOrderResponseSchema,

@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/kitchen/applications"
 )
 
 func kitchenService(t *testing.T, get *mockGetKitchenHandler, action *mockKitchenActionHandler) (*BffService, context.Context) {

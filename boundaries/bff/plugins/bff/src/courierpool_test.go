@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/courierpool/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 

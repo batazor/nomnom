@@ -8,7 +8,7 @@ import type {
 import {
   type WindowAvailability,
   windowAvailability,
-} from "../window-availability.ts";
+} from "../window-availability/window-availability.ts";
 
 export type ListScheduledSlots = Readonly<{ restaurantId: string }>;
 

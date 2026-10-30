@@ -1,6 +1,6 @@
 import type { Subject } from "../../pkg/authz/subject.ts";
 import type { Outbox } from "../../pkg/outbox/outbox.ts";
-import type { MenuAccessControl } from "../../slices/menu/applications/access-control.ts";
+import type { MenuAccessControl } from "../../slices/menu/applications/access-control/access-control.ts";
 import { AddMenuItemHandler } from "../../slices/menu/applications/add-menu-item/add-menu-item.ts";
 import { BatchGetMenusHandler } from "../../slices/menu/applications/batch-get-menus/batch-get-menus.ts";
 import { CreateMenuHandler } from "../../slices/menu/applications/create-menu/create-menu.ts";

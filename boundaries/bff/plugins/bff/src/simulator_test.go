@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/simulator/applications"
 )
 
 func simulatorService(t *testing.T, get *mockGetSimulatorHandler, set *mockSetSimulatorEnabledHandler) (*BffService, context.Context) {

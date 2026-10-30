@@ -28,7 +28,6 @@ use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver}
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::messaging::{EventConsumer, MessageHandler};
-use crate::infrastructure::random::SystemRandomSource;
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::repository::{OUTBOX_TOPIC, Store, migrate};
 use crate::infrastructure::spicedb::{
@@ -36,7 +35,6 @@ use crate::infrastructure::spicedb::{
     SpiceDbClient, SpiceDbConfigError, SpiceDbRelationships,
 };
 use crate::infrastructure::temporal::TemporalAssignment;
-use crate::infrastructure::tracks::ValkeyPositionPublisher;
 use crate::pkg::config::{
     AppConfig, DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
     DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig, KafkaConfig, SimulatorConfig,
@@ -44,10 +42,12 @@ use crate::pkg::config::{
 };
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
+use crate::slices::courier::infrastructure::tracks::ValkeyPositionPublisher;
 use crate::slices::delivery::applications::record_delivery_duration::CONSUMER;
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryRepository, DurationKind, InvalidEstimatePolicy, VirtualCity,
 };
+use crate::slices::delivery::infrastructure::random::SystemRandomSource;
 use crate::slices::delivery::infrastructure::{
     DeliveryIntegrationEvents, duration_input, handling_error,
 };

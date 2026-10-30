@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
-import type { KitchenBoardQuery } from "../../slices/restaurantorder/applications/kitchen-board.ts";
+import type { KitchenBoardQuery } from "../../slices/restaurantorder/applications/kitchen-board/kitchen-board.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   GetKitchenQueueResponseSchema,

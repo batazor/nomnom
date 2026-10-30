@@ -29,7 +29,7 @@ fn sources(relative: &str) -> Vec<PathBuf> {
 /// Production part of a source file: test modules and fixtures are skipped.
 fn production_code(path: &Path) -> Option<String> {
     let name = path.file_name()?.to_str()?;
-    if name == "tests.rs" || name == "test_support.rs" {
+    if name == "tests.rs" || path.ends_with("test_support/mod.rs") {
         return None;
     }
     let source = fs::read_to_string(path).expect("read source");

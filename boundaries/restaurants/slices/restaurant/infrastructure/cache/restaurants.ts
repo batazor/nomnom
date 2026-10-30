@@ -22,7 +22,7 @@ import type { CacheRefreshes } from "../../../../infrastructure/valkey/refresh.t
 import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
-import type { CatalogRestaurantView } from "../../applications/restaurant-view.ts";
+import type { CatalogRestaurantView } from "../../applications/restaurant-view/restaurant-view.ts";
 
 type CacheOptions = { client: Valkey; ttlMs: number; metrics: CacheMetrics };
 

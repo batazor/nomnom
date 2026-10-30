@@ -8,7 +8,6 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
 from payment_fakes import ORCHESTRATOR, PaymentsTestKit
 
-from infrastructure.observability import FsmMetrics, ObservedUnitOfWork
 from infrastructure.repository import Database
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -29,6 +28,7 @@ from slices.payment.domains.payment import (
     PaymentTrigger,
     TransitionResult,
 )
+from slices.payment.infrastructure.observability import FsmMetrics, ObservedUnitOfWork
 
 # (from_state, trigger, to_state, result, terminal) → count
 Transitions = dict[tuple[str, str, str, str, bool], float]

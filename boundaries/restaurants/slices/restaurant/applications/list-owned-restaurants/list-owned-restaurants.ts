@@ -6,7 +6,7 @@ import {
   InvalidPageSizeError,
   MAX_RESTAURANT_PAGE_SIZE,
 } from "../list-restaurants/list-restaurants.ts";
-import type { RestaurantView } from "../restaurant-view.ts";
+import type { RestaurantView } from "../restaurant-view/restaurant-view.ts";
 
 export type ListOwnedRestaurants = Readonly<{
   subject: Subject;

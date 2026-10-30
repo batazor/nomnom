@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/gateway"
 )
 

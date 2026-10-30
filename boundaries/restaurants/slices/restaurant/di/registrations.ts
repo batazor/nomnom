@@ -25,7 +25,7 @@ import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
   StaffRelationshipWriter,
-} from "../applications/access-control.ts";
+} from "../applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../applications/assign-staff/assign-staff.ts";
 import { BatchGetRestaurantsHandler } from "../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { CloseRestaurantHandler } from "../applications/close-restaurant/close-restaurant.ts";

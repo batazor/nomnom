@@ -5,7 +5,7 @@ import {
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
 import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
-import type { CookWorkload } from "../../../cook/applications/cook-workload.ts";
+import type { CookWorkload } from "../../../cook/applications/cook-workload/cook-workload.ts";
 import type {
   PendingKitchenOrder,
   PendingKitchenOrdersReader,
@@ -39,7 +39,7 @@ import type {
 import {
   type RestaurantOrderView,
   snapshotToView,
-} from "../../applications/restaurant-order-view.ts";
+} from "../../applications/restaurant-order-view/restaurant-order-view.ts";
 import type { StartedOrders } from "../../applications/start-preparation/start-preparation.ts";
 import {
   DuplicateOrderIdError,

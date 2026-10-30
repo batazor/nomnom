@@ -6,7 +6,7 @@ import {
   PermissionDeniedError,
 } from "../pkg/authz/errors.ts";
 import { NotFoundError } from "../pkg/usecase/errors.ts";
-import type { StaffRelationshipWriter } from "../slices/restaurant/applications/access-control.ts";
+import type { StaffRelationshipWriter } from "../slices/restaurant/applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {

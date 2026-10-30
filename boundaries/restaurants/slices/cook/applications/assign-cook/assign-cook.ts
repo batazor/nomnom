@@ -1,7 +1,7 @@
 import type { CookAssigner } from "../../../restaurantorder/applications/start-preparation/start-preparation.ts";
 import { NoCookAvailableError } from "../../../restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import type { Cook, CookRepository } from "../../domains/cook/cook.ts";
-import type { CookWorkload } from "../cook-workload.ts";
+import type { CookWorkload } from "../cook-workload/cook-workload.ts";
 
 /** Never assigned cooks first, then the earliest last assignment, then id. */
 const byLastAssignment = (left: Cook, right: Cook): number => {

@@ -15,16 +15,16 @@ from opentelemetry.sdk.metrics.export import (
 )
 from pydantic import ValidationError
 
-from di.payments import SpiceDBConfigurationError, create_permission_checker
-from infrastructure.authorization import (
-    PERMISSION_MAPPING,
-    SpiceDBPermissionChecker,
-)
 from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings, load_settings
 from slices.payment.applications.access import require_permission
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
+from slices.payment.di.payment import SpiceDBConfigurationError, create_permission_checker
 from slices.payment.domains.payment import OrderId, PaymentId
+from slices.payment.infrastructure.authorization import (
+    PERMISSION_MAPPING,
+    SpiceDBPermissionChecker,
+)
 
 Permissionship = CheckPermissionResponse.Permissionship
 WORKER = Subject(SubjectKind.SERVICE, "orders-worker")
@@ -139,7 +139,9 @@ class DecisionTest(unittest.TestCase):
             with self.subTest(error=error):
                 checker = SpiceDBPermissionChecker(FakePermissionsClient(error=error), 1.0)
                 with (
-                    self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+                    self.assertLogs(
+                        "slices.payment.infrastructure.authorization.spicedb", "WARNING"
+                    ),
                     self.assertRaises(AuthorizationUnavailableError),
                 ):
                     checker.is_allowed(WORKER, PaymentPermission.CAPTURE, RESOURCE)
@@ -149,7 +151,7 @@ class DecisionTest(unittest.TestCase):
             FakePermissionsClient(error=_RpcFailure(grpc.StatusCode.DEADLINE_EXCEEDED)), 1.0
         )
         with (
-            self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+            self.assertLogs("slices.payment.infrastructure.authorization.spicedb", "WARNING"),
             self.assertRaises(AuthorizationUnavailableError),
         ):
             require_permission(unavailable, WORKER, PaymentPermission.REFUND, RESOURCE)
@@ -203,7 +205,7 @@ class AuthorizationMetricsTest(unittest.TestCase):
         return result
 
     def test_every_result_is_counted_with_the_spicedb_permission(self) -> None:
-        with self.assertLogs("infrastructure.authorization.spicedb", "WARNING"):
+        with self.assertLogs("slices.payment.infrastructure.authorization.spicedb", "WARNING"):
             self.check(FakePermissionsClient(), PaymentPermission.CAPTURE)
             self.check(
                 FakePermissionsClient(Permissionship.PERMISSIONSHIP_NO_PERMISSION),

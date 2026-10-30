@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
 )
 
 // requireCustomer verifies the access token the Router forwards and puts the

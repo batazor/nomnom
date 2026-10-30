@@ -16,17 +16,9 @@ from dependency_injector import providers
 
 from di.payments import PaymentsContainer
 from di.resources import sections
-from infrastructure.observability import FsmMetrics
 from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
     Database,
-    DatabasePaymentOperationHistory,
-    DatabasePaymentOperationRepository,
-    DatabasePaymentOutbox,
-    DatabasePaymentRepository,
-    DatabasePaymentStatusReader,
-    DatabasePendingOperationQuery,
-    DatabaseProviderMessageInbox,
     DatabaseUnitOfWork,
     OutboxMessage,
     create_database,
@@ -56,6 +48,16 @@ from slices.payment.domains.payment import (
     PaymentId,
     PaymentOperation,
     PaymentState,
+)
+from slices.payment.infrastructure.observability import FsmMetrics
+from slices.payment.infrastructure.repository import (
+    DatabasePaymentOperationHistory,
+    DatabasePaymentOperationRepository,
+    DatabasePaymentOutbox,
+    DatabasePaymentRepository,
+    DatabasePaymentStatusReader,
+    DatabasePendingOperationQuery,
+    DatabaseProviderMessageInbox,
 )
 
 T = TypeVar("T")

@@ -1,1 +1,1 @@
-"""Infrastructure assets owned by the payment slice; its adapters live in ``infrastructure``."""
+"""Adapters of the payment slice."""

@@ -35,14 +35,6 @@ from infrastructure.grpc.service import (
     service_pb2,
     service_pb2_grpc,
 )
-from infrastructure.observability import ObservedProvider, classify_payment_error
-from infrastructure.observability import usecases as names
-from infrastructure.provider import (
-    WEBHOOK_PATH,
-    FakePaymentProvider,
-    WebhookVerifier,
-    create_webhook_handler,
-)
 from infrastructure.repository import Database
 from infrastructure.repository.outbox import outbox_traceparent
 from pkg import telemetry
@@ -67,6 +59,14 @@ from slices.payment.domains.payment import (
     OperationKind,
     PaymentId,
     PaymentState,
+)
+from slices.payment.infrastructure.observability import ObservedProvider, classify_payment_error
+from slices.payment.infrastructure.observability import usecases as names
+from slices.payment.infrastructure.provider import (
+    WEBHOOK_PATH,
+    FakePaymentProvider,
+    WebhookVerifier,
+    create_webhook_handler,
 )
 
 CALLER_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"

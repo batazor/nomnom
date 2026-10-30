@@ -4,7 +4,7 @@ import {
   type AcceptingCatalogRestaurantView,
   acceptanceAt,
   type CatalogRestaurantView,
-} from "../restaurant-view.ts";
+} from "../restaurant-view/restaurant-view.ts";
 
 export const DEFAULT_RESTAURANT_PAGE_SIZE = 50;
 export const MAX_RESTAURANT_PAGE_SIZE = 100;

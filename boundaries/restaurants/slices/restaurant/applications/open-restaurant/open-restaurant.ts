@@ -2,8 +2,8 @@ import type { Subject } from "../../../../pkg/authz/subject.ts";
 import {
   type ChangeOpeningDependencies,
   changeOpening,
-} from "../change-opening.ts";
-import type { RestaurantChangeResult } from "../restaurant-view.ts";
+} from "../change-opening/change-opening.ts";
+import type { RestaurantChangeResult } from "../restaurant-view/restaurant-view.ts";
 
 export type OpenRestaurant = Readonly<{
   subject: Subject;

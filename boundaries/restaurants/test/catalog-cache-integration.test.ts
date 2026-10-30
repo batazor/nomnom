@@ -18,7 +18,7 @@ import {
 } from "../infrastructure/valkey/read-cache.ts";
 import { CacheRefreshHandler } from "../infrastructure/valkey/refresh.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
-import type { MenuView } from "../slices/menu/applications/menu-support.ts";
+import type { MenuView } from "../slices/menu/applications/menu-support/menu-support.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import {
   CachedMenuReader,
@@ -32,7 +32,7 @@ import {
 import type {
   CatalogRestaurantView,
   RestaurantView,
-} from "../slices/restaurant/applications/restaurant-view.ts";
+} from "../slices/restaurant/applications/restaurant-view/restaurant-view.ts";
 import {
   CachedRestaurantCatalog,
   restaurantCacheRefreshes,

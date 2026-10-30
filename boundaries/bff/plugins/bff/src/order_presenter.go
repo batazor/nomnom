@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/ordertracking/applications"
 )
 
 // The tables name the GraphQL value of every application value. A value that

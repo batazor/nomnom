@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
 )
 
 // Dial opens a lazy connection to the internal gateway for one target context;

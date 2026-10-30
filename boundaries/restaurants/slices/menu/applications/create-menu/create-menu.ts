@@ -8,7 +8,7 @@ import {
 import type { IdGenerator } from "../../../../pkg/usecase/id-generator.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import { Menu, type MenuRepository } from "../../domains/menu/menu.ts";
-import type { MenuAccessControl } from "../access-control.ts";
+import type { MenuAccessControl } from "../access-control/access-control.ts";
 
 export type CreateMenu = Readonly<{
   subject: Subject;

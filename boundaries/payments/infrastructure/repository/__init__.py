@@ -1,8 +1,4 @@
-"""Storage of payments: Unit of Work, repositories, queries, Outbox, Inbox.
-
-Adapters are named ``Database<Port>`` after the application or domain port they implement
-over ``Database``, the pool of the payments database; names do not carry the storage
-technology.
+"""Storage shared by the payments process: the pool, Unit of Work, migrations and Outbox.
 
 ``migrations/*.sql`` is the schema of the tables shared by every slice — the Transactional
 Outbox ``payments_outbox`` with its publication and the Inbox ``inbox``; the set is applied
@@ -19,29 +15,11 @@ from .outbox import (
     OutboxMessage,
     outbox_event_id,
 )
-from .queries import (
-    DatabasePaymentOperationHistory,
-    DatabasePaymentStatusReader,
-    DatabasePendingOperationQuery,
-)
-from .repositories import (
-    DatabasePaymentOperationRepository,
-    DatabasePaymentOutbox,
-    DatabasePaymentRepository,
-    DatabaseProviderMessageInbox,
-)
 
 __all__ = [
     "EVENT_ID_NAMESPACE",
     "PAYMENT_EVENTS_TOPIC",
     "Database",
-    "DatabasePaymentOperationHistory",
-    "DatabasePaymentOperationRepository",
-    "DatabasePaymentOutbox",
-    "DatabasePaymentRepository",
-    "DatabasePaymentStatusReader",
-    "DatabasePendingOperationQuery",
-    "DatabaseProviderMessageInbox",
     "DatabaseUnitOfWork",
     "MigrationSet",
     "MissingMigrationsError",

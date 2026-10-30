@@ -2,8 +2,8 @@ import {
   type ChangeCookDependencies,
   type CookCommand,
   changeCook,
-} from "../change-cook.ts";
-import type { CookChangeResult } from "../cook-view.ts";
+} from "../change-cook/change-cook.ts";
+import type { CookChangeResult } from "../cook-view/cook-view.ts";
 
 export type PutCookOnLine = CookCommand;
 

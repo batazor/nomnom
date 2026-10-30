@@ -4,7 +4,7 @@ import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
 import type { ScheduleSlotRepository } from "../../domains/scheduleslot/scheduleslot.ts";
-import type { SlotReservationAccess } from "../access-control.ts";
+import type { SlotReservationAccess } from "../access-control/access-control.ts";
 import { RESERVE_ATTEMPTS } from "../reserve-scheduled-slot/reserve-scheduled-slot.ts";
 
 export type ReleaseScheduledSlot = Readonly<{

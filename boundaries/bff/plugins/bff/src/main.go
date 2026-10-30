@@ -6,7 +6,7 @@ import (
 	"os"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/gateway"
 	routerplugin "github.com/wundergraph/cosmo/router-plugin"
 	"google.golang.org/grpc"

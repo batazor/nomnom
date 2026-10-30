@@ -7,7 +7,7 @@ import {
 import { AlreadyExistsError } from "../../../../pkg/usecase/errors.ts";
 import type { MenuBatchReader } from "../../applications/batch-get-menus/batch-get-menus.ts";
 import type { MenuReader } from "../../applications/get-menu/get-menu.ts";
-import type { MenuView } from "../../applications/menu-support.ts";
+import type { MenuView } from "../../applications/menu-support/menu-support.ts";
 import {
   Menu,
   type MenuRepository,

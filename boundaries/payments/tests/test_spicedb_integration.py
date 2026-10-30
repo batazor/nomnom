@@ -9,11 +9,14 @@ import unittest
 import pytest
 from conftest import SPICEDB_PRESHARED_KEY
 
-from infrastructure.authorization import SpiceDBPermissionChecker, create_spicedb_client
 from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.domains.payment import OrderId, PaymentId
+from slices.payment.infrastructure.authorization import (
+    SpiceDBPermissionChecker,
+    create_spicedb_client,
+)
 
 RESOURCE = PaymentResource(PaymentId("payment-it"), OrderId("order-it"))
 
@@ -62,7 +65,7 @@ class SpiceDBIntegrationTest(unittest.TestCase):
         checker = _checker(self.spicedb_endpoint, key="wrong-key")
         worker = Subject(SubjectKind.SERVICE, "orders-worker")
         with (
-            self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+            self.assertLogs("slices.payment.infrastructure.authorization.spicedb", "WARNING"),
             self.assertRaises(AuthorizationUnavailableError),
         ):
             checker.is_allowed(worker, PaymentPermission.AUTHORIZE, RESOURCE)
@@ -73,7 +76,7 @@ class SpiceDBIntegrationTest(unittest.TestCase):
         worker = Subject(SubjectKind.SERVICE, "orders-worker")
         started = time.monotonic()
         with (
-            self.assertLogs("infrastructure.authorization.spicedb", "WARNING"),
+            self.assertLogs("slices.payment.infrastructure.authorization.spicedb", "WARNING"),
             self.assertRaises(AuthorizationUnavailableError),
         ):
             checker.is_allowed(worker, PaymentPermission.AUTHORIZE, RESOURCE)

@@ -26,32 +26,28 @@ from payment_fakes import (
 from psycopg import sql
 from yoyo.migrations import MigrationList
 
-from di.payments import PaymentsContainer, SpiceDBConfigurationError
+from di.payments import PaymentsContainer
 from di.resources import MIGRATIONS, ProcessResource, TelemetryResource, migrated_database
 from entrypoints.payments import main as payments_main
-from infrastructure.authorization import SpiceDBPermissionChecker
 from infrastructure.grpc.service import GrpcWorker, PaymentsHandlers
-from infrastructure.messaging import PaymentEventsMapper
-from infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
-from infrastructure.provider import (
-    SIGNATURE_HEADER,
-    WEBHOOK_PATH,
-    FakePaymentProvider,
-    sign_payload,
-)
-from infrastructure.repository import (
-    Database,
-    DatabasePaymentOutbox,
-    MigrationSet,
-    MissingMigrationsError,
-    migrate,
-)
+from infrastructure.repository import Database, MigrationSet, MissingMigrationsError, migrate
 from infrastructure.repository.migrate import _LOCK_KEY
 from pkg.authz import Subject, SubjectKind
 from pkg.config import database
 from pkg.lifecycle import HttpWorker, WorkerGroup
 from slices.payment.applications.create_payment import CreatePaymentInput
+from slices.payment.di.payment import SpiceDBConfigurationError
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
+from slices.payment.infrastructure.authorization import SpiceDBPermissionChecker
+from slices.payment.infrastructure.messaging import PaymentEventsMapper
+from slices.payment.infrastructure.observability import ObservedOutbox, ObservedUnitOfWork
+from slices.payment.infrastructure.provider import (
+    SIGNATURE_HEADER,
+    WEBHOOK_PATH,
+    FakePaymentProvider,
+    sign_payload,
+)
+from slices.payment.infrastructure.repository import DatabasePaymentOutbox
 
 SPICEDB_ENV = {
     "SPICEDB__ENDPOINT": "127.0.0.1:1",
@@ -98,17 +94,17 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertIsInstance(workers, WorkerGroup)
         self.assertIsInstance(container.grpc_worker(), GrpcWorker)
         self.assertIsInstance(container.webhook_worker(), HttpWorker)
-        self.assertIsInstance(container.handlers(), PaymentsHandlers)
-        self.assertIsInstance(container.permissions(), SpiceDBPermissionChecker)
-        self.assertIsInstance(container.provider().inner, FakePaymentProvider)
+        self.assertIsInstance(container.payment.handlers(), PaymentsHandlers)
+        self.assertIsInstance(container.payment.permissions(), SpiceDBPermissionChecker)
+        self.assertIsInstance(container.payment.payment_provider().inner, FakePaymentProvider)
         # Business counters wrap the Outbox and the Unit of Work (ops/semconv domain.yaml).
-        self.assertIsInstance(container.outbox(), ObservedOutbox)
-        self.assertIsInstance(container.outbox()._inner, DatabasePaymentOutbox)
-        self.assertIsInstance(container.uow(), ObservedUnitOfWork)
-        self.assertIsInstance(container.outbox_mapper(), PaymentEventsMapper)
+        self.assertIsInstance(container.payment.outbox(), ObservedOutbox)
+        self.assertIsInstance(container.payment.outbox()._inner, DatabasePaymentOutbox)
+        self.assertIsInstance(container.payment.uow(), ObservedUnitOfWork)
+        self.assertIsInstance(container.payment.outbox_mapper(), PaymentEventsMapper)
         # Process-wide singletons: one sandbox provider dedupes by idempotency key.
-        self.assertIs(container.handlers(), container.handlers())
-        self.assertIs(container.provider(), container.provider())
+        self.assertIs(container.payment.handlers(), container.payment.handlers())
+        self.assertIs(container.payment.payment_provider(), container.payment.payment_provider())
         self.assertIs(container.workers(), workers)
 
     def test_empty_spicedb_endpoint_fails_startup(self) -> None:
@@ -125,14 +121,14 @@ class PaymentsContainerTest(unittest.TestCase):
             "payments": kit.payments,
             "operations": kit.operations,
             "outbox": kit.outbox,
-            "provider": kit.provider,
+            "payment_provider": kit.provider,
             "permissions": kit.permissions,
             "clock": kit.clock,
             "ids": kit.ids,
         }.items():
-            getattr(container, name).override(providers.Object(fake))
+            getattr(container.payment, name).override(providers.Object(fake))
 
-        result = container.handlers().create_payment.handle(
+        result = container.payment.handlers().create_payment.handle(
             CreatePaymentInput(
                 subject=WORKER,
                 order_id="order-1",
@@ -159,7 +155,7 @@ class PaymentsContainerTest(unittest.TestCase):
             "inbox": kit.inbox,
             "clock": kit.clock,
         }.items():
-            getattr(container, name).override(providers.Object(fake))
+            getattr(container.payment, name).override(providers.Object(fake))
         worker = container.webhook_worker()
         worker.start()
         thread = threading.Thread(target=worker.run, daemon=True)

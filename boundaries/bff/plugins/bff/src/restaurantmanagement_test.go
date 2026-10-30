@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	catalogapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
+	catalogapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/catalog/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/restaurantmanagement/applications"
 )
 
 var nightBakery = applications.Restaurant{ID: "restaurant-night-bakery", Name: "Ночная пекарня"}

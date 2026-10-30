@@ -12,7 +12,7 @@ import {
   type ScheduleSlotRepository,
   UnknownSlotReservationError,
 } from "../../domains/scheduleslot/scheduleslot.ts";
-import type { SlotReservationAccess } from "../access-control.ts";
+import type { SlotReservationAccess } from "../access-control/access-control.ts";
 import { RESERVE_ATTEMPTS } from "../reserve-scheduled-slot/reserve-scheduled-slot.ts";
 
 export type ConfirmScheduledSlot = Readonly<{

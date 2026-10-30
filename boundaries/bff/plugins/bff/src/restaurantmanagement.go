@@ -7,9 +7,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	catalogapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
+	catalogapp "github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/catalog/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/restaurantmanagement/applications"
 )
 
 type openingHandler interface {

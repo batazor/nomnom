@@ -2,17 +2,17 @@ import { v1 } from "@authzed/authzed-node";
 
 import { AuthorizationUnavailableError } from "../../pkg/authz/errors.ts";
 import type { Subject } from "../../pkg/authz/subject.ts";
-import type { CookPoolAccess } from "../../slices/cook/applications/access-control.ts";
-import type { MenuAccessControl } from "../../slices/menu/applications/access-control.ts";
-import type { RestaurantAccessControl } from "../../slices/restaurant/applications/access-control.ts";
+import type { CookPoolAccess } from "../../slices/cook/applications/access-control/access-control.ts";
+import type { MenuAccessControl } from "../../slices/menu/applications/access-control/access-control.ts";
+import type { RestaurantAccessControl } from "../../slices/restaurant/applications/access-control/access-control.ts";
 import type {
   FulfillmentCoordinatorAccess,
   FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
-} from "../../slices/restaurantorder/applications/access-control.ts";
-import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control.ts";
-import type { SimulatorAccess } from "../../slices/simulator/applications/access-control.ts";
+} from "../../slices/restaurantorder/applications/access-control/access-control.ts";
+import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control/access-control.ts";
+import type { SimulatorAccess } from "../../slices/simulator/applications/access-control/access-control.ts";
 import {
   checkConsistency,
   type PermissionsClient,

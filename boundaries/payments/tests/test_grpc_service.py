@@ -265,7 +265,7 @@ class DefaultWorkerTest(unittest.TestCase):
     def test_default_worker_requires_identity(self) -> None:
         container = payments_container()
         self.addCleanup(close_container, container)
-        container.permissions.override(providers.Object(FakePermissions()))
+        container.payment.permissions.override(providers.Object(FakePermissions()))
         with self.assertRaises(IdentityConfigError):
             container.grpc_worker()
 

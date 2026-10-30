@@ -1,8 +1,8 @@
-import type { KitchenStaffAccess } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control/access-control.ts";
 import {
   authorizeKitchenBoard,
   type KitchenBoardQuery,
-} from "../kitchen-board.ts";
+} from "../kitchen-board/kitchen-board.ts";
 
 export type ListReadyOrders = KitchenBoardQuery;
 

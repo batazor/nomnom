@@ -3,12 +3,12 @@ import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { MoneyValue } from "../../../menu/domains/menu/vo/money.ts";
 import type { RestaurantRepository } from "../../domains/restaurant/restaurant.ts";
-import type { RestaurantAccessControl } from "../access-control.ts";
-import { loadRestaurant } from "../load-restaurant.ts";
+import type { RestaurantAccessControl } from "../access-control/access-control.ts";
+import { loadRestaurant } from "../load-restaurant/load-restaurant.ts";
 import {
   type RestaurantChangeResult,
   toRestaurantView,
-} from "../restaurant-view.ts";
+} from "../restaurant-view/restaurant-view.ts";
 
 /** What Update Restaurant does with the premium fee (FR-202). */
 export type PremiumFeeChange =

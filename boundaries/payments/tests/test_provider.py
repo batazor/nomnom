@@ -6,8 +6,14 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from di.payments import ProviderConfigurationError, create_provider
-from infrastructure.provider import (
+from pkg.config import ProviderSettings, load_settings
+from slices.payment.applications.ports import (
+    ProviderOperationRequest,
+    ProviderOperationStatus,
+)
+from slices.payment.di.payment import ProviderConfigurationError, create_provider
+from slices.payment.domains.payment import Money, OperationId, OperationKind, PaymentId
+from slices.payment.infrastructure.provider import (
     DECLINE_AMOUNT,
     FakePaymentProvider,
     InvalidWebhookError,
@@ -15,12 +21,6 @@ from infrastructure.provider import (
     parse_callback,
     sign_payload,
 )
-from pkg.config import ProviderSettings, load_settings
-from slices.payment.applications.ports import (
-    ProviderOperationRequest,
-    ProviderOperationStatus,
-)
-from slices.payment.domains.payment import Money, OperationId, OperationKind, PaymentId
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET = "whsec_test"

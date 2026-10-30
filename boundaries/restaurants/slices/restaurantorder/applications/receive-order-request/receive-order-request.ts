@@ -14,11 +14,11 @@ import {
   RestaurantOrder,
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { FulfillmentCoordinatorAccess } from "../access-control.ts";
+import type { FulfillmentCoordinatorAccess } from "../access-control/access-control.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-view.ts";
+} from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type ReceiveOrderRequest = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */

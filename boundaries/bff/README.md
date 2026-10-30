@@ -50,7 +50,7 @@ BFF — отдельный сервис и единая прикладная т�
 
 ### Слайс `ordertracking`
 
-Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-10-25-add-bff-order-tracking-resolvers/). `plugins/bff/ordertracking/applications` строит представление заказа без Protobuf и GraphQL-типов: `OrderStatus` по таблице выше, `endReason` по `reason_code`, milestones из `placed_at`, Fulfillment Facts и `cancelled_at` (вехи `PAID` — из факта `payment_authorized`, `CONFIRMED` — из факта `restaurant_accepted`; у заказов, подтверждённых до его появления, этого milestone нет), названия позиций — снимок `orders` на момент Place Order (`OrderItem.name`; у заказов, оформленных до снимка, — пустое имя, текущее меню не читается), `lineTotal` десятичной арифметикой `math/big`, `cancellation.availableUntil` по окну отмены и часам BFF, `expectedReadyAt`/`expectedPickupAt`/`expectedDeliveredAt` — последние сроки `Order` `orders` (FR-611, FR-612; не названный срок — `null`, его же несёт `orderChanged` через `LookupOrderById`). `ordertracking/infrastructure` вызывает `orders` от имени покупателя (service token и user assertion, ADR 32) и публичные `GetRestaurant` (заказ) и `BatchGetRestaurants` (история) без пользователя; клиенты генерируются из workspace (`make proto-generate`, `plugins/bff/infrastructure/grpc/buf.gen.yaml`).
+Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-10-25-add-bff-order-tracking-resolvers/). `plugins/bff/slices/ordertracking/applications` строит представление заказа без Protobuf и GraphQL-типов: `OrderStatus` по таблице выше, `endReason` по `reason_code`, milestones из `placed_at`, Fulfillment Facts и `cancelled_at` (вехи `PAID` — из факта `payment_authorized`, `CONFIRMED` — из факта `restaurant_accepted`; у заказов, подтверждённых до его появления, этого milestone нет), названия позиций — снимок `orders` на момент Place Order (`OrderItem.name`; у заказов, оформленных до снимка, — пустое имя, текущее меню не читается), `lineTotal` десятичной арифметикой `math/big`, `cancellation.availableUntil` по окну отмены и часам BFF, `expectedReadyAt`/`expectedPickupAt`/`expectedDeliveredAt` — последние сроки `Order` `orders` (FR-611, FR-612; не названный срок — `null`, его же несёт `orderChanged` через `LookupOrderById`). `ordertracking/infrastructure` вызывает `orders` от имени покупателя (service token и user assertion, ADR 32) и публичные `GetRestaurant` (заказ) и `BatchGetRestaurants` (история) без пользователя; клиенты генерируются из workspace (`make proto-generate`, `plugins/bff/infrastructure/grpc/buf.gen.yaml`).
 
 | Ответ контекста | GraphQL |
 | --- | --- |
@@ -70,7 +70,7 @@ Change [`add-bff-order-tracking-resolvers`](../../openspec/changes/archive/2026-
 
 ### Слайс `catalog`
 
-Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/catalog/applications` — сценарии List Restaurants и Get Restaurant с меню без Protobuf и GraphQL-типов; `catalog/infrastructure` вызывает публичные `ListRestaurants`, `GetRestaurant`, `GetMenu` и `BatchGetMenus` `restaurants` с service token BFF и без user assertion (`identity.WithoutUser`). Resolvers каталога access token не требуют.
+Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/slices/catalog/applications` — сценарии List Restaurants и Get Restaurant с меню без Protobuf и GraphQL-типов; `catalog/infrastructure` вызывает публичные `ListRestaurants`, `GetRestaurant`, `GetMenu` и `BatchGetMenus` `restaurants` с service token BFF и без user assertion (`identity.WithoutUser`). Resolvers каталога access token не требуют.
 
 - `restaurants(first, after)` → `ListRestaurants` только открытых ресторанов (`include_closed = false`); `first` — 1..100, иначе error `INVALID_ARGUMENT`; `after` и `pageInfo.endCursor` — `next_page_token` `restaurants` как есть, cursor ребра — id ресторана (тот же ключ курсора), на последней странице `endCursor` — cursor последнего ребра, на пустой — `null`; меню всех ресторанов страницы читаются одним `BatchGetMenus` (ресторан без меню — `null`, ошибка вызова роняет запрос; пустая страница `restaurants` не вызывает): customer UI показывает превью блюд на карточке ресторана.
 - `restaurant(id)` → `GetRestaurant` + `GetMenu`: `NOT_FOUND` ресторана — `null`, `NOT_FOUND` меню — `menu = null`; пустое описание позиции — `null`.
@@ -81,7 +81,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-
 
 ### Слайс `checkout`
 
-Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/checkout/applications` вызывает `PlaceOrder` от имени покупателя и строит payload сценарием `GetOrder` слайса `ordertracking` (тот же `Order`, что у `order(id)`); `checkout/infrastructure` переводит отказы `orders` по `ErrorInfo`.
+Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-add-customer-checkout-flow/). `plugins/bff/slices/checkout/applications` вызывает `PlaceOrder` от имени покупателя и строит payload сценарием `GetOrder` слайса `ordertracking` (тот же `Order`, что у `order(id)`); `checkout/infrastructure` переводит отказы `orders` по `ErrorInfo`.
 
 | Ответ `orders` `PlaceOrder` | GraphQL `placeOrder` |
 | --- | --- |
@@ -110,7 +110,7 @@ Change [`add-customer-checkout-flow`](../../openspec/changes/archive/2026-10-25-
 
 ### Слайс `simulator`
 
-Change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/) (FR-607). `plugins/bff/simulator/applications` — сценарии Get Simulator и Set Simulator Enabled с портом `Simulator`; `simulator/infrastructure` вызывает `GetSimulator`/`SetSimulatorEnabled` у `orders`, `restaurants` и `delivery` по очереди от имени пользователя (service token BFF и user assertion, ADR 32). `enabled` — `true`, только если Simulator включён во всех трёх. Право `platform#operate_simulator` проверяет каждый контекст.
+Change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/) (FR-607). `plugins/bff/slices/simulator/applications` — сценарии Get Simulator и Set Simulator Enabled с портом `Simulator`; `simulator/infrastructure` вызывает `GetSimulator`/`SetSimulatorEnabled` у `orders`, `restaurants` и `delivery` по очереди от имени пользователя (service token BFF и user assertion, ADR 32). `enabled` — `true`, только если Simulator включён во всех трёх. Право `platform#operate_simulator` проверяет каждый контекст.
 
 | Ответ контекстов | GraphQL `simulator` / `setSimulatorEnabled` |
 | --- | --- |
@@ -123,7 +123,7 @@ Mutation останавливается на первом сбое: контек
 
 ### Слайс `restaurantmanagement`
 
-Change [`add-restaurant-opening-management`](../../openspec/changes/add-restaurant-opening-management/). `plugins/bff/restaurantmanagement/applications` — сценарии Open Restaurant и Close Restaurant с портом `RestaurantOpener`; `restaurantmanagement/infrastructure` вызывает `OpenRestaurant`/`CloseRestaurant` `restaurants` (GRPCRoute `restaurants-v1-management`) от имени пользователя: service token BFF и user assertion (ADR 32), как `PlaceOrder`. Право `restaurant#manage` (владелец) проверяет `restaurants`; BFF владение не проверяет.
+Change [`add-restaurant-opening-management`](../../openspec/changes/add-restaurant-opening-management/). `plugins/bff/slices/restaurantmanagement/applications` — сценарии Open Restaurant и Close Restaurant с портом `RestaurantOpener`; `restaurantmanagement/infrastructure` вызывает `OpenRestaurant`/`CloseRestaurant` `restaurants` (GRPCRoute `restaurants-v1-management`) от имени пользователя: service token BFF и user assertion (ADR 32), как `PlaceOrder`. Право `restaurant#manage` (владелец) проверяет `restaurants`; BFF владение не проверяет.
 
 Payload `RestaurantOpeningPayload`: `restaurant` после команды — `RestaurantSummary` (`acceptingOrders` — `is_open`) и `changed` (`false` у повтора).
 
@@ -144,7 +144,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды — `
 
 ### Слайс `kitchen`
 
-`plugins/bff/kitchen/applications` — сценарии Get Kitchen и Apply Kitchen Action без Protobuf и GraphQL-типов; `kitchen/infrastructure` вызывает `restaurants` от имени пользователя (service token BFF и user assertion, ADR 32): доска кухни — `ListActiveRestaurantOrders` и `GetKitchenQueue` (GRPCRoute `restaurants-v1-kitchen-reads`), команды — `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady` (`restaurants-v1-kitchen`); публичные `GetRestaurant` и `GetMenu` — без пользователя. Право `restaurant#operate_kitchen` (персонал или владелец) проверяет `restaurants`.
+`plugins/bff/slices/kitchen/applications` — сценарии Get Kitchen и Apply Kitchen Action без Protobuf и GraphQL-типов; `kitchen/infrastructure` вызывает `restaurants` от имени пользователя (service token BFF и user assertion, ADR 32): доска кухни — `ListActiveRestaurantOrders` и `GetKitchenQueue` (GRPCRoute `restaurants-v1-kitchen-reads`), команды — `AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady` (`restaurants-v1-kitchen`); публичные `GetRestaurant` и `GetMenu` — без пользователя. Право `restaurant#operate_kitchen` (персонал или владелец) проверяет `restaurants`.
 
 - `kitchen(restaurantId)`: заказы в `RECEIVED`…`READY` из `ListActiveRestaurantOrders` (позиции, `received_at`, `accepted_at` и `expected_ready_at` → nullable `acceptedAt`/`expectedReadyAt` в RFC 3339, `null` до Acceptance; их же отдаёт lookup `kitchenChanged`); порядок — `RECEIVED` по `receivedAt`, затем `QUEUED` в порядке `GetKitchenQueue` (заказ, которого нет в очереди из-за гонки двух чтений, — после неё по `receivedAt`), затем остальные по `receivedAt`; названия позиций — из `GetMenu` (позиции, которой нет в меню, — пустое имя); `restaurant` — `RestaurantSummary`. `ListIncomingOrders` не нужен: новый RPC покрывает и `RECEIVED`.
 - `applyKitchenAction`: после команды заказ перечитывается из `ListActiveRestaurantOrders` (ответ команды без позиций и `receivedAt`); у `REJECT` и у заказа, ушедшего с доски, `order = null`. Причина отказа `RejectRestaurantOrder` не передаётся: в схеме её нет.
@@ -169,7 +169,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды — `
 
 ### Слайс `courier`
 
-`plugins/bff/courier/applications` — сценарии Get Courier, Set Availability, Accept Offer и Apply Delivery Action; `courier/infrastructure` вызывает RPC курьера `delivery` от имени пользователя (audience `nomnom.delivery`, GRPCRoute `delivery-v1-courier` и `delivery-v1-courier-reads`). Курьер — сам пользователь: `delivery` регистрирует курьера под user id (`RegisterCourier`), поэтому `courier_id` — subject access token; `courier#act` и принадлежность доставки или offer курьеру проверяет `delivery`.
+`plugins/bff/slices/courier/applications` — сценарии Get Courier, Set Availability, Accept Offer и Apply Delivery Action; `courier/infrastructure` вызывает RPC курьера `delivery` от имени пользователя (audience `nomnom.delivery`, GRPCRoute `delivery-v1-courier` и `delivery-v1-courier-reads`). Курьер — сам пользователь: `delivery` регистрирует курьера под user id (`RegisterCourier`), поэтому `courier_id` — subject access token; `courier#act` и принадлежность доставки или offer курьеру проверяет `delivery`.
 
 - `courier`: `GetCourierCurrentDelivery` — статус курьера (`courier_status`) и текущая доставка с адресами; `offers` — `ListAvailableDeliveryOffers`, только пока курьер `AVAILABLE`, иначе `[]`; `orderId` — заказ доставки offer (`order_id`); `expiresAt` — из `expires_at_epoch_seconds`.
 - Mutations отвечают `CourierPayload`: курьер перечитывается после команды, в том числе после бизнес-отказа.
@@ -190,7 +190,7 @@ Payload `RestaurantOpeningPayload`: `restaurant` после команды — `
 
 ### Слайс `courierpool`
 
-`plugins/bff/courierpool/applications` — сценарии Get Pool и Change Pool диспетчера ([FR-623](../../openspec/changes/add-cook-and-courier-pools/)); `courierpool/infrastructure` вызывает `GetCourierPool`, `RegisterCourier`, `UpdateCourierLocation`, `SetCourierAvailability`, `RetireCourier`, `OfferDeliveryToCourier` `delivery` от имени пользователя. Право `platform#manage_couriers` (оператор или диспетчер) проверяет `delivery`; мутация `offerDeliveryToCourier` — offer доставки заказа выбранному курьеру (`platform#offer_delivery`), отказ `delivery` (нет ожидающей доставки, курьер не свободен) — problem `OFFER_REFUSED`, курьер принимает offer сам.
+`plugins/bff/slices/courierpool/applications` — сценарии Get Pool и Change Pool диспетчера ([FR-623](../../openspec/changes/add-cook-and-courier-pools/)); `courierpool/infrastructure` вызывает `GetCourierPool`, `RegisterCourier`, `UpdateCourierLocation`, `SetCourierAvailability`, `RetireCourier`, `OfferDeliveryToCourier` `delivery` от имени пользователя. Право `platform#manage_couriers` (оператор или диспетчер) проверяет `delivery`; мутация `offerDeliveryToCourier` — offer доставки заказа выбранному курьеру (`platform#offer_delivery`), отказ `delivery` (нет ожидающей доставки, курьер не свободен) — problem `OFFER_REFUSED`, курьер принимает offer сам.
 
 - `courierPool`: `CourierPool @key(fields: "id")`, `id` — Market запроса (пул курьеров у каждого Market свой, ADR 41); размер, на линии, занято, доставки без курьера (`waiting`) и курьеры по имени с заказом оффера (`offeredOrderId`) и текущей доставки (`currentOrderId`). Пользователь без права получает error `PERMISSION_DENIED` — UI не показывает пул.
 - `addCourier(name)`: новый курьер регистрируется под UUIDv7 (за ним не стоит пользователь, действует Simulator) и ставится в стартовую точку `BFF__COURIER_START_LATITUDE`/`BFF__COURIER_START_LONGITUDE` (Helm `courierPool.startLatitude`/`startLongitude`, обязательны: без них плагин не стартует, chart не рендерится) — иначе Dispatch не предложит ему доставку. `setCourierOnLine` и `retireCourier` меняют любого курьера пула.
@@ -228,7 +228,7 @@ Router ячеек — публичный gateway, а не BFF ([ADR 41](../../do
 
 ## Identity покупателя
 
-Решение — [ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md); код — пакет [`plugins/bff/identity`](plugins/bff/identity).
+Решение — [ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md); код — пакет [`plugins/bff/infrastructure/identity`](plugins/bff/infrastructure/identity).
 
 - **Access token.** Router передаёт заголовок `Authorization` в плагин правилом `headers.all.request: propagate` в [`config.yaml`](config.yaml); другие клиентские заголовки (например `x-user-id`) до плагина не доходят. Проверено на Router 0.363.0: без правила metadata `authorization` в плагине пустая. Router (`identity.providers` в chart → `authentication.jwt.jwks`) отклоняет token с неверной подписью кодом 401 до плагина. `AccessTokenVerifier` выбирает JWKS по `iss`, проверяет подпись (RS256/ES256, `kid`), `aud` BFF и срок с допуском 30 s; ID token (есть `nonce`) отклоняется — у Dex access token тоже без `scope` (ADR 35).
 - **User assertion.** `AssertionSigner` подписывает ES256 JWT на каждый вызов контекста: `iss: nomnom-bff`, `aud` контекста, `sub` из проверенного token, срок 30 s, случайный `jti`.
@@ -318,20 +318,19 @@ boundaries/bff/
     src/*_presenter.go        # перевод представлений в GraphQL-типы, таблицы enum
     src/<slice>.go            # только resolvers слайса
     src/*_test.go             # тесты plugin
-    catalog/                  # слайс каталога: applications, infrastructure
-    checkout/                 # слайс оформления заказа
-    ordertracking/            # слайс отслеживания заказа
-    restaurantmanagement/     # слайс открытия ресторана владельцем
-    simulator/                # слайс переключателя demo Simulator
-    identity/                 # access token, user assertion, service token
+    slices/catalog/           # слайс каталога: applications, infrastructure
+    slices/checkout/          # слайс оформления заказа
+    slices/ordertracking/     # слайс отслеживания заказа
+    slices/restaurantmanagement/ # слайс открытия ресторана владельцем
+    slices/simulator/         # слайс переключателя demo Simulator
+    infrastructure/identity/ # access token, user assertion, service token
     infrastructure/gateway/   # соединение с internal gateway
     infrastructure/market/    # Market запроса и отказ вызова без него
     infrastructure/grpcerr/   # ErrorInfo и metadata ошибок контекстов
-    infrastructure/grpc/      # gRPC-клиенты контекстов (generated)
     generated/                # generated gRPC-контракт и mapping
 ```
 
-Код plugin организован vertical slices (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
+Код plugin организован vertical slices в `slices/` (`catalog`, `checkout`, `ordertracking`, `restaurantmanagement`). Слайсы содержат прикладную координацию и инфраструктурные адаптеры, но не собственную доменную модель. Порты объявлены рядом со сценариями (`OrderReader`, `CancellationRequester`, `RestaurantLister`, `RestaurantReader`, `OrderPlacer`, `RestaurantOpener`); адаптер реализует несколько портов и переводит ошибки каждой операции отдельно.
 
 Композиция ([`refactor-bff-composition`](../../openspec/changes/archive/2026-10-25-refactor-bff-composition/), FR-551): `wiring.go` читает окружение один раз и даёт всем слайсам по одному соединению с internal gateway своей Cell (через `market.Require`) на `nomnom.orders`, `nomnom.restaurants` и `nomnom.delivery`; ошибки конфигурации возвращаются в `main`. Значения прикладного слоя переводятся в GraphQL-enum явными таблицами presenter с тестом полноты; неизвестное значение — error `UNAVAILABLE` resolver, а не `UNSPECIFIED`.
 

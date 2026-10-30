@@ -13,7 +13,7 @@ import type { Outbox } from "../../../pkg/outbox/outbox.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
-import type { MenuAccessControl } from "../applications/access-control.ts";
+import type { MenuAccessControl } from "../applications/access-control/access-control.ts";
 import { AddMenuItemHandler } from "../applications/add-menu-item/add-menu-item.ts";
 import { BatchGetMenusHandler } from "../applications/batch-get-menus/batch-get-menus.ts";
 import { CreateMenuHandler } from "../applications/create-menu/create-menu.ts";

@@ -3,7 +3,7 @@ package main
 import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/catalog/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 

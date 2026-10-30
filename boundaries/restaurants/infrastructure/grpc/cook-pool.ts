@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
-import type { CookCommand } from "../../slices/cook/applications/change-cook.ts";
-import type { CookView } from "../../slices/cook/applications/cook-view.ts";
+import type { CookCommand } from "../../slices/cook/applications/change-cook/change-cook.ts";
+import type { CookView } from "../../slices/cook/applications/cook-view/cook-view.ts";
 import { requireField, transportError } from "./errors.ts";
 import {
   CookSchema,

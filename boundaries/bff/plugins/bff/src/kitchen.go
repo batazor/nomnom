@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/kitchen/applications"
 )
 
 // QueryKitchen shows the active orders of a restaurant on behalf of the

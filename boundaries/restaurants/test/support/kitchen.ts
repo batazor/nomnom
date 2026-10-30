@@ -1,7 +1,7 @@
 import type { Subject } from "../../pkg/authz/subject.ts";
 import type { Outbox } from "../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../pkg/unit-of-work/unit-of-work.ts";
-import type { CookPoolAccess } from "../../slices/cook/applications/access-control.ts";
+import type { CookPoolAccess } from "../../slices/cook/applications/access-control/access-control.ts";
 import { PoolCookAssigner } from "../../slices/cook/applications/assign-cook/assign-cook.ts";
 import { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";
 import { HireCookHandler } from "../../slices/cook/applications/hire-cook/hire-cook.ts";
@@ -23,11 +23,11 @@ import type {
   FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
-} from "../../slices/restaurantorder/applications/access-control.ts";
+} from "../../slices/restaurantorder/applications/access-control/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get-restaurant-order/get-restaurant-order.ts";
-import type { RepeatPolicy } from "../../slices/restaurantorder/applications/kitchen-command.ts";
+import type { RepeatPolicy } from "../../slices/restaurantorder/applications/kitchen-command/kitchen-command.ts";
 import { ListActivePreparationsHandler } from "../../slices/restaurantorder/applications/list-active-preparations/list-active-preparations.ts";
 import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/list-ready-orders/list-ready-orders.ts";
 import { ListScheduledOrdersHandler } from "../../slices/restaurantorder/applications/list-scheduled-orders/list-scheduled-orders.ts";
@@ -51,7 +51,7 @@ import {
   RepositoryAcceptanceFactsReader,
   RepositoryRestaurantExistence,
 } from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
-import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control.ts";
+import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control/access-control.ts";
 import { ConfirmScheduledSlotHandler } from "../../slices/scheduleslot/applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
 import { ListScheduledSlotsHandler } from "../../slices/scheduleslot/applications/list-scheduled-slots/list-scheduled-slots.ts";
 import { ReleaseScheduledSlotHandler } from "../../slices/scheduleslot/applications/release-scheduled-slot/release-scheduled-slot.ts";

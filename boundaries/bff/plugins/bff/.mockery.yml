@@ -1,42 +1,42 @@
 # Mocks of the ports the tests replace; regenerate with `go tool mockery`.
 structname: "{{.Mock}}{{.InterfaceName | firstUpper}}"
 packages:
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/catalog/applications:
     interfaces:
       MenuBatchReader: {}
       RestaurantLister: {}
       RestaurantReader: {}
       SlotReader: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/checkout/applications:
     interfaces:
       OrderPlacer: {}
       OrderViews: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/courier/applications:
     interfaces:
       Couriers: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/courierpool/applications:
     interfaces:
       Dispatch: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/kitchen/applications:
     interfaces:
       Catalog: {}
       CookCommands: {}
       CookPoolReader: {}
       KitchenBoard: {}
       KitchenCommands: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/ordertracking/applications:
     interfaces:
       CancellationRequester: {}
       Catalog: {}
       Deliveries: {}
       OrderHistory: {}
       OrderReader: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/restaurantmanagement/applications:
     interfaces:
       OpeningHoursSetter: {}
       OwnedRestaurantLister: {}
       RestaurantViews: {}
-  github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications:
+  github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/simulator/applications:
     interfaces:
       Simulator: {}
   github.com/batazor/nomnom/boundaries/bff/plugins/bff/src:

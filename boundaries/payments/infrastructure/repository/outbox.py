@@ -2,7 +2,7 @@
 
 ``OutboxEventMapper`` is the extension point for the Protobuf mappers of
 ``nomnom/payments/v1/events.proto`` (topic ``payments.v1.payment-events``); the
-entrypoint injects ``infrastructure.messaging.PaymentEventsMapper``. Factories default
+entrypoint injects ``slices.payment.infrastructure.messaging.PaymentEventsMapper``. Factories default
 to ``NoPublishedContracts``: no Domain Event has a contract, nothing is written.
 """
 

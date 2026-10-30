@@ -10,7 +10,6 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoi
 from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 from psycopg import errors
 
-from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
 from infrastructure.repository import Database
 from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize_payment import (
@@ -36,6 +35,11 @@ from slices.payment.domains.payment import (
     PaymentId,
     PaymentOperationDeclined,
     PaymentState,
+)
+from slices.payment.infrastructure.observability import (
+    DomainMetrics,
+    ObservedOutbox,
+    ObservedUnitOfWork,
 )
 
 AUTHORIZATIONS = "nomnom.payments.authorizations"

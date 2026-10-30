@@ -2,7 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { durationMs } from "@bufbuild/protobuf/wkt";
 import type { HandlerContext, ServiceImpl } from "@connectrpc/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { RestaurantChangeResult } from "../../slices/restaurant/applications/restaurant-view.ts";
+import type { RestaurantChangeResult } from "../../slices/restaurant/applications/restaurant-view/restaurant-view.ts";
 import type { PremiumFeeChange } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
 import type { ScheduledOrderSettingsValue } from "../../slices/restaurant/domains/restaurant/restaurant.ts";
 import { requireField, transportError } from "./errors.ts";

@@ -72,14 +72,14 @@ impl<T> CourierStore for T where
 }
 
 /// Поток позиций курьеров: Valkey pub/sub в процессе
-/// ([`ValkeyPositionPublisher`](crate::infrastructure::tracks::ValkeyPositionPublisher)),
+/// ([`ValkeyPositionPublisher`](crate::slices::courier::infrastructure::tracks::ValkeyPositionPublisher)),
 /// записывающий только в тестах.
 pub trait ProcessPositionPublisher: CourierPositionPublisher + Send + Sync {}
 
 impl<T: CourierPositionPublisher + Send + Sync> ProcessPositionPublisher for T {}
 
 /// Случайность точек и каналов новых доставок: ОС в процессе
-/// ([`SystemRandomSource`](crate::infrastructure::random::SystemRandomSource)),
+/// ([`SystemRandomSource`](crate::slices::delivery::infrastructure::random::SystemRandomSource)),
 /// фиксированная только в тестах.
 pub trait ProcessRandomSource: RandomSource + Send + Sync {}
 

@@ -8,7 +8,7 @@ import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit
 import type { ScheduledSlotConfig } from "../../../pkg/config/config.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
-import type { SlotReservationAccess } from "../applications/access-control.ts";
+import type { SlotReservationAccess } from "../applications/access-control/access-control.ts";
 import { ConfirmScheduledSlotHandler } from "../applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
 import { ListScheduledSlotsHandler } from "../applications/list-scheduled-slots/list-scheduled-slots.ts";
 import { ReleaseScheduledSlotHandler } from "../applications/release-scheduled-slot/release-scheduled-slot.ts";

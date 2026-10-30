@@ -6,11 +6,11 @@ import {
   AlreadyInStateError,
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { FulfillmentProcessAccess } from "../access-control.ts";
+import type { FulfillmentProcessAccess } from "../access-control/access-control.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-view.ts";
+} from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type QueueRestaurantOrder = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */

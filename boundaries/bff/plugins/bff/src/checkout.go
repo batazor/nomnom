@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/checkout/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 

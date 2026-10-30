@@ -1,9 +1,9 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { CookRepository } from "../../domains/cook/cook.ts";
-import type { CookPoolAccess } from "../access-control.ts";
-import { type CookView, toCookView } from "../cook-view.ts";
-import type { CookWorkload } from "../cook-workload.ts";
+import type { CookPoolAccess } from "../access-control/access-control.ts";
+import { type CookView, toCookView } from "../cook-view/cook-view.ts";
+import type { CookWorkload } from "../cook-workload/cook-workload.ts";
 
 export type GetCookPool = Readonly<{ subject: Subject; restaurantId: string }>;
 

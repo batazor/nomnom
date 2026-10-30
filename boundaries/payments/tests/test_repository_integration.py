@@ -15,16 +15,9 @@ import pytest
 from opentelemetry import trace
 from payment_fakes import MARKET, NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
 
-from infrastructure.observability import FsmMetrics
 from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
     Database,
-    DatabasePaymentOperationHistory,
-    DatabasePaymentOperationRepository,
-    DatabasePaymentOutbox,
-    DatabasePaymentRepository,
-    DatabasePendingOperationQuery,
-    DatabaseProviderMessageInbox,
     DatabaseUnitOfWork,
     NoPublishedContracts,
     OutboxMessage,
@@ -55,6 +48,15 @@ from slices.payment.domains.payment import (
     PaymentId,
     PaymentOperation,
     PaymentState,
+)
+from slices.payment.infrastructure.observability import FsmMetrics
+from slices.payment.infrastructure.repository import (
+    DatabasePaymentOperationHistory,
+    DatabasePaymentOperationRepository,
+    DatabasePaymentOutbox,
+    DatabasePaymentRepository,
+    DatabasePendingOperationQuery,
+    DatabaseProviderMessageInbox,
 )
 
 AUTHORIZED_TYPE = "nomnom.payments.v1.PaymentAuthorized"

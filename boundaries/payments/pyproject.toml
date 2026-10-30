@@ -54,6 +54,7 @@ all = "error"
 
 [tool.ty.src]
 include = ["di", "entrypoints", "pkg", "slices", "tests"]
+exclude = ["slices/payment/infrastructure"]
 
 [dependency-groups]
 dev = [
@@ -73,20 +74,32 @@ root_packages = ["di", "entrypoints", "infrastructure", "pkg", "slices"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Process layers: entrypoints → di → infrastructure → slices → pkg"
+name = "Process layers: entrypoints → di"
 type = "layers"
-layers = ["entrypoints", "di", "infrastructure", "slices", "pkg"]
+layers = ["entrypoints", "di"]
 
 [[tool.importlinter.contracts]]
-name = "Slice layers: applications → domains"
+name = "Slice layers: di → infrastructure → applications → domains"
 type = "layers"
 containers = ["slices.payment"]
-layers = ["applications", "domains"]
+layers = ["di", "infrastructure", "applications", "domains"]
+
+[[tool.importlinter.contracts]]
+name = "Adapters do not depend on the composition root"
+type = "forbidden"
+source_modules = ["infrastructure", "slices.payment.infrastructure"]
+forbidden_modules = ["di", "entrypoints", "slices.payment.di"]
+
+[[tool.importlinter.contracts]]
+name = "Use cases, domains and shared packages do not depend on adapters"
+type = "forbidden"
+source_modules = ["slices.payment.applications", "slices.payment.domains", "pkg"]
+forbidden_modules = ["di", "entrypoints", "infrastructure", "slices.payment.infrastructure", "slices.payment.di"]
 
 [[tool.importlinter.contracts]]
 name = "Domain and application code stay free of frameworks and drivers"
 type = "forbidden"
-source_modules = ["slices", "pkg.usecase", "pkg.authz", "pkg.unit_of_work", "pkg.outbox"]
+source_modules = ["slices.payment.applications", "slices.payment.domains", "pkg.usecase", "pkg.authz", "pkg.unit_of_work", "pkg.outbox"]
 forbidden_modules = [
     "dependency_injector",
     "grpc",

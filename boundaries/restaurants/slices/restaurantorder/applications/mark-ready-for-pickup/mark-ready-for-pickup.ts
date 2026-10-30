@@ -3,8 +3,8 @@ import {
   type KitchenCommand,
   type KitchenCommandDependencies,
   type RepeatPolicy,
-} from "../kitchen-command.ts";
-import type { RestaurantOrderView } from "../restaurant-order-view.ts";
+} from "../kitchen-command/kitchen-command.ts";
+import type { RestaurantOrderView } from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type MarkReadyForPickup = KitchenCommand;
 

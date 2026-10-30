@@ -5,7 +5,7 @@ import {
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
 import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
-import type { AuthorizationRevision } from "../../applications/access-control.ts";
+import type { AuthorizationRevision } from "../../applications/access-control/access-control.ts";
 import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { OwnedRestaurantsReader } from "../../applications/list-owned-restaurants/list-owned-restaurants.ts";
@@ -17,7 +17,7 @@ import type {
 import type {
   CatalogRestaurantView,
   RestaurantView,
-} from "../../applications/restaurant-view.ts";
+} from "../../applications/restaurant-view/restaurant-view.ts";
 import {
   Restaurant,
   type RestaurantRepository,

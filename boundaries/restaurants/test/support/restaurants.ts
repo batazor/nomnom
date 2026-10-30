@@ -7,7 +7,7 @@ import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
   StaffRelationshipWriter,
-} from "../../slices/restaurant/applications/access-control.ts";
+} from "../../slices/restaurant/applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { CloseRestaurantHandler } from "../../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";

@@ -5,7 +5,7 @@ import type {
   AuthorizationRevision,
   OwnerRelationshipWriter,
   StaffRelationshipWriter,
-} from "../../slices/restaurant/applications/access-control.ts";
+} from "../../slices/restaurant/applications/access-control/access-control.ts";
 import { type RelationshipsClient, withDeadline } from "./client.ts";
 
 export const RESTAURANT = "restaurant";

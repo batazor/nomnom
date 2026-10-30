@@ -1,7 +1,7 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { SimulatorStateRepository } from "../../domains/simulator/simulator.ts";
-import type { SimulatorAccess } from "../access-control.ts";
+import type { SimulatorAccess } from "../access-control/access-control.ts";
 
 export type GetSimulator = Readonly<{ subject: Subject }>;
 

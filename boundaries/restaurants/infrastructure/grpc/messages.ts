@@ -4,17 +4,17 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type {
   MenuItemView,
   MenuView,
-} from "../../slices/menu/applications/menu-support.ts";
-import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff.ts";
+} from "../../slices/menu/applications/menu-support/menu-support.ts";
+import type { StaffChangeResult } from "../../slices/restaurant/applications/change-staff/change-staff.ts";
 import type {
   AcceptingCatalogRestaurantView,
   RestaurantView,
-} from "../../slices/restaurant/applications/restaurant-view.ts";
+} from "../../slices/restaurant/applications/restaurant-view/restaurant-view.ts";
 import type { KitchenQueueEntry } from "../../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { ActiveRestaurantOrder } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type { IncomingOrder } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
 import type { ScheduledOrder } from "../../slices/restaurantorder/applications/list-scheduled-orders/list-scheduled-orders.ts";
-import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view.ts";
+import type { RestaurantOrderView } from "../../slices/restaurantorder/applications/restaurant-order-view/restaurant-order-view.ts";
 import type { OrderScheduleValue } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import type { DeliveryWindow } from "../../slices/scheduleslot/domains/scheduleslot/scheduleslot.ts";
 import {

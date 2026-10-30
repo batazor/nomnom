@@ -11,8 +11,8 @@ import type {
   RestaurantOrderRepository,
   RestaurantOrderState,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { FulfillmentCoordinatorAccess } from "../access-control.ts";
-import { saveAndPublish } from "../publish-order-change.ts";
+import type { FulfillmentCoordinatorAccess } from "../access-control/access-control.ts";
+import { saveAndPublish } from "../publish-order-change/publish-order-change.ts";
 
 export type CancelRestaurantOrder = Readonly<{
   /** `service` identity of the `orders` fulfillment process. */

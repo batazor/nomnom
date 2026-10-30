@@ -5,14 +5,14 @@ import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { MenuRepository } from "../../domains/menu/menu.ts";
 import { Money, type MoneyValue } from "../../domains/menu/vo/money.ts";
-import type { MenuAccessControl } from "../access-control.ts";
+import type { MenuAccessControl } from "../access-control/access-control.ts";
 import {
   loadMenu,
   type MenuItemChangeResult,
   requireMenuItem,
   toMenuItemView,
-} from "../menu-support.ts";
-import { saveAndPublish } from "../publish-menu-change.ts";
+} from "../menu-support/menu-support.ts";
+import { saveAndPublish } from "../publish-menu-change/publish-menu-change.ts";
 
 export type UpdateMenuItem = Readonly<{
   subject: Subject;

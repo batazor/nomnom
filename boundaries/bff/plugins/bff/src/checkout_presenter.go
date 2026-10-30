@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/checkout/applications"
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
 )
 

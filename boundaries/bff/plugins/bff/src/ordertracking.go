@@ -8,8 +8,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/ordertracking/applications"
 )
 
 func (s *BffService) QueryOrder(ctx context.Context, request *service.QueryOrderRequest) (*service.QueryOrderResponse, error) {

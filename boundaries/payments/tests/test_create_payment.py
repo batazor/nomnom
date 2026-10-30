@@ -8,7 +8,7 @@ from payment_fakes import (
     PaymentsTestKit,
 )
 
-from infrastructure.repository import Database, DatabasePaymentRepository
+from infrastructure.repository import Database
 from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.create_payment import (
     CreatePaymentHandler,
@@ -23,6 +23,7 @@ from slices.payment.domains.payment import (
     PaymentId,
     PaymentState,
 )
+from slices.payment.infrastructure.repository import DatabasePaymentRepository
 
 
 @pytest.mark.usefixtures("database")

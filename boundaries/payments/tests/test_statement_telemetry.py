@@ -12,15 +12,11 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import SpanKind, StatusCode
 from psycopg import errors
 
-from infrastructure.repository import (
-    Database,
-    DatabasePaymentRepository,
-    DatabaseUnitOfWork,
-    create_database,
-)
+from infrastructure.repository import Database, DatabaseUnitOfWork, create_database
 from infrastructure.repository.statements import Statement, StatementTelemetry, summarize
 from pkg.config import database
 from slices.payment.domains.payment import MarketId, Money, OrderId, Payment, PaymentId
+from slices.payment.infrastructure.repository import DatabasePaymentRepository
 
 
 class SummaryTest(unittest.TestCase):

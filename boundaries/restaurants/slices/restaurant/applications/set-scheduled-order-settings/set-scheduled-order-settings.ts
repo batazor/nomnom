@@ -4,12 +4,12 @@ import type {
   RestaurantRepository,
   ScheduledOrderSettingsValue,
 } from "../../domains/restaurant/restaurant.ts";
-import type { RestaurantAccessControl } from "../access-control.ts";
-import { loadRestaurant } from "../load-restaurant.ts";
+import type { RestaurantAccessControl } from "../access-control/access-control.ts";
+import { loadRestaurant } from "../load-restaurant/load-restaurant.ts";
 import {
   type RestaurantChangeResult,
   toRestaurantView,
-} from "../restaurant-view.ts";
+} from "../restaurant-view/restaurant-view.ts";
 
 export type SetScheduledOrderSettings = Readonly<{
   subject: Subject;

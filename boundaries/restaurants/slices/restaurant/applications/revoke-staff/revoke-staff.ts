@@ -3,7 +3,7 @@ import {
   type ChangeStaffDependencies,
   changeStaff,
   type StaffChangeResult,
-} from "../change-staff.ts";
+} from "../change-staff/change-staff.ts";
 
 export type RevokeStaff = ChangeStaff;
 

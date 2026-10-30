@@ -2,12 +2,12 @@ import type {
   OrderPriority,
   OrderScheduleValue,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { KitchenStaffAccess } from "../access-control.ts";
+import type { KitchenStaffAccess } from "../access-control/access-control.ts";
 import {
   authorizeKitchenBoard,
   type KitchenBoardItem,
   type KitchenBoardQuery,
-} from "../kitchen-board.ts";
+} from "../kitchen-board/kitchen-board.ts";
 
 export type ListScheduledOrders = KitchenBoardQuery;
 

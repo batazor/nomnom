@@ -11,13 +11,13 @@ import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { CookAssigner } from "../../restaurantorder/applications/start-preparation/start-preparation.ts";
-import type { CookPoolAccess } from "../applications/access-control.ts";
+import type { CookPoolAccess } from "../applications/access-control/access-control.ts";
 import { PoolCookAssigner } from "../applications/assign-cook/assign-cook.ts";
-import type { ChangeCookDependencies } from "../applications/change-cook.ts";
+import type { ChangeCookDependencies } from "../applications/change-cook/change-cook.ts";
 import type {
   CookRestaurants,
   CookWorkload,
-} from "../applications/cook-workload.ts";
+} from "../applications/cook-workload/cook-workload.ts";
 import { GetCookPoolHandler } from "../applications/get-cook-pool/get-cook-pool.ts";
 import { HireCookHandler } from "../applications/hire-cook/hire-cook.ts";
 import { PutCookOnLineHandler } from "../applications/put-cook-on-line/put-cook-on-line.ts";

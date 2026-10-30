@@ -10,6 +10,7 @@ pub mod failure_log;
 mod integration_events;
 pub mod observability;
 pub mod observed_use_cases;
+pub mod random;
 pub mod transitions;
 
 pub use duration_facts::{duration_input, handling_error};

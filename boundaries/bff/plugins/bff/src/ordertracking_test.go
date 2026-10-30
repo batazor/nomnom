@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	service "github.com/batazor/nomnom/boundaries/bff/plugins/bff/generated"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/identity"
+	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/slices/ordertracking/applications"
 )
 
 const fixtures = "../../../../../tests/identity/fixtures"
