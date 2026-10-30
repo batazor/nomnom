@@ -84,7 +84,7 @@ func (s Scope) Over(window, metric string, matchers ...string) string {
 // Grown — точный прирост counter за окно без экстраполяции increase(): последнее
 // значение минус значение на начало окна, а у series, появившейся внутри окна, — минус
 // ноль. Рестарт даёт новую series (instance — service.instance.id), сбросов внутри
-// series нет. Для точных долей воронки, где экстраполяция даёт этапы больше начала.
+// series нет. Для точных потоков, где экстраполяция даёт этапы больше начала.
 func (s Scope) Grown(window, metric string, matchers ...string) string {
 	series := s.Sel(metric, matchers...)
 	last := fmt.Sprintf("max_over_time(%s[%s])", series, window)

@@ -147,15 +147,11 @@ JSON — артефакт генератора: правки вносятся в
 | Fulfillment duration | TODO | [`nomnom_orders_fulfillment_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain) |
 | Orders currently in state | TODO | [`nomnom_orders_in_state`](../../../../docs/observability/metric-inventory.md#domain) |
 
-### Order funnel
+### Order flow
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
 | Order flow | live | — |
-| Funnel: orders reaching the stage | live | — |
-| Funnel: % of placed | live | — |
-| Lost: state before cancellation | live | — |
-| Lost: reason | live | — |
 
 ### Temporal
 
@@ -179,7 +175,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 56 из 72. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 52 из 68. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 

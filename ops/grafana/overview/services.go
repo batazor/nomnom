@@ -15,7 +15,7 @@ func Services() []Options {
 			UseCases: true, UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Temporal: &Temporal{Worker: inventory.OrdersWorker},
 			Domain:   ordersDomain,
-			Funnel:   orderFunnel,
+			Process:  orderFlowPanels,
 			SLO:      &SLO{Availability: 0.999, Latency: &LatencySLO{Bucket: "0.25", Target: 0.95}},
 		},
 		{

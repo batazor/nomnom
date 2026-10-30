@@ -3802,7 +3802,7 @@
         "spec": {
           "id": 56,
           "title": "Order flow",
-          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. Панель плагина `netsage-sankey-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. Панель плагина `netsage-sankey-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3877,690 +3877,6 @@
         "kind": "Panel",
         "spec": {
           "id": 57,
-          "title": "Funnel: orders reaching the stage",
-          "description": "Сколько заказов прошли каждый этап. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "placed",
-                        "range": false
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "paid",
-                        "range": false
-                      }
-                    },
-                    "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "confirmed",
-                        "range": false
-                      }
-                    },
-                    "refId": "C",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "preparing",
-                        "range": false
-                      }
-                    },
-                    "refId": "D",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "ready",
-                        "range": false
-                      }
-                    },
-                    "refId": "E",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "picked_up",
-                        "range": false
-                      }
-                    },
-                    "refId": "F",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "delivered",
-                        "range": false
-                      }
-                    },
-                    "refId": "G",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "completed",
-                        "range": false
-                      }
-                    },
-                    "refId": "H",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "bargauge",
-            "version": "",
-            "spec": {
-              "options": {
-                "displayMode": "basic",
-                "valueMode": "text",
-                "namePlacement": "auto",
-                "showUnfilled": true,
-                "sizing": "auto",
-                "minVizWidth": 8,
-                "minVizHeight": 16,
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "reduceOptions": {
-                  "values": false,
-                  "calcs": [
-                    "lastNotNull"
-                  ]
-                },
-                "maxVizHeight": 300,
-                "orientation": "horizontal"
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "short",
-                  "min": 0
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-58": {
-        "kind": "Panel",
-        "spec": {
-          "id": 58,
-          "title": "Funnel: % of placed",
-          "description": "Доля оформленных заказов, прошедших этап; последняя полоса — конверсия до завершения. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "placed",
-                        "range": false
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "paid",
-                        "range": false
-                      }
-                    },
-                    "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "confirmed",
-                        "range": false
-                      }
-                    },
-                    "refId": "C",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "preparing",
-                        "range": false
-                      }
-                    },
-                    "refId": "D",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "ready",
-                        "range": false
-                      }
-                    },
-                    "refId": "E",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "picked_up",
-                        "range": false
-                      }
-                    },
-                    "refId": "F",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "delivered",
-                        "range": false
-                      }
-                    },
-                    "refId": "G",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "100 * sum((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) / sum((max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "completed",
-                        "range": false
-                      }
-                    },
-                    "refId": "H",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "bargauge",
-            "version": "",
-            "spec": {
-              "options": {
-                "displayMode": "basic",
-                "valueMode": "text",
-                "namePlacement": "auto",
-                "showUnfilled": true,
-                "sizing": "auto",
-                "minVizWidth": 8,
-                "minVizHeight": 16,
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "reduceOptions": {
-                  "values": false,
-                  "calcs": [
-                    "lastNotNull"
-                  ]
-                },
-                "maxVizHeight": 300,
-                "orientation": "horizontal"
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "percent",
-                  "min": 0,
-                  "max": 100
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-59": {
-        "kind": "Panel",
-        "spec": {
-          "id": 59,
-          "title": "Lost: state before cancellation",
-          "description": "Из какого состояния заказ ушёл в `cancelled`: `rejected` и `delivery_failed` — итог соседа, остальное — отмена или таймаут на этом шаге.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_fsm_from_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_to_state=\"cancelled\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_to_state=\"cancelled\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_to_state=\"cancelled\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "{{nomnom_fsm_from_state}}",
-                        "range": false
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "bargauge",
-            "version": "",
-            "spec": {
-              "options": {
-                "displayMode": "basic",
-                "valueMode": "text",
-                "namePlacement": "auto",
-                "showUnfilled": true,
-                "sizing": "auto",
-                "minVizWidth": 8,
-                "minVizHeight": 16,
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "reduceOptions": {
-                  "values": false,
-                  "calcs": [
-                    "lastNotNull"
-                  ]
-                },
-                "maxVizHeight": 300,
-                "orientation": "horizontal"
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "short",
-                  "min": 0
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-6": {
-        "kind": "Panel",
-        "spec": {
-          "id": 6,
-          "title": "Memory",
-          "description": "Память Go runtime (go.memory.used): process.memory.usage для Go не экспортируется.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (job) (go_memory_used_bytes{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "{{job}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "bytes",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-60": {
-        "kind": "Panel",
-        "spec": {
-          "id": 60,
-          "title": "Lost: reason",
-          "description": "Причины отрицательного итога за выбранный диапазон.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_reason) ((max_over_time(nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "cancelled: {{nomnom_reason}}",
-                        "range": false
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_reason) ((max_over_time(nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "failed: {{nomnom_reason}}",
-                        "range": false
-                      }
-                    },
-                    "refId": "B",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "bargauge",
-            "version": "",
-            "spec": {
-              "options": {
-                "displayMode": "basic",
-                "valueMode": "text",
-                "namePlacement": "auto",
-                "showUnfilled": true,
-                "sizing": "auto",
-                "minVizWidth": 8,
-                "minVizHeight": 16,
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "reduceOptions": {
-                  "values": false,
-                  "calcs": [
-                    "lastNotNull"
-                  ]
-                },
-                "maxVizHeight": 300,
-                "orientation": "horizontal"
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "short",
-                  "min": 0
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-61": {
-        "kind": "Panel",
-        "spec": {
-          "id": 61,
           "title": "Workflows started",
           "description": "Клиентский StartWorkflowExecution (`$service`).",
           "links": [],
@@ -4621,10 +3937,10 @@
           }
         }
       },
-      "panel-62": {
+      "panel-58": {
         "kind": "Panel",
         "spec": {
-          "id": 62,
+          "id": 58,
           "title": "Workflows completed / failed",
           "description": "Метрики: `temporal_workflow_completed_total`, `temporal_workflow_failed_total`.",
           "links": [],
@@ -4705,10 +4021,10 @@
           }
         }
       },
-      "panel-63": {
+      "panel-59": {
         "kind": "Panel",
         "spec": {
-          "id": 63,
+          "id": 59,
           "title": "Workflow end-to-end latency p95",
           "description": "Метрики: `temporal_workflow_endtoend_latency_seconds`.",
           "links": [],
@@ -4769,10 +4085,74 @@
           }
         }
       },
-      "panel-64": {
+      "panel-6": {
         "kind": "Panel",
         "spec": {
-          "id": 64,
+          "id": 6,
+          "title": "Memory",
+          "description": "Память Go runtime (go.memory.used): process.memory.usage для Go не экспортируется.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (job) (go_memory_used_bytes{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"} and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "bytes",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-60": {
+        "kind": "Panel",
+        "spec": {
+          "id": 60,
           "title": "Oldest running fulfillment",
           "description": "Возраст старейшего выполняющегося workflow: polling Visibility, SDK метрики не даёт.",
           "links": [],
@@ -4801,10 +4181,10 @@
           }
         }
       },
-      "panel-65": {
+      "panel-61": {
         "kind": "Panel",
         "spec": {
-          "id": 65,
+          "id": 61,
           "title": "Activities executed / failed attempts",
           "description": "Каждая неуспешная попытка, кроме последней, ведёт к retry по Retry Policy.",
           "links": [],
@@ -4904,10 +4284,10 @@
           }
         }
       },
-      "panel-66": {
+      "panel-62": {
         "kind": "Panel",
         "spec": {
-          "id": 66,
+          "id": 62,
           "title": "Activity latency p95",
           "description": "Метрики: `temporal_activity_execution_latency_seconds`.",
           "links": [],
@@ -4968,10 +4348,10 @@
           }
         }
       },
-      "panel-67": {
+      "panel-63": {
         "kind": "Panel",
         "spec": {
-          "id": 67,
+          "id": 63,
           "title": "Worker task slots",
           "description": "Метрики: `temporal_worker_task_slots_used`, `temporal_worker_task_slots_available`.",
           "links": [],
@@ -5052,10 +4432,10 @@
           }
         }
       },
-      "panel-68": {
+      "panel-64": {
         "kind": "Panel",
         "spec": {
-          "id": 68,
+          "id": 64,
           "title": "Compensations",
           "description": "Метрики: `nomnom_orders_compensations_total`.",
           "links": [],
@@ -5084,10 +4464,10 @@
           }
         }
       },
-      "panel-69": {
+      "panel-65": {
         "kind": "Panel",
         "spec": {
-          "id": 69,
+          "id": 65,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -5107,6 +4487,102 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-66": {
+        "kind": "Panel",
+        "spec": {
+          "id": 66,
+          "title": "Denied by permission",
+          "description": "DENIED — решение политики, не сбой SpiceDB.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-67": {
+        "kind": "Panel",
+        "spec": {
+          "id": 67,
+          "title": "Errors and timeouts",
+          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-68": {
+        "kind": "Panel",
+        "spec": {
+          "id": 68,
+          "title": "Check latency",
+          "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_check_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -5194,102 +4670,6 @@
                   "unit": "percentunit",
                   "custom": {}
                 },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-70": {
-        "kind": "Panel",
-        "spec": {
-          "id": 70,
-          "title": "Denied by permission",
-          "description": "DENIED — решение политики, не сбой SpiceDB.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-71": {
-        "kind": "Panel",
-        "spec": {
-          "id": 71,
-          "title": "Errors and timeouts",
-          "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=~\"error|timeout\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-72": {
-        "kind": "Panel",
-        "spec": {
-          "id": 72,
-          "title": "Check latency",
-          "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_check_duration_seconds`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nhistogram_quantile(0.5, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.95, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\nhistogram_quantile(0.99, sum by (le) (rate(nomnom_authz_check_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
                 "overrides": []
               }
             }
@@ -6327,7 +5707,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "title": "Order funnel",
+              "title": "Order flow",
               "collapse": false,
               "layout": {
                 "kind": "GridLayout",
@@ -6343,58 +5723,6 @@
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-56"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-57"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-58"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-59"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-60"
                         }
                       }
                     }
@@ -6421,7 +5749,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-61"
+                          "name": "panel-57"
                         }
                       }
                     },
@@ -6430,6 +5758,58 @@
                       "spec": {
                         "x": 8,
                         "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-58"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-59"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-60"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-61"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 8,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -6441,8 +5821,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
-                        "y": 0,
+                        "x": 0,
+                        "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -6454,65 +5834,13 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 0,
-                        "y": 8,
+                        "x": 8,
+                        "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-64"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-65"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 8,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-66"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 16,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-67"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 16,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-68"
                         }
                       }
                     }
@@ -6564,7 +5892,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-69"
+                          "name": "panel-65"
                         }
                       }
                     },
@@ -6577,7 +5905,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-70"
+                          "name": "panel-66"
                         }
                       }
                     },
@@ -6590,7 +5918,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-71"
+                          "name": "panel-67"
                         }
                       }
                     },
@@ -6603,7 +5931,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-72"
+                          "name": "panel-68"
                         }
                       }
                     }
