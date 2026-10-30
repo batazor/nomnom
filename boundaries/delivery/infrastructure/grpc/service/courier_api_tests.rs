@@ -16,7 +16,7 @@ use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};
-use crate::slices::delivery::applications::advance_assignment;
+use crate::slices::delivery::applications::assignment::advance_assignment;
 use crate::slices::delivery::applications::authorization::{DeliveryPermission, DeliveryResource};
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryRepository, DomainEvent};

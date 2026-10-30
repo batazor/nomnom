@@ -2,6 +2,9 @@
 //! of the Virtual City as pickup and dropoff points and a random Tracking
 //! Channel.
 
+pub mod get_courier_current_delivery;
+pub mod get_order_delivery;
+
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 

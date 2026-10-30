@@ -16,7 +16,8 @@ use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, advance_assignment, confirm_pickup, list_available_delivery_offers,
+    assignment::advance_assignment, execution::confirm_pickup, offer::accept_delivery_offer,
+    offer::list_available_delivery_offers,
 };
 
 struct StaticSubjectResolver;

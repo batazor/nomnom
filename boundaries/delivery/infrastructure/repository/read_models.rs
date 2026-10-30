@@ -8,20 +8,20 @@ use crate::slices::courier::applications::update_courier_location::{
     ActiveTrackingChannel, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus, Location, MarketId};
-use crate::slices::delivery::applications::assignment_process::CandidateDeliveries;
-use crate::slices::delivery::applications::get_courier_current_delivery::{
-    CourierCurrentDeliveryReadModel, CurrentDeliveryView,
-};
-use crate::slices::delivery::applications::get_courier_pool::{
+use crate::slices::delivery::applications::assignment::get_courier_pool::{
     CourierPoolReadModel, PoolCourierView,
 };
-use crate::slices::delivery::applications::get_order_delivery::{
-    OrderCourierView, OrderDeliveryReadModel, OrderDeliveryRecord, OrderTrackingRecord,
-};
-use crate::slices::delivery::applications::list_available_delivery_offers::{
+use crate::slices::delivery::applications::assignment_process::CandidateDeliveries;
+use crate::slices::delivery::applications::offer::list_available_delivery_offers::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
+use crate::slices::delivery::applications::tracking::get_courier_current_delivery::{
+    CourierCurrentDeliveryReadModel, CurrentDeliveryView,
+};
+use crate::slices::delivery::applications::tracking::get_order_delivery::{
+    OrderCourierView, OrderDeliveryReadModel, OrderDeliveryRecord, OrderTrackingRecord,
+};
 use crate::slices::delivery::domains::delivery::{
     CompoundState, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
 };

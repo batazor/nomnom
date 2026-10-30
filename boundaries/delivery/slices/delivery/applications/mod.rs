@@ -1,31 +1,15 @@
-pub mod accept_delivery_offer;
-pub mod advance_assignment;
 pub mod assignment;
 pub mod assignment_process;
 pub mod authorization;
-pub mod cancel_delivery;
-pub mod confirm_delivery;
-pub mod confirm_pickup;
 pub mod courier_locator;
-pub mod create_delivery;
+pub mod duration;
 pub mod error;
-pub mod estimate_delivery_duration;
-pub mod expire_delivery_offer;
-pub mod find_courier;
-pub mod get_courier_current_delivery;
-pub mod get_courier_pool;
-pub mod get_order_delivery;
-pub mod list_available_delivery_offers;
-pub mod offer_delivery;
-pub mod offer_delivery_to_courier;
+pub mod execution;
+pub mod offer;
 pub mod offers_of_delivery;
 pub mod outbox;
 pub mod policy;
-pub mod reassign_courier;
-pub mod record_delivery_duration;
-pub mod reject_delivery_offer;
 pub mod relationships;
-pub mod report_delivery_failure;
 pub mod tracking;
 
 #[cfg(test)]

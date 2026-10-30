@@ -13,33 +13,39 @@ use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
+use crate::slices::delivery::applications::assignment::get_courier_pool::{
+    self, CourierPoolReadModel,
+};
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
-use crate::slices::delivery::applications::error::DeliveryApplicationError;
-use crate::slices::delivery::applications::estimate_delivery_duration::{
+use crate::slices::delivery::applications::duration::estimate_delivery_duration::{
     self, DeliveryDurationSamples,
 };
-use crate::slices::delivery::applications::get_courier_current_delivery::{
-    self, CourierCurrentDeliveryReadModel,
+use crate::slices::delivery::applications::duration::record_delivery_duration::{
+    self, DeliveryDurationStatistics, DeliveryInbox,
 };
-use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
-use crate::slices::delivery::applications::get_order_delivery::{self, OrderDeliveryReadModel};
-use crate::slices::delivery::applications::list_available_delivery_offers::{
+use crate::slices::delivery::applications::error::DeliveryApplicationError;
+use crate::slices::delivery::applications::offer::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
-use crate::slices::delivery::applications::record_delivery_duration::{
-    self, DeliveryDurationStatistics, DeliveryInbox,
-};
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
+use crate::slices::delivery::applications::tracking::get_courier_current_delivery::{
+    self, CourierCurrentDeliveryReadModel,
+};
+use crate::slices::delivery::applications::tracking::get_order_delivery::{
+    self, OrderDeliveryReadModel,
+};
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, advance_assignment, cancel_delivery, confirm_delivery, confirm_pickup,
-    create_delivery, expire_delivery_offer, find_courier, offer_delivery,
-    offer_delivery_to_courier, reassign_courier, reject_delivery_offer, report_delivery_failure,
+    assignment::advance_assignment, assignment::find_courier, assignment::reassign_courier,
+    execution::cancel_delivery, execution::confirm_delivery, execution::confirm_pickup,
+    execution::create_delivery, execution::report_delivery_failure, offer::accept_delivery_offer,
+    offer::expire_delivery_offer, offer::offer_delivery, offer::offer_delivery_to_courier,
+    offer::reject_delivery_offer,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryOfferRepository, DeliveryRepository, VirtualCity,

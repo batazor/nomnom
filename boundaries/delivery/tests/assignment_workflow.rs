@@ -28,7 +28,9 @@ use delivery::slices::delivery::applications::assignment_process::AssignmentProc
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
-use delivery::slices::delivery::applications::{accept_delivery_offer, confirm_pickup};
+use delivery::slices::delivery::applications::{
+    execution::confirm_pickup, offer::accept_delivery_offer,
+};
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferRepository, DeliveryRepository, OfferState,
     OrderId, State,

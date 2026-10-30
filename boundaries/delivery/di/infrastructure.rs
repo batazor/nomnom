@@ -30,12 +30,12 @@ use crate::slices::courier::domains::courier::{
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
+use crate::slices::delivery::applications::duration::record_delivery_duration::{
+    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
+};
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
-use crate::slices::delivery::applications::record_delivery_duration::{
-    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
-};
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::di::{

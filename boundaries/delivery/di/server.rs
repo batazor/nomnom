@@ -43,7 +43,7 @@ use crate::pkg::config::{
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::courier::infrastructure::tracks::ValkeyPositionPublisher;
-use crate::slices::delivery::applications::record_delivery_duration::CONSUMER;
+use crate::slices::delivery::applications::duration::record_delivery_duration::CONSUMER;
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryRepository, DurationKind, InvalidEstimatePolicy, VirtualCity,
 };
@@ -520,7 +520,7 @@ mod tests {
         register_courier, set_courier_availability, update_courier_location,
     };
     use crate::slices::delivery::applications::{
-        advance_assignment, create_delivery, find_courier,
+        assignment::advance_assignment, assignment::find_courier, execution::create_delivery,
     };
 
     use super::super::infrastructure::local_authorization;

@@ -17,10 +17,12 @@ use crate::slices::courier::applications::{
 use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::{CourierStatus as DomainCourierStatus, Location};
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, create_delivery,
-    estimate_delivery_duration, get_courier_current_delivery, get_courier_pool, get_order_delivery,
-    list_available_delivery_offers, offer_delivery_to_courier, reject_delivery_offer,
-    report_delivery_failure,
+    assignment::get_courier_pool, duration::estimate_delivery_duration, execution::cancel_delivery,
+    execution::confirm_delivery, execution::confirm_pickup, execution::create_delivery,
+    execution::report_delivery_failure, offer::accept_delivery_offer,
+    offer::list_available_delivery_offers, offer::offer_delivery_to_courier,
+    offer::reject_delivery_offer, tracking::get_courier_current_delivery,
+    tracking::get_order_delivery,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;

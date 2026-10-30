@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::MarketId;
-use crate::slices::delivery::applications::estimate_delivery_duration::DeliveryDurationSamples;
-use crate::slices::delivery::applications::record_delivery_duration::{
+use crate::slices::delivery::applications::duration::estimate_delivery_duration::DeliveryDurationSamples;
+use crate::slices::delivery::applications::duration::record_delivery_duration::{
     DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
 };
 use crate::slices::delivery::domains::delivery::{DeliveryId, DurationKind};

@@ -36,7 +36,9 @@ use crate::pkg::telemetry::{self, Telemetry};
 use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
-use crate::slices::delivery::applications::{advance_assignment, expire_delivery_offer};
+use crate::slices::delivery::applications::{
+    assignment::advance_assignment, offer::expire_delivery_offer,
+};
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 use crate::slices::delivery::infrastructure::observed_use_cases::{
     ADVANCE_ASSIGNMENT, EXPIRE_DELIVERY_OFFER, classify,

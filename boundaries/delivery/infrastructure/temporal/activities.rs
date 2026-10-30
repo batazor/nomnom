@@ -14,7 +14,7 @@ use temporalio_common::error::ApplicationFailure;
 use temporalio_macros::activities;
 use temporalio_sdk::activities::{ActivityContext, ActivityError};
 
-use crate::slices::delivery::applications::advance_assignment;
+use crate::slices::delivery::applications::assignment::advance_assignment;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 
 /// What the workflow waits for after a step: [`advance_assignment::Output`]

@@ -11,7 +11,7 @@ use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::courier::domains::courier::CourierId;
-use crate::slices::delivery::applications::create_delivery;
+use crate::slices::delivery::applications::execution::create_delivery;
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
 };

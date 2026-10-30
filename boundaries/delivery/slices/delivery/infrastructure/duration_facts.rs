@@ -13,8 +13,8 @@ use prost::Message;
 
 use crate::infrastructure::grpc::v1;
 use crate::infrastructure::messaging::{Envelope, HandlingError};
+use crate::slices::delivery::applications::duration::record_delivery_duration::{Fact, Input};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
-use crate::slices::delivery::applications::record_delivery_duration::{Fact, Input};
 
 use super::integration_events::{
     DELIVERY_CANCELLED, DELIVERY_COMPLETED, DELIVERY_FAILED, DELIVERY_PICKED_UP,

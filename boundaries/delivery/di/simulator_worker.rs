@@ -52,8 +52,8 @@ use crate::slices::courier::applications::update_courier_location;
 use crate::slices::courier::domains::courier::{CourierId, Location};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    accept_delivery_offer, confirm_delivery, confirm_pickup, reject_delivery_offer,
-    report_delivery_failure,
+    execution::confirm_delivery, execution::confirm_pickup, execution::report_delivery_failure,
+    offer::accept_delivery_offer, offer::reject_delivery_offer,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureCode, DeliveryId, DeliveryOfferId, VirtualCity,

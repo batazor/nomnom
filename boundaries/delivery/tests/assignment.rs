@@ -23,10 +23,10 @@ use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus,
 };
-use delivery::slices::delivery::applications::accept_delivery_offer::{Handler, Input};
-use delivery::slices::delivery::applications::advance_assignment;
+use delivery::slices::delivery::applications::assignment::advance_assignment;
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::error::DeliveryApplicationError;
+use delivery::slices::delivery::applications::offer::accept_delivery_offer::{Handler, Input};
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::domains::delivery::{

@@ -41,8 +41,8 @@ use delivery::slices::delivery::applications::authorization::{
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::applications::{
-    accept_delivery_offer, cancel_delivery, confirm_delivery, confirm_pickup, reassign_courier,
-    report_delivery_failure,
+    assignment::reassign_courier, execution::cancel_delivery, execution::confirm_delivery,
+    execution::confirm_pickup, execution::report_delivery_failure, offer::accept_delivery_offer,
 };
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,

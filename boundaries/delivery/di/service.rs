@@ -196,7 +196,9 @@ mod tests {
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::pkg::authz::Subject;
     use crate::slices::courier::applications::register_courier;
-    use crate::slices::delivery::applications::{create_delivery, get_courier_current_delivery};
+    use crate::slices::delivery::applications::{
+        execution::create_delivery, tracking::get_courier_current_delivery,
+    };
 
     use super::*;
 
