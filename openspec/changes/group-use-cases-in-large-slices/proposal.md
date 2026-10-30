@@ -12,15 +12,15 @@
   ```text
   delivery/slices/delivery/applications/
     offer/ assignment/ execution/ tracking/ duration/
-    + общий код слайса
+    + get_courier_pool и общий код слайса
 
   orders/slices/order/applications/
-    placement/ kitchen/ delivery/ closure/ lookup/
-    + syncorderrelationships и общий код слайса
+    fulfillmentfacts/ closure/
+    + сценарии без группы и общий код слайса
 
   restaurants/slices/restaurantorder/applications/
-    intake/ preparation/ board/
-    + get-restaurant-order и общий код слайса
+    acceptance/ preparation/ kitchen-board/
+    + сценарии без группы и общий код слайса
   ```
 
 - ADR 6 описывает уровень группы; ADR 3 фиксирует принцип: на каждом уровне действует одна схема, а глубина ограничена.

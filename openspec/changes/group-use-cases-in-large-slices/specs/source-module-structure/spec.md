@@ -21,5 +21,5 @@
 #### Scenario: Перемещение сценария
 **ID:** AC-1000
 
-- **WHEN** `placeorder` переезжает в `applications/placement/placeorder`
-- **THEN** Go-пакет называется `placeorder`, имя телеметрии и теги сценариев не изменились, а `make check` в `orders` проходит
+- **WHEN** `confirmorder` переезжает в `applications/fulfillmentfacts/confirmorder`
+- **THEN** Go-пакет называется `confirmorder`, имя телеметрии и теги сценариев не изменились, а `make check` в `orders` проходит
