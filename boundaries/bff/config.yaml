@@ -41,8 +41,10 @@ cors:
     - tracestate
     - GraphQL-Client-Name
 
-# ADR 32: the plugin verifies the customer's access token itself, so the
-# Router forwards Authorization to it as gRPC metadata authorization. ADR 41:
+# ADR 32: this local config has no authentication section, so only the plugin
+# verifies the customer's access token (the Helm chart also makes the Router
+# check signature and expiry); the Router forwards Authorization to it as gRPC
+# metadata authorization. ADR 41:
 # X-Nomnom-Market reaches it as x-nomnom-market — the public gateway sets it
 # from the route /m/{market_id}, the browser does not send it. No other client
 # header reaches the plugin.
