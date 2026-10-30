@@ -10,10 +10,9 @@ make arch-dev
 
 | Файл | Содержание |
 | --- | --- |
-| [`specification.c4`](specification.c4) | Виды элементов, связей и узлов развёртывания |
+| [`specification.c4`](specification.c4) | Виды элементов и связей |
 | [`model.c4`](model.c4) | Элементы и связи |
 | [`views.c4`](views.c4) | Схемы и сценарии |
-| [`deployment.c4`](deployment.c4) | Неймспейсы kind |
 
 ## Схемы
 
@@ -29,13 +28,13 @@ make arch-dev
 | `subscription` | GraphQL-подписка через Cosmo Streams |
 | `login` | Вход через Dex и проверка прав |
 | `publishRoutes` | Изменение реестра Market |
-| `kindNamespaces` | Размещение по неймспейсам kind |
 
 ## Что в модель не входит
 
 - Стратегия расширения [ADR 41](../adr/0041-cell-based-architecture-with-control-plane.md): вторая Cell и Market Migration не реализованы.
 - CLI `orders-admin` и `restaurants-admin`, DLQ, служебные топики Kafka Connect, PgBouncer.
 - Слайсы и use cases: они описаны в README контекстов.
+- Размещение по неймспейсам: оно описано в [`ops/kind`](../../ops/kind/README.md).
 
 ## Как поддерживать
 

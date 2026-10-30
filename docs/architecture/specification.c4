@@ -122,16 +122,4 @@ specification {
     color slate
     line solid
   }
-
-  deploymentNode cluster {
-    style {
-      color slate
-    }
-  }
-  deploymentNode namespace {
-    style {
-      color indigo
-      opacity 8%
-    }
-  }
 }

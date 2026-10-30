@@ -184,13 +184,4 @@ views {
     nomnom.publicGateway -> nomnom.kubeApi 'получает новую конфигурацию'
     nomnom.ui -> nomnom.publicGateway 'GET /markets'
   }
-
-  deployment view kindNamespaces {
-    title 'kind: неймспейсы'
-    description 'Тестовое окружение: один кластер, одна Cell cell-1, один Market berlin.'
-    include nomnomTest.**
-    // Только размещение: связи показаны на схемах модели.
-    exclude nomnomTest.** -> nomnomTest.**
-    autoLayout TopBottom
-  }
 }
