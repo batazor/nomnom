@@ -34,6 +34,9 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+        # Schema Registry (FR-719): consumer проверяет subject схемы записи.
+        - protocol: TCP
+          port: 8081
     # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
     - to:
         - namespaceSelector:
@@ -109,6 +112,9 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+        # Schema Registry (FR-719): consumer проверяет subject схемы записи.
+        - protocol: TCP
+          port: 8081
     # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
     - to:
         - namespaceSelector:
@@ -174,6 +180,9 @@ spec:
       ports:
         - protocol: TCP
           port: 9092
+        # Schema Registry (FR-719): consumer проверяет subject схемы записи.
+        - protocol: TCP
+          port: 8081
     # ADR 37: hook Job release регистрирует коннектор Outbox в Kafka Connect.
     - to:
         - namespaceSelector:

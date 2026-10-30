@@ -27,10 +27,10 @@ Subject Integration Event SHALL быть полным именем protobuf-со
 
 `schema-registration` SHALL выставлять глобальный режим совместимости Registry `FULL_TRANSITIVE` до регистрации. Несовместимая новая версия MUST завершать шаг ошибкой и останавливать деплой. `buf breaking` MUST оставаться проверкой PR.
 
-#### Scenario: Удалённое поле
+#### Scenario: Смена типа поля
 **ID:** AC-973
 
-- **WHEN** из зарегистрированного сообщения удалено поле и `schema-registration` пытается зарегистрировать новую версию
+- **WHEN** у поля зарегистрированного сообщения сменился тип и `schema-registration` пытается зарегистрировать новую версию
 - **THEN** Registry отвечает `409`, утилита завершается с ненулевым кодом, новая версия не зарегистрирована
 
 ### Requirement: SMT оформляет value Integration Event в wire format

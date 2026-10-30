@@ -1,8 +1,11 @@
 import {
   DEFAULT_KAFKA_CLIENT_ID,
+  DEFAULT_SCHEMA_REGISTRY_TIMEOUT,
   DEFAULT_SPICEDB_TIMEOUT,
   KAFKA_BROKERS_ENV,
   KAFKA_CLIENT_ID_ENV,
+  SCHEMA_REGISTRY_TIMEOUT_ENV,
+  SCHEMA_REGISTRY_URL_ENV,
   SPICEDB_ENDPOINT_ENV,
   SPICEDB_INSECURE_ENV,
   SPICEDB_PRESHARED_KEY_ENV,
@@ -85,4 +88,43 @@ export function loadKafkaConfig(
     brokers: Object.freeze(brokers),
     clientId,
   });
+}
+
+/**
+ * Schema Registry записей стримов (FR-715, FR-719); `SCHEMA_REGISTRY__URL`
+ * обязателен consumer: без него запись не проверить.
+ */
+export type SchemaRegistryConfig = Readonly<{
+  /** Базовый URL с завершающим `/`: пути API разрешаются относительно него. */
+  url: URL;
+  timeoutMs: number;
+}>;
+
+export function loadSchemaRegistryConfig(
+  environment: Record<string, string | undefined>,
+): SchemaRegistryConfig {
+  const raw = environment[SCHEMA_REGISTRY_URL_ENV]?.trim() ?? "";
+  if (raw === "") {
+    throw new Error(
+      `${SCHEMA_REGISTRY_URL_ENV} is required: records of the streams reference schemas of the Schema Registry`,
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(raw.endsWith("/") ? raw : `${raw}/`);
+  } catch {
+    throw new Error(`${SCHEMA_REGISTRY_URL_ENV}: malformed url "${raw}"`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(
+      `${SCHEMA_REGISTRY_URL_ENV}: "${raw}" must be an http(s) url`,
+    );
+  }
+  const timeoutMs = durationSchema
+    .refine((value) => value > 0, "schema registry timeout must be positive")
+    .parse(
+      environment[SCHEMA_REGISTRY_TIMEOUT_ENV]?.trim() ||
+        DEFAULT_SCHEMA_REGISTRY_TIMEOUT,
+    );
+  return Object.freeze({ url, timeoutMs });
 }

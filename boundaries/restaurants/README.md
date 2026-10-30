@@ -414,7 +414,7 @@ Consumers интеграционных событий `restaurants` исполь
 
 ### Потребление: Inbox и restaurants-consumer
 
-`cmd/restaurants-consumer` (`npm run consumer`, в образе — `node dist/cmd/restaurants-consumer/main.js`) читает стримы `delivery.v1.delivery-events` и `restaurants.v1.restaurant-order-events` consumer group `KAFKA__CONSUMER_GROUP` (по умолчанию `restaurants`) клиентом `@confluentinc/kafka-javascript` (ADR 31) и следует runtime contract `pkg/lifecycle` (только технический порт): по `SIGTERM` начатое сообщение дообрабатывается до `SHUTDOWN__DRAIN_TIMEOUT`, затем `disconnect` коммитит offsets. Пустой `MONGODB__URI` или `KAFKA__BROKERS` — ошибка startup. `orders.v1.order-events` контекст не читает: Restaurant Order создаёт только RPC `ReceiveOrderRequest` из fulfillment workflow после оплаты, поэтому кухня не видит неоплаченных заказов.
+`cmd/restaurants-consumer` (`npm run consumer`, в образе — `node dist/cmd/restaurants-consumer/main.js`) читает стримы `delivery.v1.delivery-events` и `restaurants.v1.restaurant-order-events` consumer group `KAFKA__CONSUMER_GROUP` (по умолчанию `restaurants`) клиентом `@confluentinc/kafka-javascript` (ADR 31) и следует runtime contract `pkg/lifecycle` (только технический порт): по `SIGTERM` начатое сообщение дообрабатывается до `SHUTDOWN__DRAIN_TIMEOUT`, затем `disconnect` коммитит offsets. Пустой `MONGODB__URI`, `KAFKA__BROKERS` или `SCHEMA_REGISTRY__URL` — ошибка startup. Value записи — wire format Schema Registry: запись вне него или со схемой другого `event_type` уходит в `<stream>.dlq` как `deserialization`, недоступный Registry — повторная доставка (FR-715). `orders.v1.order-events` контекст не читает: Restaurant Order создаёт только RPC `ReceiveOrderRequest` из fulfillment workflow после оплаты, поэтому кухня не видит неоплаченных заказов.
 
 - **Событие:** `nomnom.delivery.v1.DeliveryPickedUp` (`delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto`, код — в `infrastructure/grpc/gen/nomnom/delivery`). Handler `slices/restaurantorder/infrastructure/integration/delivery-picked-up.ts` (Inbox `restaurants.delivery-picked-up`, свой `MessageProcessor`; worker передаёт сообщение processor'у его стрима) переводит его в Command **Record Pickup** (`order_id`, `market_id`, если задан; момент — `occurred_at` envelope): `READY` Restaurant Order переходит в `PICKED_UP` и уходит с kitchen board, сохранение несёт Change Notification кухни (ADR 36). Subject — `service:delivery`, access control `DeliveryEventSourceAccessControl`. Неизвестный заказ и Pickup не из `READY` (раньше готовности или после отмены) — бизнес-исход, ack и log; другой Market — DLQ `delivery.v1.delivery-events.dlq`. Остальные типы стрима подтверждаются без обработки. Новая группа читает стрим с начала (`KAFKA__INITIAL_OFFSET=oldest`), поэтому уже забранные заказы закрываются при первом запуске.
 - **Wait Time Statistics:** та же группа читает и собственный стрим `restaurants.v1.restaurant-order-events`; worker передаёт сообщение processor'у его стрима. Handlers `slices/restaurant/infrastructure/integration/wait-time-facts.ts` (Inbox `restaurants.wait-time`) переводят `RestaurantOrderAccepted` с `queued_at` (заказ без окна, поставленный в очередь в UoW Acceptance; без `queued_at` — запланированный заказ, ничего не меняется), `PreparationStarted` (открывает запланированный заказ по его `queued_at`; для уже открытого — no-op), `RestaurantOrderReady`, `RestaurantOrderCancelled`, `PreparationFailed` в Command **Record Wait Time** — длительности от постановки в очередь ([FR-644](../../openspec/changes/add-scheduled-orders/)); событие без `restaurant_id` (опубликованное до FR-656) подтверждается без изменений, неизвестный ресторан — DLQ `restaurants.v1.restaurant-order-events.dlq`. Смена уровня пишет `RestaurantWaitLevelChanged` (`aggregate_type` `RestaurantWaitTime`, версия — номер смены) в Outbox, Debezium публикует его в `restaurants.v1.restaurant-events`.
@@ -427,6 +427,8 @@ Consumers интеграционных событий `restaurants` исполь
 | --- | --- | --- |
 | `KAFKA__BROKERS` | обязателен для `restaurants-consumer` | — |
 | `KAFKA__CLIENT_ID` | client id consumer и producer dead letters | `restaurants-consumer` |
+| `SCHEMA_REGISTRY__URL` | обязателен для `restaurants-consumer`: value записей стримов — wire format Schema Registry, subject схемы сверяется с `event_type` (FR-715) | — |
+| `SCHEMA_REGISTRY__TIMEOUT` | deadline запроса subjects id схемы | `5s` |
 | `KAFKA__CONSUMER_GROUP` | consumer group | `restaurants` |
 | `KAFKA__INITIAL_OFFSET` | начало чтения новой группы: `oldest` или `newest` | `oldest` |
 | `CONSUMER__MAX_RETRIES` | повторы transient-ошибки в процессе, 0…100 | `5` |
@@ -500,7 +502,7 @@ docker run -d --name restaurants-valkey -p 6379:6379 valkey/valkey:9.1
 export VALKEY__URL='redis://localhost:6379'
 npm start  # мигрирует базу при старте
 # DeliveryPickedUp и обновление кеша каталога (отдельный процесс, нужен Kafka):
-KAFKA__BROKERS=localhost:9092 npm run consumer
+KAFKA__BROKERS=localhost:9092 SCHEMA_REGISTRY__URL=http://127.0.0.1:8081 npm run consumer
 ```
 
 ## Проверка

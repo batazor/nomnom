@@ -39,6 +39,7 @@ import {
 } from "../slices/restaurant/infrastructure/cache/restaurants.ts";
 import { createTestDatabase } from "./support/database.ts";
 import { valkeyUrl } from "./support/global-containers.ts";
+import { framed, SCHEMA_ID, TestSchemas } from "./support/schemas.ts";
 import { testValkeyConfig } from "./support/valkey.ts";
 
 type View = Readonly<{ name: string }>;
@@ -67,13 +68,22 @@ const stored = async (client: Valkey, key: string) => {
 const ready = (client: Valkey) =>
   new Promise<void>((resolve) => client.once("ready", resolve));
 
-/** Kafka message of an Integration Event as Debezium publishes it. */
+/** Registry of the restaurants events of the tests: one file, one schema id. */
+const schemas = new TestSchemas({
+  [SCHEMA_ID]: [
+    RestaurantClosedSchema.typeName,
+    RestaurantWaitLevelChangedSchema.typeName,
+    MenuItemAvailabilityChangedSchema.typeName,
+  ],
+});
+
+/** Kafka message of an Integration Event as Debezium and SchemaFraming publish it. */
 const eventMessage = (eventType: string, payload: Uint8Array) => ({
   topic: "restaurants.v1.restaurant-events",
   partition: 0,
   offset: "0",
   key: undefined,
-  value: payload,
+  value: framed(payload),
   headers: {
     event_id: randomUUID(),
     event_type: eventType,
@@ -335,6 +345,7 @@ describe("refresh by Integration Events (ADR 43)", () => {
     });
     const handler = new CacheRefreshHandler({
       refreshes: restaurantCacheRefreshes(catalog),
+      schemas,
       retry: { initialIntervalMs: 10, maxIntervalMs: 50 },
       warn: () => {},
     });
@@ -394,6 +405,7 @@ describe("refresh by Integration Events (ADR 43)", () => {
     });
     const handler = new CacheRefreshHandler({
       refreshes: restaurantCacheRefreshes(catalog),
+      schemas,
       retry: { initialIntervalMs: 10, maxIntervalMs: 50 },
       warn: () => {},
     });
@@ -563,6 +575,7 @@ describe("refresh by Integration Events (ADR 43)", () => {
     available = false;
     const handler = new CacheRefreshHandler({
       refreshes: menuCacheRefreshes(menus),
+      schemas,
       retry: { initialIntervalMs: 10, maxIntervalMs: 50 },
       warn: () => {},
     });
@@ -629,6 +642,7 @@ describe("catalog read cache without Valkey (ADR 43)", () => {
           metrics: new CacheMetrics(),
         }),
       ),
+      schemas,
       retry: { initialIntervalMs: 10, maxIntervalMs: 20 },
       warn: () => {},
     });

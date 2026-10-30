@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -24,6 +26,7 @@ import (
 type KafkaConsumer struct {
 	cfg      config.Config
 	handlers orderdi.Consumer
+	schemas  messaging.SchemaSubjects
 
 	dial          func(ctx context.Context, options client.Options) (client.Client, error)
 	newSubscriber func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error)
@@ -40,11 +43,12 @@ type KafkaConsumer struct {
 }
 
 // NewKafkaConsumer собирает consumer поверх handlers слайса order; store
-// handlers — общий PostgreSQL orders.
-func NewKafkaConsumer(cfg config.Config, handlers orderdi.Consumer) *KafkaConsumer {
+// handlers — общий PostgreSQL orders, schemas — Schema Registry записей стримов.
+func NewKafkaConsumer(cfg config.Config, handlers orderdi.Consumer, schemas messaging.SchemaSubjects) *KafkaConsumer {
 	return &KafkaConsumer{
 		cfg:      cfg,
 		handlers: handlers,
+		schemas:  schemas,
 		dial:     client.DialContext,
 		newSubscriber: func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
 			return messaging.NewSubscriber(cfg, logger)
@@ -57,6 +61,15 @@ func NewKafkaConsumer(cfg config.Config, handlers orderdi.Consumer) *KafkaConsum
 		logger: watermill.NewSlogLogger(slog.Default()),
 		done:   make(chan error, 1),
 	}
+}
+
+// NewSchemaRegistry — Schema Registry consumer'а (FR-715, FR-719): без
+// SCHEMA_REGISTRY__URL процесс не стартует.
+func NewSchemaRegistry(cfg config.SchemaRegistryConfig) (*messaging.SchemaRegistry, error) {
+	if strings.TrimSpace(cfg.URL) == "" {
+		return nil, fmt.Errorf("%s is required", config.EnvSchemaRegistryURL)
+	}
+	return messaging.NewSchemaRegistry(cfg.URL, &http.Client{Timeout: cfg.Timeout})
 }
 
 // ConsumerServiceName — service.name процесса по умолчанию; OTEL_SERVICE_NAME переопределяет.
@@ -99,6 +112,7 @@ func (c *KafkaConsumer) Start(ctx context.Context) error {
 		ConsumerGroup: c.cfg.Kafka.ConsumerGroup,
 		Retry:         messaging.DefaultRetryPolicy,
 		CloseTimeout:  c.cfg.Shutdown.DrainTimeout,
+		Schemas:       c.schemas,
 		Prometheus:    c.metrics.Registry,
 	}, c.subscriber, c.poison, streams, c.logger)
 	if err != nil {

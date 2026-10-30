@@ -76,6 +76,10 @@ export const KAFKA_CONSUMER_GROUP_ENV = "KAFKA__CONSUMER_GROUP";
 export const DEFAULT_KAFKA_CONSUMER_GROUP = "restaurants";
 export const KAFKA_INITIAL_OFFSET_ENV = "KAFKA__INITIAL_OFFSET";
 export const DEFAULT_KAFKA_INITIAL_OFFSET = "oldest";
+// Schema Registry записей стримов (FR-715): URL обязателен consumer, без default.
+export const SCHEMA_REGISTRY_URL_ENV = "SCHEMA_REGISTRY__URL";
+export const SCHEMA_REGISTRY_TIMEOUT_ENV = "SCHEMA_REGISTRY__TIMEOUT";
+export const DEFAULT_SCHEMA_REGISTRY_TIMEOUT = "5s";
 export const CONSUMER_MAX_RETRIES_ENV = "CONSUMER__MAX_RETRIES";
 export const DEFAULT_CONSUMER_MAX_RETRIES = 5;
 export const CONSUMER_RETRY_INITIAL_INTERVAL_ENV =

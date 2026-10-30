@@ -6,6 +6,7 @@ import {
   loadConfig,
   loadKafkaConfig,
   loadScheduledSlotConfig,
+  loadSchemaRegistryConfig,
 } from "../pkg/config/config.ts";
 
 test("SERVER__PORT takes precedence over PORT", () => {
@@ -165,6 +166,21 @@ test("Kafka config parses brokers and rejects malformed ones", () => {
   );
   assert.throws(() => loadKafkaConfig({ KAFKA__BROKERS: "kafka-0" }));
   assert.throws(() => loadKafkaConfig({ KAFKA__BROKERS: "a:1,,b:2" }));
+});
+
+test("FR-719: the consumer requires an http(s) Schema Registry url", () => {
+  assert.throws(
+    () => loadSchemaRegistryConfig({}),
+    /SCHEMA_REGISTRY__URL is required/,
+  );
+  assert.throws(() =>
+    loadSchemaRegistryConfig({ SCHEMA_REGISTRY__URL: "kafka:8081" }),
+  );
+  const config = loadSchemaRegistryConfig({
+    SCHEMA_REGISTRY__URL: "http://kafka:8081",
+  });
+  assert.equal(config.url.href, "http://kafka:8081/");
+  assert.equal(config.timeoutMs, 5_000);
 });
 
 test("the consumer reads its group from the oldest offset with bounded retries by default", () => {

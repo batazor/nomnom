@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -24,7 +25,9 @@ func TestConsumerMetricsFollowDashboardInventory(t *testing.T) {
 	t.Cleanup(func() { otel.SetMeterProvider(previous) })
 
 	calls := 0
-	h := start(t, func(ctx context.Context, e *wrapperspb.StringValue) error {
+	schemas := NewMockSchemaSubjects(t)
+	schemas.EXPECT().Subjects(mock.Anything, schemaID).Return([]string{stringValue}, nil)
+	h := start(t, schemas, func(ctx context.Context, e *wrapperspb.StringValue) error {
 		calls++
 		switch e.GetValue() {
 		case "flaky":

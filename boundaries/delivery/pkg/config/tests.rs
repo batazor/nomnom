@@ -41,7 +41,7 @@ const TRACKING_TOML: &str = "\n[tracking]\ncity_origin_latitude = 52.515\ncity_o
 const VALKEY_TOML: &str = "\n[valkey]\nurl = \"redis://delivery:p@valkey:6379\"\n";
 
 /// Обязательный Kafka consumer (ADR 11) тестовых конфигов.
-const KAFKA_TOML: &str = "\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\n";
+const KAFKA_TOML: &str = "\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://kafka:8081\"\n";
 
 /// Обязательная секция Delivery Duration Estimate (FR-691) тестовых конфигов.
 const DELIVERY_ESTIMATE_TOML: &str = "\n[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n";
@@ -770,6 +770,7 @@ fn loads_kafka_and_delivery_estimate_from_toml() {
             brokers: "kafka:9092".to_owned(),
             consumer_group: "delivery".to_owned(),
             initial_offset: InitialOffset::Oldest,
+            schema_registry_url: "http://kafka:8081".to_owned(),
         }
     );
     assert_eq!(
@@ -845,18 +846,29 @@ fn missing_or_invalid_kafka_fails_startup() {
         ("kafka-missing", "[kafka]\n", None),
         (
             "kafka-empty-brokers",
-            "[kafka]\nbrokers = \" \"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\n",
+            "[kafka]\nbrokers = \" \"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://kafka:8081\"\n",
             Some(KAFKA_BROKERS_ENV),
         ),
         (
             "kafka-empty-group",
-            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"\"\ninitial_offset = \"oldest\"\n",
+            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://kafka:8081\"\n",
             Some(KAFKA_CONSUMER_GROUP_ENV),
         ),
         (
             "kafka-unknown-offset",
-            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"middle\"\n",
+            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"middle\"\nschema_registry_url = \"http://kafka:8081\"\n",
             None,
+        ),
+        // FR-719: the Schema Registry is required and must be an http(s) URL.
+        (
+            "kafka-no-schema-registry",
+            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"\"\n",
+            Some(SCHEMA_REGISTRY_URL_ENV),
+        ),
+        (
+            "kafka-schema-registry-not-http",
+            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"kafka:8081\"\n",
+            Some(SCHEMA_REGISTRY_URL_ENV),
         ),
     ] {
         let Err(error) = load_toml(name, contents) else {

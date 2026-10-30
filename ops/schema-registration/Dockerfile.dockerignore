@@ -1,0 +1,7 @@
+*
+!ops/schema-registration/go.mod
+!ops/schema-registration/go.sum
+!ops/schema-registration/*.go
+!ops/schema-registration/event-files.yaml
+!boundaries/*/infrastructure/grpc/nomnom
+ops/schema-registration/*_test.go

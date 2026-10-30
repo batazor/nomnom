@@ -6,17 +6,21 @@
 //!
 //! - success, including a duplicate of the Inbox or a type the handler does
 //!   not consume — commit;
-//! - broken envelope or permanent error of the handler — the message goes to
+//! - broken envelope, value outside the Schema Registry wire format, schema
+//!   of another `event_type` (FR-715) or permanent error of the handler — the
+//!   message goes to
 //!   `<stream>.dlq` with the dead letter headers of the other consumers
 //!   (`reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned`), then
 //!   commit;
-//! - transient error — the handler is repeated with backoff until it
-//!   succeeds or the process stops: the partition waits for the dependency.
+//! - transient error, including an unavailable Schema Registry — the step is
+//!   repeated with backoff until it succeeds or the process stops: the
+//!   partition waits for the dependency.
 //!
 //! The dead letter topic is declared in advance (kind: Job
 //! `dead-letter-topics`); the consumer never creates it.
 
 mod envelope;
+mod schemas;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,6 +34,7 @@ use tokio::sync::watch;
 use crate::pkg::config::{InitialOffset, KafkaConfig};
 
 pub use envelope::{Envelope, EnvelopeError};
+pub use schemas::{SchemaLookupError, SchemaRegistry, WireFrame, parse_wire_frame};
 
 /// Suffix of the dead letter topic of a stream.
 pub const DEAD_LETTER_SUFFIX: &str = ".dlq";
@@ -57,14 +62,15 @@ pub enum HandlingError {
     Transient(String),
 }
 
-/// Handler of one message: its envelope and payload. `Ok` — the offset may
-/// be committed. Runs on a blocking thread: the use cases are synchronous.
+/// Handler of one message: its envelope and Protobuf payload without the wire
+/// format. `Ok` — the offset may be committed. Runs on a blocking thread: the use cases are synchronous.
 pub type MessageHandler = Arc<dyn Fn(&Envelope, &[u8]) -> Result<(), HandlingError> + Send + Sync>;
 
 /// Consumer of one stream with the producer of its dead letters.
 pub struct EventConsumer {
     consumer: StreamConsumer,
     dead_letters: FutureProducer,
+    schemas: SchemaRegistry,
     group: String,
     topic: &'static str,
     /// Name of the handler in logs.
@@ -101,9 +107,11 @@ impl EventConsumer {
             .set("enable.idempotence", "true")
             .create()
             .map_err(|error| format!("kafka dead letter producer: {error}"))?;
+        let schemas = SchemaRegistry::new(&config.schema_registry_url)?;
         Ok(Self {
             consumer,
             dead_letters,
+            schemas,
             group: config.consumer_group.clone(),
             topic,
             name,
@@ -161,8 +169,49 @@ impl EventConsumer {
                 .await;
             return true;
         };
+        let frame = match parse_wire_frame(payload) {
+            Ok(frame) => frame,
+            Err(reason) => {
+                self.dead_letter(message, &headers, &reason).await;
+                return true;
+            }
+        };
+        let mut retry = FIRST_RETRY;
+        loop {
+            match self.schemas.subjects(frame.schema_id).await {
+                Ok(subjects) if subjects.contains(&envelope.event_type) => break,
+                Ok(_) => {
+                    let reason = format!(
+                        "schema {} is not a schema of event_type {:?}",
+                        frame.schema_id, envelope.event_type
+                    );
+                    self.dead_letter(message, &headers, &reason).await;
+                    return true;
+                }
+                Err(SchemaLookupError::Unknown(id)) => {
+                    let reason = format!("schema id {id} is unknown to the schema registry");
+                    self.dead_letter(message, &headers, &reason).await;
+                    return true;
+                }
+                Err(SchemaLookupError::Unavailable(reason)) => {
+                    tracing::warn!(
+                        operation = "consume",
+                        messaging.destination.name = self.topic,
+                        handler = self.name,
+                        event_type = %envelope.event_type,
+                        event_id = %envelope.event_id,
+                        error.message = %reason,
+                        "schema registry unavailable, retrying"
+                    );
+                    if pause(retry, stop).await {
+                        return false;
+                    }
+                    retry = (retry * 2).min(LONGEST_RETRY);
+                }
+            }
+        }
         let envelope = Arc::new(envelope);
-        let payload = Arc::new(payload.to_vec());
+        let payload = Arc::new(frame.payload.to_vec());
         let mut retry = FIRST_RETRY;
         loop {
             let (call, event, body) = (

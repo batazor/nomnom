@@ -9,6 +9,7 @@ install/upgrade кладёт её в Kafka Connect (PUT /connectors/<name>/confi
 {{- $name := required "cdc.connector.name is required" .Values.cdc.connector.name }}
 {{- $url := required "cdc.connectUrl is required (ADR 37)" .Values.cdc.connectUrl }}
 {{- $config := merge (dict
+      "transforms.schema.registry.url" (required "cdc.schemaRegistryUrl is required (FR-714)" .Values.cdc.schemaRegistryUrl)
       "mongodb.connection.string" (required "cdc.connectionString is required" .Values.cdc.connectionString))
     .Values.cdc.connector.config }}
 apiVersion: v1

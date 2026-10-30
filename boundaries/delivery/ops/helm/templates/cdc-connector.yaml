@@ -10,6 +10,7 @@ cdc.connector (контракт Outbox, общий для окружений) п
 {{- $url := required "cdc.connectUrl is required (ADR 37)" .Values.cdc.connectUrl }}
 {{- $db := .Values.cdc.database }}
 {{- $config := merge (dict
+      "transforms.schema.registry.url" (required "cdc.schemaRegistryUrl is required (FR-714)" .Values.cdc.schemaRegistryUrl)
       "database.hostname" (required "cdc.database.hostname is required" $db.hostname)
       "database.port" ($db.port | toString)
       "database.dbname" (required "cdc.database.name is required" $db.name)

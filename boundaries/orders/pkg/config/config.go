@@ -11,12 +11,14 @@ import (
 )
 
 type Config struct {
-	Server      ServerConfig      `mapstructure:"server"`
-	Management  ManagementConfig  `mapstructure:"management"`
-	Shutdown    ShutdownConfig    `mapstructure:"shutdown"`
-	Kafka       KafkaConfig       `mapstructure:"kafka"`
-	Temporal    TemporalConfig    `mapstructure:"temporal"`
-	Fulfillment FulfillmentConfig `mapstructure:"fulfillment"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Management ManagementConfig `mapstructure:"management"`
+	Shutdown   ShutdownConfig   `mapstructure:"shutdown"`
+	Kafka      KafkaConfig      `mapstructure:"kafka"`
+	// SchemaRegistry is read by orders-consumer only (FR-715).
+	SchemaRegistry SchemaRegistryConfig `mapstructure:"schema_registry"`
+	Temporal       TemporalConfig       `mapstructure:"temporal"`
+	Fulfillment    FulfillmentConfig    `mapstructure:"fulfillment"`
 	// ScheduledOrder is the plan of a Scheduled Order (FR-677, FR-693).
 	ScheduledOrder ScheduledOrderConfig `mapstructure:"scheduled_order"`
 
@@ -45,6 +47,9 @@ func Load() (Config, error) {
 	}
 	if err := configureKafka(loader); err != nil {
 		return Config{}, fmt.Errorf("configure kafka: %w", err)
+	}
+	if err := configureSchemaRegistry(loader); err != nil {
+		return Config{}, fmt.Errorf("configure schema registry: %w", err)
 	}
 	if err := configureTemporal(loader); err != nil {
 		return Config{}, fmt.Errorf("configure temporal: %w", err)
@@ -102,6 +107,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.Kafka.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.SchemaRegistry.Validate(); err != nil {
 		return Config{}, err
 	}
 	if err := cfg.Temporal.Validate(); err != nil {

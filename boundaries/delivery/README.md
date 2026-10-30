@@ -415,11 +415,11 @@ Consumers интеграционных событий `delivery` использ�
 
 ### Kafka consumer
 
-Процесс `delivery` читает Kafka одной группой `KAFKA__CONSUMER_GROUP` (chart: `delivery`) на `rdkafka` (`infrastructure/messaging`, worker `di::ConsumingWorker`): брокеры — `KAFKA__BROKERS`, начальный offset новой группы — `KAFKA__INITIAL_OFFSET` (`oldest` или `newest`); все три обязательны, пустое или неизвестное значение завершает startup. Offset сообщения подтверждается после обработки:
+Процесс `delivery` читает Kafka одной группой `KAFKA__CONSUMER_GROUP` (chart: `delivery`) на `rdkafka` (`infrastructure/messaging`, worker `di::ConsumingWorker`): брокеры — `KAFKA__BROKERS`, начальный offset новой группы — `KAFKA__INITIAL_OFFSET` (`oldest` или `newest`), Schema Registry записей стрима — `SCHEMA_REGISTRY__URL` (http(s), FR-715); все четыре обязательны, пустое или неизвестное значение завершает startup. Offset сообщения подтверждается после обработки:
 
 - успех, повтор по Inbox или тип, который consumer не читает, — commit;
-- нет `event_id`, `event_type`, `occurred_at` (RFC 3339 UTC) или payload, payload не декодируется, permanent-ошибка use case — сообщение уходит в `<stream>.dlq` с ключом, payload, исходными заголовками и `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned` (как у `orders` и `restaurants`, [разбор DLQ](../../docs/dlq.md)), затем commit;
-- transient-ошибка (PostgreSQL недоступен, исход commit неизвестен, конкурентное изменение) — повтор с backoff 1s…30s, partition ждёт зависимость; при остановке процесса offset не подтверждается.
+- нет `event_id`, `event_type`, `occurred_at` (RFC 3339 UTC) или payload, value не в wire format Schema Registry, id схемы неизвестен или её subjects не содержат `event_type`, payload не декодируется, permanent-ошибка use case — сообщение уходит в `<stream>.dlq` с ключом, payload, исходными заголовками и `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned` (как у `orders` и `restaurants`, [разбор DLQ](../../docs/dlq.md)), затем commit;
+- transient-ошибка (Schema Registry или PostgreSQL недоступен, исход commit неизвестен, конкурентное изменение) — повтор с backoff 1s…30s, partition ждёт зависимость; при остановке процесса offset не подтверждается.
 
 Inbox `delivery_inbox` (`consumer`, `event_id`) общий для consumers процесса; запись удаляется через семь дней тем же statement, что пишет новую. Команды разбора DLQ группы `delivery` (`dlq list/redrive/discard`) пока нет.
 

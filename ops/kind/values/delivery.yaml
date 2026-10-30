@@ -27,6 +27,8 @@ env:
   # Kafka consumer собственных фактов Delivery для Delivery Duration Statistics (FR-676);
   # группа и начальный offset заданы в chart (values.yaml).
   KAFKA__BROKERS: kafka.nomnom-infra.svc.cluster.local:9092
+  # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
+  SCHEMA_REGISTRY__URL: http://kafka.nomnom-infra.svc.cluster.local:8081
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
@@ -68,6 +70,7 @@ temporal:
 cdc:
   enabled: true
   connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
+  schemaRegistryUrl: http://kafka.nomnom-infra.svc.cluster.local:8081
   database:
     hostname: postgres.nomnom-data.svc.cluster.local
     name: delivery

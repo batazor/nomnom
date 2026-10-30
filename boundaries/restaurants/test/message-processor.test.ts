@@ -18,13 +18,14 @@ import {
   type InboxDocument,
 } from "../pkg/infrastructure/repository/inbox.ts";
 import { createTestDatabase } from "./support/database.ts";
+import { framed, SCHEMA_ID, TestSchemas } from "./support/schemas.ts";
 
 const TOPIC = "orders.v1.order-events";
 const EVENT_TYPE = "nomnom.orders.v1.OrderPlaced";
 
 const message = (
   headers: Record<string, string> = {},
-  value = new Uint8Array([1, 2, 3]),
+  value = framed(new Uint8Array([1, 2, 3])),
 ): InboundMessage => ({
   topic: TOPIC,
   partition: 1,
@@ -94,6 +95,7 @@ const setup = async (handler: EventHandler, maxRetries = 2) => {
         deadLetters.push(dead);
       },
     },
+    schemas: new TestSchemas({ [SCHEMA_ID]: [EVENT_TYPE] }),
     retry: { maxRetries, initialIntervalMs: 1, maxIntervalMs: 2 },
     metrics,
     log: () => {},
@@ -162,6 +164,107 @@ test("an event type the consumer does not handle is acknowledged without the Inb
   assert.equal((await inboxRecords()).length, 0);
 });
 
+test("FR-715: the handler gets the Protobuf payload without the wire format", async () => {
+  const { handler, calls } = scripted([async () => {}]);
+  const { processor } = await setup(handler);
+
+  assert.equal(await processor.process(message()), "processed");
+
+  assert.deepEqual(calls, [new Uint8Array([1, 2, 3])]);
+});
+
+test("AC-977: a value outside the wire format goes to <stream>.dlq before the handler", async () => {
+  const { handler, calls } = scripted([async () => {}]);
+  const { processor, deadLetters, metrics } = await setup(handler);
+  const bare = new Uint8Array([10, 3, 111, 45, 49]);
+
+  const outcome = await processor.process(message({}, bare));
+
+  assert.equal(outcome, "dead-lettered");
+  assert.equal(calls.length, 0);
+  assert.deepEqual(deadLetters[0]?.value, bare);
+  assert.match(deadLetters[0]?.headers.reason_poisoned ?? "", /wire format/);
+  assert.deepEqual(metrics.events, [
+    "poisoned:deserialization",
+    "processed:deserialization",
+  ]);
+});
+
+test("AC-978: the schema of another event_type goes to <stream>.dlq", async () => {
+  const { handler, calls } = scripted([async () => {}]);
+  const { processor, deadLetters } = await setup(handler);
+
+  const outcome = await processor.process(
+    message({}, framed(new Uint8Array([1, 2, 3]), 8)),
+  );
+
+  assert.equal(outcome, "dead-lettered");
+  assert.equal(calls.length, 0);
+  assert.match(
+    deadLetters[0]?.headers.reason_poisoned ?? "",
+    /schema id 8 is unknown/,
+  );
+});
+
+test("AC-978: a schema whose subjects lack the event_type goes to <stream>.dlq", async () => {
+  const { handler, calls } = scripted([async () => {}]);
+  const { db, unitOfWork } = await createTestDatabase();
+  const deadLetters: IntegrationMessage[] = [];
+  const processor = new MessageProcessor({
+    consumer: "restaurants.order-placed",
+    group: "restaurants",
+    handlers: [handler],
+    inbox: new DatabaseInbox(db, unitOfWork),
+    deadLetters: {
+      publish: async (dead) => {
+        deadLetters.push(dead);
+      },
+    },
+    schemas: new TestSchemas({
+      [SCHEMA_ID]: ["nomnom.orders.v1.OrderCompleted"],
+    }),
+    retry: { maxRetries: 0, initialIntervalMs: 1, maxIntervalMs: 1 },
+    log: () => {},
+  });
+
+  assert.equal(await processor.process(message()), "dead-lettered");
+
+  assert.equal(calls.length, 0);
+  assert.equal(
+    deadLetters[0]?.headers.reason_poisoned,
+    `schema 7 is not a schema of event_type "${EVENT_TYPE}"`,
+  );
+});
+
+test("AC-979: an unavailable Schema Registry rejects without a dead letter", async () => {
+  const { handler, calls } = scripted([async () => {}]);
+  const { db, unitOfWork } = await createTestDatabase();
+  const deadLetters: IntegrationMessage[] = [];
+  const processor = new MessageProcessor({
+    consumer: "restaurants.order-placed",
+    group: "restaurants",
+    handlers: [handler],
+    inbox: new DatabaseInbox(db, unitOfWork),
+    deadLetters: {
+      publish: async (dead) => {
+        deadLetters.push(dead);
+      },
+    },
+    schemas: {
+      subjects: async () => {
+        throw new Error("connect ECONNREFUSED");
+      },
+    },
+    retry: { maxRetries: 0, initialIntervalMs: 1, maxIntervalMs: 1 },
+    log: () => {},
+  });
+
+  await assert.rejects(processor.process(message()), /ECONNREFUSED/);
+
+  assert.equal(calls.length, 0);
+  assert.equal(deadLetters.length, 0);
+});
+
 test("a broken envelope goes to <stream>.dlq with poison metadata", async () => {
   const { handler, calls } = scripted([async () => {}]);
   const { processor, deadLetters, metrics } = await setup(handler);
@@ -174,7 +277,7 @@ test("a broken envelope goes to <stream>.dlq with poison metadata", async () => 
   const [dead] = deadLetters;
   assert.equal(dead?.topic, `${TOPIC}.dlq`);
   assert.equal(dead?.key, "order-1");
-  assert.deepEqual(dead?.value, new Uint8Array([1, 2, 3]));
+  assert.deepEqual(dead?.value, framed(new Uint8Array([1, 2, 3])));
   assert.equal(dead?.headers.topic_poisoned, TOPIC);
   assert.equal(dead?.headers.consumer_group_poisoned, "restaurants");
   assert.match(dead?.headers.reason_poisoned ?? "", /event_id/);
@@ -278,6 +381,7 @@ test("a failed dead letter publish rejects, so the message is not lost", async (
         throw new Error("broker down");
       },
     },
+    schemas: new TestSchemas({ [SCHEMA_ID]: [EVENT_TYPE] }),
     retry: { maxRetries: 0, initialIntervalMs: 1, maxIntervalMs: 1 },
     log: () => {},
   });

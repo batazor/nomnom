@@ -11,6 +11,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -21,6 +22,8 @@ import (
 // namespace watermill и subsystem consumer, включая publish в DLQ.
 func TestWatermillBuiltinMetricsUseConsumerSubsystem(t *testing.T) {
 	registry := prometheus.NewRegistry()
+	schemas := NewMockSchemaSubjects(t)
+	schemas.EXPECT().Subjects(mock.Anything, schemaID).Return([]string{stringValue}, nil)
 	pubSub := gochannel.NewGoChannel(gochannel.Config{BlockPublishUntilSubscriberAck: true}, watermill.NopLogger{})
 	dlq, err := pubSub.Subscribe(context.Background(), messaging.DeadLetterTopic(topic))
 	require.NoError(t, err)
@@ -33,6 +36,7 @@ func TestWatermillBuiltinMetricsUseConsumerSubsystem(t *testing.T) {
 	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
 		ConsumerGroup: "orders",
 		Retry:         messaging.RetryPolicy{MaxRetries: 0, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
+		Schemas:       schemas,
 		Prometheus:    registry,
 	}, pubSub, pubSub, []messaging.Stream{{
 		Group: "test",

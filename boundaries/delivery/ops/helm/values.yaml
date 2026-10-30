@@ -91,7 +91,8 @@ resources:
 # TRACKING__CITY_ORIGIN_LONGITUDE, TRACKING__CITY_BLOCKS, TRACKING__BLOCK_METERS и
 # TRACKING__PERSIST_INTERVAL (FR-658): без них процесс не стартует, значения задаёт окружение
 # (kind: 5s, 30s, 2m, 1s; Virtual City 12 × 12 по 150 м у демо-курьеров, 15s).
-# KAFKA__BROKERS обязателен (ADR 11): адрес брокеров задаёт окружение.
+# KAFKA__BROKERS и SCHEMA_REGISTRY__URL обязательны (ADR 11, FR-715): адреса брокеров и
+# Schema Registry задаёт окружение.
 env:
   # Kafka consumer собственных фактов Delivery (delivery.v1.delivery-events) для Delivery
   # Duration Statistics (FR-676): группа delivery; новая группа читает стрим с начала.
@@ -256,6 +257,9 @@ cdc:
   enabled: false
   # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
   connectUrl: ""
+  # Schema Registry для SchemaFraming коннектора (FR-714), например
+  # http://kafka.nomnom-infra.svc.cluster.local:8081.
+  schemaRegistryUrl: ""
   # Адрес базы для Kafka Connect. password — ссылка config provider Connect, не сам пароль,
   # например ${dir:/etc/nomnom/cdc:delivery-password}.
   database:
@@ -286,7 +290,12 @@ cdc:
       key.converter: org.apache.kafka.connect.storage.StringConverter
       value.converter: org.apache.kafka.connect.converters.ByteArrayConverter
       header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
-      transforms: outbox
+      # SchemaFraming (FR-714): value стримов Integration Events — wire format Schema Registry
+      # по header event_type; Change Notification streams (*-changes) в topics не входят.
+      transforms: outbox,schema
+      transforms.schema.type: nomnom.connect.SchemaFraming
+      transforms.schema.topics: delivery.v1.delivery-events
+      transforms.schema.cache.ttl.ms: "60000"
       transforms.outbox.type: io.debezium.transforms.outbox.EventRouter
       transforms.outbox.table.field.event.id: event_id
       transforms.outbox.table.field.event.key: aggregate_id

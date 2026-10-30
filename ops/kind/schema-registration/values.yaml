@@ -1,0 +1,11 @@
+# Values chart kind-schema-registration. image задаёт Skaffold (setValueTemplates) тегом
+# локальной сборки ops/schema-registration.
+
+image:
+  repository: nomnom/schema-registration
+  tag: latest
+  # Образ загружен через kind load.
+  pullPolicy: IfNotPresent
+
+# Schema Registry Redpanda (ops/kind/manifests/messaging/infrastructure.yaml).
+registryUrl: http://kafka.nomnom-infra.svc.cluster.local:8081

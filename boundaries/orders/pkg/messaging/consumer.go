@@ -1,7 +1,9 @@
 package messaging
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -51,6 +53,8 @@ type ConsumerConfig struct {
 	ConsumerGroup string
 	Retry         RetryPolicy
 	CloseTimeout  time.Duration
+	// Schemas resolves the subjects of the schema id of each record (FR-715).
+	Schemas SchemaSubjects
 	// Prometheus принимает встроенные метрики Watermill (namespace watermill,
 	// subsystem consumer); они уходят в OTLP через Prometheus bridge. nil — без них.
 	Prometheus prometheus.Registerer
@@ -67,9 +71,10 @@ const (
 // EventGroupProcessor handler group per stream and the middleware chain of
 // ADR 28, outermost first:
 //
-//	Recoverer → OpenTelemetry/metrics → Watermill metrics → deserialization guard → Retry → dead letter → unknown event_type → handler
+//	Recoverer → OpenTelemetry/metrics → Watermill metrics → deserialization guard → schema subject → Retry → dead letter → unknown event_type → handler
 //
-//	deserialization error, permanent, unknown → <stream>.dlq + ack
+//	deserialization error, schema of another event_type, permanent, unknown → <stream>.dlq + ack
+//	schema registry unavailable → nack, the partition waits and Kafka redelivers
 //	transient → Retry with backoff; exhausted → nack, the partition waits and Kafka redelivers
 //	business → ack, logged
 //	nil, including an Inbox duplicate → ack
@@ -82,6 +87,9 @@ func NewConsumerRouter(
 ) (*message.Router, error) {
 	if logger == nil {
 		logger = watermill.NopLogger{}
+	}
+	if cfg.Schemas == nil {
+		return nil, errors.New("consumer router requires the schema registry")
 	}
 	tel, err := newTelemetry()
 	if err != nil {
@@ -130,6 +138,7 @@ func NewConsumerRouter(
 	// The first middleware is the outermost one.
 	router.AddMiddleware(append(middlewares,
 		dlq.guard,
+		dlq.schemaSubject(cfg.Schemas),
 		retry.Middleware,
 		tel.countAttempts,
 		dlq.permanent,
@@ -191,6 +200,33 @@ func (q deadLetterQueue) guard(next message.HandlerFunc) message.HandlerFunc {
 			return nil, q.send(msg, ClassDeserialization, reason)
 		}
 		return next(msg)
+	}
+}
+
+// schemaSubject sends a record whose schema id is unknown or belongs to
+// another event_type to the DLQ as a deserialization error (FR-715). An
+// unavailable Registry nacks the record: it is redelivered, not dead-lettered.
+func (q deadLetterQueue) schemaSubject(schemas SchemaSubjects) message.HandlerMiddleware {
+	return func(next message.HandlerFunc) message.HandlerFunc {
+		return func(msg *message.Message) ([]*message.Message, error) {
+			frame, err := parseWireFrame(msg.Payload)
+			if err != nil {
+				return nil, q.send(msg, ClassDeserialization, err.Error())
+			}
+			subjects, err := schemas.Subjects(msg.Context(), frame.SchemaID)
+			if errors.Is(err, ErrUnknownSchema) {
+				return nil, q.send(msg, ClassDeserialization, err.Error())
+			}
+			if err != nil {
+				return nil, err
+			}
+			eventType := msg.Metadata.Get(EventTypeMetadata)
+			if !slices.Contains(subjects, eventType) {
+				return nil, q.send(msg, ClassDeserialization,
+					fmt.Sprintf("schema %d is not a schema of event_type %q", frame.SchemaID, eventType))
+			}
+			return next(msg)
+		}
 	}
 }
 

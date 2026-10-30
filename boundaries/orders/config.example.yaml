@@ -10,6 +10,10 @@ kafka:
     - localhost:9092
   client_id: orders
   consumer_group: orders
+# Schema Registry записей стримов (env SCHEMA_REGISTRY__URL): обязателен orders-consumer (FR-715).
+schema_registry:
+  url: http://127.0.0.1:8081
+  timeout: 5s
 temporal:
   host_port: localhost:7233
   namespace: default

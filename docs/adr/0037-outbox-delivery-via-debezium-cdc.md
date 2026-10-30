@@ -70,11 +70,26 @@ release контекста регистрирует её через REST Connect
 | `aggregate_version` | `aggregateVersion` | заголовок `aggregate_version` | целое |
 | `occurred_at` | `occurredAt` | заголовок `occurred_at` | `timestamptz` / BSON `Date`, в заголовке RFC 3339 UTC |
 | `topic` | `topic` | топик Kafka (`route.by.field`) | строка |
-| `payload` | `payload` | value | `bytea` / BSON `Binary`: Protobuf или JSON Change Notification |
+| `payload` | `payload` | value | `bytea` / BSON `Binary`: Protobuf (в Kafka — wire format Schema Registry, см. ниже) или JSON Change Notification |
 | `traceparent` | `traceparent` | заголовок `traceparent` | W3C trace context или `''`, не `NULL` и не отсутствует |
 
 Остальные поля таблицы Debezium не читает. Envelope совпадает с прежним (ADR 25, ADR 28):
 консьюмеры не меняются.
+
+### SMT `SchemaFraming`
+
+После `EventRouter` (`MongoEventRouter`) коннектор применяет transform
+`nomnom.connect.SchemaFraming` (`transforms: outbox,schema`, исходники —
+`ops/kind/kafka-connect/schema-framing`, jar в образе Connect): value записи topic из
+`transforms.schema.topics` — стримов Integration Events контекста — становится wire format
+Schema Registry ([ADR 25](0025-integration-event-publication.md#payload-и-schema-registry)).
+Id последней версии subject `event_type` и индекс сообщения SMT берёт из Registry
+(`?format=serialized`, `FileDescriptorProto`) и кеширует на `transforms.schema.cache.ttl.ms`;
+value проверяется разбором как это сообщение. Запись без `event_type`, без subject, с
+неразбираемым value или при недоступном Registry переводит задачу в `FAILED` без пропуска
+записи; hook Job регистрации коннектора перезапускает такие задачи при следующем деплое. Topics
+Change Notifications в список не входят, их JSON проходит без изменений. Id последней версии
+безопасен для payload любой прежней версии: Registry держит `FULL_TRANSITIVE`.
 
 - PostgreSQL: publication создаёт миграция контекста —
   `CREATE PUBLICATION <ctx>_outbox FOR TABLE <ctx>_outbox WITH (publish = 'insert')`. Удаления

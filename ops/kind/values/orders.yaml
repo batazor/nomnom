@@ -69,6 +69,7 @@ resources:
 cdc:
   enabled: true
   connectUrl: http://kafka-connect.nomnom-infra.svc.cluster.local:8083
+  schemaRegistryUrl: http://kafka.nomnom-infra.svc.cluster.local:8081
   database:
     hostname: postgres.nomnom-data.svc.cluster.local
     name: orders

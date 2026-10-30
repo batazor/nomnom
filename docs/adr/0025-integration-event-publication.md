@@ -68,7 +68,17 @@ payload,
 metadata: trace context, correlation_id, causation_id
 ```
 
-`occurred_at` берётся из domain event (время факта, переданное значением в domain method), а не из часов publisher. Protobuf-схема envelope и размещение полей в Kafka headers или payload остаются открытым вопросом [документации событийного взаимодействия](../event-driven-architecture.md#открытые-вопросы-реализации); этот ADR их не выбирает.
+`occurred_at` берётся из domain event (время факта, переданное значением в domain method), а не из часов publisher. Envelope передаётся в Kafka headers ([ADR 28](0028-selective-use-of-watermill-cqrs.md)).
+
+### Payload и Schema Registry
+
+Outbox хранит payload — байты Protobuf контракта. Value записи стрима Integration Events — тот же payload в wire format Schema Registry: magic byte `0`, id схемы (4 байта big-endian), индексы сообщения в файле и байты Protobuf. Префикс дописывает SMT `SchemaFraming` коннектора Outbox ([ADR 37](0037-outbox-delivery-via-debezium-cdc.md)) по header `event_type`, поэтому publishers на любом языке префикс не пишут и Registry при записи в Outbox не нужен. Change Notifications ([ADR 36](0036-graphql-subscriptions-via-cosmo-streams.md)) — не Integration Events: их value — JSON без префикса.
+
+- Registry — встроенный в Redpanda Schema Registry с API Confluent. Интеграция BSR с Confluent Schema Registry доступна только в Enterprise-плане Buf, а регистрация схем там оплачивается отдельно; переход на другой Confluent-совместимый Registry меняет только URL.
+- Subject Integration Event — полное имя Protobuf-сообщения, равное `event_type` (record name strategy): в одном стриме несколько типов событий. Импортированный файл модуля регистрируется под subject = путь файла и указывается в `references`.
+- Схемы регистрирует только шаг деплоя `ops/schema-registration` из buf-модулей контекстов ([ADR 7](0007-grpc-contracts-and-buf-schema-registry.md)); producers, SMT и consumers Registry только читают.
+- Глобальный режим совместимости Registry — `FULL_TRANSITIVE`: несовместимая версия (смена типа поля, удаление сообщения) отклоняется и останавливает деплой. Registry не ловит удаление поля и перестановку номеров — это остаётся проверкой `buf breaking` в PR.
+- Consumer сверяет subjects id схемы записи с `event_type`. Value вне wire format, неизвестный id и схема другого `event_type` — `deserialization`, запись уходит в `<stream>.dlq`; недоступный Registry — transient, partition ждёт.
 
 ### Стабильный `event_id`
 
@@ -100,7 +110,7 @@ Kafka → Transport DTO (proto) → infrastructure mapper → Command → handle
 
 Версионируется контракт integration event, а не domain event: domain event меняется вместе с моделью как внутренний код.
 
-- Изменения additive-first: новые поля optional, существующие поля не меняют смысл, номера полей не переиспользуются; проверка — `buf breaking`.
+- Изменения additive-first: новые поля optional, существующие поля не меняют смысл, номера полей не переиспользуются; проверка — `buf breaking` в PR, затем `FULL_TRANSITIVE` Registry при регистрации. Схема нового события или поля регистрируется до деплоя publisher'а: запись без subject останавливает коннектор.
 - Breaking change — новая major-версия package (`nomnom.orders.v2.*`). На период миграции consumers publisher выполняет dual publish v1 и v2, а срок вывода v1 фиксируется в SDD изменения.
 - Mapper отвечает за построение всех поддерживаемых версий. Каждая версия — отдельный Integration Event со своим `event_type` и `event_id`.
 
@@ -112,4 +122,4 @@ Domain model остаётся независимой от transport и форм�
 
 Запрет асинхронных in-process обработчиков domain events переводит такие реакции на Outbox → Kafka → Inbox: появляется задержка и инфраструктурная цепочка даже внутри одного контекста, зато реакция переживает сбой процесса и дедуплицируется по `event_id`.
 
-Формат Protobuf envelope, размещение event-схем в Buf и выбор headers или payload для metadata остаются открытыми и решаются вместе с первыми контрактами событий.
+Schema Registry становится зависимостью доставки: пока он недоступен, коннекторы Outbox в `FAILED`, а consumers ждут. Порядок деплоя — регистрация схем до publisher'а — требование к pipeline окружения.

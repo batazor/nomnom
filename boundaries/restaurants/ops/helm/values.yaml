@@ -272,6 +272,9 @@ cdc:
   enabled: false
   # REST Kafka Connect, например http://kafka-connect.nomnom-infra.svc.cluster.local:8083.
   connectUrl: ""
+  # Schema Registry для SchemaFraming коннектора (FR-714), например
+  # http://kafka.nomnom-infra.svc.cluster.local:8081.
+  schemaRegistryUrl: ""
   # URI replica set для Kafka Connect — ссылка config provider Connect, не сам URI с паролем,
   # например ${dir:/etc/nomnom/cdc:restaurants-uri}.
   connectionString: ""
@@ -294,7 +297,12 @@ cdc:
       key.converter: org.apache.kafka.connect.storage.StringConverter
       value.converter: org.apache.kafka.connect.converters.ByteArrayConverter
       header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
-      transforms: outbox
+      # SchemaFraming (FR-714): value стримов Integration Events — wire format Schema Registry
+      # по header event_type; Change Notification streams (*-changes) в topics не входят.
+      transforms: outbox,schema
+      transforms.schema.type: nomnom.connect.SchemaFraming
+      transforms.schema.topics: restaurants.v1.restaurant-order-events,restaurants.v1.restaurant-events,restaurants.v1.menu-events
+      transforms.schema.cache.ttl.ms: "60000"
       transforms.outbox.type: io.debezium.connector.mongodb.transforms.outbox.MongoEventRouter
       transforms.outbox.collection.field.event.id: eventId
       transforms.outbox.collection.field.event.key: aggregateId

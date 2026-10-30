@@ -14,19 +14,27 @@
 package testfixture
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -36,6 +44,9 @@ const (
 	KafkaImage = "apache/kafka:4.4.0"
 	// SpiceDBImage is SPICEDB_IMAGE of the root Makefile.
 	SpiceDBImage = "authzed/spicedb:v1.57.0"
+	// RedpandaImage is the broker of ops/kind/manifests/messaging/infrastructure.yaml; the
+	// tests use its Schema Registry.
+	RedpandaImage = "docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce"
 	// TemporalImage is the Temporal CLI dev server of ops/kind/manifests/messaging/infrastructure.yaml.
 	TemporalImage = "temporalio/temporal:1.9.1"
 	// SpiceDBPresharedKey is the key of the SpiceDB container.
@@ -154,6 +165,159 @@ func MustStartKafka() *Kafka {
 }
 
 func (k *Kafka) Close() { closeContainer(k.container) }
+
+// SchemaRegistry is the Schema Registry of a Redpanda broker for the tests of
+// one package: the tests register the event files their records reference.
+type SchemaRegistry struct {
+	URL       string
+	container testcontainers.Container
+}
+
+// StartSchemaRegistry runs Redpanda with the Schema Registry on 8081.
+func StartSchemaRegistry(ctx context.Context) (*SchemaRegistry, error) {
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image: RedpandaImage,
+			Cmd: []string{"redpanda", "start", "--mode=dev-container", "--smp=1", "--memory=256M",
+				"--overprovisioned", "--schema-registry-addr=0.0.0.0:8081"},
+			ExposedPorts: []string{"8081/tcp"},
+			WaitingFor:   wait.ForHTTP("/subjects").WithPort("8081/tcp").WithStartupTimeout(startupTimeout),
+		},
+		Started: true,
+	})
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("start schema registry: %w", err))
+	}
+	endpoint, err := loopbackEndpoint(ctx, c, "8081/tcp")
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("schema registry endpoint: %w", err))
+	}
+	return &SchemaRegistry{URL: "http://" + endpoint, container: c}, nil
+}
+
+// MustStartSchemaRegistry is StartSchemaRegistry for TestMain.
+func MustStartSchemaRegistry() *SchemaRegistry {
+	r, err := StartSchemaRegistry(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	return r
+}
+
+// RegisterEvents registers the .proto source of the event file of the
+// repository as schema-registration does (FR-712, FR-717): imported files of
+// the modules first under their path, then the file under the full name of
+// each top-level message. It returns the schema id of the file.
+func (r *SchemaRegistry) RegisterEvents(ctx context.Context, file protoreflect.FileDescriptor) (uint32, error) {
+	s, err := r.schemaOf(ctx, file)
+	if err != nil {
+		return 0, err
+	}
+	var id uint32
+	messages := file.Messages()
+	for i := range messages.Len() {
+		registered, err := r.post(ctx, "/subjects/"+string(messages.Get(i).FullName())+"/versions", s)
+		if err != nil {
+			return 0, err
+		}
+		id = registered.ID
+	}
+	return id, nil
+}
+
+type registrySchema struct {
+	SchemaType string              `json:"schemaType"`
+	Schema     string              `json:"schema"`
+	References []registryReference `json:"references,omitempty"`
+}
+
+type registryReference struct {
+	Name    string `json:"name"`
+	Subject string `json:"subject"`
+	Version int    `json:"version"`
+}
+
+func (r *SchemaRegistry) schemaOf(ctx context.Context, file protoreflect.FileDescriptor) (registrySchema, error) {
+	// nomnom/<context>/v1/x.proto lives in the buf module of the context.
+	_, self, _, _ := runtime.Caller(0)
+	parts := strings.SplitN(file.Path(), "/", 3)
+	if len(parts) != 3 || parts[0] != "nomnom" {
+		return registrySchema{}, fmt.Errorf("%s is not a file of a context module", file.Path())
+	}
+	source, err := os.ReadFile(filepath.Join(filepath.Dir(self), "..", "..", "..", parts[1], "infrastructure", "grpc", file.Path()))
+	if err != nil {
+		return registrySchema{}, fmt.Errorf("read %s: %w", file.Path(), err)
+	}
+	s := registrySchema{SchemaType: "PROTOBUF", Schema: string(source)}
+	imports := file.Imports()
+	for i := range imports.Len() {
+		imported := imports.Get(i).FileDescriptor
+		if strings.HasPrefix(imported.Path(), "google/protobuf/") {
+			continue
+		}
+		dependency, err := r.schemaOf(ctx, imported)
+		if err != nil {
+			return registrySchema{}, err
+		}
+		subject := url.PathEscape(imported.Path())
+		if _, err := r.post(ctx, "/subjects/"+subject+"/versions", dependency); err != nil {
+			return registrySchema{}, err
+		}
+		found, err := r.post(ctx, "/subjects/"+subject, dependency)
+		if err != nil {
+			return registrySchema{}, err
+		}
+		s.References = append(s.References, registryReference{Name: imported.Path(), Subject: imported.Path(), Version: found.Version})
+	}
+	return s, nil
+}
+
+type registered struct {
+	ID      uint32 `json:"id"`
+	Version int    `json:"version"`
+}
+
+func (r *SchemaRegistry) post(ctx context.Context, path string, s registrySchema) (registered, error) {
+	body, err := json.Marshal(s)
+	if err != nil {
+		return registered{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.URL+path, bytes.NewReader(body))
+	if err != nil {
+		return registered{}, err
+	}
+	req.Header.Set("Content-Type", "application/vnd.schemaregistry.v1+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return registered{}, fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return registered{}, fmt.Errorf("POST %s: status %d", path, resp.StatusCode)
+	}
+	var out registered
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return registered{}, fmt.Errorf("POST %s: %w", path, err)
+	}
+	return out, nil
+}
+
+func (r *SchemaRegistry) Close() { closeContainer(r.container) }
+
+// WireFormat frames a Protobuf payload as the SchemaFraming SMT of the
+// connectors does (FR-714): magic byte, schema id, the indexes of the
+// top-level message and the payload.
+func WireFormat(schemaID uint32, messageIndex int, payload []byte) []byte {
+	framed := []byte{0}
+	framed = binary.BigEndian.AppendUint32(framed, schemaID)
+	if messageIndex == 0 {
+		framed = append(framed, 0)
+	} else {
+		framed = binary.AppendVarint(framed, 1)
+		framed = binary.AppendVarint(framed, int64(messageIndex))
+	}
+	return append(framed, payload...)
+}
 
 // SpiceDB is an in-memory SpiceDB with authorization/bootstrap.yaml of the
 // repository: the schema plus the grants deployment owns, as in kind.

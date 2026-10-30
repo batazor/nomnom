@@ -1,0 +1,8 @@
+apiVersion: v2
+name: kind-schema-registration
+description: >-
+  Регистрация схем Integration Events в Schema Registry тестового kind-окружения (FR-712,
+  FR-716): Helm hook Job после install/upgrade запускает ops/schema-registration. Release
+  kafka-connect ставится после него, поэтому коннекторы стартуют с зарегистрированными схемами.
+type: application
+version: 0.1.0

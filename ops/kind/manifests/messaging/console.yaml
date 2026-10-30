@@ -6,9 +6,9 @@
 # Console без enterprise-лицензии не разграничивает права: в UI можно удалять записи и сдвигать
 # offsets групп. Разбор DLQ — только командой dlq контекста (docs/dlq.md): сдвиг offset
 # <group>.dlq из UI не пишет журнал discard, а публикация из UI — без redriven_from.
-# Payload Integration Events — бинарный protobuf, в одном стриме несколько типов событий;
-# serde.protobuf Console сопоставляет один тип на topic, поэтому payload показывается raw,
-# а headers envelope (event_type, aggregate_id, reason_poisoned …) — текстом.
+# Value Integration Events — wire format Schema Registry (FR-714): Console читает схему записи
+# по её id из Schema Registry Redpanda и показывает payload расшифрованным. Change
+# Notifications (*-changes) — JSON.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -20,6 +20,9 @@ data:
   config.yaml: |
     kafka:
       brokers: [kafka.nomnom-infra.svc.cluster.local:9092]
+    schemaRegistry:
+      enabled: true
+      urls: [http://kafka.nomnom-infra.svc.cluster.local:8081]
     kafkaConnect:
       enabled: true
       clusters:

@@ -1,0 +1,46 @@
+# Hook Job, а не обычный ресурс: helm ждёт его завершения, и ошибка регистрации (несовместимая
+# версия — 409) проваливает release, а с ним и деплой. Повторный запуск без изменений .proto
+# новых версий не создаёт.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: schema-registration
+  namespace: nomnom-infra
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schema-registration
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      # Пользователь nonroot образа distroless задан именем: kubelet проверяет runAsNonRoot
+      # только по числовому uid.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: schema-registration
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SCHEMA_REGISTRY__URL
+              value: {{ .Values.registryUrl | quote }}
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

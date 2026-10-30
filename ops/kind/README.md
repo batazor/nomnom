@@ -89,6 +89,17 @@ make kind-down
   `replication-slot-*`). Состояние:
   `kubectl -n nomnom-infra exec deploy/kafka-connect -- curl -s localhost:8083/connectors?expand=status`.
   Topics создаются при первой публикации.
+- Schema Registry Integration Events ([ADR 25](../../docs/adr/0025-integration-event-publication.md#payload-и-schema-registry))
+  — встроенный в Redpanda (`kafka.nomnom-infra.svc.cluster.local:8081`, порт `schema-registry`
+  Service `kafka`). Схемы регистрирует hook Job release `schema-registration` (chart
+  [`schema-registration`](schema-registration), образ [`ops/schema-registration`](../schema-registration)):
+  файлы `events.proto` buf-модулей, subject = `event_type`, режим `FULL_TRANSITIVE`; release
+  `kafka-connect` ставится после него (`dependsOn`). SMT `SchemaFraming`
+  ([`kafka-connect/schema-framing`](kafka-connect/schema-framing), jar в образе Connect)
+  оформляет value стримов Integration Events в wire format Registry; Change Notifications
+  проходят без изменений. Consumers `orders`, `restaurants` и `delivery` читают Registry по
+  `SCHEMA_REGISTRY__URL`, egress `:8081` открыт `manifests/netpol/app-infrastructure.yaml`.
+  Тесты SMT — `mvn package` в `kafka-connect/schema-framing` (Redpanda из testcontainers).
 - Redpanda Console ([`manifests/messaging/console.yaml`](manifests/messaging/console.yaml)) — web UI
   Kafka: topics и записи с headers (в том числе `<stream>.dlq`), consumer groups и offsets,
   коннекторы Kafka Connect. По умолчанию не ставится, чтобы не занимать память: `make kind-console`
@@ -227,7 +238,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
-| `nomnom-infra` | single-node Kafka API (Redpanda dev-container, Service `kafka`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
+| `nomnom-infra` | single-node Kafka API и Schema Registry (Redpanda dev-container, Service `kafka`: `9092`, `8081`), Job регистрации схем (release `schema-registration`), Kafka Connect с Debezium для Outbox (release `kafka-connect`, Service `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
 
 ## Internal gateway
 

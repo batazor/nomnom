@@ -11,7 +11,7 @@ Schema Registry делает опубликованные схемы часть�
 ## What Changes
 
 - **Redpanda Schema Registry** включается в брокере. В kind это `:8081` у Deployment `kafka`, порт открыт в Service `kafka` и в NetworkPolicy consumers.
-- **Регистрация схем из buf.** Новая утилита `schema-registration` (Go) собирает `buf build` модулей контекстов и регистрирует файлы Integration Events из явного списка, а также их зависимости. Subject = полное имя protobuf-сообщения (`RecordNameStrategy`), то есть совпадает с `event_type`. Глобальный режим совместимости — `FULL_TRANSITIVE`. Схемы регистрирует только этот шаг деплоя, producers и consumers схемы не регистрируют. В kind это Job после Kafka и до Kafka Connect и consumers.
+- **Регистрация схем из buf.** Новая утилита `schema-registration` (Go) компилирует файлы buf-модулей контекстов компилятором buf и регистрирует файлы Integration Events из явного списка, а также их зависимости. Subject = полное имя protobuf-сообщения (`RecordNameStrategy`), то есть совпадает с `event_type`. Глобальный режим совместимости — `FULL_TRANSITIVE`. Схемы регистрирует только этот шаг деплоя, producers и consumers схемы не регистрируют. В kind это hook Job release `schema-registration`, от которого зависит release `kafka-connect`.
 - **Wire format Confluent.** Value записи стрима Integration Events — magic byte `0`, 4 байта id схемы, индексы сообщения и затем байты protobuf.
 - **Свой SMT в Debezium.** Transform `SchemaFraming` в образе Kafka Connect дописывает префикс: id схемы он берёт по header `event_type` из subject Registry. Transform работает только на topics из своей конфигурации, то есть на стримах Integration Events коннектора. Записи Change Notifications (`*.v1.*-changes`, JSON для Cosmo Router) он не трогает. Запись стрима с `event_type` без subject переводит задачу коннектора в `FAILED`. Publishers (Go, TS, Rust, Python) не меняются: в outbox по-прежнему пишутся байты protobuf.
 - **Consumers проверяют wire format.** `orders`, `restaurants` и `delivery` отрезают префикс, находят по id subjects схемы и сверяют их с `event_type`. Нет префикса, неизвестный id или subject не совпадает с `event_type` — это `deserialization_error`, запись уходит в DLQ. Конфиг `SCHEMA_REGISTRY__URL` обязателен: если он пуст или невалиден, процесс падает на старте.
@@ -39,8 +39,8 @@ Schema Registry делает опубликованные схемы часть�
 
 ## Impact
 
-- **Новое:** `ops/schema-registration` (Go, Dockerfile с `buf build`), `ops/kafka-connect/schema-framing` (Java, SMT).
-- **`ops/kind`:** аргументы и Service `kafka` (`:8081`), образ Kafka Connect с SMT, Job `schema-registration` в before-hook, NetworkPolicy consumers, `console.yaml`, README.
+- **Новое:** `ops/schema-registration` (Go, компилятор buf `protocompile`), `ops/kind/kafka-connect/schema-framing` (Java, Maven, SMT), chart `ops/kind/schema-registration`.
+- **`ops/kind`:** аргументы и Service `kafka` (`:8081`), образ Kafka Connect с SMT, release `schema-registration`, NetworkPolicy consumers, `console.yaml`, README.
 - **Helm charts `orders`, `restaurants`, `delivery`, `payments`:** `transforms` коннектора `cdc.*`; `SCHEMA_REGISTRY__URL` у consumer-процессов `orders`, `restaurants`, `delivery`.
 - **`boundaries/orders`:** `GuardedUnmarshaler` и тесты с Registry из testcontainers.
 - **`boundaries/restaurants`:** envelope и processor consumer'а.

@@ -19,7 +19,7 @@ pub use estimate::{
 pub use infrastructure::{ReconcilerConfig, SpiceDbConfig};
 pub use kafka::{
     InitialOffset, KAFKA_BROKERS_ENV, KAFKA_CONSUMER_GROUP_ENV, KAFKA_INITIAL_OFFSET_ENV,
-    KafkaConfig,
+    KafkaConfig, SCHEMA_REGISTRY_URL_ENV,
 };
 #[cfg(test)]
 use load::{

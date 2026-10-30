@@ -233,6 +233,10 @@ buf push --label main
 
 Label `main` соответствует ветке `main`, но потребители всё равно закрепляют commit, а не label. Авторизация выполняется через `BUF_TOKEN` из секретов CI или окружения.
 
+### Схемы Integration Events в Schema Registry
+
+Контракты Integration Events лежат в тех же buf-модулях (`nomnom/<context>/v1/events.proto`) и проходят те же проверки. Для доставки по Kafka их схемы дополнительно публикуются в Confluent-совместимый Schema Registry окружения — встроенный в Redpanda, а не BSR: интеграция BSR с Confluent Schema Registry доступна только в Enterprise-плане Buf ([ADR 25](0025-integration-event-publication.md#payload-и-schema-registry)). Публикует их утилита `ops/schema-registration`: компилирует файлы из списка `ops/schema-registration/event-files.yaml` компилятором buf (`protocompile`) и регистрирует их исходный текст с `references` на импортированные файлы модулей. `buf` остаётся источником схем и первой проверкой совместимости; Registry повторяет её режимом `FULL_TRANSITIVE` на шаге деплоя.
+
 ## Consequences
 
 Контракт имеет одного владельца, расположен рядом с адаптером и распространяется через BSR без импорта чужой доменной модели. Закреплённые schema commits и версии plugins делают генерацию воспроизводимой; `STANDARD` и `FILE` формализуют именование и защиту совместимости. Цена решения — committed generated code, явные PR для обновления refs, поддержка нескольких language-specific generator configs и временное дублирование общих transport messages.

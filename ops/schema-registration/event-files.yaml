@@ -1,0 +1,16 @@
+# Файлы Integration Events, схемы которых регистрирует schema-registration (FR-712).
+# module — корень buf-модуля (modules[].path в buf.yaml), path — файл внутри модуля.
+# Subject каждого сообщения верхнего уровня — его полное имя, равное event_type (FR-717);
+# импортированные файлы модулей регистрируются под subject = путь файла. Новый стрим
+# Integration Events добавляется сюда вместе с transforms.schema.topics коннектора.
+modules:
+  - boundaries/orders/infrastructure/grpc
+  - boundaries/restaurants/infrastructure/grpc
+  - boundaries/delivery/infrastructure/grpc
+  - boundaries/payments/infrastructure/grpc
+files:
+  - nomnom/orders/v1/events.proto
+  - nomnom/orders/v1/relationships.proto
+  - nomnom/restaurants/v1/events.proto
+  - nomnom/delivery/v1/events.proto
+  - nomnom/payments/v1/events.proto

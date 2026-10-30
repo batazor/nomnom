@@ -3,13 +3,23 @@
 // the commit, restaurants-consumer reads them in its own consumer group and
 // rewrites the changed keys from MongoDB. A refresh reads the current
 // document, so redeliveries and reordering within the TTL need no Inbox.
-// While Valkey is unavailable the message is retried with backoff and its
-// offset is not committed: once Valkey is back, every refresh is applied.
+// While Valkey or the Schema Registry is unavailable the message is retried
+// with backoff and its offset is not committed: once they are back, every
+// refresh is applied. A record outside its schema (FR-715) is not refreshed.
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { MessageHandler } from "../kafka/consumer.ts";
-import { type InboundMessage, parseEnvelope } from "../messaging/envelope.ts";
-import type { ProcessOutcome, RetryPolicy } from "../messaging/processor.ts";
+import {
+  type InboundMessage,
+  PermanentMessageError,
+  parseEnvelope,
+} from "../messaging/envelope.ts";
+import {
+  type ProcessOutcome,
+  payloadOf,
+  type RetryPolicy,
+} from "../messaging/processor.ts";
+import type { SchemaSubjects } from "../messaging/schema-registry.ts";
 
 /** Refresh of the cache by event_type: payload → keys rewritten from the source. */
 export type CacheRefreshes = Readonly<
@@ -18,15 +28,18 @@ export type CacheRefreshes = Readonly<
 
 export class CacheRefreshHandler implements MessageHandler {
   readonly #refreshes: CacheRefreshes;
+  readonly #schemas: SchemaSubjects;
   readonly #retry: Pick<RetryPolicy, "initialIntervalMs" | "maxIntervalMs">;
   readonly #warn: (message: string, fields?: Record<string, unknown>) => void;
 
   constructor(options: {
     refreshes: CacheRefreshes;
+    schemas: SchemaSubjects;
     retry: Pick<RetryPolicy, "initialIntervalMs" | "maxIntervalMs">;
     warn: (message: string, fields?: Record<string, unknown>) => void;
   }) {
     this.#refreshes = options.refreshes;
+    this.#schemas = options.schemas;
     this.#retry = options.retry;
     this.#warn = options.warn;
   }
@@ -51,9 +64,17 @@ export class CacheRefreshHandler implements MessageHandler {
     let intervalMs = this.#retry.initialIntervalMs;
     for (;;) {
       try {
-        await refresh(message.value);
+        await refresh(await payloadOf(message.value, eventType, this.#schemas));
         return "processed";
       } catch (error) {
+        if (error instanceof PermanentMessageError) {
+          this.#warn("event outside its schema, cache not refreshed", {
+            error,
+            "messaging.destination.name": message.topic,
+            "messaging.kafka.offset": message.offset,
+          });
+          return "rejected";
+        }
         if (signal.aborted) throw error;
         this.#warn("cache refresh failed, retrying", {
           error,

@@ -110,6 +110,9 @@ brokers = "localhost:9092"
 consumer_group = "delivery"
 # С какого конца читает группа без committed offset: oldest или newest.
 initial_offset = "oldest"
+# Schema Registry (FR-715): value записи — wire format, subject схемы сверяется с event_type.
+# Обязателен, http(s). Переменная: SCHEMA_REGISTRY__URL.
+schema_registry_url = "http://127.0.0.1:8081"
 
 [delivery_estimate]
 # Delivery Duration Estimate (FR-691): медианы последних sample_size длительностей Market

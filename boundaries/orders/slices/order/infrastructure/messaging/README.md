@@ -29,7 +29,9 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 
 | Ошибка | Класс | Действие |
 | --- | --- | --- |
-| Битый record, невалидный envelope (`GuardedUnmarshaler`) | deserialization | `<stream>.dlq` + ack до handler |
+| Битый record, невалидный envelope, value вне wire format Schema Registry (`GuardedUnmarshaler`) | deserialization | `<stream>.dlq` + ack до handler |
+| Id схемы неизвестен Registry или её subjects не содержат `event_type` (FR-715) | deserialization | `<stream>.dlq` + ack до handler |
+| Schema Registry недоступен | transient | nack и повторная доставка: partition ждёт Registry |
 | Вид `invalid_input`, `not_found`, `permission`; битый Protobuf payload, неизвестный `event_type` | permanent | `<stream>.dlq` + ack |
 | Вид `domain_rule` (`order.InvalidTransition`, `order.GuardFailed`, …), `already_exists` | business | ack, лог |
 | Вид `conflict`, `unavailable`, `internal` (store, Temporal) | transient | retry с backoff (`messaging.DefaultRetryPolicy`), затем nack и повторная доставка |
@@ -37,7 +39,7 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 
 ## Тесты
 
-[`watermill_handler_test.go`](watermill_handler_test.go) — wiring на Watermill `gochannel`: маршрутизация по `event_type`, handler groups, порядок событий одного aggregate, duplicate, poison. Политика retry/poison/business — [`pkg/messaging/consumer_test.go`](../../../../pkg/messaging/consumer_test.go). [`kafka_integration_test.go`](kafka_integration_test.go) (build tag `integration`, `make test-integration-kafka`, нужен Docker) — Testcontainers Kafka `apache/kafka:4.4.0`: применение события и повторная доставка, порядок событий одного `aggregate_id` в топиках с 3 partitions, retry при временной недоступности workflow, poison topic.
+[`watermill_handler_test.go`](watermill_handler_test.go) — wiring на Watermill `gochannel`: маршрутизация по `event_type`, handler groups, порядок событий одного aggregate, duplicate, poison. Политика retry/poison/business — [`pkg/messaging/consumer_test.go`](../../../../pkg/messaging/consumer_test.go). Схемы событий тесты регистрируют в Schema Registry Redpanda из testcontainers и оформляют payload в wire format, как SMT `SchemaFraming` коннектора (`main_test.go`). [`kafka_integration_test.go`](kafka_integration_test.go) (build tag `integration`, `make test-integration-kafka`, нужен Docker) — Testcontainers Kafka `apache/kafka:4.4.0`: применение события и повторная доставка, порядок событий одного `aggregate_id` в топиках с 3 partitions, retry при временной недоступности workflow, poison topic, запись вне своей схемы.
 
 ## Развёртывание
 

@@ -21,6 +21,7 @@ import {
 } from "../slices/restaurantorder/infrastructure/integration/delivery-picked-up.ts";
 import { cook, createKitchenWorld } from "./support/kitchen.ts";
 import { createInfrastructure } from "./support/restaurants.ts";
+import { framed, SCHEMA_ID, TestSchemas } from "./support/schemas.ts";
 
 const PICKED_UP_AT = "2026-10-26T16:50:00.000Z";
 
@@ -32,13 +33,15 @@ const deliveryPickedUp = (
   partition: 0,
   offset: "0",
   key: Buffer.from("delivery-1"),
-  value: toBinary(
-    DeliveryPickedUpSchema,
-    create(DeliveryPickedUpSchema, {
-      orderId,
-      deliveryId: "delivery-1",
-      marketId: options.marketId ?? "berlin",
-    }),
+  value: framed(
+    toBinary(
+      DeliveryPickedUpSchema,
+      create(DeliveryPickedUpSchema, {
+        orderId,
+        deliveryId: "delivery-1",
+        marketId: options.marketId ?? "berlin",
+      }),
+    ),
   ),
   headers: {
     event_id: options.eventId ?? "event-1",
@@ -71,6 +74,7 @@ const setup = async () => {
         deadLetters.push(dead);
       },
     },
+    schemas: new TestSchemas({ [SCHEMA_ID]: [DELIVERY_PICKED_UP_EVENT_TYPE] }),
     retry: { maxRetries: 0, initialIntervalMs: 1, maxIntervalMs: 1 },
     log: () => {},
   });

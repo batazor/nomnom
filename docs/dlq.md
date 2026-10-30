@@ -2,7 +2,7 @@
 
 Решение: [ADR 28. Selective Use of Watermill CQRS](adr/0028-selective-use-of-watermill-cqrs.md#восстановление-из-dlq).
 
-Consumer отправляет в `<stream>.dlq` то, что повтором не лечится: битый record (deserialization), неизвестный `event_type` и permanent error handler'а. Это дефект кода или контракта, поэтому DLQ разбирает оператор после исправления, а не автоматический retry. Transient-ошибки в DLQ не попадают: partition ждёт, пока зависимость вернётся.
+Consumer отправляет в `<stream>.dlq` то, что повтором не лечится: битый record (deserialization, в том числе value вне wire format Schema Registry и схема другого `event_type`), неизвестный `event_type` и permanent error handler'а. Это дефект кода или контракта, поэтому DLQ разбирает оператор после исправления, а не автоматический retry. Transient-ошибки в DLQ не попадают: partition ждёт, пока зависимость вернётся.
 
 ## Модель
 
@@ -47,6 +47,7 @@ kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/
    | `unknown event_type` — событие не для этой группы | discard с причиной |
    | `deserialization_error` — consumer отстал от контракта | выкатить consumer с новым контрактом, затем redrive |
    | `deserialization_error` — publisher записал битый record | исправить publisher; событие не восстановить из DLQ, discard с причиной и ссылкой на инцидент |
+   | `deserialization_error` — value вне wire format, неизвестный id схемы или схема другого `event_type` | запись прошла мимо SMT `SchemaFraming` или Registry потерял схемы; исправить коннектор или перерегистрировать схемы (`schema-registration`) — id новой регистрации другой, поэтому такую запись discard с причиной |
    | permanent error handler'а — дефект mapping/handler'а | исправить, выкатить, затем redrive |
    | permanent error — данные события неверны | discard с причиной; исправление данных — отдельным решением владельца |
 
@@ -65,7 +66,7 @@ kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/
 
 5. Повторить `dlq list`: список пуст или содержит только оставленное намеренно. Проверить, что redriven-события дошли: лог handler'а, состояние Order, отсутствие новой записи в DLQ с тем же `event_id`.
 
-Записи DLQ с headers в kind удобно смотреть в Redpanda Console: `make kind-console`, topic `<stream>.dlq` ([ops/kind](../ops/kind/README.md)). Payload — бинарный protobuf, он показывается raw; `reason_poisoned`, `consumer_group_poisoned`, `event_type`, `aggregate_id` видны в headers. Console — только для просмотра: удаление записей и сдвиг offset `<group>.dlq` из UI обходят журнал discard, публикация из UI идёт без `redriven_from`.
+Записи DLQ с headers в kind удобно смотреть в Redpanda Console: `make kind-console`, topic `<stream>.dlq` ([ops/kind](../ops/kind/README.md)). Value — wire format Schema Registry, Console расшифровывает payload по схеме записи; `reason_poisoned`, `consumer_group_poisoned`, `event_type`, `aggregate_id` видны в headers. Console — только для просмотра: удаление записей и сдвиг offset `<group>.dlq` из UI обходят журнал discard, публикация из UI идёт без `redriven_from`.
 
 Команды идут разово в pod consumer'а: там уже есть конфигурация Kafka (`KAFKA__BROKERS`, `KAFKA__CONSUMER_GROUP`) и разрешённый egress. Прерванная команда продолжает с последней разобранной записи: offset `<group>.dlq` коммитится после каждой.
 

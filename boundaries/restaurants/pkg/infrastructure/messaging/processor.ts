@@ -1,7 +1,10 @@
 // Обработка одного входящего Integration Event (ADR 11, ADR 28): envelope →
-// handler по event_type внутри транзакции Inbox → классификация ошибки.
+// subject схемы записи (FR-715) → handler по event_type внутри транзакции
+// Inbox → классификация ошибки.
 //
-//   deserialization, permanent → <stream>.dlq + ack
+//   deserialization (в том числе value вне wire format, схема другого event_type),
+//   permanent                  → <stream>.dlq + ack
+//   Schema Registry недоступен → ошибка, Kafka доставит снова
 //   transient                  → повтор с backoff; исчерпан → ошибка, Kafka доставит снова
 //   business                   → ack, log
 //   успех, включая duplicate Inbox → ack
@@ -17,6 +20,8 @@ import {
   PermanentMessageError,
   parseEnvelope,
 } from "./envelope.ts";
+import { type SchemaSubjects, UnknownSchemaError } from "./schema-registry.ts";
+import { parseWireFrame } from "./wire-format.ts";
 
 export type ErrorClass =
   | "transient"
@@ -30,7 +35,7 @@ export interface EventHandler {
   readonly eventType: string;
   /**
    * Выполняется внутри транзакции Inbox и может быть выполнен повторно: без
-   * внешних побочных эффектов.
+   * внешних побочных эффектов. `payload` — байты Protobuf без wire format.
    */
   handle(envelope: Envelope, payload: Uint8Array): Promise<void>;
   /** Класс ошибки handler; `undefined` — transient. */
@@ -113,6 +118,7 @@ export class MessageProcessor {
   readonly #handlers: ReadonlyMap<string, EventHandler>;
   readonly #inbox: Inbox;
   readonly #deadLetters: MessagePublisher;
+  readonly #schemas: SchemaSubjects;
   readonly #retry: RetryPolicy;
   readonly #metrics: ConsumerMetrics;
   readonly #log: (message: string) => void;
@@ -127,6 +133,8 @@ export class MessageProcessor {
     handlers: readonly EventHandler[];
     inbox: Inbox;
     deadLetters: MessagePublisher;
+    /** Subjects id схемы записи: subject должен быть её event_type. */
+    schemas: SchemaSubjects;
     retry: RetryPolicy;
     metrics?: ConsumerMetrics;
     log?: (message: string) => void;
@@ -141,6 +149,7 @@ export class MessageProcessor {
     );
     this.#inbox = options.inbox;
     this.#deadLetters = options.deadLetters;
+    this.#schemas = options.schemas;
     this.#retry = options.retry;
     this.#metrics = options.metrics ?? noConsumerMetrics;
     this.#log = options.log ?? (() => {});
@@ -170,6 +179,22 @@ export class MessageProcessor {
     const labels = this.#labels(message, envelope.eventType);
     const handler = this.#handlers.get(envelope.eventType);
     if (handler === undefined) return "ignored";
+    let payload: Uint8Array;
+    try {
+      payload = await payloadOf(
+        message.value,
+        envelope.eventType,
+        this.#schemas,
+      );
+    } catch (error) {
+      if (error instanceof PermanentMessageError) {
+        await this.#deadLetter(message, labels, error, error.errorClass);
+        this.#metrics.processed(labels, elapsed(), error.errorClass);
+        return "dead-lettered";
+      }
+      this.#metrics.processed(labels, elapsed(), "transient");
+      throw error;
+    }
     this.#metrics.messageAge(
       labels,
       Math.max(0, this.#now().getTime() - envelope.occurredAt.getTime()) / 1000,
@@ -185,7 +210,7 @@ export class MessageProcessor {
     for (let attempt = 0; ; attempt += 1) {
       try {
         const result = await this.#inbox.runOnce(record, () =>
-          handler.handle(envelope, message.value),
+          handler.handle(envelope, payload),
         );
         if (result === "duplicate") this.#metrics.duplicate(labels);
         this.#metrics.processed(labels, elapsed());
@@ -250,6 +275,37 @@ export class MessageProcessor {
       `${this.#consumer} dead-lettered ${labels.eventType || "message"} ${message.topic}/${message.partition}@${message.offset} (${errorClass}): ${describe(error)}`,
     );
   }
+}
+
+/**
+ * Payload записи без wire format, если subjects её схемы содержат event_type
+ * (FR-715). Value вне wire format, неизвестный id и схема другого event_type —
+ * deserialization; недоступный Registry — исходная ошибка, transient.
+ */
+export async function payloadOf(
+  value: Uint8Array,
+  eventType: string,
+  schemas: SchemaSubjects,
+): Promise<Uint8Array> {
+  const frame = parseWireFrame(value);
+  let subjects: readonly string[];
+  try {
+    subjects = await schemas.subjects(frame.schemaId);
+  } catch (error) {
+    if (error instanceof UnknownSchemaError) {
+      throw new PermanentMessageError(error.message, "deserialization", {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+  if (!subjects.includes(eventType)) {
+    throw new PermanentMessageError(
+      `schema ${frame.schemaId} is not a schema of event_type "${eventType}"`,
+      "deserialization",
+    );
+  }
+  return frame.payload;
 }
 
 const classify = (handler: EventHandler, error: unknown): ErrorClass => {

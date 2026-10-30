@@ -77,9 +77,9 @@ func EnvelopeFromMessage(msg *message.Message) (Envelope, error) {
 	return envelope, nil
 }
 
-// NewIntegrationEventMessage builds the Kafka message of an Integration Event.
-// It is the format the Outbox records of publishers carry; the consumer uses it
-// only in tests.
+// NewIntegrationEventMessage builds the Outbox message of an Integration Event:
+// the payload is the bare Protobuf, the SchemaFraming SMT of the connector
+// frames it in the wire format on delivery (FR-714).
 func NewIntegrationEventMessage(envelope Envelope, event proto.Message) (*message.Message, error) {
 	envelope.EventType = EventName(event)
 	if err := envelope.validate(); err != nil {
@@ -109,7 +109,8 @@ func EventName(event proto.Message) string {
 var ErrPublishOutsideOutbox = errors.New("integration events are published only through the outbox")
 
 // EnvelopeMarshaler is the cqrs.CommandEventMarshaler of inbound Integration
-// Events: the name comes from the event_type header, the payload is Protobuf.
+// Events: the name comes from the event_type header, the payload is Protobuf
+// in the Schema Registry wire format.
 // The default Watermill marshalers name events after Go structs and are not
 // used, because events are published by contexts in other languages.
 type EnvelopeMarshaler struct{}
@@ -125,7 +126,11 @@ func (EnvelopeMarshaler) Unmarshal(msg *message.Message, v any) error {
 	if !ok {
 		return Permanent(fmt.Errorf("event %T is not a protobuf message", v))
 	}
-	if err := proto.Unmarshal(msg.Payload, event); err != nil {
+	frame, err := parseWireFrame(msg.Payload)
+	if err != nil {
+		return Permanent(fmt.Errorf("unmarshal %s: %w", EventName(event), err))
+	}
+	if err := proto.Unmarshal(frame.Payload, event); err != nil {
 		return Permanent(fmt.Errorf("unmarshal %s: %w", EventName(event), err))
 	}
 	return nil

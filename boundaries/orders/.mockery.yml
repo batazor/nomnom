@@ -7,6 +7,16 @@ packages:
   nomnom/orders/pkg/lifecycle:
     interfaces:
       Worker: {}
+  nomnom/orders/pkg/messaging:
+    config:
+      filename: mocks_schemas_test.go
+    interfaces:
+      SchemaSubjects:
+        configs:
+          - dir: pkg/messaging
+            pkgname: messaging_test
+          - dir: slices/order/infrastructure/messaging
+            pkgname: messaging_test
   nomnom/orders/slices/fulfillment/applications/neighbours:
     config:
       dir: slices/fulfillment/infrastructure/temporal

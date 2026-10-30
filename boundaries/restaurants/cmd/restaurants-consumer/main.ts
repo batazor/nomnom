@@ -21,6 +21,7 @@ import {
   loadConfig,
   loadKafkaConfig,
   loadLocalEnv,
+  loadSchemaRegistryConfig,
   loadValkeyConfig,
 } from "../../pkg/config/config.ts";
 import {
@@ -46,10 +47,12 @@ const config = loadConfig(process.env);
 // included, are migrated by the process itself before it consumes (local
 // ADR 2). Kafka carries the Integration Events (ADR 28). Valkey (ADR 43) is
 // the catalog read cache the consumer refreshes; while it is down the refresh
-// waits and its offsets stay uncommitted.
+// waits and its offsets stay uncommitted. The Schema Registry resolves the
+// schema of every record (FR-715).
 const mongodb = databaseConfig.load(process.env, "consumer");
 const kafka = loadKafkaConfig(process.env);
 const valkeyConfig = loadValkeyConfig(process.env);
+const schemaRegistry = loadSchemaRegistryConfig(process.env);
 
 const telemetry = startTelemetry(SERVICE_NAME);
 const database = await connectDatabase(mongodb);
@@ -95,6 +98,7 @@ try {
     valkeyConfig,
     valkey: valkey.client,
     deadLetters,
+    schemaRegistry,
     logger,
   });
   await new Lifecycle({

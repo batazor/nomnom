@@ -14,6 +14,7 @@ import type { Clock } from "../pkg/application/clock.ts";
 import type {
   ConsumerConfig,
   KitchenConfig,
+  SchemaRegistryConfig,
   ValkeyConfig,
   WaitTimeConfig,
 } from "../pkg/config/config.ts";
@@ -37,6 +38,10 @@ import {
   MessageProcessor,
   type ProcessOutcome,
 } from "../pkg/infrastructure/messaging/processor.ts";
+import {
+  HttpSchemaRegistry,
+  type SchemaSubjects,
+} from "../pkg/infrastructure/messaging/schema-registry.ts";
 import type { DatabaseConnection } from "../pkg/infrastructure/repository/client.ts";
 import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
 import { DatabaseOutbox } from "../pkg/infrastructure/repository/outbox.ts";
@@ -116,6 +121,8 @@ export type ConsumerResources = Readonly<{
   valkey: Valkey;
   /** Producer of `<stream>.dlq` dead letters. */
   deadLetters: MessagePublisher;
+  /** Schema Registry of the records of the streams (FR-715). */
+  schemaRegistry: SchemaRegistryConfig;
   logger: Logger;
 }>;
 
@@ -131,6 +138,8 @@ export interface ConsumerCradle {
   /** ADR 43: opening and availability events rewrite the read cache keys. */
   readonly cacheRefresh: CacheRefreshHandler;
   readonly deadLetters: MessagePublisher;
+  /** Subjects of the schema ids of the records (FR-715). */
+  readonly schemas: SchemaSubjects;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */
   readonly logger: Logger;
   /** Span and duration of every use case listed in di/usecases.ts. */
@@ -174,6 +183,9 @@ export const createConsumerContainer = (
     valkey: asValue(resources.valkey),
     cacheMetrics: asFunction(() => new CacheMetrics()).singleton(),
     deadLetters: asValue(resources.deadLetters),
+    schemas: asFunction(
+      () => new HttpSchemaRegistry(resources.schemaRegistry),
+    ).singleton(),
     logger: asValue(resources.logger),
     useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),
     clock: asValue<Clock>({ now: () => new Date() }),
@@ -230,6 +242,7 @@ export const createConsumerContainer = (
         deliveryPickedUp,
         inbox,
         deadLetters,
+        schemas,
         consumerMetrics,
         logger,
       }: ConsumerCradle) => {
@@ -243,6 +256,7 @@ export const createConsumerContainer = (
           handlers: [deliveryPickedUp],
           inbox,
           deadLetters,
+          schemas,
           retry: {
             maxRetries: consumerConfig.maxRetries,
             initialIntervalMs: consumerConfig.retryInitialIntervalMs,
@@ -283,6 +297,7 @@ export const createConsumerContainer = (
         recordWaitTime,
         inbox,
         deadLetters,
+        schemas,
         consumerMetrics,
         logger,
       }: ConsumerCradle) => {
@@ -296,6 +311,7 @@ export const createConsumerContainer = (
           handlers: createWaitTimeHandlers({ recordWaitTime }),
           inbox,
           deadLetters,
+          schemas,
           retry: {
             maxRetries: consumerConfig.maxRetries,
             initialIntervalMs: consumerConfig.retryInitialIntervalMs,
@@ -317,6 +333,7 @@ export const createConsumerContainer = (
         consumerConfig,
         waitTimePolicy,
         clock,
+        schemas,
         logger,
       }: ConsumerCradle) => {
         const cache = {
@@ -346,6 +363,7 @@ export const createConsumerContainer = (
               ),
             ),
           },
+          schemas,
           retry: {
             initialIntervalMs: consumerConfig.retryInitialIntervalMs,
             maxIntervalMs: consumerConfig.retryMaxIntervalMs,

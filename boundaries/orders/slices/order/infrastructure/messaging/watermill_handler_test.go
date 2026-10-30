@@ -2,6 +2,7 @@ package messaging_test
 
 import (
 	"context"
+	"net/http"
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/application"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
@@ -90,9 +91,12 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		}()
 	}
 
+	schemas, err := messaging.NewSchemaRegistry(registry.URL, http.DefaultClient)
+	require.NoError(t, err)
 	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
 		ConsumerGroup: "orders",
 		Retry:         messaging.RetryPolicy{MaxRetries: 1, InitialInterval: time.Millisecond, MaxInterval: time.Millisecond},
+		Schemas:       schemas,
 	}, pubSub, pubSub, ordermessaging.Streams(handlers), nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -121,6 +125,7 @@ func (c consumer) publishVersion(t *testing.T, topic, eventID string, version ui
 		AggregateVersion: version,
 	}, event)
 	require.NoError(t, err)
+	msg.Payload = framed(event, msg.Payload)
 	done := make(chan error, 1)
 	go func() { done <- c.pubSub.Publish(topic, msg) }()
 	select {

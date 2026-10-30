@@ -103,12 +103,14 @@ Watermill не превращает business errors в бесконечный tr
 
 Ошибка `Unmarshal` в sarama-subscriber'е — fail-fast: сообщение не ack'ается, offset не коммитится, partition стоит. Поэтому `Unmarshaler` никогда не возвращает ошибку: невалидный record становится сообщением с raw payload и metadata `deserialization_error=…`, которое deserialization guard направляет в `<stream>.dlq` и ack'ает. Это проверяется тестом: битый record не блокирует partition. У будущего franz-go клиента для этого есть `OnUnmarshalError`, у sarama-версии — нет.
 
+Value Integration Event — wire format Schema Registry ([ADR 25](0025-integration-event-publication.md#payload-и-schema-registry)). `Unmarshaler` проверяет формат без Registry: value вне его — тот же `deserialization_error`. Value остаётся с префиксом, поэтому dead letter хранит запись как есть и redrive публикует её без изменений; префикс отрезает `EnvelopeMarshaler` перед разбором Protobuf. Subject схемы сверяет отдельный middleware после deserialization guard: id неизвестен или его subjects не содержат `event_type` — `<stream>.dlq` как deserialization; недоступный Registry — nack до Retry, partition ждёт и Kafka доставит запись снова. Id схем неизменяемы, поэтому найденные subjects consumer хранит до конца жизни процесса. `SCHEMA_REGISTRY__URL` обязателен consumer'у: без него процесс не стартует.
+
 #### Порядок middleware
 
 Снаружи внутрь:
 
 ```text
-Recoverer (panic → error) → OpenTelemetry/metrics → deserialization guard → Retry → dead letter (permanent → <stream>.dlq) → unknown event_type → handler
+Recoverer (panic → error) → OpenTelemetry/metrics → deserialization guard → schema subject → Retry → dead letter (permanent → <stream>.dlq) → unknown event_type → handler
 ```
 
 `CircuitBreaker` — опционально на handlers с внешними зависимостями вне UoW (SpiceDB, gateway); решение при реализации.

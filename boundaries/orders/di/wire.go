@@ -7,6 +7,7 @@ import (
 
 	grpcadapter "nomnom/orders/infrastructure/grpc"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/messaging"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	orderdi "nomnom/orders/slices/order/di"
 	simulatordi "nomnom/orders/slices/simulator/di"
@@ -24,7 +25,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Database", "Cancellation", "Catalog", "Temporal", "Fulfillment", "ScheduledOrder", "InternalGateway", "Simulator"))
+		"Server", "Identity", "SpiceDB", "Database", "Cancellation", "Catalog", "Temporal", "Fulfillment", "ScheduledOrder", "InternalGateway", "Simulator", "SchemaRegistry"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
@@ -52,6 +53,6 @@ func InitializeWorker(cfg config.Config) (*TemporalWorker, func(), error) {
 }
 
 func InitializeConsumer(cfg config.Config) (*KafkaConsumer, func(), error) {
-	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.ConsumerSet, NewKafkaConsumer)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.ConsumerSet, NewSchemaRegistry, wire.Bind(new(messaging.SchemaSubjects), new(*messaging.SchemaRegistry)), NewKafkaConsumer)
 	return nil, nil, nil
 }

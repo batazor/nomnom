@@ -14,6 +14,7 @@ import {
   type AppConfig,
   loadConfig,
   loadScheduledSlotConfig,
+  loadSchemaRegistryConfig,
   loadSimulatorConfig,
   loadSpiceDbConfig,
 } from "../pkg/config/config.ts";
@@ -212,6 +213,9 @@ test("the consumer container resolves every registration", async () => {
     valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
     valkey: offlineValkey(),
     deadLetters: { publish: async () => {} },
+    schemaRegistry: loadSchemaRegistryConfig({
+      SCHEMA_REGISTRY__URL: "http://127.0.0.1:1",
+    }),
     logger: silentLogger,
   });
   try {

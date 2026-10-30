@@ -151,12 +151,20 @@ build:
       docker:
         target: runtime
     # Customer UI (локальный ADR 2 UI): vite build за nginx. Контекст — boundaries/ ради
-    # клиентской схемы BFF; лишнее отсекает ui/Dockerfile.dockerignore. Последний artifact:
-    # индексы в patches профилей (1, 3, 5) не меняются.
+    # клиентской схемы BFF; лишнее отсекает ui/Dockerfile.dockerignore. Индексы в
+    # patches профилей (1, 3, 5) не меняются.
     - image: nomnom/ui
       context: ../../../boundaries
       docker:
         dockerfile: ui/Dockerfile
+        target: runtime
+    # Регистрация схем Integration Events (FR-712): контекст — корень репозитория ради .proto
+    # модулей контекстов, лишнее отсекает Dockerfile.dockerignore. Добавлен после ui: индексы
+    # в patches профилей не меняются.
+    - image: nomnom/schema-registration
+      context: ../../..
+      docker:
+        dockerfile: ops/schema-registration/Dockerfile
         target: runtime
 manifests:
   # SpiceDB, PostgreSQL и MongoDB (данные в памяти и emptyDir) ставит chart ../bootstrap из
@@ -372,6 +380,8 @@ deploy:
         namespace: nomnom-infra
         createNamespace: true
         wait: true
+        # Коннекторы оформляют записи по зарегистрированным схемам (FR-716): Connect — после них.
+        dependsOn: [schema-registration]
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_kafka_connect}}"
           image.tag: "{{.IMAGE_TAG_nomnom_kafka_connect}}"
@@ -397,8 +407,8 @@ deploy:
           image.repository: "{{.IMAGE_REPO_nomnom_ui}}"
           image.tag: "{{.IMAGE_TAG_nomnom_ui}}"
       # Temporal worker delivery (FR-708): Assignment Workflow, тот же образ и chart, command
-      # /usr/local/bin/delivery-worker. Схему мигрирует release delivery. Последний release
-      # (индекс 13): индексы в patches профилей не меняются.
+      # /usr/local/bin/delivery-worker. Схему мигрирует release delivery. Индекс 13 — в
+      # patches grafana-cloud.
       - name: delivery-worker
         chartPath: ../../../boundaries/delivery/ops/helm
         namespace: nomnom-delivery
@@ -410,6 +420,16 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_delivery}}"
           image.tag: "{{.IMAGE_TAG_nomnom_delivery}}"
+      # Схемы Integration Events в Schema Registry Redpanda (FR-716): hook Job до kafka-connect.
+      # Последний release (индекс 14): индексы в patches профилей не меняются.
+      - name: schema-registration
+        chartPath: ../schema-registration
+        namespace: nomnom-infra
+        createNamespace: true
+        wait: true
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nomnom_schema_registration}}"
+          image.tag: "{{.IMAGE_TAG_nomnom_schema_registration}}"
 profiles:
   # make kind-dev / KIND_STAND=core: стенд для ручной работы без fixtures проверок kind E2E
   # (без release e2e и образа e2e-probe) — make kind-test на нём не проходит.

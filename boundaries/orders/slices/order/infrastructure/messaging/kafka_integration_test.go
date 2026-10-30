@@ -3,6 +3,7 @@ package messaging_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -75,10 +76,13 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 	require.NoError(t, err)
 	poisonPublisher, err := messaging.NewDeadLetterPublisher(cfg, logger)
 	require.NoError(t, err)
+	schemas, err := messaging.NewSchemaRegistry(registry.URL, http.DefaultClient)
+	require.NoError(t, err)
 	router, err := messaging.NewConsumerRouter(messaging.ConsumerConfig{
 		ConsumerGroup: cfg.ConsumerGroup,
 		Retry:         messaging.RetryPolicy{MaxRetries: 3, InitialInterval: 10 * time.Millisecond, MaxInterval: 50 * time.Millisecond},
 		CloseTimeout:  10 * time.Second,
+		Schemas:       schemas,
 	}, subscriber, poisonPublisher, ordermessaging.Streams(handlersOf(store, notifier, NewMockStarter(t), NewMockRelationships(t))), logger)
 	require.NoError(t, err)
 	runCtx, cancel := context.WithCancel(ctx)
@@ -194,6 +198,37 @@ func TestKafkaConsumerAgainstKafka(t *testing.T) {
 		await(t, notified, 1)
 	})
 
+	// AC-977, AC-978: a bare Protobuf value and the schema of another event_type
+	// are deserialization errors; the record keeps its value in the DLQ.
+	t.Run("record outside its schema goes to the DLQ as a deserialization error", func(t *testing.T) {
+		pickedUp := &deliveryv1.DeliveryPickedUp{OrderId: "order-accepted"}
+		bare, err := proto.Marshal(&restaurantsv1.RestaurantOrderReady{OrderId: "order-accepted"})
+		require.NoError(t, err)
+		for _, tc := range []struct {
+			name, reason string
+			value        []byte
+		}{
+			{"bare", "not the schema registry magic byte", bare},
+			{"foreign schema", `is not a schema of event_type "nomnom.restaurants.v1.RestaurantOrderReady"`, framed(pickedUp, bare)},
+		} {
+			name, value := tc.name, tc.value
+			msg, err := messaging.NewIntegrationEventMessage(messaging.Envelope{
+				EventID: "event-" + name, OccurredAt: occurredAt, AggregateType: "source", AggregateID: "kitchen-x", AggregateVersion: 1,
+			}, &restaurantsv1.RestaurantOrderReady{OrderId: "order-accepted"})
+			require.NoError(t, err)
+			msg.Payload = value
+			publishMessage(t, brokers, ordermessaging.RestaurantOrderEventsTopic, msg)
+
+			select {
+			case letter := <-poison:
+				assert.Contains(t, letter.Metadata.Get(messaging.ReasonDeadLetteredMetadata), tc.reason, name)
+				assert.Equal(t, value, []byte(letter.Payload), name)
+			case <-time.After(30 * time.Second):
+				t.Fatalf("%s record is not in the DLQ", name)
+			}
+		}
+	})
+
 	t.Run("unknown event type goes to the DLQ", func(t *testing.T) {
 		publish(ordermessaging.RestaurantOrderEventsTopic, "kitchen-x", "event-unknown", &deliveryv1.DeliveryPickedUp{OrderId: "order-accepted"})
 
@@ -241,8 +276,9 @@ func createTopics(t *testing.T, brokers []string, topics ...string) {
 	}
 }
 
-// publisher publishes Integration Events as publishers of other contexts do:
-// envelope in headers, Protobuf payload, partition key aggregate_id.
+// publisher publishes Integration Events as the connectors of other contexts
+// do: envelope in headers, Protobuf payload in the wire format, partition key
+// aggregate_id.
 func publisher(t *testing.T, brokers []string) func(topic, aggregateID, eventID string, event proto.Message) {
 	t.Helper()
 	pub, err := watermillkafka.NewPublisher(watermillkafka.PublisherConfig{
@@ -264,8 +300,22 @@ func publisher(t *testing.T, brokers []string) func(topic, aggregateID, eventID 
 			AggregateVersion: 1,
 		}, event)
 		require.NoError(t, err)
+		msg.Payload = framed(event, msg.Payload)
 		require.NoError(t, pub.Publish(topic, msg))
 	}
+}
+
+// publishMessage produces msg with its metadata as headers and its payload as
+// the value, without framing.
+func publishMessage(t *testing.T, brokers []string, topic string, msg *message.Message) {
+	t.Helper()
+	pub, err := watermillkafka.NewPublisher(watermillkafka.PublisherConfig{
+		Brokers:   brokers,
+		Marshaler: watermillkafka.DefaultMarshaler{},
+	}, watermill.NopLogger{})
+	require.NoError(t, err)
+	defer func() { _ = pub.Close() }()
+	require.NoError(t, pub.Publish(topic, msg))
 }
 
 // raw produces a record as a broken publisher would: no envelope headers.
