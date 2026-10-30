@@ -10,9 +10,10 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/testfixture"
-	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
+
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // kafka and registry are the broker and Schema Registry of the package,

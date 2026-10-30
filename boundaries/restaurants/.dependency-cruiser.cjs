@@ -58,7 +58,7 @@ module.exports = {
         pathNot:
           "^(infrastructure|slices/[^/]+/infrastructure|di|slices/[^/]+/di|cmd)/",
       },
-      to: { path: "/gen/" },
+      to: { path: "(/gen/|^node_modules/@buf/)" },
     },
     {
       name: "resolvable-imports",

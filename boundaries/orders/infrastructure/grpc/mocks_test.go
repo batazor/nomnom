@@ -6,8 +6,8 @@ package grpcadapter_test
 
 import (
 	"context"
-	"nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 
+	"buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	mock "github.com/stretchr/testify/mock"
 )
 

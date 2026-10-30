@@ -21,13 +21,15 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/order/infrastructure/catalog"
+
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 func item(id, amount, currency string, available bool) *restaurantsv1.MenuItem {
@@ -43,7 +45,7 @@ func dial(t *testing.T, server *MockRestaurantsServiceServer, options ...grpc.Di
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 

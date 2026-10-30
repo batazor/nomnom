@@ -75,9 +75,19 @@ Buf lint category `STANDARD` уже включает проверки `SERVICE_S
 
 ### Потребление и generated code
 
-Потребитель указывает BSR-модуль в `inputs[].module` своего `buf.gen.yaml` и добавляет к имени модуля суффикс с конкретным BSR commit, например `buf.build/nomnom/orders:<commit>`. Подвижные labels не используются для пиннинга. Обновление контракта — явное изменение commit ref в PR.
+Потребитель не генерирует код чужих контрактов: он подключает готовый BSR Generated SDK модуля-владельца как обычную зависимость своего пакетного менеджера. Версия SDK содержит версию plugin и BSR commit модуля, например `v1.36.12-20261030084627-27ccc405ec08.2`, и закрепляется в `go.mod` или `package.json` с lock-файлом. Подвижные labels и `latest` в манифесте не используются. Обновление контракта — явное изменение версии зависимости в PR.
 
-Generated code коммитится в `infrastructure` потребителя. CI повторяет `buf generate` и проверяет чистый `git diff --exit-code`. У владельца `buf.gen.yaml` находится в его `infrastructure/grpc` и использует локальный модуль; у каждого потребителя есть собственный `buf.gen.yaml` рядом с адаптером. Единого корневого `buf.gen.yaml` нет, поскольку в формате v2 `plugins[].out` применяется ко всем `inputs` данного файла.
+| Язык | Зависимость | Импорт |
+| --- | --- | --- |
+| Go, сообщения | `buf.build/gen/go/nomnom/<module>/protocolbuffers/go` | `.../nomnom/<module>/v1` |
+| Go, gRPC | `buf.build/gen/go/nomnom/<module>/grpc/go` | `.../nomnom/<module>/v1/<module>v1grpc` |
+| TypeScript | `@buf/nomnom_<module>.bufbuild_es` из `https://buf.build/gen/npm/v1/` | `@buf/nomnom_<module>.bufbuild_es/nomnom/<module>/v1/<file>_pb.js` |
+
+Модули публичны, как и репозиторий, поэтому сборка не требует токена BSR. `npm ci` берёт адрес из `package-lock.json`; `.npmrc` с `@buf:registry` нужен только для `npm install`.
+
+Generated code владельца коммитится в его `infrastructure/grpc/gen`. CI повторяет `buf generate` и проверяет чистый `git diff --exit-code`. `buf.gen.yaml` есть только у владельца, использует локальный модуль и находится в его `infrastructure/grpc`. Исключение — внешние модули без подходящего SDK: например, `delivery` генерирует клиент `buf.build/authzed/api` для Rust в `infrastructure/spicedb`.
+
+Новая версия контракта сначала публикуется через `buf push`, затем потребитель поднимает версию SDK. Поэтому изменение `.proto` и использующий его код потребителя не могут появиться в одном push без публикации.
 
 Remote plugins всегда закрепляются на версии:
 
@@ -165,27 +175,7 @@ inputs:
   - directory: .
 ```
 
-Потребитель использует опубликованный модуль с конкретным commit ref. Пример Go-потребителя API заказов:
-
-```yaml
-version: v2
-managed:
-  enabled: true
-  override:
-    - file_option: go_package_prefix
-      value: <consumer-go-module>/infrastructure/grpc/gen
-plugins:
-  - remote: buf.build/protocolbuffers/go:v1.36.12
-    out: gen
-    opt: paths=source_relative
-  - remote: buf.build/grpc/go:v1.6.2
-    out: gen
-    opt: paths=source_relative
-inputs:
-  - module: buf.build/nomnom/orders:<pinned-bsr-commit>
-```
-
-Для остальных языков сохраняются те же `managed` и pinned `inputs`, а `plugins` заменяются целевой группой:
+Для остальных языков владельца сохраняется тот же `managed`, а `plugins` заменяются целевой группой:
 
 ```yaml
 # TypeScript
@@ -210,7 +200,7 @@ plugins:
     out: gen
 ```
 
-Значения output directories и `go_package_prefix` уточняются для языка и layout конкретного потребителя, но локальный input владельца, BSR input потребителя, версии plugins и pinned commit не меняются произвольно.
+Значения output directories и `go_package_prefix` уточняются для языка и layout конкретного потребителя, но локальный input владельца и версии plugins не меняются произвольно.
 
 ### Проверки и публикация
 
@@ -221,7 +211,7 @@ buf format --diff --exit-code                    # форматирование 
 buf lint                                         # правила STANDARD
 buf build                                        # компилируемость workspace
 buf breaking --against buf.build/nomnom/<module> # совместимость с последним push
-buf generate                                     # stubs владельца или потребителя
+buf generate                                     # stubs владельца
 git diff --exit-code                             # generated code актуален
 ```
 

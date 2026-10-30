@@ -18,11 +18,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/scheduledslots"
+
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 var windowStart = time.Date(2026, time.October, 25, 19, 0, 0, 0, time.UTC)
@@ -31,7 +33,7 @@ func newSlots(t *testing.T, server *MockRestaurantsServiceServer) *scheduledslot
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 	conn, err := grpc.NewClient("passthrough:///bufnet",

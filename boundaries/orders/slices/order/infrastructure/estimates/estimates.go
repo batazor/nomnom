@@ -14,12 +14,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
+
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // ErrMissingEstimate means a neighbour answered without the estimate it
@@ -28,13 +31,13 @@ var ErrMissingEstimate = errors.New("estimate missing from the response")
 
 // Restaurants reads Restaurant.baseline_preparation.
 type Restaurants struct {
-	client restaurantsv1.RestaurantsServiceClient
+	client restaurantsv1grpc.RestaurantsServiceClient
 }
 
 var _ planschedule.Preparation = (*Restaurants)(nil)
 
 func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
-	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
+	return &Restaurants{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn)}
 }
 
 func (r *Restaurants) BaselinePreparation(ctx context.Context, restaurantID order.RestaurantID) (time.Duration, error) {
@@ -54,13 +57,13 @@ func (r *Restaurants) BaselinePreparation(ctx context.Context, restaurantID orde
 
 // Delivery reads EstimateDeliveryDuration of a Market.
 type Delivery struct {
-	client deliveryv1.DeliveryServiceClient
+	client deliveryv1grpc.DeliveryServiceClient
 }
 
 var _ planschedule.DeliveryDuration = (*Delivery)(nil)
 
 func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
-	return &Delivery{client: deliveryv1.NewDeliveryServiceClient(conn)}
+	return &Delivery{client: deliveryv1grpc.NewDeliveryServiceClient(conn)}
 }
 
 func (d *Delivery) EstimateDeliveryDuration(ctx context.Context, marketID vo.MarketID) (planschedule.DeliveryEstimate, error) {

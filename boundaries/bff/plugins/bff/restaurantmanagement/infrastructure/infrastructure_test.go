@@ -17,9 +17,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	catalog "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
@@ -29,7 +30,7 @@ const fixtures = "../../../../../../tests/identity/fixtures"
 // restaurantsServer keeps the opening state of one restaurant like restaurants:
 // a repeat answers changed = false.
 type restaurantsServer struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
+	restaurantsv1grpc.UnimplementedRestaurantsServiceServer
 	open   bool
 	err    error
 	got    string
@@ -91,7 +92,7 @@ func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 

@@ -6,8 +6,8 @@ package estimates_test
 
 import (
 	"context"
-	"nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
 
+	"buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
 	mock "github.com/stretchr/testify/mock"
 )
 

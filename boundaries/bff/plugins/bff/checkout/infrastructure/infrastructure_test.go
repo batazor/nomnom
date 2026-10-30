@@ -19,15 +19,16 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"buf.build/gen/go/nomnom/orders/grpc/go/nomnom/orders/v1/ordersv1grpc"
+	ordersv1 "buf.build/gen/go/nomnom/orders/protocolbuffers/go/nomnom/orders/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/checkout/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
 )
 
 const fixtures = "../../../../../../tests/identity/fixtures"
 
 type ordersServer struct {
-	ordersv1.UnimplementedOrdersServiceServer
+	ordersv1grpc.UnimplementedOrdersServiceServer
 	err    error
 	got    *ordersv1.PlaceOrderRequest
 	seenMD metadata.MD
@@ -46,7 +47,7 @@ func connect(t *testing.T, server *ordersServer) *Orders {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	ordersv1.RegisterOrdersServiceServer(grpcServer, server)
+	ordersv1grpc.RegisterOrdersServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 

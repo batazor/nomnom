@@ -6,19 +6,20 @@ import (
 
 	"google.golang.org/grpc"
 
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
 // Catalog implements applications.Catalog on the public reads of
 // restaurants.v1.RestaurantsService. They carry no user assertion.
 type Catalog struct {
-	client restaurantsv1.RestaurantsServiceClient
+	client restaurantsv1grpc.RestaurantsServiceClient
 }
 
 func NewCatalog(conn grpc.ClientConnInterface) *Catalog {
-	return &Catalog{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
+	return &Catalog{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn)}
 }
 
 func (c *Catalog) Restaurant(ctx context.Context, restaurantID string) (applications.Restaurant, error) {

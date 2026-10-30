@@ -20,9 +20,11 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"buf.build/gen/go/nomnom/orders/grpc/go/nomnom/orders/v1/ordersv1grpc"
+	ordersv1 "buf.build/gen/go/nomnom/orders/protocolbuffers/go/nomnom/orders/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
@@ -32,7 +34,7 @@ const fixtures = "../../../../../../tests/identity/fixtures"
 var placedAt = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 
 type ordersServer struct {
-	ordersv1.UnimplementedOrdersServiceServer
+	ordersv1grpc.UnimplementedOrdersServiceServer
 	order  *ordersv1.Order
 	err    error
 	seenMD metadata.MD
@@ -83,7 +85,7 @@ func card(id string) *ordersv1.Order {
 }
 
 type restaurantsServer struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
+	restaurantsv1grpc.UnimplementedRestaurantsServiceServer
 	seenMD metadata.MD
 }
 
@@ -161,7 +163,7 @@ func TestOrdersGetOrderCarriesCustomerAndMapsOrder(t *testing.T) {
 			Start: timestamppb.New(placedAt.Add(2 * time.Hour)), End: timestamppb.New(placedAt.Add(2*time.Hour + 15*time.Minute)),
 		},
 	}}
-	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1grpc.RegisterOrdersServiceServer(s, server) }))
 
 	got, err := orders.GetOrder(customerContext(), "order-1")
 
@@ -182,7 +184,7 @@ func TestOrdersGetOrderCarriesCustomerAndMapsOrder(t *testing.T) {
 func TestOrdersHidesForeignOrders(t *testing.T) {
 	for _, code := range []codes.Code{codes.NotFound, codes.PermissionDenied} {
 		server := &ordersServer{err: status.Error(code, "no")}
-		orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+		orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1grpc.RegisterOrdersServiceServer(s, server) }))
 		_, err := orders.GetOrder(customerContext(), "order-1")
 		assert.ErrorIs(t, err, applications.ErrOrderNotFound, code)
 	}
@@ -191,7 +193,7 @@ func TestOrdersHidesForeignOrders(t *testing.T) {
 // AC-560: the ErrorInfo reason of a refusal reaches the scenario.
 func TestOrdersCancellationRefusalCarriesReason(t *testing.T) {
 	server := &ordersServer{err: refusal("CANCELLATION_WINDOW_EXPIRED")}
-	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1grpc.RegisterOrdersServiceServer(s, server) }))
 
 	_, err := orders.RequestCancellation(customerContext(), applications.CancellationRequest{OrderID: "order-1", RequestID: "r-1"})
 
@@ -207,7 +209,7 @@ func TestOrdersCancellationRefusalCarriesReason(t *testing.T) {
 // refusal of cancellation.
 func TestGetOrderFailedPreconditionIsNotACancellationRefusal(t *testing.T) {
 	server := &ordersServer{err: refusal("ORDER_STATE_CONFLICT")}
-	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1grpc.RegisterOrdersServiceServer(s, server) }))
 	_, err := orders.GetOrder(customerContext(), "order-1")
 	require.Error(t, err)
 	var refused applications.CancellationRefused
@@ -218,7 +220,7 @@ func TestGetOrderFailedPreconditionIsNotACancellationRefusal(t *testing.T) {
 
 func TestCatalogIsPublic(t *testing.T) {
 	server := &restaurantsServer{}
-	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, server) }))
+	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1grpc.RegisterRestaurantsServiceServer(s, server) }))
 
 	restaurant, err := catalog.Restaurant(customerContext(), "restaurant-1")
 	require.NoError(t, err)
@@ -231,7 +233,7 @@ func TestCatalogIsPublic(t *testing.T) {
 // unknown id is absent.
 func TestCatalogReadsRestaurantsInOneCall(t *testing.T) {
 	server := &restaurantsServer{}
-	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, server) }))
+	catalog := NewCatalog(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1grpc.RegisterRestaurantsServiceServer(s, server) }))
 
 	restaurants, err := catalog.Restaurants(customerContext(), []string{"restaurant-1", "missing"})
 
@@ -245,7 +247,7 @@ func TestCatalogReadsRestaurantsInOneCall(t *testing.T) {
 // The history goes to orders on behalf of the customer, with the customer id.
 func TestOrdersListCustomerOrdersCarriesCustomerAndCursors(t *testing.T) {
 	server := &ordersServer{}
-	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, server) }))
+	orders := NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1grpc.RegisterOrdersServiceServer(s, server) }))
 
 	page, err := orders.ListCustomerOrders(customerContext(), "customer-1", 2, "cursor-3")
 

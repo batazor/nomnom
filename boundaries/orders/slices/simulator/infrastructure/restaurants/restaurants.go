@@ -11,10 +11,12 @@ import (
 
 	"google.golang.org/grpc"
 
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/customersimulator"
+
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // pageSize is the maximum page of ListRestaurants.
@@ -25,7 +27,7 @@ const pageSize = 100
 // ListRestaurants is per Market. The Market of the Order is not chosen here:
 // Place Order takes it from the chosen Restaurant.
 type Catalog struct {
-	client  restaurantsv1.RestaurantsServiceClient
+	client  restaurantsv1grpc.RestaurantsServiceClient
 	markets []vo.MarketID
 	timeout time.Duration
 }
@@ -33,7 +35,7 @@ type Catalog struct {
 var _ customersimulator.Catalog = (*Catalog)(nil)
 
 func New(conn grpc.ClientConnInterface, markets []vo.MarketID, timeout time.Duration) *Catalog {
-	return &Catalog{client: restaurantsv1.NewRestaurantsServiceClient(conn), markets: markets, timeout: timeout}
+	return &Catalog{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn), markets: markets, timeout: timeout}
 }
 
 // OpenRestaurants reads every page of the restaurants accepting orders of

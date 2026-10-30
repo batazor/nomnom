@@ -16,9 +16,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/courierpool/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 )
 
@@ -27,7 +28,7 @@ const fixtures = "../../../../../../tests/identity/fixtures"
 // deliveryServer answers the Courier Pool RPCs and records every call and
 // whether it carried a user assertion.
 type deliveryServer struct {
-	deliveryv1.UnimplementedDeliveryServiceServer
+	deliveryv1grpc.UnimplementedDeliveryServiceServer
 	err      error
 	markets  []string
 	calls    []string
@@ -77,7 +78,7 @@ func connect(t *testing.T, server *deliveryServer) *Delivery {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	deliveryv1.RegisterDeliveryServiceServer(grpcServer, server)
+	deliveryv1grpc.RegisterDeliveryServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 

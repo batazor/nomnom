@@ -15,11 +15,15 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
-	paymentsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1"
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
+
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/payments/grpc/go/nomnom/payments/v1/paymentsv1grpc"
+	paymentsv1 "buf.build/gen/go/nomnom/payments/protocolbuffers/go/nomnom/payments/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // ErrOperationPending is retryable: the Activity repeats the same idempotency key
@@ -29,11 +33,11 @@ var ErrOperationPending = errors.New("payment operation is pending")
 // Payments implements neighbours.Payments. Every operation first resolves the
 // Payment of the Order by the idempotent CreatePayment.
 type Payments struct {
-	client paymentsv1.PaymentsServiceClient
+	client paymentsv1grpc.PaymentsServiceClient
 }
 
 func NewPayments(conn grpc.ClientConnInterface) *Payments {
-	return &Payments{client: paymentsv1.NewPaymentsServiceClient(conn)}
+	return &Payments{client: paymentsv1grpc.NewPaymentsServiceClient(conn)}
 }
 
 var _ neighbours.Payments = (*Payments)(nil)
@@ -126,11 +130,11 @@ func compensated(call string, op *paymentsv1.PaymentOperation) error {
 
 // Restaurants implements neighbours.Restaurants.
 type Restaurants struct {
-	client restaurantsv1.RestaurantsServiceClient
+	client restaurantsv1grpc.RestaurantsServiceClient
 }
 
 func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
-	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
+	return &Restaurants{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn)}
 }
 
 var _ neighbours.Restaurants = (*Restaurants)(nil)
@@ -224,11 +228,11 @@ func (r *Restaurants) CancelOrder(ctx context.Context, request neighbours.Restau
 
 // Delivery implements neighbours.Delivery.
 type Delivery struct {
-	client deliveryv1.DeliveryServiceClient
+	client deliveryv1grpc.DeliveryServiceClient
 }
 
 func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
-	return &Delivery{client: deliveryv1.NewDeliveryServiceClient(conn)}
+	return &Delivery{client: deliveryv1grpc.NewDeliveryServiceClient(conn)}
 }
 
 var _ neighbours.Delivery = (*Delivery)(nil)

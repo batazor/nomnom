@@ -36,9 +36,10 @@ import (
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
-	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
+
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 var occurredAt = time.Date(2026, time.October, 25, 13, 0, 0, 0, time.UTC)

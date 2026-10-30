@@ -7,7 +7,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
@@ -15,11 +16,11 @@ import (
 // tracking — from delivery.v1.DeliveryService (GetOrderDelivery) on behalf of
 // the customer: delivery checks order#view once.
 type Deliveries struct {
-	client deliveryv1.DeliveryServiceClient
+	client deliveryv1grpc.DeliveryServiceClient
 }
 
 func NewDeliveries(conn grpc.ClientConnInterface) *Deliveries {
-	return &Deliveries{client: deliveryv1.NewDeliveryServiceClient(conn)}
+	return &Deliveries{client: deliveryv1grpc.NewDeliveryServiceClient(conn)}
 }
 
 var _ applications.Deliveries = (*Deliveries)(nil)

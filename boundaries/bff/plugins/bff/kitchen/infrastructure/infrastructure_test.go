@@ -20,8 +20,9 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
 
@@ -39,7 +40,7 @@ var (
 // restaurantsServer answers the kitchen board and commands and records which
 // calls carried a user assertion.
 type restaurantsServer struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
+	restaurantsv1grpc.UnimplementedRestaurantsServiceServer
 	mu    sync.Mutex
 	err   error
 	state restaurantsv1.RestaurantOrderState
@@ -191,7 +192,7 @@ func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 

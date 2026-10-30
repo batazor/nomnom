@@ -17,12 +17,15 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/estimates"
+
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 func serve(t *testing.T) (*grpc.ClientConn, *MockRestaurantsServiceServer, *MockDeliveryServiceServer) {
@@ -31,8 +34,8 @@ func serve(t *testing.T) (*grpc.ClientConn, *MockRestaurantsServiceServer, *Mock
 	delivery := NewMockDeliveryServiceServer(t)
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(server, restaurants)
-	deliveryv1.RegisterDeliveryServiceServer(server, delivery)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(server, restaurants)
+	deliveryv1grpc.RegisterDeliveryServiceServer(server, delivery)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	conn, err := grpc.NewClient("passthrough:///gateway",

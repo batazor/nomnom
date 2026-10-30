@@ -6,8 +6,8 @@ package grpcclient_test
 
 import (
 	"context"
-	"nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1"
 
+	"buf.build/gen/go/nomnom/payments/protocolbuffers/go/nomnom/payments/v1"
 	mock "github.com/stretchr/testify/mock"
 )
 

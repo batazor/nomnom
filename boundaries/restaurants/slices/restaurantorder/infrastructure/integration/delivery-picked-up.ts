@@ -1,9 +1,9 @@
 // Consumer Integration Event `nomnom.delivery.v1.DeliveryPickedUp` (ADR 11,
 // ADR 28): Transport DTO → Command Record Pickup. The courier took the order,
 // so the kitchen is done with it and the order leaves the kitchen board.
-import { fromBinary } from "@bufbuild/protobuf";
 
-import { DeliveryPickedUpSchema } from "../../../../infrastructure/grpc/gen/nomnom/delivery/v1/events_pb.js";
+import { DeliveryPickedUpSchema } from "@buf/nomnom_delivery.bufbuild_es/nomnom/delivery/v1/events_pb.js";
+import { fromBinary } from "@bufbuild/protobuf";
 import {
   type Envelope,
   PermanentMessageError,

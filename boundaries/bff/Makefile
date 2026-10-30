@@ -1,5 +1,5 @@
 
-.PHONY: build check compose download generate proto-generate start test
+.PHONY: build check compose download generate start test
 
 make: check
 
@@ -20,10 +20,6 @@ build:
 
 generate:
 	npm run generate
-
-# gRPC-клиенты orders, restaurants и delivery для слайсов BFF (plugins/bff/infrastructure/grpc/buf.gen.yaml).
-proto-generate:
-	cd plugins/bff/infrastructure/grpc && buf generate --template buf.gen.yaml
 
 test:
 	npm test

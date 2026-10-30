@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
+import { DeliveryPickedUpSchema } from "@buf/nomnom_delivery.bufbuild_es/nomnom/delivery/v1/events_pb.js";
 import { create, toBinary } from "@bufbuild/protobuf";
-
-import { DeliveryPickedUpSchema } from "../infrastructure/grpc/gen/nomnom/delivery/v1/events_pb.js";
 import type {
   InboundMessage,
   IntegrationMessage,

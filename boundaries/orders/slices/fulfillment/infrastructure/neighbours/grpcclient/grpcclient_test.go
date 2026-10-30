@@ -18,12 +18,16 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
-	paymentsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1"
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
+
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/payments/grpc/go/nomnom/payments/v1/paymentsv1grpc"
+	paymentsv1 "buf.build/gen/go/nomnom/payments/protocolbuffers/go/nomnom/payments/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // serve runs the mocked neighbours behind one in-process endpoint, like the internal gateway.
@@ -34,9 +38,9 @@ func serve(t *testing.T) (*grpc.ClientConn, *MockPaymentsServiceServer, *MockRes
 	delivery := NewMockDeliveryServiceServer(t)
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer()
-	paymentsv1.RegisterPaymentsServiceServer(server, payments)
-	restaurantsv1.RegisterRestaurantsServiceServer(server, restaurants)
-	deliveryv1.RegisterDeliveryServiceServer(server, delivery)
+	paymentsv1grpc.RegisterPaymentsServiceServer(server, payments)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(server, restaurants)
+	deliveryv1grpc.RegisterDeliveryServiceServer(server, delivery)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 

@@ -16,10 +16,13 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/orders/grpc/go/nomnom/orders/v1/ordersv1grpc"
+	ordersv1 "buf.build/gen/go/nomnom/orders/protocolbuffers/go/nomnom/orders/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
-	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications"
 )
 
@@ -47,7 +50,7 @@ func (s *state) set(ctx context.Context, enabled bool) (bool, error) {
 }
 
 type ordersServer struct {
-	ordersv1.UnimplementedOrdersServiceServer
+	ordersv1grpc.UnimplementedOrdersServiceServer
 	state
 }
 
@@ -68,7 +71,7 @@ func (s *ordersServer) SetSimulatorEnabled(ctx context.Context, request *ordersv
 }
 
 type restaurantsServer struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
+	restaurantsv1grpc.UnimplementedRestaurantsServiceServer
 	state
 }
 
@@ -89,7 +92,7 @@ func (s *restaurantsServer) SetSimulatorEnabled(ctx context.Context, request *re
 }
 
 type deliveryServer struct {
-	deliveryv1.UnimplementedDeliveryServiceServer
+	deliveryv1grpc.UnimplementedDeliveryServiceServer
 	state
 }
 
@@ -145,9 +148,9 @@ func contexts(t *testing.T) []contextUnderTest {
 	t.Helper()
 	orders, restaurants, delivery := &ordersServer{}, &restaurantsServer{}, &deliveryServer{}
 	return []contextUnderTest{
-		{"nomnom.orders", &orders.state, NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1.RegisterOrdersServiceServer(s, orders) }))},
-		{"nomnom.restaurants", &restaurants.state, NewRestaurants(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1.RegisterRestaurantsServiceServer(s, restaurants) }))},
-		{"nomnom.delivery", &delivery.state, NewDelivery(connect(t, "nomnom.delivery", func(s *grpc.Server) { deliveryv1.RegisterDeliveryServiceServer(s, delivery) }))},
+		{"nomnom.orders", &orders.state, NewOrders(connect(t, "nomnom.orders", func(s *grpc.Server) { ordersv1grpc.RegisterOrdersServiceServer(s, orders) }))},
+		{"nomnom.restaurants", &restaurants.state, NewRestaurants(connect(t, "nomnom.restaurants", func(s *grpc.Server) { restaurantsv1grpc.RegisterRestaurantsServiceServer(s, restaurants) }))},
+		{"nomnom.delivery", &delivery.state, NewDelivery(connect(t, "nomnom.delivery", func(s *grpc.Server) { deliveryv1grpc.RegisterDeliveryServiceServer(s, delivery) }))},
 	}
 }
 

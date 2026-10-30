@@ -15,19 +15,20 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	catalog "github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/restaurantmanagement/applications"
 )
 
 // Restaurants implements applications.RestaurantOpener.
 type Restaurants struct {
-	client restaurantsv1.RestaurantsServiceClient
+	client restaurantsv1grpc.RestaurantsServiceClient
 }
 
 func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
-	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
+	return &Restaurants{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn)}
 }
 
 var (

@@ -16,10 +16,12 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
+
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // ReasonScheduledOrdersUnavailable is the ErrorInfo reason of the
@@ -33,7 +35,7 @@ var ErrInvalidReservation = errors.New("slot reservation violates the restaurant
 
 // Slots reserves Delivery Windows of restaurants.
 type Slots struct {
-	client  restaurantsv1.RestaurantsServiceClient
+	client  restaurantsv1grpc.RestaurantsServiceClient
 	timeout time.Duration
 }
 
@@ -42,7 +44,7 @@ var _ placeorder.SlotReservations = (*Slots)(nil)
 // New binds the adapter to the gateway connection; timeout bounds one
 // reservation.
 func New(conn grpc.ClientConnInterface, timeout time.Duration) *Slots {
-	return &Slots{client: restaurantsv1.NewRestaurantsServiceClient(conn), timeout: timeout}
+	return &Slots{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn), timeout: timeout}
 }
 
 // Reserve holds the window under the order id; a repeat with the same order

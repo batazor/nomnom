@@ -162,7 +162,7 @@ Domain Model / Read Model → Application DTO → Transport DTO
 
 | Модель | Размещение | Правило |
 | --- | --- | --- |
-| Transport DTO — Protobuf, Kafka event payload, HTTP/webhook payload, Temporal Activity input/output | `infrastructure/` adapter'а-владельца | Сгенерированный Buf-код живёт в `infrastructure/grpc/gen` и импортируется только из `infrastructure` |
+| Transport DTO — Protobuf, Kafka event payload, HTTP/webhook payload, Temporal Activity input/output | `infrastructure/` adapter'а-владельца | Сгенерированный Buf-код владельца живёт в `infrastructure/grpc/gen`, контракты соседей подключаются как BSR Generated SDK; импортируются только из `infrastructure` |
 | Command — намерение изменить состояние (`PlaceOrderCommand`) | `<slice>/applications/<usecase>/` | Без бизнес-логики и transport-типов |
 | Query — чтение без изменения состояния (`GetOrderQuery`) | `<slice>/applications/<usecase>/` | Без transport-типов |
 | Application DTO — вход/выход use case (`OrderDetailsDTO`) | `<slice>/applications/<usecase>/` | Без поведения; read model query **является** Application DTO; не создаётся на каждый domain type |
@@ -251,7 +251,7 @@ boundaries/<service>/infrastructure/grpc/
 
 Префикс `nomnom.` и повтор имени сервиса в пути обязательны. Они предотвращают коллизии пакетов и обеспечивают `PACKAGE_DIRECTORY_MATCH`. Отдельного общего `contracts/` нет, и модули `nomnom` не импортируют друг друга. Пока не появится подтверждённая потребность в `buf.build/nomnom/common`, API самостоятельно описывают Address, пагинацию и другие transport messages. Стандартные типы берутся из `buf.build/googleapis/googleapis` и `buf.build/protocolbuffers/wellknowntypes`.
 
-Владелец генерирует серверные stubs из локального модуля. Потребитель использует BSR-модуль с закреплённым commit ref в своём `buf.gen.yaml`; labels для пиннинга не применяются. Generated code коммитится в `infrastructure`, а CI проверяет повторяемость через `buf generate` и `git diff --exit-code`. Для сервиса BFF будет создан один `boundaries/bff/plugins/bff/infrastructure/grpc/buf.gen.yaml`; общие сгенерированные клиенты будут использоваться инфраструктурными адаптерами слайсов без копирования. Generated gRPC-контракт Cosmo Router/plugin в `boundaries/bff/plugins/bff/generated` является отдельным техническим контрактом runtime.
+Владелец генерирует серверные stubs из локального модуля. Его generated code коммитится в `infrastructure/grpc/gen`, а CI проверяет повторяемость через `buf generate` и `git diff --exit-code`. Потребитель подключает BSR Generated SDK как зависимость с закреплённой версией в `go.mod` или `package.json`; labels для пиннинга не применяются. Так же получают клиенты адаптеры слайсов BFF. Generated gRPC-контракт Cosmo Router/plugin в `boundaries/bff/plugins/bff/generated` является отдельным техническим контрактом runtime.
 
 Адаптер переводит transport messages в типы `applications` и `domains` и обратно. Protobuf-типы не импортируются внутренними слоями. Он также фиксированно отображает ошибки и добавляет `google.rpc.ErrorInfo` со стабильными `domain` и `reason`:
 

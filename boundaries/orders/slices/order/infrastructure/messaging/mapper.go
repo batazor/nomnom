@@ -21,8 +21,9 @@ import (
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/domains/order"
-	deliveryv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/slices/order/infrastructure/messaging/gen/nomnom/restaurants/v1"
+
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // Mapping Transport DTO + Envelope → Command. Pure functions: no storage,

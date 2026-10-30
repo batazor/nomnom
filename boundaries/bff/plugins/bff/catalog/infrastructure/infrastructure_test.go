@@ -19,9 +19,10 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/catalog/applications"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/market"
 )
 
@@ -30,7 +31,7 @@ const fixtures = "../../../../../../tests/identity/fixtures"
 var nextOpening = time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
 
 type restaurantsServer struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
+	restaurantsv1grpc.UnimplementedRestaurantsServiceServer
 	listed        *restaurantsv1.ListRestaurantsRequest
 	restaurantErr error
 	menuErr       error
@@ -117,7 +118,7 @@ func connect(t *testing.T, server *restaurantsServer) *Restaurants {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 

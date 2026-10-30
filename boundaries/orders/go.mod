@@ -3,6 +3,12 @@ module nomnom/orders
 go 1.27
 
 require (
+	buf.build/gen/go/nomnom/delivery/grpc/go v1.6.2-20261030084627-2e2e4e0040d5.1
+	buf.build/gen/go/nomnom/delivery/protocolbuffers/go v1.36.12-20261030084627-2e2e4e0040d5.2
+	buf.build/gen/go/nomnom/payments/grpc/go v1.6.2-20261030084627-9fc7e7fde41f.1
+	buf.build/gen/go/nomnom/payments/protocolbuffers/go v1.36.12-20261030084627-9fc7e7fde41f.2
+	buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030084627-27ccc405ec08.1
+	buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030084627-27ccc405ec08.2
 	github.com/IBM/sarama v1.50.1
 	github.com/KimMachineGun/automemlimit v1.0.1
 	github.com/Masterminds/squirrel v1.5.4

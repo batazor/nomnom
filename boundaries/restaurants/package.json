@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@authzed/authzed-node": "1.6.1",
+    "@buf/nomnom_delivery.bufbuild_es": "2.16.0-20261030084627-2e2e4e0040d5.1",
     "@bufbuild/protobuf": "2.16.0",
     "@confluentinc/kafka-javascript": "1.11.0",
     "@connectrpc/connect": "2.2.0",

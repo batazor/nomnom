@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"nomnom/orders/infrastructure/gateway"
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	grpcadapter "nomnom/orders/infrastructure/grpc"
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/config"
@@ -30,6 +29,9 @@ import (
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/fake"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
+
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 const identityFixtures = "../../../../tests/identity/fixtures"
@@ -97,7 +99,7 @@ func newE2E(t *testing.T, restaurants *MockRestaurantsServiceServer) e2e {
 	tokens := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tokens, "nomnom.restaurants"), []byte("orders-token\n"), 0o600))
 	gatewayConn := bufconnClient(t, func(s *grpc.Server) {
-		restaurantsv1.RegisterRestaurantsServiceServer(s, restaurants)
+		restaurantsv1grpc.RegisterRestaurantsServiceServer(s, restaurants)
 	},
 		grpc.WithUnaryInterceptor(gateway.ServiceToken(tokens)))
 	ports := commandPorts{

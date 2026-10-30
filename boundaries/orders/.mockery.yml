@@ -38,7 +38,7 @@ packages:
       pkgname: spicedb_test
     interfaces:
       Permissions: {}
-  nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1:
+  buf.build/gen/go/nomnom/payments/grpc/go/nomnom/payments/v1/paymentsv1grpc:
     config:
       include-auto-generated: true
       dir: slices/fulfillment/infrastructure/neighbours/grpcclient
@@ -46,7 +46,7 @@ packages:
       pkgname: grpcclient_test
     interfaces:
       PaymentsServiceServer: {}
-  nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1:
+  buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc:
     config:
       include-auto-generated: true
     interfaces:
@@ -58,7 +58,7 @@ packages:
           - dir: slices/order/infrastructure/estimates
             filename: mocks_delivery_test.go
             pkgname: estimates_test
-  nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1:
+  buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc:
     config:
       include-auto-generated: true
     interfaces:

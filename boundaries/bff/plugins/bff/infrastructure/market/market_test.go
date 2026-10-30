@@ -16,13 +16,14 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // restaurants is the context of the Cell: it counts calls and records the
 // metadata it received.
 type restaurants struct {
-	restaurantsv1.UnimplementedRestaurantsServiceServer
+	restaurantsv1grpc.UnimplementedRestaurantsServiceServer
 	mu     sync.Mutex
 	calls  int
 	seenMD metadata.MD
@@ -37,12 +38,12 @@ func (r *restaurants) GetRestaurant(ctx context.Context, _ *restaurantsv1.GetRes
 	return &restaurantsv1.GetRestaurantResponse{Restaurant: &restaurantsv1.Restaurant{Name: "Pizza"}}, nil
 }
 
-func client(t *testing.T) (restaurantsv1.RestaurantsServiceClient, *restaurants) {
+func client(t *testing.T) (restaurantsv1grpc.RestaurantsServiceClient, *restaurants) {
 	t.Helper()
 	server := &restaurants{}
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	restaurantsv1.RegisterRestaurantsServiceServer(grpcServer, server)
+	restaurantsv1grpc.RegisterRestaurantsServiceServer(grpcServer, server)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
 	conn, err := grpc.NewClient("passthrough:///bufnet",
@@ -51,7 +52,7 @@ func client(t *testing.T) (restaurantsv1.RestaurantsServiceClient, *restaurants)
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	return restaurantsv1.NewRestaurantsServiceClient(Require(conn)), server
+	return restaurantsv1grpc.NewRestaurantsServiceClient(Require(conn)), server
 }
 
 func inMarket(values ...string) context.Context {

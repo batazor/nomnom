@@ -15,18 +15,19 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/kitchen/applications"
 )
 
 // Restaurants implements the kitchen ports.
 type Restaurants struct {
-	client restaurantsv1.RestaurantsServiceClient
+	client restaurantsv1grpc.RestaurantsServiceClient
 }
 
 func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
-	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
+	return &Restaurants{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn)}
 }
 
 var (

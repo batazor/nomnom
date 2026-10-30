@@ -101,8 +101,8 @@ linters:
             - "**/orders/pkg/**"
             - "!$test"
           deny:
-            - pkg: nomnom/orders/infrastructure/gateway/gen
-              desc: generated code импортируют только adapters и composition root (ADR 7)
+            - pkg: buf.build/gen/go/nomnom
+              desc: SDK контрактов импортируют только adapters и composition root (ADR 7)
             - pkg: nomnom/orders/infrastructure/grpc/gen
               desc: generated code импортируют только adapters и composition root (ADR 7)
 

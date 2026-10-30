@@ -15,11 +15,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
+
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 )
 
 // ErrMixedCurrencies means the menu of a restaurant prices its items in more
@@ -41,7 +43,7 @@ type Limits struct {
 // bounded by one timeout: GetRestaurant for accepting_orders and the premium
 // fee, then GetMenu.
 type Catalog struct {
-	client  restaurantsv1.RestaurantsServiceClient
+	client  restaurantsv1grpc.RestaurantsServiceClient
 	limits  Limits
 	timeout time.Duration
 }
@@ -49,7 +51,7 @@ type Catalog struct {
 var _ placeorder.Catalog = (*Catalog)(nil)
 
 func New(conn grpc.ClientConnInterface, limits Limits, timeout time.Duration) *Catalog {
-	return &Catalog{client: restaurantsv1.NewRestaurantsServiceClient(conn), limits: limits, timeout: timeout}
+	return &Catalog{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn), limits: limits, timeout: timeout}
 }
 
 func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (placeorder.CatalogSnapshot, error) {

@@ -10,6 +10,12 @@ require (
 )
 
 require (
+	buf.build/gen/go/nomnom/delivery/grpc/go v1.6.2-20261030084627-2e2e4e0040d5.1
+	buf.build/gen/go/nomnom/delivery/protocolbuffers/go v1.36.12-20261030084627-2e2e4e0040d5.2
+	buf.build/gen/go/nomnom/orders/grpc/go v1.6.2-20261030084627-c97c46966506.1
+	buf.build/gen/go/nomnom/orders/protocolbuffers/go v1.36.12-20261030084627-c97c46966506.2
+	buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030084627-27ccc405ec08.1
+	buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030084627-27ccc405ec08.2
 	github.com/MicahParks/keyfunc/v3 v3.8.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0

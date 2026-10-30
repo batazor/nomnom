@@ -117,7 +117,7 @@ Domain Model / Read Model → Application DTO → Transport DTO
 - Application DTO не создаётся на каждый domain type: он появляется только там, где domain object действительно не подходит наружу.
 - Именование следует идиомам языка: в Go допустимо `PlaceOrder` вместо `PlaceOrderCommand`. Суть правила — в размещении и направлении зависимостей, а не в суффиксе.
 
-Сгенерированный Buf-код находится в отдельном пакете/модуле внутри `infrastructure` (`infrastructure/grpc/gen` владельца или потребителя, [ADR 7](0007-grpc-contracts-and-buf-schema-registry.md)) и импортируется только из `infrastructure`.
+Сгенерированный Buf-код владельца находится в `infrastructure/grpc/gen`, контракты соседей подключаются как BSR Generated SDK ([ADR 7](0007-grpc-contracts-and-buf-schema-registry.md)). И то и другое импортируется только из `infrastructure`.
 
 ### Доменная модель
 

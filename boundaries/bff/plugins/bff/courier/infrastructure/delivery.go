@@ -14,17 +14,18 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/courier/applications"
-	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
 )
 
 // Delivery implements applications.Couriers.
 type Delivery struct {
-	client deliveryv1.DeliveryServiceClient
+	client deliveryv1grpc.DeliveryServiceClient
 }
 
 func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
-	return &Delivery{client: deliveryv1.NewDeliveryServiceClient(conn)}
+	return &Delivery{client: deliveryv1grpc.NewDeliveryServiceClient(conn)}
 }
 
 var _ applications.Couriers = (*Delivery)(nil)

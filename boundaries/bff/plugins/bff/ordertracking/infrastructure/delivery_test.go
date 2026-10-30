@@ -12,15 +12,16 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/identity"
-	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/ordertracking/applications"
 )
 
 // orderDeliveries answers GetOrderDelivery and records whether the call
 // carried the customer as a user assertion.
 type orderDeliveries struct {
-	deliveryv1.UnimplementedDeliveryServiceServer
+	deliveryv1grpc.UnimplementedDeliveryServiceServer
 	response *deliveryv1.GetOrderDeliveryResponse
 	err      error
 	asserted bool
@@ -35,7 +36,7 @@ func (s *orderDeliveries) GetOrderDelivery(ctx context.Context, _ *deliveryv1.Ge
 func deliveriesOver(t *testing.T, server *orderDeliveries) *Deliveries {
 	t.Helper()
 	return NewDeliveries(connect(t, "nomnom.delivery", func(s *grpc.Server) {
-		deliveryv1.RegisterDeliveryServiceServer(s, server)
+		deliveryv1grpc.RegisterDeliveryServiceServer(s, server)
 	}))
 }
 

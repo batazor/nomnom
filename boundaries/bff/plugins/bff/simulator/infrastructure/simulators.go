@@ -13,19 +13,22 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	deliveryv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/delivery/v1"
-	ordersv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1"
-	restaurantsv1 "github.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/restaurants/v1"
+	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
+	deliveryv1 "buf.build/gen/go/nomnom/delivery/protocolbuffers/go/nomnom/delivery/v1"
+	"buf.build/gen/go/nomnom/orders/grpc/go/nomnom/orders/v1/ordersv1grpc"
+	ordersv1 "buf.build/gen/go/nomnom/orders/protocolbuffers/go/nomnom/orders/v1"
+	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
+	restaurantsv1 "buf.build/gen/go/nomnom/restaurants/protocolbuffers/go/nomnom/restaurants/v1"
 	"github.com/batazor/nomnom/boundaries/bff/plugins/bff/simulator/applications"
 )
 
 // Orders implements applications.Simulator for orders.
 type Orders struct {
-	client ordersv1.OrdersServiceClient
+	client ordersv1grpc.OrdersServiceClient
 }
 
 func NewOrders(conn grpc.ClientConnInterface) *Orders {
-	return &Orders{client: ordersv1.NewOrdersServiceClient(conn)}
+	return &Orders{client: ordersv1grpc.NewOrdersServiceClient(conn)}
 }
 
 func (o *Orders) Enabled(ctx context.Context) (bool, error) {
@@ -46,11 +49,11 @@ func (o *Orders) SetEnabled(ctx context.Context, enabled bool) (bool, error) {
 
 // Restaurants implements applications.Simulator for restaurants.
 type Restaurants struct {
-	client restaurantsv1.RestaurantsServiceClient
+	client restaurantsv1grpc.RestaurantsServiceClient
 }
 
 func NewRestaurants(conn grpc.ClientConnInterface) *Restaurants {
-	return &Restaurants{client: restaurantsv1.NewRestaurantsServiceClient(conn)}
+	return &Restaurants{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn)}
 }
 
 func (r *Restaurants) Enabled(ctx context.Context) (bool, error) {
@@ -71,11 +74,11 @@ func (r *Restaurants) SetEnabled(ctx context.Context, enabled bool) (bool, error
 
 // Delivery implements applications.Simulator for delivery.
 type Delivery struct {
-	client deliveryv1.DeliveryServiceClient
+	client deliveryv1grpc.DeliveryServiceClient
 }
 
 func NewDelivery(conn grpc.ClientConnInterface) *Delivery {
-	return &Delivery{client: deliveryv1.NewDeliveryServiceClient(conn)}
+	return &Delivery{client: deliveryv1grpc.NewDeliveryServiceClient(conn)}
 }
 
 func (d *Delivery) Enabled(ctx context.Context) (bool, error) {
