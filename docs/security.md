@@ -49,7 +49,7 @@ BFF проверяет внешний access token и формирует subject
 
 ### Service identity
 
-`service` subject между bounded contexts доказывается Kubernetes projected ServiceAccount token ([ADR 27](adr/0027-service-identity-via-projected-serviceaccount-tokens.md)): metadata `authorization: Bearer <jwt>`, audience целевого контекста (`nomnom.orders`, `nomnom.restaurants`, `nomnom.delivery`, `nomnom.payments`, `nomnom.controlplane`), подпись по JWKS кластера, `iss`, `exp`/`nbf` с допуском 30 s и allowlist `namespace/serviceaccount=service-name`. Любое нарушение — `UNAUTHENTICATED`; без `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` и `IDENTITY__JWKS_FILE` сервер отклоняет всех (fail closed). Resolver только аутентифицирует: permissions identity по-прежнему проверяет SpiceDB в use case. Правила проверки во всех языках закреплены общими векторами `tests/identity`.
+`service` subject между bounded contexts доказывается Kubernetes projected ServiceAccount token ([ADR 27](adr/0027-service-identity-via-projected-serviceaccount-tokens.md)): metadata `authorization: Bearer <jwt>`, audience целевого контекста (`nomnom.orders`, `nomnom.restaurants`, `nomnom.delivery`, `nomnom.payments`), подпись по JWKS кластера, `iss`, `exp`/`nbf` с допуском 30 s и allowlist `namespace/serviceaccount=service-name`. Любое нарушение — `UNAUTHENTICATED`; без `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` и `IDENTITY__JWKS_FILE` сервер отклоняет всех (fail closed). Resolver только аутентифицирует: permissions identity по-прежнему проверяет SpiceDB в use case. Правила проверки во всех языках закреплены общими векторами `tests/identity`.
 
 ### Асинхронные операции
 

@@ -1,0 +1,43 @@
+{{- /*
+ADR 41: control plane читает реестр и пишет только его status: менять spec он не может. Запись в
+реестр — ClusterRole nomnom-topology-editor; кому её выдать, решает кластер.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "common.names.fullname" . }}-registry
+  labels:
+    {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+rules:
+  - apiGroups: ["controlplane.nomnom.dev"]
+    resources: ["cells", "markets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["controlplane.nomnom.dev"]
+    resources: ["cells/status", "markets/status"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "common.names.fullname" . }}-registry
+  labels:
+    {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "common.names.fullname" . }}-registry
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "controlplane.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nomnom-topology-editor
+  labels:
+    {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
+rules:
+  - apiGroups: ["controlplane.nomnom.dev"]
+    resources: ["cells", "markets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]

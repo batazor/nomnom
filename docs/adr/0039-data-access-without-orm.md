@@ -31,7 +31,6 @@ ORM и ODM не используются. Запросы пишутся на SQL
 | Контекст | Драйвер | Запросы | Миграции |
 |---|---|---|---|
 | `orders` (Go) | pgx v5 | query builder [squirrel](https://github.com/Masterminds/squirrel) (`$`-placeholders), выполнение через pgx | [golang-migrate](https://github.com/golang-migrate/migrate) (driver pgx/v5, source iofs, SQL-файлы встроены в бинарь) |
-| `controlplane` (Go, [ADR 41](0041-cell-based-architecture-with-control-plane.md)) | pgx v5 | squirrel, как `orders` | golang-migrate, как `orders` (набор `topology`) |
 | `payments` (Python) | psycopg 3 + `psycopg_pool` | SQL и `psycopg.sql` | [yoyo-migrations](https://ollycope.com/software/yoyo/) (SQL-файлы в пакете, backend `postgresql+psycopg`) |
 | `delivery` (Rust) | sqlx | `sqlx::query!` / `query_as!` / `query_scalar!`, проверка против схемы при компиляции; кеш `.sqlx/` в репозитории, сборка с `SQLX_OFFLINE=true` | `sqlx::migrate!` |
 | `restaurants` (TS) | официальный `mongodb` | BSON-запросы драйвера | [migrate-mongo](https://github.com/seppevs/migrate-mongo) (changelog и lock библиотеки) |

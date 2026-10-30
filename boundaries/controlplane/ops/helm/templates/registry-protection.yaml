@@ -1,0 +1,30 @@
+# ADR 41: Cell и Market не удаляются — market_id не используется повторно, а Market уходит в архив
+# (spec.archived). Политика защищает от случайного удаления; снять её может только администратор
+# кластера. keep: uninstall не должен снимать защиту с оставшегося реестра.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: nomnom-registry-no-delete
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [controlplane.nomnom.dev]
+        apiVersions: ["*"]
+        operations: [DELETE]
+        resources: [cells, markets]
+  validations:
+    - expression: "false"
+      message: Cell and Market are never deleted; archive a Market with spec.archived
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: nomnom-registry-no-delete
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  policyName: nomnom-registry-no-delete
+  validationActions: [Deny]

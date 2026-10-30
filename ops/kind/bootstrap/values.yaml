@@ -24,7 +24,6 @@ contexts:
   - restaurants
   - delivery
   - payments
-  - controlplane
 
 # ADR 18: schema.zed и bootstrap.yaml из authorization/ (--set-file).
 authz:
@@ -42,7 +41,6 @@ postgres:
     - orders
     - payments
     - delivery
-    - controlplane
   # templates/pgbouncer.yaml, session mode: соединение клиента держит server-соединение. poolSize
   # базы — Σ(replicas × maxConns) всех процессов владельца, по 2 соединения миграций на процесс и
   # запас на rolling update. Сумма с Debezium и экспортерами помещается в max_connections сервера (100).
@@ -52,7 +50,6 @@ postgres:
       orders: 32
       payments: 16
       delivery: 24
-      controlplane: 10
 
 identity:
   # ADR 27: issuer projected ServiceAccount tokens, ожидаемый values контекстов.

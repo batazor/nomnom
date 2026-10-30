@@ -26,8 +26,7 @@ type Config struct {
 	DrainTimeout time.Duration
 }
 
-// Worker — единица работы процесса, которой владеет composition root:
-// HTTP/gRPC server, consumer или Temporal worker.
+// Worker — единица работы процесса, которой владеет composition root: контроллер.
 type Worker interface {
 	// Start захватывает ресурсы, например listener. Ошибка прерывает startup.
 	Start(ctx context.Context) error

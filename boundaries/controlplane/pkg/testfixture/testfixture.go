@@ -1,11 +1,11 @@
 // Package testfixture starts the infrastructure of integration tests once per
 // test package, from TestMain:
 //
-//	var pg *testfixture.Postgres
+//	var cluster *testfixture.K3s
 //
 //	func TestMain(m *testing.M) {
-//		pg = testfixture.MustStartPostgres()
-//		defer pg.Close()
+//		cluster = testfixture.MustStartK3s()
+//		defer cluster.Close()
 //		m.Run()
 //	}
 //
@@ -16,151 +16,65 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
-	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/testcontainers/testcontainers-go/modules/k3s"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-const (
-	// PostgresImage is POSTGRES_IMAGE of the Makefile.
-	PostgresImage = "postgres:18.6-alpine3.24"
-	// SpiceDBImage is SPICEDB_IMAGE of the root Makefile.
-	SpiceDBImage = "authzed/spicedb:v1.57.0"
-	// SpiceDBPresharedKey is the key of the SpiceDB container.
-	SpiceDBPresharedKey = "devkey"
-)
+// K3sImage runs the Kubernetes minor of KIND_NODE_IMAGE in ops/kind/versions.env:
+// CEL rules and admission policies are the API server's.
+const K3sImage = "rancher/k3s:v1.37.0-k3s1"
 
-const startupTimeout = 2 * time.Minute
+const terminateTimeout = 30 * time.Second
 
-// Postgres is a PostgreSQL server for the tests of one package.
-type Postgres struct {
-	DSN       string
+// K3s is a Kubernetes API server for the tests of one package.
+type K3s struct {
+	Config    *rest.Config
 	container testcontainers.Container
 }
 
-// StartPostgres starts a PostgreSQL container. Migrations are the caller's:
-// the fixture does not know the schema.
-func StartPostgres(ctx context.Context) (*Postgres, error) {
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        PostgresImage,
-			ExposedPorts: []string{"5432/tcp"},
-			Env: map[string]string{
-				"POSTGRES_USER":     "controlplane",
-				"POSTGRES_PASSWORD": "controlplane",
-				"POSTGRES_DB":       "controlplane",
-			},
-			// The entrypoint restarts the server after init: the second line is final.
-			WaitingFor: wait.ForAll(
-				wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
-				wait.ForListeningPort("5432/tcp"),
-			).WithDeadline(startupTimeout),
-		},
-		Started: true,
-	})
+// StartK3s starts a k3s container. CRDs are the caller's: the fixture does not
+// know them.
+func StartK3s(ctx context.Context) (*K3s, error) {
+	c, err := k3s.Run(ctx, K3sImage)
 	if err != nil {
-		return nil, terminate(c, fmt.Errorf("start postgres: %w", err))
+		return nil, terminate(c, fmt.Errorf("start k3s: %w", err))
 	}
-	endpoint, err := loopbackEndpoint(ctx, c, "5432/tcp")
+	kubeconfig, err := c.GetKubeConfig(ctx)
 	if err != nil {
-		return nil, terminate(c, fmt.Errorf("postgres endpoint: %w", err))
+		return nil, terminate(c, fmt.Errorf("k3s kubeconfig: %w", err))
 	}
-	return &Postgres{DSN: "postgres://controlplane:controlplane@" + endpoint + "/controlplane?sslmode=disable", container: c}, nil
+	config, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
+	if err != nil {
+		return nil, terminate(c, fmt.Errorf("parse k3s kubeconfig: %w", err))
+	}
+	return &K3s{Config: config, container: c}, nil
 }
 
-// MustStartPostgres is StartPostgres for TestMain: without the database no test
-// of the package can run.
-func MustStartPostgres() *Postgres {
-	pg, err := StartPostgres(context.Background())
+// MustStartK3s is StartK3s for TestMain: without the API server no test of the
+// package can run.
+func MustStartK3s() *K3s {
+	cluster, err := StartK3s(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
-	return pg
+	return cluster
 }
 
-func (p *Postgres) Close() { closeContainer(p.container) }
+func (k *K3s) Close() { closeContainer(k.container) }
 
-// SpiceDB is an in-memory SpiceDB with authorization/bootstrap.yaml of the
-// repository: the schema plus the grants deployment owns, as in kind.
-type SpiceDB struct {
-	Endpoint  string
-	container testcontainers.Container
+func closeContainer(c testcontainers.Container) {
+	ctx, cancel := context.WithTimeout(context.Background(), terminateTimeout)
+	defer cancel()
+	if err := testcontainers.TerminateContainer(c, testcontainers.StopContext(ctx)); err != nil {
+		log.Printf("terminate container: %v", err)
+	}
 }
 
-// StartSpiceDB runs SpiceDB with the bootstrap of `make spicedb-dev`.
-func StartSpiceDB(ctx context.Context) (*SpiceDB, error) {
-	_, file, _, _ := runtime.Caller(0)
-	authz := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "authorization")
-	files := make([]testcontainers.ContainerFile, 0, 2)
-	for _, name := range []string{"bootstrap.yaml", "schema.zed"} {
-		files = append(files, testcontainers.ContainerFile{HostFilePath: filepath.Join(authz, name), ContainerFilePath: "/authz/" + name, FileMode: 0o644})
-	}
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        SpiceDBImage,
-			ExposedPorts: []string{"50051/tcp"},
-			Files:        files,
-			WorkingDir:   "/authz",
-			Cmd: []string{"serve", "--grpc-preshared-key", SpiceDBPresharedKey,
-				"--datastore-engine", "memory", "--datastore-bootstrap-files", "bootstrap.yaml"},
-			WaitingFor: wait.ForAll(
-				wait.ForLog("grpc server started serving"),
-				wait.ForListeningPort("50051/tcp"),
-			).WithDeadline(startupTimeout),
-		},
-		Started: true,
-	})
-	if err != nil {
-		return nil, terminate(c, fmt.Errorf("start spicedb: %w", err))
-	}
-	endpoint, err := loopbackEndpoint(ctx, c, "50051/tcp")
-	if err != nil {
-		return nil, terminate(c, fmt.Errorf("spicedb endpoint: %w", err))
-	}
-	return &SpiceDB{Endpoint: endpoint, container: c}, nil
-}
-
-// MustStartSpiceDB is StartSpiceDB for TestMain.
-func MustStartSpiceDB() *SpiceDB {
-	s, err := StartSpiceDB(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-	return s
-}
-
-func (s *SpiceDB) Close() { closeContainer(s.container) }
-
-// loopback is the address of the ports Docker publishes for the tests. An IP
-// literal keeps clients off the DNS of the host: the gRPC resolver looks up
-// TXT _grpc_config.<host> for a name, which a slow local resolver answers in
-// seconds.
-const loopback = "127.0.0.1"
-
-// loopbackEndpoint is "127.0.0.1:<published port>" of a container port.
-func loopbackEndpoint(ctx context.Context, c testcontainers.Container, port string) (string, error) {
-	mapped, err := c.MappedPort(ctx, port)
-	if err != nil {
-		return "", err
-	}
-	return net.JoinHostPort(loopback, mapped.Port()), nil
-}
-
-// terminate removes a container that failed to start, keeping the start error.
 func terminate(c testcontainers.Container, err error) error {
 	closeContainer(c)
 	return err
-}
-
-func closeContainer(c testcontainers.Container) {
-	if c == nil {
-		return
-	}
-	if err := testcontainers.TerminateContainer(c); err != nil {
-		log.Printf("terminate test container: %v", err)
-	}
 }

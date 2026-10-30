@@ -5,7 +5,14 @@ metadata:
   labels:
     {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  # Одна реплика без surge: новая версия стартует на месте старой, а не рядом с ней. Пока pod
+  # пересоздаётся, Envoy работает на последней конфигурации (ADR 41).
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "common.labels.matchLabels" . | nindent 6 }}
@@ -24,8 +31,6 @@ spec:
         {{- include "controlplane.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
       {{- include "controlplane.validateShutdownBudget" . }}
-      {{- include "controlplane.validateIdentity" . }}
-      {{- include "controlplane.validateSpiceDB" . }}
       {{- include "controlplane.validateRoutes" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
@@ -47,9 +52,6 @@ spec:
             {{- include "common.compatibility.renderSecurityContext" (dict "secContext" . "context" $) | nindent 12 }}
           {{- end }}
           ports:
-            - name: {{ .Values.service.portName }}
-              containerPort: {{ .Values.service.targetPort }}
-              protocol: TCP
             - name: metrics
               containerPort: {{ .Values.management.port }}
               protocol: TCP
@@ -70,22 +72,6 @@ spec:
               value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
             - name: SHUTDOWN__DRAIN_TIMEOUT
               value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
-            {{- with .Values.identity }}
-            - name: IDENTITY__ISSUER
-              value: {{ .issuer | quote }}
-            - name: IDENTITY__AUDIENCE
-              value: {{ .audience | quote }}
-            - name: IDENTITY__JWKS_FILE
-              value: /etc/nomnom/identity/jwks.json
-            - name: IDENTITY__SERVICE_ACCOUNTS
-              value: {{ .serviceAccounts | quote }}
-            - name: IDENTITY__USER_ISSUER
-              value: {{ .userIssuer | quote }}
-            - name: IDENTITY__USER_JWKS_FILE
-              value: /etc/nomnom/user-identity/jwks.json
-            - name: IDENTITY__USER_DELEGATES
-              value: {{ .userDelegates | quote }}
-            {{- end }}
             {{- with .Values.routes }}
             - name: ROUTES__NAMESPACE
               value: {{ .namespace | quote }}
@@ -94,21 +80,7 @@ spec:
             - name: ROUTES__LISTENER
               value: {{ .listener | quote }}
             {{- end }}
-            {{- include "controlplane.postgresEnv" (dict "context" .) | nindent 12 }}
             {{- include "controlplane.otelEnv" (dict "context" .) | nindent 12 }}
-            {{- with .Values.spicedb }}
-            - name: SPICEDB__ENDPOINT
-              value: {{ .endpoint | quote }}
-            - name: SPICEDB__INSECURE
-              value: {{ .insecure | quote }}
-            - name: SPICEDB__TIMEOUT
-              value: {{ .timeout | quote }}
-            - name: SPICEDB__PRESHARED_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .presharedKeySecret.name }}
-                  key: {{ .presharedKeySecret.key }}
-            {{- end }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
@@ -124,32 +96,14 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.volumeMounts }}
           volumeMounts:
-            - name: identity-jwks
-              mountPath: /etc/nomnom/identity
-              readOnly: true
-            - name: identity-user-jwks
-              mountPath: /etc/nomnom/user-identity
-              readOnly: true
-            {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
-            {{- end }}
+          {{- end }}
+      {{- with .Values.volumes }}
       volumes:
-        - name: identity-jwks
-          configMap:
-            name: {{ .Values.identity.jwksConfigMap }}
-            items:
-              - key: jwks.json
-                path: jwks.json
-        - name: identity-user-jwks
-          configMap:
-            name: {{ .Values.identity.userJwksConfigMap }}
-            items:
-              - key: jwks.json
-                path: jwks.json
-        {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
-        {{- end }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}

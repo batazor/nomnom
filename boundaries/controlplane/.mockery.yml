@@ -4,3 +4,7 @@ packages:
   github.com/batazor/nomnom/boundaries/controlplane/pkg/lifecycle:
     interfaces:
       Worker: {}
+  github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes:
+    interfaces:
+      Registry: {}
+      Applier: {}

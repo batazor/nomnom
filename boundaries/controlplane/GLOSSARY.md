@@ -1,22 +1,22 @@
 # Control plane
 
 Глобальный реестр топологии cell-based архитектуры ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)):
-какие Cell есть и в какой Cell размещён каждый Market. Control plane не участвует в обработке
-бизнес-запросов: из реестра он пишет маршруты публичного gateway, а ни gateway, ни ячейки к нему не
-обращаются.
+какие Cell есть и в какой Cell размещён каждый Market. Реестр — ресурсы `Cell` и `Market` Kubernetes.
+Control plane не участвует в обработке бизнес-запросов: из реестра он пишет маршруты публичного gateway,
+а ни gateway, ни ячейки к нему не обращаются.
 
 ## Language
 
 **Cell**:
-Полный изолированный экземпляр data plane со своим Cosmo Router, BFF и internal gateway; `cell_id` — slug. Неизменяема после регистрации.
+Полный изолированный экземпляр data plane со своим Cosmo Router, BFF и internal gateway; `cell_id` — slug. Неизменяема после объявления.
 _Avoid_: Cluster, region, shard
 
 **Market**:
-Город, в котором работает доставка; `market_id` — slug, название 1..64 символа, валюта ISO 4217, часовой пояс IANA (`Europe/Berlin`). Создаётся сразу размещённым в Cell.
+Город, в котором работает доставка; `market_id` — slug, название 1..64 символа, валюта ISO 4217, часовой пояс IANA (`Europe/Berlin`). Объявляется сразу с Cell; пока этой Cell нет, он не публикуется.
 _Avoid_: Tenant, region, city id
 
 **Market Placement**:
-Размещение Market ровно в одной зарегистрированной Cell (`cell_id` Market).
+Размещение Market ровно в одной объявленной Cell (`spec.cellRef` Market).
 _Avoid_: Partition, assignment
 
 **Router Cell**:
@@ -32,9 +32,9 @@ JSON `GET /markets`, который Envoy публичного gateway отда�
 _Avoid_: Markets query
 
 **Архивный Market**:
-Market после `ArchiveMarket`: нет в `ListMarkets`, в Списке Market и Маршрутах Market; строка реестра остаётся, `market_id` не создаётся снова.
+Market со `spec.archived: true`: нет в Списке Market и Маршрутах Market; ресурс остаётся, `market_id` не создаётся снова, из архива Market не возвращается.
 _Avoid_: Deleted market, removed market
 
 **Idempotent Repeat**:
-Повтор `RegisterCell`/`CreateMarket` с теми же значениями: успех с `created = false`; другие значения для известного id — `ALREADY_EXISTS`. Повтор `ArchiveMarket` — успех с `archived = false`.
+Повторное применение `Cell` или `Market` с теми же значениями ничего не меняет; другие значения для известного id отклоняет API server.
 _Avoid_: Upsert, update

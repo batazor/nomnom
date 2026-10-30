@@ -1,24 +1,20 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
-# Control plane (ADR 41): реестр Cell и Market — только оператору (platform#manage_markets), а
-# маршруты публичного gateway control plane пишет сам из реестра.
+# Control plane (ADR 41): реестр — ресурсы Cell и Market, их проверяет API server и контроллер, а
+# маршруты публичного gateway контроллер пишет сам из реестра.
 #
-# cell-1 и berlin регистрирует Job chart ops/kind/demo (ops/kind/demo/files/seed.json), поэтому
-# проверка маршрутов ждёт, пока Job их не создаст. Projected token BFF (ServiceAccount
-# nomnom-bff/bff, audience nomnom.controlplane) тест выпускает на хосте TokenRequest'ом
-# (kubectl create token) и предъявляет из pod grpc-caller в nomnom-bff — под NetworkPolicy
-# неймспейса BFF.
+# cell-1 и berlin объявляет chart ops/kind/demo. Ресурсы теста создаёт script, а не операции
+# chainsaw apply и create: те удаляют созданное в cleanup, а удаление реестра запрещено. Поэтому у
+# каждого прогона свои имена, и Market прогона уходит в архив.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: controlplane-registry
 spec:
   description: >
-    Control plane публикует HTTPRoute market-berlin (/m/berlin → Service bff cell-1) и список
-    Market; BFF без оператора не читает и не пишет реестр (PERMISSION_DENIED); workload вне
-    allowlist control plane получает UNAUTHENTICATED.
-  bindings:
-    - name: gateway
-      value: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+    Контроллер публикует HTTPRoute market-berlin (/m/berlin → Service bff cell-1) и список Market;
+    API server отклоняет неверные значения, изменение и удаление реестра; Market без Cell и с
+    неизвестным поясом не публикуется; архивный Market уходит с gateway; менять реестр могут только
+    субъекты с nomnom-topology-editor; у control plane нет PostgreSQL, SpiceDB и identity.
   steps:
     - name: policies applied
       use:
@@ -38,6 +34,23 @@ spec:
       try:
         - assert:
             timeout: 4m
+            resource:
+              apiVersion: controlplane.nomnom.dev/v1alpha1
+              kind: Market
+              metadata:
+                name: berlin
+              status:
+                (conditions[?type == 'Ready'].status): ['True']
+        - assert:
+            resource:
+              apiVersion: controlplane.nomnom.dev/v1alpha1
+              kind: Cell
+              metadata:
+                name: cell-1
+              status:
+                (conditions[?type == 'Ready'].status): ['True']
+        - assert:
+            timeout: 1m
             resource:
               apiVersion: gateway.networking.k8s.io/v1
               kind: HTTPRoute
@@ -64,58 +77,125 @@ spec:
             check:
               ($error): ~
               (length(json_parse($stdout).markets[?id == 'berlin' && name == 'Berlin' && currency == 'EUR'])): 1
-    - name: BFF without operator neither reads nor writes the registry
+    # AC-1002, AC-1003, AC-1005, AC-1006, AC-1009: dry run проходит схему, CEL и admission, не меняя реестр.
+    - name: the API server refuses wrong values, changes and deletion
       try:
         - script:
-            env:
-              - name: GATEWAY
-                value: ($gateway)
             content: |
-              set -eu
-              token="$(kubectl -n nomnom-bff create token bff --audience nomnom.controlplane --duration 10m)"
-              kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
-                grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb -protoset /protos/googleapis.binpb \
-                  -H "authorization: Bearer $0" -d "{}" \
-                  "$1" nomnom.controlplane.v1.ControlPlaneService/ListMarkets 2>&1 || true
-              ' "$token" "$GATEWAY"
+              set -u
+              refused() {
+                if "$@" >/dev/null 2>&1; then echo "accepted: $*"; exit 1; fi
+              }
+              cell() {
+                printf 'apiVersion: controlplane.nomnom.dev/v1alpha1\nkind: Cell\nmetadata: {name: %s}\nspec: {router: {namespace: nomnom-bff, name: %s, port: %s}}\n' "$1" "$2" "$3"
+              }
+              market() {
+                printf 'apiVersion: controlplane.nomnom.dev/v1alpha1\nkind: Market\nmetadata: {name: %s}\nspec: {displayName: Berlin, currency: %s, timeZone: "%s", cellRef: %s}\n' "$1" "$2" "$3" "$4"
+              }
+              apply() { kubectl apply --server-side --field-manager e2e --force-conflicts --dry-run=server -f -; }
+              check() { "$@" | apply >/dev/null 2>&1 && { echo "accepted: $*"; exit 1; }; return 0; }
+              check cell cell-e2e Bff_1 3010
+              check cell cell-e2e bff 0
+              check cell cell-1 bff 3011
+              check market Berlin_1 EUR Europe/Berlin cell-1
+              check market e2e-market eur Europe/Berlin cell-1
+              check market e2e-market EUR "" cell-1
+              check market berlin EUR Europe/Berlin cell-2
+              refused kubectl delete market berlin --dry-run=server
+              refused kubectl delete cell cell-1 --dry-run=server
+              echo refused
             check:
               ($error): ~
-              (json_parse($stdout).code): 7
-              (contains(json_parse($stdout).details[].reason, 'OPERATION_NOT_ALLOWED')): true
+              (trim_space($stdout)): refused
+    # AC-1007, AC-1008, AC-1010, AC-1011: проверка контроллером и архив.
+    - name: a Market waits for its Cell and leaves the gateway in the archive
+      try:
         - script:
-            env:
-              - name: GATEWAY
-                value: ($gateway)
+            timeout: 5m
             content: |
               set -eu
-              token="$(kubectl -n nomnom-bff create token bff --audience nomnom.controlplane --duration 10m)"
-              kubectl -n nomnom-bff exec deploy/grpc-caller -- sh -c '
-                grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb -protoset /protos/googleapis.binpb \
-                  -H "authorization: Bearer $0" \
-                  -d "{\"cellId\":\"cell-e2e\",\"router\":{\"namespace\":\"nomnom-bff\",\"name\":\"bff\",\"port\":3010}}" \
-                  "$1" nomnom.controlplane.v1.ControlPlaneService/RegisterCell 2>&1 || true
-              ' "$token" "$GATEWAY"
+              run="e2e-$(date +%s)"
+              declare_market() {
+                kubectl apply --server-side --field-manager e2e -f - <<EOF
+              apiVersion: controlplane.nomnom.dev/v1alpha1
+              kind: Market
+              metadata: {name: $1}
+              spec: {displayName: "Kind e2e $1", currency: EUR, timeZone: "$2", cellRef: $3, archived: $4}
+              EOF
+              }
+              reason() { kubectl get market "$1" -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}'; }
+              wait_reason() {
+                for _ in $(seq 1 60); do
+                  [ "$(reason "$1")" = "$2" ] && return 0
+                  sleep 2
+                done
+                echo "market $1 has reason $(reason "$1"), expected $2" >&2
+                exit 1
+              }
+              archive() { kubectl patch market "$1" --type merge -p '{"spec":{"archived":true}}' >/dev/null; }
+              trap 'archive "$run" || true; archive "$run-tz" || true' EXIT
+
+              # Market объявлен раньше Cell.
+              declare_market "$run" Europe/Berlin "$run" false >/dev/null
+              wait_reason "$run" CellNotFound
+              kubectl -n nomnom-gateway get httproute "market-$run" >/dev/null 2>&1 && { echo "route without a Cell" >&2; exit 1; }
+              kubectl apply --server-side --field-manager e2e -f - >/dev/null <<EOF
+              apiVersion: controlplane.nomnom.dev/v1alpha1
+              kind: Cell
+              metadata: {name: $run}
+              spec: {router: {namespace: nomnom-bff, name: bff, port: 3010}}
+              EOF
+              wait_reason "$run" RoutesApplied
+              kubectl -n nomnom-gateway get httproute "market-$run" >/dev/null
+
+              # Неизвестный пояс не мешает остальным.
+              declare_market "$run-tz" Mars/Olympus cell-1 false >/dev/null
+              wait_reason "$run-tz" InvalidTimeZone
+              kubectl -n nomnom-gateway get httproute "market-$run-tz" >/dev/null 2>&1 && { echo "route with a wrong time zone" >&2; exit 1; }
+              kubectl -n nomnom-gateway get httproute market-berlin >/dev/null
+
+              # Архив.
+              archive "$run"
+              wait_reason "$run" Archived
+              kubectl -n nomnom-gateway get httproute "market-$run" >/dev/null 2>&1 && { echo "route of an archived Market" >&2; exit 1; }
+              kubectl -n nomnom-gateway get configmap markets -o jsonpath='{.data.response\.body}' | grep -q "\"$run\"" && { echo "archived Market in the list" >&2; exit 1; }
+              if kubectl patch market "$run" --type merge -p '{"spec":{"archived":false}}' >/dev/null 2>&1; then
+                echo "a Market left the archive" >&2
+                exit 1
+              fi
+              echo done
             check:
               ($error): ~
-              (json_parse($stdout).code): 7
-              (contains(json_parse($stdout).details[].reason, 'OPERATION_NOT_ALLOWED')): true
-    # grpc-caller не входит в allowlist control plane (и его token выпущен для nomnom.orders).
-    - name: workload outside the allowlist is unauthenticated
-      use:
-        template: ../templates/grpc-call.yaml
-        with:
-          bindings:
-            - {name: method, value: nomnom.controlplane.v1.ControlPlaneService/ListMarkets}
-            - {name: authorize, value: true}
-            - {name: code, value: 16}
-            - {name: message, value: caller identity is not authenticated}
-            - {name: reason, value: AUTHENTICATION_REQUIRED}
+              (trim_space($stdout)): done
+    # AC-814, AC-1012, AC-1013.
+    - name: only the editor role changes the registry
+      try:
+        - script:
+            content: |
+              can() { kubectl auth can-i "$@" 2>/dev/null || true; }
+              bff=system:serviceaccount:nomnom-bff:bff
+              controlplane=system:serviceaccount:nomnom-controlplane:controlplane
+              echo "$(can create markets --as "$bff") $(can get markets --as "$bff") $(can patch markets --as "$controlplane") $(can patch markets --subresource=status --as "$controlplane")"
+            check:
+              ($error): ~
+              (trim_space($stdout)): no no no yes
+    # AC-1014.
+    - name: the control plane has no API, database and SpiceDB
+      try:
+        - script:
+            content: |
+              kubectl -n nomnom-controlplane get deployment controlplane -o json | jq -r '
+                [.spec.template.spec.containers[0].env[].name | select(test("^(POSTGRES|SPICEDB|IDENTITY)__"))] | length'
+              kubectl -n nomnom-controlplane get service -o json | jq -r '.items | length'
+            check:
+              ($error): ~
+              (trim_space($stdout)): |-
+                0
+                0
   catch:
     - podLogs:
         namespace: nomnom-controlplane
         selector: app.kubernetes.io/name=controlplane
         tail: 30
-    - podLogs:
-        namespace: nomnom-bff
-        selector: app.kubernetes.io/name=demo-seed
-        tail: 30
+    - script:
+        content: kubectl get cells,markets -o wide

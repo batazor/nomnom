@@ -31,11 +31,10 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	app, cleanup, err := di.InitializeApp(cfg)
+	app, err := di.InitializeApp(cfg)
 	if err != nil {
 		return fmt.Errorf("initialize app: %w", err)
 	}
-	defer cleanup()
 
 	return lifecycle.New(lifecycle.Config{
 		ManagementAddr: fmt.Sprintf(":%d", cfg.Management.Port),

@@ -1,6 +1,6 @@
 // Package di — composition root процесса controlplane: Wire injector (wire.go)
-// собирает слайс topology и gRPC-транспорт в App, а App владеет запуском и
-// остановкой бизнес-порта и pipeline telemetry.
+// собирает слайс topology в App, а App владеет запуском и остановкой контроллера
+// и pipeline telemetry.
 package di
 
 import (
@@ -8,104 +8,102 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"google.golang.org/grpc"
+	"github.com/go-logr/logr"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	grpcadapter "github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc"
-	controlplanev1 "github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1"
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/telemetry"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	topologydi "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/di"
 )
 
 // AppServiceName — service.name процесса по умолчанию; OTEL_SERVICE_NAME переопределяет.
 const AppServiceName = "controlplane"
 
-// App — lifecycle.Worker бизнес-порта.
+// NewRESTConfig подключает процесс к Kubernetes API кластера (in-cluster
+// ServiceAccount): реестр и маршруты живут там, а вне кластера процесс не стартует.
+func NewRESTConfig() (*rest.Config, error) {
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes in-cluster config: %w", err)
+	}
+	return restConfig, nil
+}
+
+// App — lifecycle.Worker контроллера.
 type App struct {
-	server    *grpc.Server
-	routes    publishroutes.Publisher
-	addr      string
-	listener  net.Listener
+	manager   manager.Manager
+	published <-chan struct{}
 	telemetry *telemetry.Telemetry
+	cancel    context.CancelFunc
+	stopped   chan struct{}
+	err       error
 }
 
-func NewApp(cfg config.ServerConfig, server *grpc.Server, module *topologydi.Module) *App {
-	return &App{server: server, routes: module.PublishRoutes, addr: fmt.Sprintf(":%d", cfg.Port)}
+func NewApp(module *topologydi.Module) *App {
+	return &App{manager: module.Manager, published: module.Published, stopped: make(chan struct{})}
 }
 
-// Start поднимает telemetry pipeline, один раз приводит маршруты публичного
-// gateway к реестру (ADR 41) и открывает бизнес-порт; после него процесс может
-// стать ready. Маршруты не применились — процесс не стартует.
+// Start поднимает telemetry pipeline, запускает контроллер и ждёт первой успешной
+// публикации маршрутов: только после неё процесс становится ready. Контроллер
+// повторяет неудачную публикацию сам, поэтому Start завершается ошибкой только при
+// остановке контроллера или процесса.
 func (a *App) Start(ctx context.Context) error {
+	logger := logr.FromSlogHandler(slog.Default().Handler())
+	ctrl.SetLogger(logger)
+	klog.SetLogger(logger)
+
 	tel, err := telemetry.Start(ctx, AppServiceName)
 	if err != nil {
 		return fmt.Errorf("start telemetry: %w", err)
 	}
 	a.telemetry = tel
-	if err := a.routes.Publish(ctx); err != nil {
-		return errors.Join(fmt.Errorf("publish routes at start: %w", err), a.telemetry.Shutdown(ctx))
+
+	// Контроллер работает до Shutdown, а ctx отменяется уже по SIGTERM, до readiness delay.
+	managerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	a.cancel = cancel
+	go func() {
+		defer close(a.stopped)
+		a.err = a.manager.Start(managerCtx)
+	}()
+
+	select {
+	case <-a.published:
+		slog.InfoContext(ctx, "controlplane published the routes")
+		return nil
+	case <-a.stopped:
+		return errors.Join(fmt.Errorf("controller stopped before the first publication: %w", a.err), a.flushTelemetry(ctx))
+	case <-ctx.Done():
+		cancel()
+		<-a.stopped
+		return errors.Join(ctx.Err(), a.err, a.flushTelemetry(context.WithoutCancel(ctx)))
 	}
-	var lc net.ListenConfig
-	listener, err := lc.Listen(ctx, "tcp", a.addr)
-	if err != nil {
-		return errors.Join(fmt.Errorf("listen %s: %w", a.addr, err), a.telemetry.Shutdown(ctx))
-	}
-	a.listener = listener
-	slog.InfoContext(ctx, "controlplane listening", slog.String("server.address", listener.Addr().String()))
-	return nil
 }
 
-// Run обслуживает входящие запросы до вызова Shutdown.
+// Run ждёт остановки контроллера.
 func (a *App) Run() error {
-	if err := a.server.Serve(a.listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-		return fmt.Errorf("serve grpc: %w", err)
+	<-a.stopped
+	if a.err != nil {
+		return fmt.Errorf("run controller: %w", a.err)
 	}
 	return nil
 }
 
-// Shutdown прекращает приём новых запросов и дожидается начатых до дедлайна
-// ctx; оставшиеся закрываются принудительно. Финальный export — после drain.
+// Shutdown останавливает контроллер и дожидается начатой публикации до дедлайна
+// ctx. Финальный export — после остановки.
 func (a *App) Shutdown(ctx context.Context) error {
-	return errors.Join(a.stop(ctx), a.flushTelemetry(ctx))
+	a.cancel()
+	var stopErr error
+	select {
+	case <-a.stopped:
+	case <-ctx.Done():
+		stopErr = fmt.Errorf("stop controller: %w", ctx.Err())
+	}
+	return errors.Join(stopErr, a.flushTelemetry(ctx))
 }
 
 func (a *App) flushTelemetry(ctx context.Context) error {
-	if a.telemetry == nil {
-		return nil
-	}
 	return a.telemetry.Shutdown(ctx)
-}
-
-func (a *App) stop(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		a.server.GracefulStop()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		a.server.Stop()
-		<-done
-		return fmt.Errorf("graceful stop grpc: %w", ctx.Err())
-	}
-}
-
-// NewGRPCServer — бизнес-порт nomnom.controlplane.v1. Незавершённый HTTP/2
-// handshake ограничен, чтобы half-open соединение не держало GracefulStop.
-func NewGRPCServer(module *topologydi.Module, subjects grpcadapter.SubjectResolver) *grpc.Server {
-	server := grpc.NewServer(grpc.ConnectionTimeout(2*time.Second), grpc.StatsHandler(otelgrpc.NewServerHandler()))
-	controlplanev1.RegisterControlPlaneServiceServer(server, grpcadapter.NewService(grpcadapter.Handlers{
-		RegisterCell:  module.RegisterCell,
-		CreateMarket:  module.CreateMarket,
-		ArchiveMarket: module.ArchiveMarket,
-		ListMarkets:   module.ListMarkets,
-	}, subjects))
-	return server
 }

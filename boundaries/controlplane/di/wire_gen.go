@@ -7,7 +7,6 @@
 package di
 
 import (
-	"github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/di"
 	"github.com/google/wire"
@@ -15,52 +14,31 @@ import (
 
 // Injectors from wire.go:
 
-// InitializeApp — injector cmd/controlplane: store применяет миграции при сборке.
-func InitializeApp(cfg config.Config) (*App, func(), error) {
-	serverConfig := cfg.Server
-	databaseConfig := cfg.Database
-	store, cleanup, err := NewStore(databaseConfig)
+// InitializeApp — injector cmd/controlplane.
+func InitializeApp(cfg config.Config) (*App, error) {
+	restConfig, err := NewRESTConfig()
 	if err != nil {
-		return nil, nil, err
-	}
-	spiceDBConfig := cfg.SpiceDB
-	authorizer, cleanup2, err := di.NewAuthorizer(spiceDBConfig)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
+		return nil, err
 	}
 	routesConfig := cfg.Routes
-	applier, err := di.NewRouteApplier(routesConfig)
+	shutdownConfig := cfg.Shutdown
+	manager, err := di.NewManager(restConfig, routesConfig, shutdownConfig)
 	if err != nil {
-		cleanup2()
-		cleanup()
-		return nil, nil, err
+		return nil, err
 	}
-	module := di.NewModule(store, authorizer, applier)
-	identityConfig := cfg.Identity
-	subjectResolver, err := grpcadapter.NewSubjectResolver(identityConfig)
+	applier, err := di.NewRouteApplier(restConfig, routesConfig)
 	if err != nil {
-		cleanup2()
-		cleanup()
-		return nil, nil, err
+		return nil, err
 	}
-	server := NewGRPCServer(module, subjectResolver)
-	app := NewApp(serverConfig, server, module)
-	return app, func() {
-		cleanup2()
-		cleanup()
-	}, nil
+	module, err := di.NewModule(manager, applier)
+	if err != nil {
+		return nil, err
+	}
+	app := NewApp(module)
+	return app, nil
 }
 
 // wire.go:
 
-// Provider sets процесса controlplane объявлены здесь, под тегом wireinject: их
-// использует только генератор. Инфраструктура и use cases слайса — в
-// slices/topology/di; здесь — store, транспорт и App. wire_gen.go генерирует
-// `make generate`.
-var (
-	// configSet раскрывает секции конфигурации для provider'ов, которым нужна только своя секция.
-	configSet = wire.FieldsOf(new(config.Config), "Server", "Identity", "SpiceDB", "Database", "Routes")
-	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.
-	grpcSet = wire.NewSet(grpcadapter.NewSubjectResolver, NewGRPCServer)
-)
+// configSet раскрывает секции конфигурации для provider'ов, которым нужна только своя секция.
+var configSet = wire.FieldsOf(new(config.Config), "Shutdown", "Routes")

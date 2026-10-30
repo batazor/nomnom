@@ -4,22 +4,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 )
 
-func TestAuthorizerRequiresSpiceDB(t *testing.T) {
-	_, _, err := NewAuthorizer(config.SpiceDBConfig{})
-	require.ErrorContains(t, err, config.EnvSpiceDBEndpoint)
-}
-
-func TestRouteApplierRequiresTheRoutesConfig(t *testing.T) {
-	_, err := NewRouteApplier(config.RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public"})
+func TestManagerRequiresTheRoutesConfig(t *testing.T) {
+	_, err := NewManager(&rest.Config{}, config.RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public"}, config.ShutdownConfig{})
 	require.ErrorContains(t, err, config.EnvRoutesListener)
 }
 
-func TestRouteApplierRunsInTheCluster(t *testing.T) {
-	t.Setenv("KUBERNETES_SERVICE_HOST", "")
-	_, err := NewRouteApplier(config.RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public", Listener: "api"})
-	require.ErrorContains(t, err, "in-cluster")
+func TestRouteApplierRequiresTheRoutesConfig(t *testing.T) {
+	_, err := NewRouteApplier(&rest.Config{}, config.RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public"})
+	require.ErrorContains(t, err, config.EnvRoutesListener)
 }

@@ -1,84 +1,91 @@
 # Control plane
 
 Глобальный control plane cell-based архитектуры ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)):
-реестр Cell, Market и Market Placement и маршруты публичного gateway из него. Go, PostgreSQL, gRPC API
-`nomnom.controlplane.v1.ControlPlaneService` ([proto](infrastructure/grpc/nomnom/controlplane/v1/service.proto)).
+контроллер Kubernetes на Go. Реестр Cell, Market и Market Placement — ресурсы `Cell` и `Market` группы
+`controlplane.nomnom.dev/v1alpha1`, единственный источник правды. Своей базы данных и бизнес-API у него нет.
 Язык — [GLOSSARY](GLOSSARY.md), локальные решения — [docs/adr](docs/adr).
 
-Control plane не в горячем пути: ни gateway, ни ячейки к нему не обращаются. После каждой записи
-(`RegisterCell`, `CreateMarket`, `ArchiveMarket`, в том числе повтора) и один раз при старте до readiness он
-server-side apply применяет в неймспейс публичного gateway (`ROUTES__NAMESPACE`) полный набор
-ресурсов из реестра ([publish routes](slices/topology/applications/publishroutes/README.md)):
+Control plane не в горячем пути: ни gateway, ни ячейки к нему не обращаются. При старте, при изменении
+`Cell` и `Market` и при изменении своих ресурсов на gateway контроллер server-side apply применяет в
+неймспейс публичного gateway (`ROUTES__NAMESPACE`) полный набор ресурсов из реестра
+([publish routes](slices/topology/applications/publishroutes/README.md)):
 
 - `HTTPRoute market-<market_id>` — `/m/<market_id>` в Service Router Cell, префикс снимается,
   `X-Nomnom-Market` ставится из маршрута; метка `nomnom.dev/route: market`; маршруты Market с этой
-  меткой и `app.kubernetes.io/managed-by: nomnom-controlplane`, которых нет в реестре (архивные),
+  меткой и `app.kubernetes.io/managed-by: nomnom-controlplane`, которых нет в наборе (архивные),
   удаляются;
 - `ConfigMap`, `HTTPRouteFilter` (`directResponse`) и `HTTPRoute markets` — Envoy сам отвечает на
-  `GET /markets` списком `{"markets":[{"id","name","currency","timeZone"}]}` неархивных Market по
+  `GET /markets` списком `{"markets":[{"id","name","currency","timeZone"}]}` опубликованных Market по
   названию.
 
-Чтение реестра и применение — под advisory lock PostgreSQL в одной read-only транзакции, так что
-параллельные записи не применят более старый снимок. Не применилось при записи — `UNAVAILABLE`
-(`ROUTES_UNAVAILABLE`), запись остаётся, повтор команды применяет снова; при старте — процесс не
-стартует.
+Очередь контроллера держит один ключ на всю топологию, поэтому публикации идут по одной, а следующее
+событие применяет более новый снимок. Опроса по таймеру нет. Удалённый вручную маршрут возвращается без
+перезапуска. Не применилось — `Ready=False` (`RoutesUnavailable`) и повтор с backoff до 30 секунд.
 
-## API
+## Реестр
 
-| RPC | Кто вызывает | Правило |
+```yaml
+apiVersion: controlplane.nomnom.dev/v1alpha1
+kind: Cell
+metadata:
+  name: cell-1
+spec:
+  router: {namespace: nomnom-bff, name: bff, port: 3010}
+---
+apiVersion: controlplane.nomnom.dev/v1alpha1
+kind: Market
+metadata:
+  name: berlin
+spec:
+  displayName: Berlin
+  currency: EUR
+  timeZone: Europe/Berlin
+  cellRef: cell-1
+  archived: false
+```
+
+Запись — `kubectl apply` от субъекта с `ClusterRole` `nomnom-topology-editor`, чтение — `kubectl get cells,markets`.
+
+| Правило | Где проверяется | Нарушение |
 | --- | --- | --- |
-| `RegisterCell` | оператор (user assertion через делегата, ADR 32) | `platform#manage_markets` (SpiceDB, ADR 18); Cell — `cell_id` и `router` (Service Cosmo Router: DNS-1123 namespace и name, порт 1..65535); повтор с теми же значениями — `created = false`, с другими — `ALREADY_EXISTS`; затем публикация маршрутов |
-| `CreateMarket` | оператор | то же; `time_zone` — обязательный IANA-пояс (`Europe/Berlin`), пустой или неизвестный — `INVALID_ARGUMENT`, другой пояс для известного `market_id` — `ALREADY_EXISTS`; незарегистрированная Cell — `FAILED_PRECONDITION` (`CELL_NOT_FOUND`); затем публикация маршрутов |
-| `ArchiveMarket` | оператор | `platform#manage_markets`; Market уходит из списка и с gateway, `market_id` больше не создаётся (`CreateMarket` — `ALREADY_EXISTS`, `MARKET_ARCHIVED`); повтор — `archived = false`; неизвестный `market_id` — `NOT_FOUND` (`MARKET_NOT_FOUND`); затем публикация маршрутов ([archive market](slices/topology/applications/archivemarket/README.md)) |
-| `ListMarkets` | оператор | `platform#manage_markets`; неархивные, по name, затем market_id |
+| Slug `^[a-z][a-z0-9-]{1,31}$` у имени `Cell` и `Market` | CEL | запись отклонена |
+| Router: DNS-1123 label и порт 1..65535 | схема | запись отклонена |
+| `displayName` 1..64 символа без пробелов по краям, `currency` ISO 4217, непустые `timeZone` и `cellRef` | схема, CEL | запись отклонена |
+| `Cell.spec` и все поля `Market.spec`, кроме `archived`, неизменяемы | CEL | запись отклонена |
+| `archived` не возвращается в `false` | CEL | запись отклонена |
+| Удаление `Cell` и `Market` запрещено, `market_id` не используется повторно | `ValidatingAdmissionPolicy` | запись отклонена |
+| Cell из `cellRef` объявлена | контроллер | `Ready=False`, `CellNotFound` |
+| `timeZone` есть в базе IANA, встроенной в бинарь (`time/tzdata`) | контроллер | `Ready=False`, `InvalidTimeZone` |
 
-Ошибки — `google.rpc.ErrorInfo` домена `nomnom.controlplane.v1`:
+Market с такой ошибкой не публикуется и не мешает остальным. Объявили недостающую Cell — он публикуется сам.
+Архивный Market получает `Ready=False` с reason `Archived`.
 
-| Код | Reason |
-| --- | --- |
-| `UNAUTHENTICATED` | `AUTHENTICATION_REQUIRED` — нет/неверный projected token, assertion не от делегата |
-| `INVALID_ARGUMENT` | `INVALID_ARGUMENT` — slug, Router Cell, название, валюта, часовой пояс |
-| `PERMISSION_DENIED` | `OPERATION_NOT_ALLOWED` |
-| `NOT_FOUND` | `MARKET_NOT_FOUND` |
-| `ALREADY_EXISTS` | `CELL_ALREADY_REGISTERED`, `MARKET_ALREADY_EXISTS`, `MARKET_ARCHIVED` |
-| `FAILED_PRECONDITION` | `CELL_NOT_FOUND` |
-| `UNAVAILABLE` | `DEPENDENCY_UNAVAILABLE` — SpiceDB не ответил (fail closed); `ROUTES_UNAVAILABLE` — маршруты публичного gateway не применены, повторите команду |
-| `INTERNAL` | `INTERNAL_ERROR` |
+Удаление защищено от случайности, а не от администратора кластера: тот может снять политику.
 
 ## Устройство
 
-- `slices/topology` — домены `cell` и `market` (value objects в `vo/`), use cases
-  [`registercell`](slices/topology/applications/registercell/README.md),
-  [`createmarket`](slices/topology/applications/createmarket/README.md),
-  [`archivemarket`](slices/topology/applications/archivemarket/README.md),
-  [`listmarkets`](slices/topology/applications/listmarkets/README.md),
-  [`publishroutes`](slices/topology/applications/publishroutes/README.md); PostgreSQL-репозитории
-  (pgx + squirrel, ADR 39), проверка SpiceDB и адаптер маршрутов `infrastructure/gatewayroutes`
-  (client-go, dynamic client, in-cluster ServiceAccount).
-- Миграции встроены в бинарь и применяются при старте под advisory lock (ADR 42), набор `topology`.
-  `00003_market_time_zone` задаёт пояс существующим Market явно: `berlin` — `Europe/Berlin`; любой
-  другой Market без известного пояса останавливает миграцию с его `market_id`, и оператор решает
-  за него до старта.
-- База IANA встроена в бинарь (`time/tzdata`): допустимость пояса зависит от релиза control plane,
-  а не от образа.
+- `infrastructure/kubernetes/api/v1alpha1` — типы CRD; манифесты в `ops/helm/templates/crds` и DeepCopy генерирует `make generate`.
+- `slices/topology` — домены `cell` и `market` (value objects в `vo/`), сценарий
+  [`publishroutes`](slices/topology/applications/publishroutes/README.md), адаптеры `infrastructure/registry`
+  (ресурсы реестра), `infrastructure/gatewayroutes` (маршруты через dynamic client) и `infrastructure/controller`
+  (цикл reconcile на `controller-runtime`).
 - DI — Google Wire (ADR 5): `di/wire.go`, `make generate`.
 - Моки портов для тестов — mockery (шаблон testify), список в `.mockery.yml`, генерирует `make generate`.
-- Runtime contract (ADR 17): бизнес-порт 8086, технический порт `metrics` 9086 с `/health/*`;
-  OpenTelemetry (ADR 9) — OTLP metrics и traces, JSON-логи.
+- Runtime contract (ADR 17): технический порт `metrics` 9086 с `/health/*`; ready — после первой успешной
+  публикации. OpenTelemetry (ADR 9) — OTLP metrics и traces, JSON-логи; Prometheus-эндпоинт `controller-runtime` выключен.
+- Одна реплика без surge (`maxSurge: 0`, `maxUnavailable: 1`): новая версия стартует на месте старой. Короткое
+  наложение на время остановки старого pod безопасно: обе применяют полный набор server-side apply, а следующее
+  событие приводит ресурсы к реестру. Пока pod пересоздаётся, Envoy работает на последней конфигурации.
 
 ## Конфигурация
 
-Все параметры обязательны, пустой — процесс не стартует ([config.example.yaml](config.example.yaml)):
-`IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` (`nomnom.controlplane`), `IDENTITY__JWKS_FILE`,
-`IDENTITY__SERVICE_ACCOUNTS`, `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE`,
-`IDENTITY__USER_DELEGATES`, `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY`, `POSTGRES__DSN`,
-`ROUTES__NAMESPACE`, `ROUTES__GATEWAY`, `ROUTES__LISTENER` (неймспейс маршрутов, Gateway и
-listener публичного API). Kubernetes API — только in-cluster config ServiceAccount: вне кластера
-процесс не стартует (`make run` — только с поднятым в кластере API).
+Обязательны `ROUTES__NAMESPACE`, `ROUTES__GATEWAY`, `ROUTES__LISTENER` (неймспейс маршрутов, Gateway и listener
+публичного API; [config.example.yaml](config.example.yaml)): пустой параметр — процесс не стартует. Kubernetes API — только
+in-cluster config ServiceAccount: вне кластера процесс не стартует (`make run` — только с поднятым в кластере API).
 
 ## Команды
 
-`make run`, `make test` (PostgreSQL и SpiceDB в testcontainers, нужен Docker), `make lint`,
+`make run`, `make test` (контроллер на k3s в testcontainers, нужен Docker), `make lint`,
 `make format`, `make format-check`, `make check`, `make generate`.
 
 Развёртывание — Helm chart [`ops/helm`](ops/helm) (ADR 12); kind — [`ops/kind`](../../ops/kind/README.md).

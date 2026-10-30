@@ -7,8 +7,11 @@ ops/
   helm/        # Helm chart приложения (ADR 12)
 ```
 
-Chart создаёт Deployment, Service (порт `grpc` 8086), ServiceAccount, ConfigMap несекретного
-`env` и Role с RoleBinding в неймспейсе маршрутов публичного gateway (`routes.namespace`: только
-`get`/`create`/`patch` HTTPRoute, HTTPRouteFilter и ConfigMap). Секреты (DSN PostgreSQL, preshared
-key SpiceDB) — внешние Secret. Identity, SpiceDB, PostgreSQL и `routes.*` обязательны: без них
-chart не рендерится. Values kind — `ops/kind/values/controlplane.yaml`.
+Chart создаёт:
+
+- CRD `Cell` и `Market` (`templates/crds/`, генерирует `make generate`) и `ValidatingAdmissionPolicy` запрета их удаления (`keep`: uninstall их не удаляет);
+- Deployment с одной репликой без surge (`maxSurge: 0`), ServiceAccount и ConfigMap несекретного `env`;
+- `ClusterRole` чтения реестра и записи его `status` для ServiceAccount и `ClusterRole` `nomnom-topology-editor` для тех, кому кластер разрешит менять реестр;
+- Role с RoleBinding в неймспейсе маршрутов публичного gateway (`routes.namespace`).
+
+`routes.*` обязательны: без них chart не рендерится. Values kind — `ops/kind/values/controlplane.yaml`.

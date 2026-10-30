@@ -4,22 +4,6 @@ image:
   # Образ загружен через kind load; Never гарантирует запуск именно собранной версии.
   pullPolicy: Never
 
-podLabels:
-  # Pod предоставляет бизнес-API: ingress только от internal gateway (NetworkPolicy).
-  nomnom.dev/business-api: "true"
-
-# ADR 27: projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks публикует Job
-# identity-jwks chart ops/kind/bootstrap). Вызывающие: Job demo-seed (chart ops/kind/demo) регистрирует cell-1 и создаёт berlin
-# от имени оператора kind-operator с user assertion ключом BFF — поэтому он делегат (ADR 32);
-# fixture e2e-driver (ops/kind/e2e/chart) так же создаёт Market каждого прогона e2e.
-identity:
-  issuer: https://kubernetes.default.svc.cluster.local
-  jwksConfigMap: cluster-jwks
-  serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/demo-seed=demo-seed,nomnom-bff/e2e-driver=e2e-driver
-  userJwksConfigMap: bff-jwks
-  userIssuer: nomnom-bff
-  userDelegates: bff,demo-seed,e2e-driver
-
 # ADR 41: маршруты Market и список Market — listener api Gateway public
 # (manifests/gateway/public-gateway.yaml).
 routes:
@@ -27,19 +11,7 @@ routes:
   gateway: public
   listener: api
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
-spicedb:
-  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
-  insecure: true
-  presharedKeySecret:
-    name: spicedb-preshared-key
-
-# ADR 8: PostgreSQL controlplane; Secret controlplane-postgres создаёт chart ops/kind/bootstrap.
-postgres:
-  dsnSecret:
-    name: controlplane-postgres
-
-# Burstable без CPU limit; профиль ещё не измерен — значения как у orders с запасом.
+# Burstable без CPU limit; профиль ещё не измерен.
 resources:
   requests:
     cpu: 10m

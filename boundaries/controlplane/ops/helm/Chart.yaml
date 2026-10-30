@@ -1,6 +1,6 @@
 apiVersion: v2
 name: controlplane
-description: "Control plane (Go): глобальный реестр Cell, Market и Market Placement (ADR 41)."
+description: "Control plane (Go): контроллер реестра Cell и Market и маршрутов публичного gateway (ADR 41)."
 type: application
 # Версия chart. appVersion намеренно не задаётся: образ полностью описывается через
 # image.repository / image.tag в values.

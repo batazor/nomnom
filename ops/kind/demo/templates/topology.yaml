@@ -1,0 +1,26 @@
+# Топология kind (ADR 41): CRD ставит chart controlplane (dependsOn в skaffold.yaml), дальше Cell и
+# Market публикует его контроллер. keep: удаление реестра запрещено, uninstall не должен в него упираться.
+apiVersion: controlplane.nomnom.dev/v1alpha1
+kind: Cell
+metadata:
+  name: cell-1
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  router:
+    namespace: nomnom-bff
+    name: bff
+    port: 3010
+---
+apiVersion: controlplane.nomnom.dev/v1alpha1
+kind: Market
+metadata:
+  name: berlin
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  displayName: Berlin
+  currency: EUR
+  timeZone: Europe/Berlin
+  cellRef: cell-1
+  archived: false

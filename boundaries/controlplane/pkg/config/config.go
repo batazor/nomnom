@@ -9,17 +9,11 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
-
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config/database"
 )
 
 type Config struct {
-	Server     ServerConfig     `mapstructure:"server"`
 	Management ManagementConfig `mapstructure:"management"`
 	Shutdown   ShutdownConfig   `mapstructure:"shutdown"`
-	Identity   IdentityConfig   `mapstructure:"identity"`
-	SpiceDB    SpiceDBConfig    `mapstructure:"spicedb"`
-	Database   database.Config  `mapstructure:"postgres"`
 	Routes     RoutesConfig     `mapstructure:"routes"`
 }
 
@@ -28,12 +22,8 @@ func Load() (Config, error) {
 	loader.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 
 	for name, configure := range map[string]func(*viper.Viper) error{
-		"server":     configureServer,
 		"management": configureManagement,
 		"shutdown":   configureShutdown,
-		"identity":   configureIdentity,
-		"spicedb":    configureSpiceDB,
-		"database":   database.Configure,
 		"routes":     configureRoutes,
 	} {
 		if err := configure(loader); err != nil {
@@ -60,16 +50,10 @@ func Load() (Config, error) {
 
 // Validate checks every section; the first invalid one stops the start.
 func (cfg Config) Validate() error {
-	for _, validate := range []func() error{
-		cfg.Server.Validate, cfg.Management.Validate, cfg.Shutdown.Validate,
-		cfg.Identity.Validate, cfg.SpiceDB.Validate, cfg.Database.Validate, cfg.Routes.Validate,
-	} {
+	for _, validate := range []func() error{cfg.Management.Validate, cfg.Shutdown.Validate, cfg.Routes.Validate} {
 		if err := validate(); err != nil {
 			return err
 		}
-	}
-	if cfg.Management.Port == cfg.Server.Port {
-		return fmt.Errorf("management port must differ from server port %d", cfg.Server.Port)
 	}
 	return nil
 }

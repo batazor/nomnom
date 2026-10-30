@@ -60,53 +60,7 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
 {{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
 {{- end -}}
-{{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
-{{- fail "management.port must differ from service.targetPort" -}}
 {{- end -}}
-{{- end -}}
-
-{{/*
-PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пула процесса. Без dsnSecret.name chart
-не рендерится (validateSpiceDB): процесс без POSTGRES__DSN не стартует.
-За пулером в session mode каждое соединение пула держит server-соединение, поэтому
-maxConns задаётся values каждой роли. Миграции процесс применяет сам при старте
-2 соединениями вне maxConns: advisory lock процесса и миграция с lock_timeout.
-Usage: {{ include "controlplane.postgresEnv" (dict "context" $) }}
-*/}}
-{{- define "controlplane.postgresEnv" -}}
-{{- with .context.Values.postgres }}
-{{- if .dsnSecret.name }}
-{{- if lt (int .maxConns) 1 -}}
-{{- fail (printf "postgres.maxConns must be positive, got %v" .maxConns) -}}
-{{- end -}}
-{{- if or (lt (int .minConns) 0) (gt (int .minConns) 1) -}}
-{{- fail (printf "postgres.minConns must be 0 or 1, got %v" .minConns) -}}
-{{- end -}}
-{{- if gt (int .minConns) (int .maxConns) -}}
-{{- fail "postgres.minConns must not exceed postgres.maxConns" -}}
-{{- end }}
-- name: POSTGRES__DSN
-  valueFrom:
-    secretKeyRef:
-      name: {{ .dsnSecret.name }}
-      key: {{ .dsnSecret.key }}
-- name: POSTGRES__MAX_CONNS
-  value: {{ .maxConns | quote }}
-- name: POSTGRES__MIN_CONNS
-  value: {{ .minConns | quote }}
-- name: POSTGRES__MAX_CONN_LIFETIME
-  value: {{ .maxConnLifetime | quote }}
-- name: POSTGRES__MAX_CONN_LIFETIME_JITTER
-  value: {{ .maxConnLifetimeJitter | quote }}
-- name: POSTGRES__MAX_CONN_IDLE_TIME
-  value: {{ .maxConnIdleTime | quote }}
-- name: POSTGRES__CONNECT_TIMEOUT
-  value: {{ .connectTimeout | quote }}
-- name: POSTGRES__HEALTH_CHECK_PERIOD
-  value: {{ .healthCheckPeriod | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
 
 {{/*
 OpenTelemetry (ADR 9, docs/observability.md): одинаковая идентификация traces, metrics и
@@ -144,35 +98,7 @@ Usage: {{ include "controlplane.otelEnv" (dict "context" $ "serviceName" "") }}
 {{- end }}
 
 {{/*
-Identity (ADR 27, ADR 32, ADR 41): у control plane нет анонимных операций — JWKS кластера, issuer,
-audience, allowlist, JWKS BFF, issuer BFF и делегаты обязательны, иначе
-chart не рендерится (а процесс без них не стартует).
-*/}}
-{{- define "controlplane.validateIdentity" -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
-{{- if not (get $.Values.identity $key) -}}
-{{- fail (printf "identity.%s is required" $key) -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-SpiceDB (ADR 18): каждая запись проверяет platform#manage_markets.
-*/}}
-{{- define "controlplane.validateSpiceDB" -}}
-{{- if not .Values.spicedb.endpoint -}}
-{{- fail "spicedb.endpoint is required" -}}
-{{- end -}}
-{{- if not .Values.spicedb.presharedKeySecret.name -}}
-{{- fail "spicedb.presharedKeySecret.name is required" -}}
-{{- end -}}
-{{- if not .Values.postgres.dsnSecret.name -}}
-{{- fail "postgres.dsnSecret.name is required" -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-Маршруты публичного gateway (ADR 41): без них control plane не опубликует маршрут созданного Market.
+Маршруты публичного gateway (ADR 41): без них control plane не опубликует маршруты объявленных Market.
 */}}
 {{- define "controlplane.validateRoutes" -}}
 {{- range $key := list "namespace" "gateway" "listener" -}}

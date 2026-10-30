@@ -1,71 +1,57 @@
 // Package di описывает зависимости слайса topology для Google Wire (ADR 5):
-// PostgreSQL-репозитории реестра, проверка SpiceDB, публикация маршрутов
-// публичного gateway и use cases Cell и Market.
+// реестр на ресурсах Cell и Market, применение маршрутов публичного gateway и цикл
+// reconcile, который их связывает.
 package di
 
 import (
 	"fmt"
 
 	"github.com/google/wire"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/archivemarket"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/listmarkets"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/registercell"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/controller"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/gatewayroutes"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/repository"
-	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/spicedb"
+	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/registry"
 )
 
-// APISet — слайс topology процесса cmd/controlplane.
-var APISet = wire.NewSet(NewAuthorizer, NewRouteApplier, NewModule)
+// ControllerSet — слайс topology процесса cmd/controlplane.
+var ControllerSet = wire.NewSet(NewManager, NewRouteApplier, NewModule)
 
-// Module — собранные use cases слайса для gRPC adapter и старта процесса.
+// Module — собранный цикл reconcile для старта процесса.
 type Module struct {
-	RegisterCell  registercell.Handler
-	CreateMarket  createmarket.Handler
-	ArchiveMarket archivemarket.Handler
-	ListMarkets   listmarkets.Handler
-	PublishRoutes publishroutes.Handler
+	Manager manager.Manager
+	// Published закрывается после первой успешной публикации маршрутов.
+	Published <-chan struct{}
 }
 
-func NewModule(store *repository.Store, authorizer authz.Authorizer, applier publishroutes.Applier) *Module {
-	markets := repository.NewMarkets(store)
-	routes := publishroutes.New(repository.NewRoutes(store), applier)
-	return &Module{
-		RegisterCell:  registercell.New(authorizer, repository.NewCells(store), routes),
-		CreateMarket:  createmarket.New(authorizer, markets, routes),
-		ArchiveMarket: archivemarket.New(authorizer, markets, routes),
-		ListMarkets:   listmarkets.New(authorizer, markets),
-		PublishRoutes: routes,
+// NewManager создаёт manager контроллера; без ROUTES__* процесс не стартует.
+func NewManager(restConfig *rest.Config, routes config.RoutesConfig, shutdown config.ShutdownConfig) (manager.Manager, error) {
+	if err := routes.Validate(); err != nil {
+		return nil, err
 	}
+	return controller.NewManager(restConfig, routes.Namespace, shutdown.DrainTimeout)
 }
 
-// NewAuthorizer подключает проверку platform#manage_markets к SpiceDB (ADR 18);
-// без endpoint процесс не стартует.
-func NewAuthorizer(cfg config.SpiceDBConfig) (authz.Authorizer, func(), error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, nil, err
-	}
-	client, err := spicedb.Dial(cfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("spicedb: %w", err)
-	}
-	return spicedb.NewAuthorizer(client, cfg.Timeout), func() { _ = client.Close() }, nil
-}
-
-// NewRouteApplier применяет маршруты публичного gateway через Kubernetes API
-// кластера (in-cluster ServiceAccount); без ROUTES__* процесс не стартует.
-func NewRouteApplier(cfg config.RoutesConfig) (publishroutes.Applier, error) {
+// NewRouteApplier применяет маршруты публичного gateway через Kubernetes API.
+func NewRouteApplier(restConfig *rest.Config, cfg config.RoutesConfig) (publishroutes.Applier, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	applier, err := gatewayroutes.NewInCluster(gatewayroutes.Config{Namespace: cfg.Namespace, Gateway: cfg.Gateway, Listener: cfg.Listener})
+	applier, err := gatewayroutes.NewForConfig(restConfig, gatewayroutes.Config{Namespace: cfg.Namespace, Gateway: cfg.Gateway, Listener: cfg.Listener})
 	if err != nil {
 		return nil, fmt.Errorf("routes: %w", err)
 	}
 	return applier, nil
+}
+
+// NewModule регистрирует цикл reconcile в manager.
+func NewModule(mgr manager.Manager, applier publishroutes.Applier) (*Module, error) {
+	published, err := controller.Register(mgr, publishroutes.New(registry.New(mgr.GetClient()), applier))
+	if err != nil {
+		return nil, err
+	}
+	return &Module{Manager: mgr, Published: published}, nil
 }

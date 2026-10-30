@@ -6,7 +6,7 @@ image:
 
 # ADR 27: service identity BFF — nomnom-bff/bff; её разрешают allowlist и userDelegates
 # orders, restaurants и delivery (values/orders.yaml, values/restaurants.yaml,
-# values/delivery.yaml) и allowlist controlplane (values/controlplane.yaml).
+# values/delivery.yaml).
 serviceAccount:
   name: bff
 

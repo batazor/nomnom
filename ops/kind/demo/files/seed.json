@@ -1,12 +1,7 @@
 {
   "operator": "kind-operator",
-  "cells": [
-    {"id": "cell-1", "router": {"namespace": "nomnom-bff", "name": "bff", "port": 3010}}
-  ],
-  "markets": [
-    {"id": "berlin", "name": "Berlin", "currency": "EUR", "timeZone": "Europe/Berlin", "cellId": "cell-1"}
-  ],
   "market": "berlin",
+  "timeZone": "Europe/Berlin",
   "owner": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
   "kitchen": "ChFub21ub20tZGVtby1vd25lchIFbG9jYWw",
   "couriers": [

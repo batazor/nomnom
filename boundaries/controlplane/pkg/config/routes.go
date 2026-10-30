@@ -19,8 +19,8 @@ const (
 
 // RoutesConfig is where the control plane publishes the routes of the public
 // gateway (ADR 41): the namespace of its routes, the Gateway and the listener
-// of client traffic. A process without them could not route a Market it
-// creates, so it does not start.
+// of client traffic. A process without them could not route a declared Market,
+// so it does not start.
 type RoutesConfig struct {
 	Namespace string `mapstructure:"namespace"`
 	Gateway   string `mapstructure:"gateway"`

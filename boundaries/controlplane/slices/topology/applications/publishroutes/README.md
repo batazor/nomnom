@@ -1,10 +1,8 @@
 # Publish Routes
 
-- **Тип:** внутренний сценарий control plane; вызывается после `RegisterCell` и `CreateMarket` (в том числе
-  повтора) и один раз при старте процесса до readiness.
-- **Порядок:** read-only транзакция с transaction-level advisory lock PostgreSQL → снимок реестра (Market с Router своей Cell, по `name`,
-  затем `market_id`) → server-side apply ресурсов публичного gateway → конец транзакции снимает lock.
-- **Результат:** маршрут каждого Market и список Market применены; ошибка применения — `ErrRoutesUnavailable`
-  (`UNAVAILABLE`, `ROUTES_UNAVAILABLE`), запись реестра не откатывается.
+- **Тип:** сценарий reconcile control plane; запускается при старте, при изменении `Cell` и `Market` и при изменении управляемых ресурсов публичного gateway.
+- **Порядок:** снимок реестра → проверка значений, часового пояса и Cell каждого Market → server-side apply ресурсов публичного gateway → удаление маршрутов Market вне набора → запись `Ready` в `status`.
+- **Результат:** маршрут каждого проверенного неархивного Market и список Market применены. Market с неизвестной Cell (`CellNotFound`), неизвестным поясом (`InvalidTimeZone`) или неверным значением (`InvalidValue`) не публикуется и не мешает остальным. Архивный Market получает `Ready=False` и reason `Archived`.
+- **Ошибка:** не применилось — `Ready=False`, `RoutesUnavailable`, `ErrRoutesUnavailable`; контроллер повторяет публикацию с backoff.
 
-Handler: [`publishroutes.go`](publishroutes.go); ресурсы — `infrastructure/gatewayroutes`.
+Handler: [`publishroutes.go`](publishroutes.go); адаптеры — `infrastructure/registry` и `infrastructure/gatewayroutes`.

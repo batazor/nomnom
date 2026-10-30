@@ -250,38 +250,6 @@ spec:
         - protocol: TCP
           port: 50051
 ---
-# controlplane (ADR 41): своя PostgreSQL и SpiceDB (platform#manage_markets). Kafka, Debezium и
-# Temporal ему не нужны: control plane не публикует событий.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-infrastructure-egress
-  namespace: nomnom-controlplane
-spec:
-  podSelector: {}
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              nomnom.dev/tier: infra
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: pgbouncer
-      ports:
-        - protocol: TCP
-          port: 6432
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              nomnom.dev/tier: infra
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: spicedb
-      ports:
-        - protocol: TCP
-          port: 50051
----
 # BFF: JWKS identity providers (ADR 35) — Dex и тестовый test-idp; Kafka — Cosmo Streams
 # подписок orderChanged (ADR 36); Valkey delivery — подписка courierMoved (FR-668).
 apiVersion: networking.k8s.io/v1
@@ -388,8 +356,9 @@ spec:
         - protocol: TCP
           port: http
 ---
-# controlplane (ADR 41): Kubernetes API — server-side apply маршрутов публичного gateway (Role в
-# nomnom-gateway, chart controlplane). Сущность kube-apiserver есть только в политике Cilium.
+# controlplane (ADR 41): Kubernetes API — единственная внешняя зависимость: реестр Cell и Market и
+# маршруты публичного gateway (Role в nomnom-gateway, chart controlplane). Kafka, Debezium, Temporal,
+# PostgreSQL и SpiceDB ему не нужны. Сущность kube-apiserver есть только в политике Cilium.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

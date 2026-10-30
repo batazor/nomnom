@@ -113,37 +113,36 @@ spec:
               ' "$assertion" "$COURIER" || echo "courier $COURIER stays as is (not registered or not online)"
         # Последним Market прогона архивируется (ADR 41): он уходит из списка Market и с публичного
         # gateway, иначе каждый прогон добавлял бы город в выбор клиента. Market, который прогон не
-        # успел создать, — NOT_FOUND, это лишь пишется в log.
+        # успел создать, — NotFound, это лишь пишется в log.
         - script:
             env:
               - name: MARKET
                 value: ($market)
             content: |
-              set -eu
-              root="$(git rev-parse --show-toplevel)"
-              key="$(mktemp)"
-              trap 'rm -f "$key"' EXIT
-              kubectl -n nomnom-bff get secret bff-assertion-key -o json | jq -r '.data["tls.key"] // .data["key.pem"]' | base64 -d >"$key"
-              assertion="$(python3 -I "$root/ops/kind/scripts/mint-jwt.py" user-assertion "$key" nomnom-bff-kind nomnom.controlplane kind-operator)"
-              kubectl -n nomnom-bff exec deploy/e2e-driver -- sh -c '
-                grpcurl -plaintext -max-time 10 -format-error -protoset /protos/nomnom.binpb \
-                  -H "authorization: Bearer $(cat /var/run/secrets/nomnom/identity/nomnom.controlplane)" \
-                  -H "x-nomnom-user-assertion: $0" -d "{\"marketId\":\"$1\"}" \
-                  internal-gateway.envoy-gateway-system.svc.cluster.local:8080 \
-                  nomnom.controlplane.v1.ControlPlaneService/ArchiveMarket 2>&1
-              ' "$assertion" "$MARKET" || echo "market $MARKET stays (not created)"
+              kubectl patch market "$MARKET" --type merge -p '{"spec":{"archived":true}}' 2>&1 || echo "market $MARKET stays (not created)"
 
-    # 0. Оператор создаёт Market прогона в cell-1 (его регистрирует chart ops/kind/demo).
-    - name: operator creates run market
-      use:
-        template: ../templates/driver-call.yaml
-        with:
-          bindings:
-            - {name: audience, value: nomnom.controlplane}
-            - {name: subject, value: $s.operator}
-            - {name: method, value: nomnom.controlplane.v1.ControlPlaneService/CreateMarket}
-            - name: request
-              value: '{marketId: $s.market, name: ("Kind e2e " + $s.run), currency: "EUR", timeZone: "Europe/Berlin", cellId: "cell-1"}'
+    # 0. Market прогона в cell-1 (её объявляет chart ops/kind/demo). Script, а не операция apply
+    # chainsaw: та удаляет созданное в cleanup, а удаление реестра запрещено.
+    - name: operator declares run market
+      try:
+        - script:
+            timeout: 3m
+            env:
+              - name: MARKET
+                value: ($market)
+              - name: RUN
+                value: ($run)
+            content: |
+              set -eu
+              kubectl apply --server-side --field-manager e2e -f - <<EOF
+              apiVersion: controlplane.nomnom.dev/v1alpha1
+              kind: Market
+              metadata: {name: $MARKET}
+              spec: {displayName: "Kind e2e $RUN", currency: EUR, timeZone: Europe/Berlin, cellRef: cell-1, archived: false}
+              EOF
+              kubectl wait "market/$MARKET" --for=condition=Ready --timeout=2m
+            check:
+              ($error): ~
 
     # 1. Оператор: ресторан и курьер.
     - name: operator registers restaurant

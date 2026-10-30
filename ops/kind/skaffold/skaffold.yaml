@@ -416,8 +416,8 @@ deploy:
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_nomnom_kafka_connect}}"
           image.tag: "{{.IMAGE_TAG_nomnom_kafka_connect}}"
-      # Control plane (ADR 41): глобальный реестр Cell, Market и Market Placement; БД и SpiceDB
-      # готовит chart ../bootstrap. Cell cell-1 и Market berlin регистрирует Job chart ../demo.
+      # Control plane (ADR 41): CRD реестра Cell и Market и контроллер маршрутов публичного gateway.
+      # Cell cell-1 и Market berlin объявляет chart ../demo.
       # Индекс 11 — в patches grafana-cloud.
       - name: controlplane
         chartPath: ../../../boundaries/controlplane/ops/helm

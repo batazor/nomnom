@@ -4,7 +4,7 @@
 #
 # Клиент — net-probe в nomnom-outsider, вне прикладного контура: HTTPS на listener api
 # (api.nomnom.localhost) Service public-gateway, сертификат проверяется корнем локального CA
-# (Secret cert-manager/nomnom-local-ca). berlin → cell-1 регистрирует Job chart ops/kind/demo.
+# (Secret cert-manager/nomnom-local-ca). berlin → cell-1 объявляет chart ops/kind/demo.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
@@ -13,7 +13,8 @@ spec:
   description: >
     /m/berlin/graphql доходит до BFF cell-1 с X-Nomnom-Market: berlin даже при чужом заголовке
     клиента; неизвестный Market — 404 gateway; GET /markets — список реестра; при остановленном
-    control plane маршруты работают, а удалённый маршрут control plane восстанавливает при старте.
+    control plane маршруты работают, а удалённый маршрут control plane восстанавливает и сразу, и при
+    старте.
   steps:
     - name: policies applied
       use:
@@ -99,6 +100,48 @@ spec:
         - script:
             timeout: 3m
             content: *request
+            check:
+              ($error): ~
+      finally:
+        - script:
+            content: |
+              kubectl -n nomnom-controlplane scale deployment controlplane --replicas 1
+              kubectl -n nomnom-controlplane rollout status deployment controlplane --timeout 3m
+    # AC-1015: без перезапуска.
+    - name: the control plane restores a deleted route
+      try:
+        - script:
+            content: kubectl -n nomnom-gateway delete httproute market-berlin
+            check:
+              ($error): ~
+        - assert:
+            timeout: 1m
+            resource:
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: HTTPRoute
+              metadata:
+                name: market-berlin
+                namespace: nomnom-gateway
+    # AC-1016: запись реестра ждёт возвращения control plane.
+    - name: the registry changes while the control plane is stopped
+      try:
+        - script:
+            timeout: 5m
+            content: |
+              set -eu
+              market="kind-e2e-stopped-$(date +%s)"
+              trap 'kubectl patch market "$market" --type merge -p "{\"spec\":{\"archived\":true}}" >/dev/null || true' EXIT
+              kubectl -n nomnom-controlplane scale deployment controlplane --replicas 0
+              kubectl -n nomnom-controlplane wait --for=delete pod -l app.kubernetes.io/name=controlplane --timeout 2m
+              kubectl apply --server-side --field-manager e2e -f - <<EOF
+              apiVersion: controlplane.nomnom.dev/v1alpha1
+              kind: Market
+              metadata: {name: $market}
+              spec: {displayName: "Kind e2e stopped", currency: EUR, timeZone: Europe/Berlin, cellRef: cell-1, archived: false}
+              EOF
+              kubectl -n nomnom-controlplane scale deployment controlplane --replicas 1
+              kubectl wait "market/$market" --for=condition=Ready --timeout=3m
+              kubectl -n nomnom-gateway get httproute "market-$market"
             check:
               ($error): ~
       finally:

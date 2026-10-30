@@ -129,7 +129,7 @@ make kind-down
 - Данные и авторизация ([ADR 8](../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
   [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md)) и identity ставит chart
   [`bootstrap`](#bootstrap) до charts приложений: SpiceDB в `nomnom-authz`, один PostgreSQL с базами `orders`,
-  `payments`, `delivery`, `controlplane`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
+  `payments`, `delivery`, MongoDB `restaurants` и Valkey `restaurants` (кеш чтения каталога,
   [ADR 43](../../docs/adr/0043-application-caching-policy.md): без persistence, ACL-пользователь
   `restaurants` с ключами `restaurants:*`, URL — Secret `restaurants-valkey`; пользователь `exporter`
   для Alloy — только INFO и CONFIG GET, пароль — Secret `alloy-valkey`) и Valkey `delivery` (pub/sub потока
@@ -159,17 +159,15 @@ make kind-down
   но не делегат.
 - Control plane ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)) —
   artifact `nomnom/controlplane` и release `controlplane` в `nomnom-controlplane` с
-  [`values/controlplane.yaml`](values/controlplane.yaml): своя PostgreSQL и SpiceDB
-  (`manifests/netpol/app-infrastructure.yaml`), бизнес-порт 8086 только через internal gateway.
-  Allowlist: `nomnom-bff/bff`, `nomnom-bff/demo-seed` (делегат оператора для `RegisterCell`,
-  `CreateMarket`) и `nomnom-bff/e2e-driver` (в cleanup — `ArchiveMarket` Market прогона); все операции — только оператору
-  (`platform#manage_markets`). После каждой записи и при старте control plane server-side apply
-  пишет в `nomnom-gateway` маршруты публичного gateway: `HTTPRoute market-<market_id>`
+  [`values/controlplane.yaml`](values/controlplane.yaml): контроллер без базы данных, бизнес-порта и
+  SpiceDB. Реестр — ресурсы `Cell` и `Market`; CRD и запрет их удаления ставит chart `controlplane`, запись —
+  `ClusterRole` `nomnom-topology-editor`. При старте и при изменении реестра или своих ресурсов контроллер
+  server-side apply пишет в `nomnom-gateway` маршруты публичного gateway: `HTTPRoute market-<market_id>`
   (`/m/<market_id>` → Service `nomnom-bff/bff`, префикс снимается, `X-Nomnom-Market` ставится из
   маршрута) и список Market (`ConfigMap`, `HTTPRouteFilter` и `HTTPRoute markets`, Envoy отвечает
   на `GET /markets` сам). Права — Role chart в `nomnom-gateway`, egress к kube-apiserver —
   `CiliumNetworkPolicy`. В kind одна Cell `cell-1` (Router — Service `nomnom-bff/bff:3010`) и
-  один Market `berlin`; их создаёт seed (раздел «Демо-данные»).
+  один Market `berlin`; их объявляет chart `demo` (раздел «Демо-данные»).
 - SpiceDB kind получает общий `authorization/bootstrap.yaml` и kind-only grants
   [`authz/bootstrap-kind.yaml`](authz/bootstrap-kind.yaml) (`platform:nomnom#operator@user:kind-operator`
   — оператор e2e пути заказа): chart [`bootstrap`](#bootstrap) получает его `--set-file
@@ -222,7 +220,7 @@ releases с pod template label `skaffold.dev/run-id`, а хранилища де
 | Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
 | Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-data/postgres-admin`, `nomnom-data/postgres-alloy`, `nomnom-data/pgbouncer-users` (`userlist.txt`), `nomnom-observability/alloy-postgres` (DSN роли `alloy`) | `lookup` или `randAlphaNum 48`; DSN и `userlist.txt` из того же значения | PostgreSQL, PgBouncer, приложения, Alloy |
 | Secret `nomnom-data/mongodb-restaurants` (`root-password`, `password`, `keyfile`), `nomnom-restaurants/restaurants-mongodb` (`uri`) | `lookup` или `randAlphaNum` | MongoDB, restaurants |
-| Deployment и Service `postgres` — один сервер с базами и ролями `orders`, `payments`, `delivery`, `controlplane` (init SQL ConfigMap `postgres-config`), MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
+| Deployment и Service `postgres` — один сервер с базами и ролями `orders`, `payments`, `delivery` (init SQL ConfigMap `postgres-config`), MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
 | replica set `rs0` и пользователь `restaurants` MongoDB | Job `mongodb-restaurants-init` (hook): `mongosh`, идемпотентно | restaurants |
 
 `lookup` читает существующий Secret, поэтому повторный deploy и `skaffold dev` учётные данные не
@@ -249,7 +247,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-gateway` | GatewayClass, Gateway, `BackendTrafficPolicy`, `EnvoyProxy`, реестр `GRPCRoute` |
 | `envoy-gateway-system` | controller Envoy Gateway и Envoy Proxy, Service `internal-gateway` |
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
-| `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery`, `controlplane` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
+| `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
 | `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
 | `nomnom-infra` | Apache Kafka под Strimzi (ресурсы `Kafka`, `KafkaNodePool`, `KafkaTopic`, Service `kafka-kafka-bootstrap:9092`), Confluent Schema Registry (`schema-registry:8081`), Job регистрации схем (release `schema-registration`), Kafka Connect с Debezium для Outbox (ресурс `KafkaConnect` release `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
@@ -283,8 +281,6 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `delivery-v1-courier-reads` | `ListAvailableDeliveryOffers`, `GetCourierCurrentDelivery`, `GetCourierPool`, `GetOrderDelivery` | `reads` |
 | `delivery-v1-administration` | `RegisterCourier`, `RetireCourier`, `OfferDeliveryToCourier` | `commands` |
 | `payments-v1-commands` | `CreatePayment`, `AuthorizePayment`, `CapturePayment`, `CancelAuthorization`, `RefundPayment` | `commands` |
-| `controlplane-v1-reads` | `ListMarkets` | `reads` |
-| `controlplane-v1-commands` | `RegisterCell`, `CreateMarket`, `ArchiveMarket` | `commands` |
 
 `reads` повторяет до 2 раз на `unavailable`, `connect-failure`, `refused-stream` и
 `reset-before-request`; `commands` — только на `connect-failure`, `refused-stream` и
@@ -388,14 +384,11 @@ Subject — Dex sub пользователя `nomnom-demo-owner` (`ChFub21ub20tZ
 Рестораны: «Пельменная «Сибирь»», «Чайхана «Самарканд»», «Блинная «Теремок у моста»» (5–7 блюд
 каждая). Данные — [`demo/files/seed.json`](demo/files/seed.json).
 
-**Топология.** Первым seed регистрирует в control plane Cell `cell-1` (gateway
-`internal-gateway.envoy-gateway-system.svc.cluster.local:8080`) и Market `berlin` (Berlin, EUR,
-`Europe/Berlin`, `cell-1`) от имени `kind-operator` (`platform#manage_markets`); рестораны и курьеры создаются в
-Market `berlin` (`market` в `seed.json`). Не hook chart `bootstrap` ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)):
-bootstrap ставится до charts приложений, control plane к тому моменту не запущен, а Job seed
-ждёт gateway и control plane повторами (`dependsOn: controlplane`). `RegisterCell` и
-`CreateMarket` идемпотентны (`created = false`); изменённые значения для известного id —
-`ALREADY_EXISTS`, Job падает.
+**Топология.** Cell `cell-1` и Market `berlin` (Berlin, EUR, `Europe/Berlin`, `cell-1`) — ресурсы
+[`demo/templates/topology.yaml`](demo/templates/topology.yaml); рестораны и курьеры создаются в
+Market `berlin` (`market` в `seed.json`). Не chart `bootstrap` ([ADR 34](../../docs/adr/0034-declarative-kind-bootstrap.md)):
+CRD ставит chart `controlplane`, а bootstrap идёт раньше него. Значения реестра неизменяемы: изменить их
+в `topology.yaml` значит получить отказ API server при `helm upgrade`.
 
 **Seed.** Chart [`demo`](demo) ставит Job `demo-seed-<revision>` в `nomnom-bff` на каждый
 install/upgrade ([`demo/seed/seed.py`](demo/seed/seed.py), образ — стадия `demo-seed` Dockerfile `e2e/probe`: образ проверок с python3 и openssl): те же публичные gRPC-вызовы через internal gateway, что e2e пути заказа, от
@@ -457,8 +450,8 @@ workloads (а `orders` и `restaurants` не стартуют без своих 
 | `infra-connectivity` | под политиками Kafka открыт из delivery и payments; чужая БД и Temporal для не-`orders` закрыты |
 | `workloads-healthy-under-policies` | после применения политик deployments неймспейсов приложений, `envoy-gateway-system` и `kube-system` Available, ни один контейнер не перезапускался и нет проваленных kubelet-проб (6a.1–6a.3) |
 | `bff-end-to-end` | BFF Available; из `nomnom-bff` закрыты прямой `orders` и PostgreSQL; `bffInfo`; `order(id)` без `Authorization` — `Unauthenticated` (AC-576); с access token тестового provider для отсутствующего заказа — `{"data":{"order":null}}` (AC-575), то есть orders принял user assertion BFF; тот же user assertion (ключ BFF, aud `nomnom.orders`) от `grpc-caller` — `UNAUTHENTICATED`, log — `service is not an allowed delegate` (7.1, 7.3–7.7, 7.9–7.10) |
-| `controlplane-registry` | control plane опубликовал `HTTPRoute market-berlin` (`/m/berlin` → `nomnom-bff/bff:3010`, listener `api`) и `ConfigMap markets` с Berlin, EUR (повтор, пока seed не создаст топологию); с projected token BFF из `grpc-caller` `ListMarkets` и `RegisterCell` без оператора — `PERMISSION_DENIED`; `grpc-caller` вне allowlist — `UNAUTHENTICATED` |
-| `cell-routing` | из `nomnom-outsider` по HTTPS listener `api`: `GET /markets` — Berlin, EUR; `/m/berlin/graphql` доходит до BFF `cell-1` с Market `berlin`, чужой `X-Nomnom-Market` клиента перезаписан; `/m/atlantis`, `/m/berlinx`, `/graphql` — `404` gateway; при остановленном control plane запросы обслуживаются; удалённый `HTTPRoute market-berlin` control plane восстанавливает при старте (FR-628–FR-633) |
+| `controlplane-registry` | контроллер опубликовал `HTTPRoute market-berlin` (`/m/berlin` → `nomnom-bff/bff:3010`, listener `api`) и `ConfigMap markets` с Berlin, EUR; API server отклоняет неверные значения, изменение и удаление реестра; Market без Cell и с неизвестным поясом не публикуется, архивный уходит с gateway и не возвращается; ServiceAccount без `nomnom-topology-editor` не читает и не пишет реестр, control plane пишет только `status`; у него нет конфигурации PostgreSQL, SpiceDB и identity и нет Service |
+| `cell-routing` | из `nomnom-outsider` по HTTPS listener `api`: `GET /markets` — Berlin, EUR; `/m/berlin/graphql` доходит до BFF `cell-1` с Market `berlin`, чужой `X-Nomnom-Market` клиента перезаписан; `/m/atlantis`, `/m/berlinx`, `/graphql` — `404` gateway; при остановленном control plane запросы обслуживаются, а новый Market публикуется после его возвращения; удалённый `HTTPRoute market-berlin` control plane восстанавливает сразу и при старте (FR-628–FR-633) |
 | `order-lifecycle` | путь заказа (AC-740): оператор регистрирует ресторан и курьера, владелец — персонал, меню, открытие; курьер на линии; покупатель оформляет заказ через BFF; кухня находит его в `ListIncomingOrders`, принимает и готовит, курьер принимает предложение Dispatch, забирает и доставляет; в BFF `DELIVERED` с milestones `COURIER_ASSIGNED`, `PICKED_UP`, `DELIVERED`, оплата `captured`. Ids уникальны на прогон; в конце курьер уходит с линии |
 
 Один тест: `cd ops/kind/e2e && go run github.com/kyverno/chainsaw@$CHAINSAW_VERSION test --kube-context kind-nomnom-test --config .chainsaw.yaml --test-dir . --include-test-regex 'chainsaw/gateway-routes-to-backends'`.

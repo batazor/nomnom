@@ -14,12 +14,10 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/instrumentation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -28,18 +26,6 @@ import (
 
 // ServiceNamespace — service.namespace всех процессов (docs/observability.md).
 const ServiceNamespace = "nomnom"
-
-// PgxScope — instrumentation scope otelpgx (traces и db.client.operation.duration).
-const PgxScope = "github.com/exaring/otelpgx"
-
-// DBOperationDurationMetric — semconv histogram длительности операций БД.
-const DBOperationDurationMetric = "db.client.operation.duration"
-
-// DBOperationDurationAttributes — labels db_client_operation_duration_seconds
-// из ops/grafana/inventory; pgx.operation.type otelpgx отбрасывается.
-var DBOperationDurationAttributes = []attribute.Key{
-	semconv.DBSystemNameKey, semconv.DBOperationNameKey, semconv.DBCollectionNameKey, semconv.ErrorTypeKey,
-}
 
 // Telemetry — metrics и traces pipeline процесса.
 type Telemetry struct {
@@ -71,7 +57,7 @@ func Start(ctx context.Context, serviceName string) (*Telemetry, error) {
 		return nil, err
 	}
 	otel.SetMeterProvider(t.MeterProvider)
-	// W3C Trace Context и Baggage: otelgrpc продолжает trace вызывающего из traceparent.
+	// W3C Trace Context и Baggage.
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	if tracesEndpointConfigured() {
 		exporter, err := otlptracegrpc.New(ctx)
@@ -111,16 +97,6 @@ func New(ctx context.Context, serviceName string, newReader ReaderFactory) (*Tel
 	options := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(sdkmetric.NewView(sdkmetric.Instrument{Name: "system.*"}, sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}})),
-		// otelpgx: db.client.operation.duration — только с attributes инвентаря;
-		// собственный counter db.client.operation.errors не входит в semconv.
-		sdkmetric.WithView(sdkmetric.NewView(
-			sdkmetric.Instrument{Name: DBOperationDurationMetric, Scope: instrumentation.Scope{Name: PgxScope}},
-			sdkmetric.Stream{AttributeFilter: attribute.NewAllowKeysFilter(DBOperationDurationAttributes...)},
-		)),
-		sdkmetric.WithView(sdkmetric.NewView(
-			sdkmetric.Instrument{Name: "db.client.operation.errors", Scope: instrumentation.Scope{Name: PgxScope}},
-			sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}},
-		)),
 	}
 	if newReader != nil {
 		reader, err := newReader()

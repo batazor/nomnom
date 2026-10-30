@@ -642,57 +642,6 @@ spec:
           namespace: nomnom-payments
           port: 8084
 ---
-# Control plane (ADR 41): список Market для оператора (platform#manage_markets).
-apiVersion: gateway.networking.k8s.io/v1
-kind: GRPCRoute
-metadata:
-  name: controlplane-v1-reads
-  namespace: nomnom-gateway
-spec:
-  parentRefs:
-    - name: internal
-      sectionName: grpc
-  rules:
-    - matches:
-        - method:
-            type: Exact
-            service: nomnom.controlplane.v1.ControlPlaneService
-            method: ListMarkets
-      backendRefs:
-        - name: controlplane
-          namespace: nomnom-controlplane
-          port: 8086
----
-# Control plane (ADR 41): команды оператора (platform#manage_markets) — Cell и Market,
-# в том числе архив Market.
-apiVersion: gateway.networking.k8s.io/v1
-kind: GRPCRoute
-metadata:
-  name: controlplane-v1-commands
-  namespace: nomnom-gateway
-spec:
-  parentRefs:
-    - name: internal
-      sectionName: grpc
-  rules:
-    - matches:
-        - method:
-            type: Exact
-            service: nomnom.controlplane.v1.ControlPlaneService
-            method: RegisterCell
-        - method:
-            type: Exact
-            service: nomnom.controlplane.v1.ControlPlaneService
-            method: CreateMarket
-        - method:
-            type: Exact
-            service: nomnom.controlplane.v1.ControlPlaneService
-            method: ArchiveMarket
-      backendRefs:
-        - name: controlplane
-          namespace: nomnom-controlplane
-          port: 8086
----
 # Retries идемпотентных чтений (ADR 15). Политика сливается с internal-gateway-defaults
 # (StrategicMerge): верхний предел 300s, circuit breaker и passive health check — оттуда.
 # Не более 2 повторов на отказы до обработки и UNAVAILABLE; без per-try timeout — все
@@ -720,9 +669,6 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: delivery-v1-reads
-    - group: gateway.networking.k8s.io
-      kind: GRPCRoute
-      name: controlplane-v1-reads
   retry:
     numRetries: 2
     retryOn:
@@ -776,9 +722,6 @@ spec:
     - group: gateway.networking.k8s.io
       kind: GRPCRoute
       name: payments-v1-commands
-    - group: gateway.networking.k8s.io
-      kind: GRPCRoute
-      name: controlplane-v1-commands
   retry:
     numRetries: 2
     retryOn:
@@ -846,21 +789,6 @@ spec:
     - group: ""
       kind: Service
       name: payments
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-internal-gateway
-  namespace: nomnom-controlplane
-spec:
-  from:
-    - group: gateway.networking.k8s.io
-      kind: GRPCRoute
-      namespace: nomnom-gateway
-  to:
-    - group: ""
-      kind: Service
-      name: controlplane
 ---
 # Simulator (platform#operate_simulator): его вызывает BFF от имени оператора (FR-604).
 apiVersion: gateway.networking.k8s.io/v1

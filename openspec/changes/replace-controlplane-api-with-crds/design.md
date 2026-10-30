@@ -68,11 +68,11 @@ CEL не обращается к другим объектам и не знае�
 
 Запись `status` не должна запускать новый цикл: контроллер фильтрует события по `metadata.generation`.
 
-### Запуск и несколько реплик
+### Запуск и реплика
 
 - Readiness становится `true` после первого успешного reconcile. Если первый reconcile не удался, контроллер повторяет его, а Deployment не считается готовым.
 - Обязательный конфиг, в том числе `ROUTES__*`, по-прежнему проверяется на старте: пустое значение останавливает процесс.
-- Leader election через `Lease` в неймспейсе release: при rolling update две версии не должны применять ресурсы одновременно.
+- Реплика одна, `maxSurge: 0`, `maxUnavailable: 1`. Обычный rolling update с leader election здесь не работает: readiness ждёт первой публикации, новая реплика не получила бы `Lease`, пока жива старая, а старая не уходит, пока новая не ready. `Recreate` не подходит для существующего Deployment: Helm применяет манифест server-side apply и не снимает прежний `rollingUpdate`, поэтому upgrade отклоняется. Короткое наложение на время остановки старого pod безопасно: обе версии применяют полный набор, а следующее событие приводит ресурсы к реестру. Пока pod пересоздаётся, Envoy работает на последней конфигурации, а изменения реестра ждут в API server.
 - Встроенный metrics server `controller-runtime` выключен. Телеметрия остаётся OTLP (ADR 9), `/health/*` — на техническом порту 9086 (ADR 17).
 
 ## Доступ
@@ -82,8 +82,7 @@ CEL не обращается к другим объектам и не знае�
 ServiceAccount control plane получает:
 
 - `get`, `list`, `watch` на `cells`, `markets` и запись только в `cells/status`, `markets/status`;
-- текущие права на ресурсы gateway в `ROUTES__NAMESPACE` и дополнительно `list`, `watch`, нужные для watch;
-- `Lease` в своём неймспейсе.
+- текущие права на ресурсы gateway в `ROUTES__NAMESPACE` и дополнительно `list`, `watch`, нужные для watch.
 
 Менять `spec` реестра он не может. Вместо аудита через SpiceDB и user assertion остаётся аудит Kubernetes API.
 
@@ -98,7 +97,7 @@ ServiceAccount control plane получает:
 
 ## Тесты
 
-Правила CEL и политика имеют смысл только на настоящем API server, поэтому тесты контроллера идут на k3s через testcontainers (модуль `testcontainers-go`) с установленными CRD Gateway API и Envoy Gateway. Чистую логику построения ресурсов и проверки значений покрывают обычные unit-тесты. In-memory клиента `controller-runtime` (`fake`) нет.
+Правила CEL и политика имеют смысл только на настоящем API server, поэтому тесты контроллера идут на k3s через testcontainers (модуль `testcontainers-go`). CRD Gateway API и Envoy Gateway там заменены заглушками без схемы (`testdata/gateway-crds.yaml`): k3s их не содержит, а настоящую схему проверяет kind e2e. Чистую логику построения ресурсов и проверки значений покрывают обычные unit-тесты. In-memory клиента `controller-runtime` (`fake`) нет.
 
 ## Устройство пакетов
 

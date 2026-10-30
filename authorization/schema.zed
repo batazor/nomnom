@@ -40,8 +40,6 @@ definition platform {
 	permission dispatch_delivery = operator
 	/** orders, restaurants, delivery: read and switch the demo Simulator (FR-604). */
 	permission operate_simulator = operator
-	/** controlplane: register Cells and create Markets (ADR 41). */
-	permission manage_markets = operator
 }
 
 /** Owner: orders. */

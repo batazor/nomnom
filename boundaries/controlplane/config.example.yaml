@@ -1,31 +1,12 @@
 # Пример локальной конфигурации controlplane (CONFIG_FILE=config.example.yaml make run).
-# Переменные окружения (SECTION__KEY) перекрывают файл. Все секции identity, spicedb,
-# postgres и routes обязательны: без них процесс не стартует. Маршруты публичного gateway
-# применяются через in-cluster config ServiceAccount: вне кластера процесс не стартует.
-server:
-  port: 8086
+# Переменные окружения (SECTION__KEY) перекрывают файл. Секция routes обязательна: без неё
+# процесс не стартует. Реестр и маршруты публичного gateway доступны через in-cluster config
+# ServiceAccount: вне кластера процесс не стартует.
 management:
   port: 9086
 shutdown:
   readiness_delay: 0s
   drain_timeout: 5s
-identity:
-  # ADR 27: projected ServiceAccount tokens кластера; локально — фикстуры tests/identity.
-  issuer: https://kubernetes.default.svc.cluster.local
-  audience: nomnom.controlplane
-  jwks_file: ../../tests/identity/fixtures/jwks.json
-  service_accounts: nomnom-bff/bff=bff,nomnom-bff/demo-seed=demo-seed
-  # ADR 32: user assertions BFF; оператор приходит через делегата.
-  user_issuer: nomnom-bff
-  user_jwks_file: ../../tests/identity/fixtures/bff-jwks.json
-  user_delegates: bff,demo-seed
-spicedb:
-  endpoint: localhost:50051
-  preshared_key: devkey
-  insecure: true
-  timeout: 2s
-postgres:
-  dsn: postgres://controlplane:controlplane@localhost:5436/controlplane?sslmode=disable
 routes:
   # ADR 41: маршруты Market и список Market публичного gateway.
   namespace: nomnom-gateway

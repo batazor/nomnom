@@ -12,8 +12,7 @@ const (
 	EnvManagementPort       = "MANAGEMENT__PORT"
 )
 
-// ManagementConfig описывает технический порт (Kubernetes-имя `metrics`):
-// health и metrics отделены от бизнес-порта.
+// ManagementConfig описывает технический порт (Kubernetes-имя `metrics`): health.
 type ManagementConfig struct {
 	Port int `mapstructure:"port"`
 }

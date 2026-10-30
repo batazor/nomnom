@@ -2,8 +2,6 @@
 # Базовый chart не содержит значений конкретного окружения: registry, tag, ресурсы, адреса
 # внешних систем и kind-specific настройки задаются values окружения или --set.
 
-replicaCount: 1
-
 image:
   # Registry задаётся окружением или global.imageRegistry.
   registry: ""
@@ -25,15 +23,15 @@ commonLabels: {}
 global: {}
 
 # Label app.kubernetes.io/component.
-component: api
+component: controller
 
 serviceAccount:
   create: true
   # Имя ServiceAccount. Пустое значение — <fullname>.
   name: ""
   annotations: {}
-  # Токен ServiceAccount для Kubernetes API: control plane применяет маршруты публичного
-  # gateway (ADR 41, routes.*).
+  # Токен ServiceAccount для Kubernetes API: control plane читает реестр и применяет маршруты
+  # публичного gateway (ADR 41, routes.*).
   automount: true
 
 podAnnotations: {}
@@ -54,16 +52,6 @@ securityContext:
   runAsNonRoot: true
   privileged: false
   readOnlyRootFilesystem: true
-
-service:
-  type: ClusterIP
-  # Приложение слушает 8086 (SERVER__PORT); targetPort — порт процесса.
-  port: 8086
-  targetPort: 8086
-  # Бизнес-порт обслуживает nomnom.controlplane.v1 по gRPC/HTTP2.
-  portName: grpc
-  appProtocol: kubernetes.io/h2c
-  annotations: {}
 
 # Requests/limits задаёт окружение. GOMAXPROCS и GOMEMLIMIT (automemlimit) следуют limits.
 resources:
@@ -122,48 +110,13 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Service identity (ADR 27) и user assertions BFF (ADR 32). Все поля обязательны: без них chart
-# не рендерится. serviceAccounts — allowlist "namespace/serviceaccount=service-name,…";
-# userDelegates — services, передающие user assertion оператора.
-identity:
-  issuer: ""
-  audience: nomnom.controlplane
-  serviceAccounts: ""
-  jwksConfigMap: ""
-  userJwksConfigMap: ""
-  userIssuer: ""
-  userDelegates: ""
-
 # Маршруты публичного gateway (ADR 41): неймспейс HTTPRoute, Gateway и listener клиентского
-# трафика. Все поля обязательны. Chart выдаёт ServiceAccount Role в этом неймспейсе — только
-# get/create/patch HTTPRoute, HTTPRouteFilter и ConfigMap (server-side apply).
+# трафика. Все поля обязательны. Chart выдаёт ServiceAccount Role в этом неймспейсе: server-side
+# apply и watch HTTPRoute, HTTPRouteFilter и ConfigMap, удаление HTTPRoute.
 routes:
   namespace: ""
   gateway: ""
   listener: ""
-
-# SpiceDB (ADR 18): endpoint и Secret preshared key обязательны.
-spicedb:
-  endpoint: ""
-  insecure: false
-  timeout: 2s
-  presharedKeySecret:
-    name: ""
-    key: preshared-key
-
-# PostgreSQL (ADR 8): DSN из внешнего Secret обязателен. Миграции встроены в образ и
-# применяются при старте под advisory lock (ADR 42).
-postgres:
-  dsnSecret:
-    name: ""
-    key: dsn
-  maxConns: 5
-  minConns: 0
-  maxConnLifetime: 30m
-  maxConnLifetimeJitter: 5m
-  maxConnIdleTime: 5m
-  connectTimeout: 5s
-  healthCheckPeriod: 1m
 
 # ADR 9: OTel resource attributes процесса.
 telemetry:

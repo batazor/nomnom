@@ -62,8 +62,3 @@ spec:
                   audience: nomnom.delivery
                   path: nomnom.delivery
                   expirationSeconds: 3600
-              # ADR 41: оператор прогона создаёт Market прогона в control plane.
-              - serviceAccountToken:
-                  audience: nomnom.controlplane
-                  path: nomnom.controlplane
-                  expirationSeconds: 3600

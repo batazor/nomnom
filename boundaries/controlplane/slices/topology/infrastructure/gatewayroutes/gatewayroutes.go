@@ -38,6 +38,9 @@ const (
 	LabelRoute  = "nomnom.dev/route"
 	LabelMarket = "nomnom.dev/market"
 	LabelCell   = "nomnom.dev/cell"
+	// LabelManagedBy marks every resource of the control plane; the controller
+	// watches the resources with it.
+	LabelManagedBy = "app.kubernetes.io/managed-by"
 	// RouteMarket is the LabelRoute of a Market route; the gateway policy of
 	// Market routes selects them by it.
 	RouteMarket = "market"
@@ -45,12 +48,16 @@ const (
 )
 
 // marketRoutesSelector selects the Market routes this field manager applied.
-var marketRoutesSelector = LabelRoute + "=" + RouteMarket + ",app.kubernetes.io/managed-by=" + FieldManager
+var marketRoutesSelector = LabelRoute + "=" + RouteMarket + "," + LabelManagedBy + "=" + FieldManager
 
 var (
-	gvrHTTPRoute       = schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}
-	gvrHTTPRouteFilter = schema.GroupVersionResource{Group: "gateway.envoyproxy.io", Version: "v1alpha1", Resource: "httproutefilters"}
-	gvrConfigMap       = schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+	GVKHTTPRoute       = schema.GroupVersionKind{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"}
+	GVKHTTPRouteFilter = schema.GroupVersionKind{Group: "gateway.envoyproxy.io", Version: "v1alpha1", Kind: "HTTPRouteFilter"}
+	GVKConfigMap       = schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
+
+	gvrHTTPRoute       = schema.GroupVersionResource{Group: GVKHTTPRoute.Group, Version: GVKHTTPRoute.Version, Resource: "httproutes"}
+	gvrHTTPRouteFilter = schema.GroupVersionResource{Group: GVKHTTPRouteFilter.Group, Version: GVKHTTPRouteFilter.Version, Resource: "httproutefilters"}
+	gvrConfigMap       = schema.GroupVersionResource{Version: GVKConfigMap.Version, Resource: "configmaps"}
 )
 
 // Config is where the routes go: the namespace of the public gateway, the
@@ -77,13 +84,9 @@ var _ publishroutes.Applier = Applier{}
 
 func New(client dynamic.Interface, cfg Config) Applier { return Applier{client: client, cfg: cfg} }
 
-// NewInCluster connects with the ServiceAccount of the pod: the control plane
-// runs in the cluster of the public gateway.
-func NewInCluster(cfg Config) (Applier, error) {
-	restConfig, err := rest.InClusterConfig()
-	if err != nil {
-		return Applier{}, fmt.Errorf("kubernetes in-cluster config: %w", err)
-	}
+// NewForConfig connects with restConfig: the control plane runs in the cluster
+// of the public gateway.
+func NewForConfig(restConfig *rest.Config, cfg Config) (Applier, error) {
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return Applier{}, fmt.Errorf("kubernetes client: %w", err)
@@ -264,7 +267,7 @@ func object(apiVersion, kind, namespace, name, route string, content map[string]
 	content["metadata"] = map[string]any{
 		"name":      name,
 		"namespace": namespace,
-		"labels":    map[string]any{LabelRoute: route, "app.kubernetes.io/managed-by": FieldManager},
+		"labels":    map[string]any{LabelRoute: route, LabelManagedBy: FieldManager},
 	}
 	return &unstructured.Unstructured{Object: content}
 }

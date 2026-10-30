@@ -34,8 +34,6 @@ linters:
             - "!$test"
           allow:
             - $gostd
-            - github.com/batazor/nomnom/boundaries/controlplane/pkg/authz
-            - github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase
             - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains
             - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications
         shared-packages:
@@ -63,15 +61,6 @@ linters:
               desc: adapters не зависят от composition root
             - pkg: github.com/batazor/nomnom/boundaries/controlplane/cmd
               desc: adapters не зависят от процессов
-        generated-code:
-          files:
-            - "**/controlplane/pkg/**"
-            - "**/slices/**"
-            - "!**/slices/*/di/**"
-            - "!$test"
-          deny:
-            - pkg: github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen
-              desc: generated code импортируют только adapters и composition root (ADR 7)
 
 formatters:
   enable:

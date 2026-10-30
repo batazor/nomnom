@@ -1,7 +1,6 @@
 {{ .Chart.Name }}: release "{{ .Release.Name }}" установлен в namespace "{{ .Release.Namespace }}".
 
 Deployment: {{ include "common.names.fullname" . }}
-Service:    {{ include "common.names.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
 Image:      {{ include "controlplane.image" . | default "<не задан>" }}
 {{- if not .Values.image.repository }}
 
@@ -15,10 +14,8 @@ Image:      {{ include "controlplane.image" . | default "<не задан>" }}
   kubectl --namespace {{ .Release.Namespace }} get pods \
     -l "app.kubernetes.io/name={{ include "common.names.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
 
-Service предназначен для internal gateway и технических механизмов Kubernetes; бизнес-вызовы
-между сервисами идут через gateway, а не напрямую в Service. Для локальной отладки:
-  kubectl --namespace {{ .Release.Namespace }} port-forward \
-    svc/{{ include "common.names.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+Реестр — ресурсы Cell и Market:
+  kubectl get cells,markets
 
 Health contract на техническом порту metrics ({{ .Values.management.port }}):
   kubectl --namespace {{ .Release.Namespace }} port-forward \
