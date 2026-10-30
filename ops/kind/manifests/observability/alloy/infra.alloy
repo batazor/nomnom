@@ -219,7 +219,7 @@ prometheus.relabel "kafka_connect" {
 // считает неразобранное как конец partition DLQ минус их offset.
 prometheus.exporter.kafka "infra" {
   kafka_uris          = ["kafka.nomnom-infra.svc.cluster.local:9092"]
-  groups_filter_regex = ["^(orders|restaurants)(\\.dlq)?$"]
+  groups_filter_regex = "^(orders|restaurants)(\\.dlq)?$"
 }
 
 prometheus.scrape "kafka" {
