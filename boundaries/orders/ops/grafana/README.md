@@ -147,6 +147,15 @@ JSON — артефакт генератора: правки вносятся в
 | Fulfillment duration | TODO | [`nomnom_orders_fulfillment_duration_seconds`](../../../../docs/observability/metric-inventory.md#domain) |
 | Orders currently in state | TODO | [`nomnom_orders_in_state`](../../../../docs/observability/metric-inventory.md#domain) |
 
+### Order funnel
+
+| Панель | Статус | Недостающие метрики |
+| --- | --- | --- |
+| Funnel: orders reaching the stage | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`nomnom_orders_placed_total`](../../../../docs/observability/metric-inventory.md#domain) |
+| Funnel: % of placed | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm), [`nomnom_orders_placed_total`](../../../../docs/observability/metric-inventory.md#domain) |
+| Lost: state before cancellation | TODO | [`nomnom_fsm_transitions_total`](../../../../docs/observability/metric-inventory.md#fsm) |
+| Lost: reason | TODO | [`nomnom_orders_cancelled_total`](../../../../docs/observability/metric-inventory.md#domain), [`nomnom_orders_failed_total`](../../../../docs/observability/metric-inventory.md#domain) |
+
 ### Temporal
 
 | Панель | Статус | Недостающие метрики |
@@ -169,7 +178,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 47 из 67. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
+Живых панелей: 47 из 71. TODO-панель показывает недостающие метрики и целевой PromQL; она становится живой после смены статуса в инвентаре и регенерации.
 
 ## Alerts
 

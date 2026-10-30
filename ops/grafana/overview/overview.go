@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/grafana/grafana-foundation-sdk/go/bargauge"
+	"github.com/grafana/grafana-foundation-sdk/go/common"
 	dashboard "github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
 	"github.com/grafana/grafana-foundation-sdk/go/prometheus"
 	"github.com/grafana/grafana-foundation-sdk/go/resource"
@@ -56,10 +58,12 @@ type Options struct {
 	PaymentProvider bool
 	Kafka           *Kafka
 	// UseCases — декоратор application handlers (раздел usecase инвентаря).
-	UseCases      bool
-	UnitOfWork    bool
-	Lifecycle     bool
-	Temporal      *Temporal
+	UseCases   bool
+	UnitOfWork bool
+	Lifecycle  bool
+	Temporal   *Temporal
+	// Funnel — панели процесса, идущего через все роли сервиса: row без фильтра $service.
+	Funnel        func(Scope) []Panel
 	Kitchen       bool
 	Authorization bool
 	// Certificates — у контекста есть свои Certificate cert-manager в nomnom-<context>.
@@ -102,6 +106,11 @@ type Panel struct {
 	Description string
 	Unit        string
 	Queries     []Query
+	// Bars — итог за выбранный диапазон горизонтальными полосами в порядке Queries
+	// (bar gauge и instant-запросы) вместо графика во времени.
+	Bars bool
+	// Max — верх шкалы Bars; 0 — по данным.
+	Max float64
 	// Traces — TraceQL-условия spans серий по индексу Queries: data link точки
 	// ведёт в Tempo на spans этой серии. "" — у запроса нет ссылки.
 	Traces []string
@@ -184,6 +193,10 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	}
 	if opts.Domain != nil {
 		rows = append(rows, row{title: "Domain metrics", scope: main, panels: opts.Domain(main)})
+	}
+	if opts.Funnel != nil {
+		process := Scope{Services: opts.Services, AllServices: true}
+		rows = append(rows, row{title: "Order funnel", scope: process, panels: opts.Funnel(process)})
 	}
 	if opts.Temporal != nil {
 		worker := Scope{Var: "worker", Services: []string{opts.Temporal.Worker}}
@@ -292,11 +305,15 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 	}
 	group := dashboard.NewQueryGroupBuilder()
 	viz := timeseries.NewVisualizationV2Builder().Unit(p.Unit)
+	bars := barsVisualization(p)
 	for i, q := range ready {
 		ref := string(rune('A' + i))
 		query := prometheus.NewQueryV2Builder().
 			Datasource(dashboard.NewDashboardv2DataQueryKindDatasourceBuilder().Name("${metrics}")).
-			Expr(q.Expr).LegendFormat(q.Legend).Range(true)
+			Expr(q.Expr).LegendFormat(q.Legend).Range(!p.Bars)
+		if p.Bars {
+			query.Instant(true)
+		}
 		if inventory.ExemplarsEnabled && strings.Contains(q.Expr, "histogram_quantile") {
 			query.Exemplar(true)
 		}
@@ -306,7 +323,27 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 			viz.OverrideByQuery(ref, []dashboard.DynamicConfigValue{{Id: "links", Value: seriesLinks(sc, traces[i])}})
 		}
 	}
-	return b.Description(description).Data(group).Visualization(viz), summary
+	b = b.Description(description).Data(group)
+	if p.Bars {
+		return b.Visualization(bars), summary
+	}
+	return b.Visualization(viz), summary
+}
+
+// barsVisualization — полосы последнего значения каждого запроса.
+func barsVisualization(p Panel) *bargauge.VisualizationV2Builder {
+	viz := bargauge.NewVisualizationV2Builder().
+		Unit(p.Unit).
+		Min(0).
+		Orientation(common.VizOrientationHorizontal).
+		DisplayMode(common.BarGaugeDisplayModeBasic).
+		ValueMode(common.BarGaugeValueModeText).
+		ShowUnfilled(true).
+		ReduceOptions(common.NewReduceDataOptionsBuilder().Calcs([]string{"lastNotNull"}).Values(false))
+	if p.Max > 0 {
+		viz.Max(p.Max)
+	}
+	return viz
 }
 
 func hasMetrics(q Query) bool {

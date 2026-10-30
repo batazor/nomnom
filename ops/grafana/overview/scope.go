@@ -18,6 +18,9 @@ type Scope struct {
 	Job string
 	// Matchers добавляются к каждому selector row (namespace и pod сервиса).
 	Matchers []string
+	// AllServices — job из всего списка Services, без фильтра $service, но с
+	// фильтром environment: панель описывает процесс, идущий через все роли.
+	AllServices bool
 	// Literal — job из списка Services без dashboard variables и без join с
 	// target_info: так строятся alert rules, у которых variables нет.
 	Literal bool
@@ -27,7 +30,7 @@ func (s Scope) job() string {
 	if s.Job != "" {
 		return fmt.Sprintf(`job=%q`, s.Job)
 	}
-	if s.Literal {
+	if s.Literal || s.AllServices {
 		return fmt.Sprintf(`job=~"nomnom/(%s)"`, strings.Join(s.Services, "|"))
 	}
 	return fmt.Sprintf(`job=~"nomnom/(${%s:pipe})"`, s.Var)
