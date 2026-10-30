@@ -96,6 +96,23 @@ env:
 
 `EVENT_STORE__SNAPSHOT_EVERY` обязателен: снапшот `Payment` пишется, когда commit проходит кратное ему значение ([локальный ADR 2](../docs/adr/0002-event-sourcing-for-payment.md)).
 
+## Пересборка проекций
+
+`payments` и `payment_operations` — проекции потоков `payment_events`, `payment_snapshots` — снапшоты ([локальный ADR 2](../docs/adr/0002-event-sourcing-for-payment.md#пересборка-проекций)). Команда запускается в поде процесса с его окружением:
+
+```bash
+kubectl -n nomnom-payments exec deploy/payments -- python -m entrypoints.payments_admin.main projections check
+```
+
+```bash
+kubectl -n nomnom-payments exec deploy/payments -- python -m entrypoints.payments_admin.main projections rebuild --snapshots
+```
+
+- `check` ничего не меняет и завершается с кодом 1, если нашёл расхождения. В выводе только ключи и вид расхождения: `missing`, `extra`, `differs`, `unreadable`.
+- Сначала запускайте `check`: `rebuild` удаляет строки проекций без потока (`extra`), и после него расхождение уже не увидеть. Такие строки появляются, например, если образ без Event Sourcing выкачен поверх мигрированной схемы: откат образа после миграции не поддерживается.
+- `rebuild` заменяет проекции одной транзакцией, а с `--snapshots` ещё и снапшоты. Запросы продолжают читать прежние строки, записи ждут, поэтому часть операций на это время может завершиться ошибкой и должна быть повторена. Повторной публикации событий нет: Outbox не затрагивается.
+- Если таблицы заняты дольше 5 секунд или поток не читается, `rebuild` завершается с кодом 1 и откатывает всё.
+
 OpenTelemetry ([ADR 9](../../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md))
 задаётся блоком `telemetry`, а не `env`:
 

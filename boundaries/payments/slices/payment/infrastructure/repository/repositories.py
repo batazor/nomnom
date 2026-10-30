@@ -6,6 +6,7 @@ leaves the surrounding Unit of Work usable.
 
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import Any
 
 import psycopg
 from psycopg import errors
@@ -24,6 +25,7 @@ from slices.payment.domains.payment import (
     PaymentDomainEvent,
     PaymentId,
     PaymentModel,
+    PaymentOperation,
     PaymentOperationRequested,
     crosses_snapshot_boundary,
 )
@@ -38,6 +40,7 @@ from .event_codec import (
 )
 from .event_store import (
     STREAM_VERSION_UNIQUE,
+    StoredEvent,
     StoredSnapshot,
     append_events,
     read_events,
@@ -53,8 +56,8 @@ PROVIDER_CONSUMER = "payment-provider"
 # ADR 37: an Outbox row is needed only until Debezium reads its insert from the WAL.
 OUTBOX_RETENTION = timedelta(hours=1)
 
-_PAYMENT_COLUMNS = "id, order_id, market_id, amount, currency, state, provider_reference, version"
-_OPERATION_COLUMNS = (
+PAYMENT_COLUMNS = "id, order_id, market_id, amount, currency, state, provider_reference, version"
+OPERATION_COLUMNS = (
     "id, payment_id, kind, idempotency_key, amount, currency, requested_at, state, "
     "provider_reference, decline_reason, completed_at"
 )
@@ -98,16 +101,10 @@ class DatabasePaymentRepository:
             rows = read_events(conn, payment_id, after)
         if snapshot is None and not rows:
             return None
-        for offset, row in enumerate(rows, start=1):
-            if row.version != after + offset:
-                raise UnreadableStoredDataError(f"stream {payment_id} has a gap at {row.version}")
-        events = [decode_event(r.event_type, r.schema_version, r.payload) for r in rows]
+        events = decode_stream(payment_id, after, rows)
         self._replay_metrics.loaded(len(events), from_snapshot=snapshot is not None)
         model = None if snapshot is None else decode_snapshot(snapshot.state)
-        try:
-            return Payment.from_history(model, after, events)
-        except ValueError as error:
-            raise UnreadableStoredDataError(f"stream {payment_id}: {error}") from error
+        return restore_payment(payment_id, model, after, events)
 
     def get_by_order(self, order_id: OrderId) -> Payment | None:
         """Return the only Payment of the Order, or ``None``."""
@@ -172,6 +169,33 @@ class DatabasePaymentRepository:
         return None if row is None else self.get(PaymentId(row[0]))
 
 
+def decode_stream(
+    payment_id: str, after_version: int, rows: Sequence[StoredEvent]
+) -> list[PaymentDomainEvent]:
+    """Return the events of ``rows``, which follow ``after_version``.
+
+    Raises:
+        UnreadableStoredDataError: An event cannot be read or the versions have a gap.
+    """
+    for offset, row in enumerate(rows, start=1):
+        if row.version != after_version + offset:
+            raise UnreadableStoredDataError(f"stream {payment_id} has a gap at {row.version}")
+    return [decode_event(r.event_type, r.schema_version, r.payload) for r in rows]
+
+
+def restore_payment(
+    payment_id: str,
+    snapshot: PaymentModel | None,
+    version: int,
+    events: Sequence[PaymentDomainEvent],
+) -> Payment:
+    """Return the Payment of a history; a history ``evolve`` rejects is unreadable data."""
+    try:
+        return Payment.from_history(snapshot, version, events)
+    except ValueError as error:
+        raise UnreadableStoredDataError(f"stream {payment_id}: {error}") from error
+
+
 def _usable_snapshot(snapshot: StoredSnapshot | None) -> StoredSnapshot | None:
     # Другая версия схемы — состояние собирается из всего потока, следующая граница
     # перезапишет снапшот. Это пересборка производных данных, источник истины тот же.
@@ -205,47 +229,54 @@ def _uncommitted_key(payment: Payment) -> str:
 def project_payment(conn: psycopg.Connection, payment: PaymentModel, version: int) -> None:
     """Write the projections of the Payment state at ``version`` on the connection."""
     conn.execute(
-        f"INSERT INTO payments ({_PAYMENT_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
+        f"INSERT INTO payments ({PAYMENT_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
         "ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, "
         "provider_reference = EXCLUDED.provider_reference, version = EXCLUDED.version",
-        (
-            payment.id,
-            payment.order_id,
-            payment.market_id.value,
-            payment.amount.amount,
-            payment.amount.currency,
-            payment.state.value,
-            payment.provider_reference,
-            version,
-        ),
+        payment_row(payment, version),
     )
     if not payment.operations:
         return
     with conn.cursor() as cursor:
         cursor.executemany(
-            f"INSERT INTO payment_operations ({_OPERATION_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
+            f"INSERT INTO payment_operations ({OPERATION_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
             "ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, "
             "provider_reference = EXCLUDED.provider_reference, "
             "decline_reason = EXCLUDED.decline_reason, completed_at = EXCLUDED.completed_at",
-            [
-                (
-                    operation.id,
-                    operation.payment_id,
-                    operation.kind.value,
-                    operation.idempotency_key,
-                    operation.amount.amount,
-                    operation.amount.currency,
-                    operation.requested_at,
-                    operation.state.value,
-                    operation.provider_reference,
-                    operation.decline_reason,
-                    operation.completed_at,
-                )
-                for operation in payment.operations
-            ],
+            [operation_row(operation) for operation in payment.operations],
         )
+
+
+def payment_row(payment: PaymentModel, version: int) -> tuple[Any, ...]:
+    """Row of ``payments`` in the order of ``PAYMENT_COLUMNS``."""
+    return (
+        payment.id,
+        payment.order_id,
+        payment.market_id.value,
+        payment.amount.amount,
+        payment.amount.currency,
+        payment.state.value,
+        payment.provider_reference,
+        version,
+    )
+
+
+def operation_row(operation: PaymentOperation) -> tuple[Any, ...]:
+    """Row of ``payment_operations`` in the order of ``OPERATION_COLUMNS``."""
+    return (
+        operation.id,
+        operation.payment_id,
+        operation.kind.value,
+        operation.idempotency_key,
+        operation.amount.amount,
+        operation.amount.currency,
+        operation.requested_at,
+        operation.state.value,
+        operation.provider_reference,
+        operation.decline_reason,
+        operation.completed_at,
+    )
 
 
 class DatabasePaymentOutbox:

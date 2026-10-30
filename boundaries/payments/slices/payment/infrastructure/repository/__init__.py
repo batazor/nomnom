@@ -9,6 +9,7 @@ technology.
 """
 
 from .event_codec import UnreadableStoredDataError
+from .projection_rebuild import ProjectionMismatch, ProjectionRebuilder, RebuildResult
 from .queries import (
     DatabasePaymentOperationHistory,
     DatabasePaymentStatusReader,
@@ -26,6 +27,9 @@ __all__ = [
     "DatabasePaymentRepository",
     "DatabasePaymentStatusReader",
     "DatabaseProviderMessageInbox",
+    "ProjectionMismatch",
+    "ProjectionRebuilder",
+    "RebuildResult",
     "ReplayMetrics",
     "UnreadableStoredDataError",
 ]
