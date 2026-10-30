@@ -255,7 +255,7 @@ var Metrics = []Metric{
 	{Name: "nomnom_payments_provider_request_duration_seconds", Section: "provider", Type: Histogram, Source: "Provider gateway adapter", Labels: []string{"nomnom_payment_operation", "nomnom_outcome"}, Status: expected(Payments), Note: "`operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат."},
 
 	// domain: orders
-	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(Orders)},
+	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: verified([]string{Orders})},
 	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(OrdersWorker, OrdersConsumer)},
 	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: expected(Orders, OrdersWorker)},
 	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: expected(OrdersWorker)},

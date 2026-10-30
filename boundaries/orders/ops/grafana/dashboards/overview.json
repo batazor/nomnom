@@ -3486,27 +3486,59 @@
         "spec": {
           "id": 52,
           "title": "Orders: placed / completed / cancelled / failed",
-          "description": "Метрики: `nomnom_orders_placed_total`, `nomnom_orders_completed_total`, `nomnom_orders_cancelled_total`, `nomnom_orders_failed_total`.",
+          "description": "Метрики: `nomnom_orders_placed_total`, `nomnom_orders_completed_total`, `nomnom_orders_cancelled_total`, `nomnom_orders_failed_total`.\n\nЧасть запросов ждёт метрик: nomnom_orders_cancelled_total, nomnom_orders_completed_total, nomnom_orders_failed_total (см. docs/observability/metric-inventory.md).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(nomnom_orders_placed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "placed",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_orders_cancelled_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_completed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_failed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n| [`nomnom_orders_placed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum(rate(nomnom_orders_placed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_completed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_cancelled_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\nsum(rate(nomnom_orders_failed_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
                 "overrides": []
               }
             }
@@ -3614,27 +3646,71 @@
         "spec": {
           "id": 56,
           "title": "Funnel: orders reaching the stage",
-          "description": "Сколько заказов прошли каждый этап. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "description": "Сколько заказов прошли каждый этап. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.\n\nЧасть запросов ждёт метрик: nomnom_fsm_transitions_total (см. docs/observability/metric-inventory.md).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))",
+                        "instant": true,
+                        "legendFormat": "placed",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "bargauge",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n| [`nomnom_orders_placed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nround(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\nround(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n```\n"
+                "displayMode": "basic",
+                "valueMode": "text",
+                "namePlacement": "auto",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizWidth": 8,
+                "minVizHeight": 16,
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "reduceOptions": {
+                  "values": false,
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                },
+                "maxVizHeight": 300,
+                "orientation": "horizontal"
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "short",
+                  "min": 0
+                },
                 "overrides": []
               }
             }
@@ -3646,27 +3722,72 @@
         "spec": {
           "id": 57,
           "title": "Funnel: % of placed",
-          "description": "Доля оформленных заказов, прошедших этап; последняя полоса — конверсия до завершения. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "description": "Доля оформленных заказов, прошедших этап; последняя полоса — конверсия до завершения. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.\n\nЧасть запросов ждёт метрик: nomnom_fsm_transitions_total (см. docs/observability/metric-inventory.md).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "100 * round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))",
+                        "instant": true,
+                        "legendFormat": "placed",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "bargauge",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_fsm_transitions_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#fsm) | ожидается |\n| [`nomnom_orders_placed_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#domain) | ожидается |\n\nЦелевой PromQL:\n\n```promql\n100 * round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed\", nomnom_fsm_to_state=~\"paid|confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid\", nomnom_fsm_to_state=~\"confirmed|preparing|ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed\", nomnom_fsm_to_state=~\"preparing|ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing\", nomnom_fsm_to_state=~\"ready|picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready\", nomnom_fsm_to_state=~\"picked_up|delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up\", nomnom_fsm_to_state=~\"delivered|completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n100 * round(sum(increase(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_from_state=~\"placed|paid|confirmed|preparing|ready|picked_up|delivered\", nomnom_fsm_to_state=~\"completed\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))) / round(sum(increase(nomnom_orders_placed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])))\n```\n"
+                "displayMode": "basic",
+                "valueMode": "text",
+                "namePlacement": "auto",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizWidth": 8,
+                "minVizHeight": 16,
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "reduceOptions": {
+                  "values": false,
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                },
+                "maxVizHeight": 300,
+                "orientation": "horizontal"
               },
               "fieldConfig": {
-                "defaults": {},
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100
+                },
                 "overrides": []
               }
             }

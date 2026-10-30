@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 143; пар «метрика × сервис» со статусом «есть»: 140.
+Метрик в инвентаре: 143; пар «метрика × сервис» со статусом «есть»: 141.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -265,7 +265,7 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_orders_placed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders`: ожидается | — |
+| `nomnom_orders_placed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders`: есть | — |
 | `nomnom_orders_completed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
 | `nomnom_orders_cancelled_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: ожидается | — |
 | `nomnom_orders_failed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders-worker`: ожидается | — |
