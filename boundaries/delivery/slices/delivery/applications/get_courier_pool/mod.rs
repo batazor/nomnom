@@ -13,8 +13,8 @@ use crate::slices::courier::applications::authorization::{
 use crate::slices::courier::domains::courier::{CourierId, CourierName, CourierStatus, MarketId};
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
 
-use super::super::error::DeliveryApplicationError;
-use super::super::market_id;
+use super::error::DeliveryApplicationError;
+use super::market_id;
 
 /// One courier of the pool.
 #[derive(Clone, Debug, Eq, PartialEq)]

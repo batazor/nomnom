@@ -25,10 +25,10 @@ use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus, Location,
 };
 use delivery::slices::delivery::applications::assignment_process::CandidateDeliveries;
+use delivery::slices::delivery::applications::execution::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::delivery::applications::offer::list_available_delivery_offers::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
-use delivery::slices::delivery::applications::tracking::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
     DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, ExpectedTime,

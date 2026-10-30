@@ -520,7 +520,7 @@ mod tests {
         register_courier, set_courier_availability, update_courier_location,
     };
     use crate::slices::delivery::applications::{
-        assignment::advance_assignment, assignment::find_courier, execution::create_delivery,
+        assignment::advance_assignment, assignment::create_delivery, assignment::find_courier,
     };
 
     use super::super::infrastructure::local_authorization;

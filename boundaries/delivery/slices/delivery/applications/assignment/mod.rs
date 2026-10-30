@@ -4,8 +4,8 @@
 //! the delivery transition and saves the delivery in its Unit of Work.
 
 pub mod advance_assignment;
+pub mod create_delivery;
 pub mod find_courier;
-pub mod get_courier_pool;
 pub mod reassign_courier;
 
 use crate::slices::courier::applications::assignment::CourierAssignment;

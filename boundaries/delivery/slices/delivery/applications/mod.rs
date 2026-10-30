@@ -5,6 +5,7 @@ pub mod courier_locator;
 pub mod duration;
 pub mod error;
 pub mod execution;
+pub mod get_courier_pool;
 pub mod offer;
 pub mod offers_of_delivery;
 pub mod outbox;

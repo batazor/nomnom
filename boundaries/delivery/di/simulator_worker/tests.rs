@@ -8,7 +8,7 @@ use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
 use crate::slices::courier::applications::{register_courier, update_courier_location};
 use crate::slices::delivery::applications::{
-    assignment::advance_assignment, execution::create_delivery,
+    assignment::advance_assignment, assignment::create_delivery,
 };
 use crate::slices::delivery::domains::delivery::{ExpectedTime, Intersection, State};
 use crate::slices::simulator::applications::work::{

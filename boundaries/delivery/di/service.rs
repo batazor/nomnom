@@ -197,7 +197,7 @@ mod tests {
     use crate::pkg::authz::Subject;
     use crate::slices::courier::applications::register_courier;
     use crate::slices::delivery::applications::{
-        execution::create_delivery, tracking::get_courier_current_delivery,
+        assignment::create_delivery, execution::get_courier_current_delivery,
     };
 
     use super::*;

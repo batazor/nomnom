@@ -20,6 +20,6 @@
 
 ## Acceptance
 
-FR-621, AC-792 change [`add-cook-and-courier-pools`](../../../../../../../openspec/changes/add-cook-and-courier-pools/).
+FR-621, AC-792 change [`add-cook-and-courier-pools`](../../../../../../openspec/changes/add-cook-and-courier-pools/).
 
-Общий каталог: [Delivery use cases](../../../../../README.md#use-cases).
+Общий каталог: [Delivery use cases](../../../../README.md#use-cases).

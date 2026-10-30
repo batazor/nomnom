@@ -13,9 +13,6 @@ use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
-use crate::slices::delivery::applications::assignment::get_courier_pool::{
-    self, CourierPoolReadModel,
-};
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
@@ -26,6 +23,10 @@ use crate::slices::delivery::applications::duration::record_delivery_duration::{
     self, DeliveryDurationStatistics, DeliveryInbox,
 };
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
+use crate::slices::delivery::applications::execution::get_courier_current_delivery::{
+    self, CourierCurrentDeliveryReadModel,
+};
+use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
 use crate::slices::delivery::applications::offer::list_available_delivery_offers::{
     self, PendingDeliveryOffersReadModel,
 };
@@ -34,16 +35,13 @@ use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
-use crate::slices::delivery::applications::tracking::get_courier_current_delivery::{
-    self, CourierCurrentDeliveryReadModel,
-};
 use crate::slices::delivery::applications::tracking::get_order_delivery::{
     self, OrderDeliveryReadModel,
 };
 use crate::slices::delivery::applications::{
-    assignment::advance_assignment, assignment::find_courier, assignment::reassign_courier,
-    execution::cancel_delivery, execution::confirm_delivery, execution::confirm_pickup,
-    execution::create_delivery, execution::report_delivery_failure, offer::accept_delivery_offer,
+    assignment::advance_assignment, assignment::create_delivery, assignment::find_courier,
+    assignment::reassign_courier, execution::cancel_delivery, execution::confirm_delivery,
+    execution::confirm_pickup, execution::report_delivery_failure, offer::accept_delivery_offer,
     offer::expire_delivery_offer, offer::offer_delivery, offer::offer_delivery_to_courier,
     offer::reject_delivery_offer,
 };

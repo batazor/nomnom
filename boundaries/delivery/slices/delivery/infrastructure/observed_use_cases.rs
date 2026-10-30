@@ -18,14 +18,13 @@ use crate::pkg::authz::Subject;
 use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    assignment::advance_assignment, assignment::find_courier, assignment::get_courier_pool,
+    assignment::advance_assignment, assignment::create_delivery, assignment::find_courier,
     assignment::reassign_courier, duration::estimate_delivery_duration,
     duration::record_delivery_duration, execution::cancel_delivery, execution::confirm_delivery,
-    execution::confirm_pickup, execution::create_delivery, execution::report_delivery_failure,
-    offer::accept_delivery_offer, offer::expire_delivery_offer,
-    offer::list_available_delivery_offers, offer::offer_delivery, offer::offer_delivery_to_courier,
-    offer::reject_delivery_offer, tracking::get_courier_current_delivery,
-    tracking::get_order_delivery,
+    execution::confirm_pickup, execution::get_courier_current_delivery,
+    execution::report_delivery_failure, get_courier_pool, offer::accept_delivery_offer,
+    offer::expire_delivery_offer, offer::list_available_delivery_offers, offer::offer_delivery,
+    offer::offer_delivery_to_courier, offer::reject_delivery_offer, tracking::get_order_delivery,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 

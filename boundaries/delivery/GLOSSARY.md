@@ -42,6 +42,10 @@ _Avoid_: Free courier
 _Avoid_: Event, command
 _Avoid_: Courier Assignment, booking
 
+**Delivery Execution**:
+Выполнение назначенной доставки: Pickup, передача заказа клиенту, отказ или отмена.
+_Avoid_: Assignment, fulfillment
+
 **Pickup**:
 Получение назначенным курьером заказа у ресторана.
 _Avoid_: Acceptance, collection request
