@@ -162,7 +162,6 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 		CursorSync(dashboard.DashboardCursorSyncCrosshair).
 		TimeSettings(dashboard.NewTimeSettingsBuilder().From("now-6h").To("now").AutoRefresh("1m").Timezone("browser")).
 		Variables(g.variables()).
-		Links(g.links()).
 		Annotations(g.annotations(main))
 
 	rows := []row{
@@ -215,7 +214,7 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 	}
 
 	product, technical := dashboard.Rows(), dashboard.Rows()
-	var productRows, technicalRows int
+	productRows := 0
 	for _, r := range rows {
 		if len(r.panels) == 0 {
 			continue
@@ -228,16 +227,14 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 			productRows++
 		default:
 			technical.Row(b)
-			technicalRows++
 		}
 	}
+	tabs := dashboard.Tabs()
 	if productRows > 0 {
-		g.dash.TabsLayout(dashboard.Tabs().
-			Tab(dashboard.Tab("Product").RowsLayout(product)).
-			Tab(dashboard.Tab("Technical").RowsLayout(technical)))
-	} else {
-		g.dash.RowsLayout(technical)
+		tabs.Tab(dashboard.Tab("Product").RowsLayout(product))
 	}
+	tabs.Tab(dashboard.Tab("Technical").RowsLayout(technical)).Tab(g.aboutTab(g.serviceAbout()))
+	g.dash.TabsLayout(tabs)
 	if len(g.errs) > 0 {
 		return Dashboard{}, fmt.Errorf("%s: %s", uid, strings.Join(g.errs, "; "))
 	}

@@ -10,8 +10,6 @@ import (
 
 	"github.com/grafana/grafana-foundation-sdk/go/cog"
 	dashboard "github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
-
-	"nomnom/ops/grafana/inventory"
 )
 
 // Data sources выбираются variables по типу plugin: dashboard не содержит UID
@@ -188,45 +186,12 @@ func (g *generator) checkTrace(panel string, q Query, cond string) {
 	}
 }
 
-// community — серверные dashboards зависимостей: из overview ведут ссылки, панели не дублируются.
+// community — серверные dashboards зависимостей: вкладка About ведёт на них, панели не дублируются.
 var community = map[string]struct{ title, url string }{
 	"postgresql": {"PostgreSQL server (community 9628)", "https://grafana.com/grafana/dashboards/9628"},
 	"mongodb":    {"MongoDB server (community 7353)", "https://grafana.com/grafana/dashboards/7353"},
 	"kafka":      {"Kafka cluster (community 7589)", "https://grafana.com/grafana/dashboards/7589"},
 	"watermill":  {"Watermill panels reference (9777)", "https://grafana.com/grafana/dashboards/9777"},
-}
-
-func (g *generator) links() []cog.Builder[dashboard.DashboardLink] {
-	link := func(title, u, icon string) cog.Builder[dashboard.DashboardLink] {
-		return dashboard.NewDashboardLinkBuilder().Title(title).Type(dashboard.DashboardLinkTypeLink).
-			Url(u).Icon(icon).TargetBlank(true).KeepTime(false).IncludeVars(false).Tags([]string{})
-	}
-	main := Scope{Var: "service"}
-	links := []cog.Builder[dashboard.DashboardLink]{
-		link("Logs (Loki)", logsURL(), "doc"),
-		link("Traces (Tempo)", tracesURL(main, ""), "external link"),
-		link("Traces: errors", tracesURL(main, " && status=error"), "external link"),
-		link("Profiles (Pyroscope)", profilesURL(), "external link"),
-		link("Metric inventory", inventory.RepoURL+inventory.DocPath, "info"),
-		link("Dashboard README", inventory.RepoURL+"boundaries/"+g.opts.Context+"/ops/grafana/README.md", "info"),
-		// Серверная сторона SpiceDB и PostgreSQL, pods всех контекстов.
-		dashboard.NewDashboardLinkBuilder().Title("Platform / Overview").Type(dashboard.DashboardLinkTypeLink).
-			Url("/d/" + PlatformUID).Icon("dashboard").TargetBlank(false).KeepTime(true).IncludeVars(false).Tags([]string{}),
-	}
-	var deps []string
-	if g.opts.Database != "" {
-		deps = append(deps, string(g.opts.Database))
-	}
-	if g.opts.Kafka != nil {
-		deps = append(deps, "kafka")
-		if g.opts.Kafka.Watermill {
-			deps = append(deps, "watermill")
-		}
-	}
-	for _, d := range deps {
-		links = append(links, link(community[d].title, community[d].url, "dashboard"))
-	}
-	return links
 }
 
 // DeploymentAnnotation — смена service_version в target_info как отметка деплоя.

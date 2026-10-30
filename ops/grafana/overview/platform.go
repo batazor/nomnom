@@ -51,7 +51,9 @@ func PlatformOverview() (Dashboard, error) {
 			layout.Row(b)
 		}
 	}
-	g.dash.RowsLayout(layout)
+	g.dash.TabsLayout(dashboard.Tabs().
+		Tab(dashboard.Tab("Technical").RowsLayout(layout)).
+		Tab(g.aboutTab(platformAbout())))
 	if len(g.errs) > 0 {
 		return Dashboard{}, fmt.Errorf("%s: %s", PlatformUID, strings.Join(g.errs, "; "))
 	}

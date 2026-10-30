@@ -2,6 +2,7 @@ package overview
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,12 +76,36 @@ func TestDashboardsUseTabsAutoGridAndShowRules(t *testing.T) {
 		if !strings.Contains(s, `"ConditionalRenderingData"`) {
 			t.Errorf("%s: нет правила скрытия панелей без данных", ctx)
 		}
-		if ctx == "bff" {
-			continue
+		var manifest struct {
+			Spec struct {
+				Links  []any `json:"links"`
+				Layout struct {
+					Spec struct {
+						Tabs []struct {
+							Spec struct {
+								Title string `json:"title"`
+							} `json:"spec"`
+						} `json:"tabs"`
+					} `json:"spec"`
+				} `json:"layout"`
+			} `json:"spec"`
 		}
-		product, technical := strings.Index(s, `"title":"Product"`), strings.Index(s, `"title":"Technical"`)
-		if product < 0 || technical < product {
-			t.Errorf("%s: вкладки Product %d, Technical %d", ctx, product, technical)
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			t.Fatal(err)
+		}
+		var tabs []string
+		for _, tab := range manifest.Spec.Layout.Spec.Tabs {
+			tabs = append(tabs, tab.Spec.Title)
+		}
+		want := []string{"Product", "Technical", "About"}
+		if ctx == "bff" {
+			want = want[1:]
+		}
+		if !slices.Equal(tabs, want) {
+			t.Errorf("%s: вкладки %v, ожидаются %v", ctx, tabs, want)
+		}
+		if len(manifest.Spec.Links) > 0 {
+			t.Errorf("%s: ссылки должны быть во вкладке About", ctx)
 		}
 	}
 }
@@ -94,6 +119,22 @@ func TestPanelsWaitingForMetricsAreNotInTheDashboard(t *testing.T) {
 		}
 		if strings.Contains(string(raw), "TODO") {
 			t.Errorf("%s: TODO-панель в dashboard", ctx)
+		}
+	}
+}
+
+// Сводка строится из Options: ссылки на сигналы и зависимости сервиса.
+func TestServiceAboutNamesTheServiceAndItsLinks(t *testing.T) {
+	g := &generator{opts: Options{
+		Context: "orders", Title: "Orders", Language: Go, Services: []string{inventory.Orders}, Database: PostgreSQL,
+		Kafka: &Kafka{Watermill: true, ConsumerGroup: "orders", DeadLetters: []string{"a.dlq"}},
+	}}
+
+	about := g.serviceAbout()
+
+	for _, want := range []string{"`orders`", "`postgresql`", "`a.dlq`", "Logs (Loki)", "Traces: errors", "Platform / Overview", "community 9628", "boundaries/orders/ops/grafana/README.md"} {
+		if !strings.Contains(about, want) {
+			t.Errorf("нет %s в\n%s", want, about)
 		}
 	}
 }

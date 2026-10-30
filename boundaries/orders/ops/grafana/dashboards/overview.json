@@ -4058,6 +4058,38 @@
           }
         }
       },
+      "panel-69": {
+        "kind": "Panel",
+        "spec": {
+          "id": 69,
+          "title": "About",
+          "description": "Сводка о сервисе и ссылки на соседние инструменты.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "# Orders\n\n## Сервис\n\n| | |\n| --- | --- |\n| Процессы | `orders`, `orders-worker`, `orders-consumer` |\n| Язык | `go` |\n| База данных | `postgresql` |\n| Consumer group | `orders` |\n| DLQ | `restaurants.v1.restaurant-order-events.dlq`, `delivery.v1.delivery-events.dlq`, `orders.v1.order-relationships.dlq` |\n| Temporal worker | `orders-worker` |\n\n## Сигналы\n\n- [Logs (Loki)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${logs}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22${logs}%22%7D%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D+%7C+service_version%3D~%5C%22${version:regex}%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces (Tempo)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces: errors](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Profiles (Pyroscope)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${profiles}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22${profiles}%22%7D%2C%22labelSelector%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D%22%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22queryType%22%3A%22profile%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n\n## Документация\n\n- [Dashboard README](https://github.com/batazor/nomnom/blob/main/boundaries/orders/ops/grafana/README.md)\n- [Metric inventory](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md)\n\n## Соседние dashboards\n\n- [Platform / Overview](/d/nomnom-platform-overview)\n- [PostgreSQL server (community 9628)](https://grafana.com/grafana/dashboards/9628)\n- [Kafka cluster (community 7589)](https://grafana.com/grafana/dashboards/7589)\n- [Watermill panels reference (9777)](https://grafana.com/grafana/dashboards/9777)\n\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
       "panel-7": {
         "kind": "Panel",
         "spec": {
@@ -5812,132 +5844,38 @@
                 }
               }
             }
+          },
+          {
+            "kind": "TabsLayoutTab",
+            "spec": {
+              "title": "About",
+              "layout": {
+                "kind": "AutoGridLayout",
+                "spec": {
+                  "maxColumnCount": 1,
+                  "columnWidthMode": "standard",
+                  "rowHeightMode": "custom",
+                  "rowHeight": 700,
+                  "fillScreen": false,
+                  "items": [
+                    {
+                      "kind": "AutoGridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-69"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         ]
       }
     },
-    "links": [
-      {
-        "title": "Logs (Loki)",
-        "type": "link",
-        "icon": "doc",
-        "tooltip": "",
-        "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${logs}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22${logs}%22%7D%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D+%7C+service_version%3D~%5C%22${version:regex}%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Traces (Tempo)",
-        "type": "link",
-        "icon": "external link",
-        "tooltip": "",
-        "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Traces: errors",
-        "type": "link",
-        "icon": "external link",
-        "tooltip": "",
-        "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Profiles (Pyroscope)",
-        "type": "link",
-        "icon": "external link",
-        "tooltip": "",
-        "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${profiles}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22${profiles}%22%7D%2C%22labelSelector%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D%22%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22queryType%22%3A%22profile%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Metric inventory",
-        "type": "link",
-        "icon": "info",
-        "tooltip": "",
-        "url": "https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Dashboard README",
-        "type": "link",
-        "icon": "info",
-        "tooltip": "",
-        "url": "https://github.com/batazor/nomnom/blob/main/boundaries/orders/ops/grafana/README.md",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Platform / Overview",
-        "type": "link",
-        "icon": "dashboard",
-        "tooltip": "",
-        "url": "/d/nomnom-platform-overview",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": false,
-        "includeVars": false,
-        "keepTime": true
-      },
-      {
-        "title": "PostgreSQL server (community 9628)",
-        "type": "link",
-        "icon": "dashboard",
-        "tooltip": "",
-        "url": "https://grafana.com/grafana/dashboards/9628",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Kafka cluster (community 7589)",
-        "type": "link",
-        "icon": "dashboard",
-        "tooltip": "",
-        "url": "https://grafana.com/grafana/dashboards/7589",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      },
-      {
-        "title": "Watermill panels reference (9777)",
-        "type": "link",
-        "icon": "dashboard",
-        "tooltip": "",
-        "url": "https://grafana.com/grafana/dashboards/9777",
-        "tags": [],
-        "asDropdown": false,
-        "targetBlank": true,
-        "includeVars": false,
-        "keepTime": false
-      }
-    ],
+    "links": [],
     "preload": false,
     "tags": [
       "nomnom",
