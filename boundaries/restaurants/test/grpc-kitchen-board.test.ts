@@ -12,11 +12,11 @@ import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import {
   type ActiveRestaurantOrder,
   ListActiveRestaurantOrdersHandler,
-} from "../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+} from "../slices/restaurantorder/applications/board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import {
   type IncomingOrder,
   ListIncomingOrdersHandler,
-} from "../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
+} from "../slices/restaurantorder/applications/board/list-incoming-orders/list-incoming-orders.ts";
 import { RestaurantOrderState as DomainRestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   context,

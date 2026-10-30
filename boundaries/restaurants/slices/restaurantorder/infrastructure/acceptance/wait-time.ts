@@ -1,7 +1,7 @@
 import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { WaitTimeStatisticsStore } from "../../../restaurant/applications/record-wait-time/record-wait-time.ts";
 import type { WaitTimePolicy } from "../../../restaurant/domains/restaurant/wait-time.ts";
-import type { ReadyTimeEstimator } from "../../applications/accept-order/accept-order.ts";
+import type { ReadyTimeEstimator } from "../../applications/intake/accept-order/accept-order.ts";
 
 /**
  * Initial `expected_ready_at` from the Wait Time Statistics of the restaurant

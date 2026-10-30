@@ -7,7 +7,7 @@ import type { UnitOfWork } from "../pkg/unit-of-work/unit-of-work.ts";
 import {
   CancellationRejectionReason,
   type CancelRestaurantOrderResult,
-} from "../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+} from "../slices/restaurantorder/applications/intake/cancel-restaurant-order/cancel-restaurant-order.ts";
 import { RestaurantOrder } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {
   cancellationRejection,

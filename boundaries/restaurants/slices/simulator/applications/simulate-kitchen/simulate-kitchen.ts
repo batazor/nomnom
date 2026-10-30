@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import type { AcceptOrderHandler } from "../../../restaurantorder/applications/accept-order/accept-order.ts";
-import type { MarkAssembledHandler } from "../../../restaurantorder/applications/mark-assembled/mark-assembled.ts";
-import type { MarkReadyForPickupHandler } from "../../../restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import type { RejectOrderHandler } from "../../../restaurantorder/applications/reject-order/reject-order.ts";
-import type { ReportPreparationDelayHandler } from "../../../restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
-import type { ReportPreparationFailureHandler } from "../../../restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
-import type { StartPreparationHandler } from "../../../restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { AcceptOrderHandler } from "../../../restaurantorder/applications/intake/accept-order/accept-order.ts";
+import type { RejectOrderHandler } from "../../../restaurantorder/applications/intake/reject-order/reject-order.ts";
+import type { MarkAssembledHandler } from "../../../restaurantorder/applications/preparation/mark-assembled/mark-assembled.ts";
+import type { MarkReadyForPickupHandler } from "../../../restaurantorder/applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import type { ReportPreparationDelayHandler } from "../../../restaurantorder/applications/preparation/report-preparation-delay/report-preparation-delay.ts";
+import type { ReportPreparationFailureHandler } from "../../../restaurantorder/applications/preparation/report-preparation-failure/report-preparation-failure.ts";
+import type { StartPreparationHandler } from "../../../restaurantorder/applications/preparation/start-preparation/start-preparation.ts";
 import {
   NoCookAvailableError,
   RestaurantOrderState,

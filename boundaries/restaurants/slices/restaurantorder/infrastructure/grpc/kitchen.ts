@@ -22,14 +22,14 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { AcceptOrderHandler } from "../../applications/accept-order/accept-order.ts";
+import type { AcceptOrderHandler } from "../../applications/intake/accept-order/accept-order.ts";
+import type { RejectOrderHandler } from "../../applications/intake/reject-order/reject-order.ts";
 import type { KitchenCommand } from "../../applications/kitchen-command/kitchen-command.ts";
-import type { MarkAssembledHandler } from "../../applications/mark-assembled/mark-assembled.ts";
-import type { MarkReadyForPickupHandler } from "../../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import type { RejectOrderHandler } from "../../applications/reject-order/reject-order.ts";
-import type { ReportPreparationDelayHandler } from "../../applications/report-preparation-delay/report-preparation-delay.ts";
-import type { ReportPreparationFailureHandler } from "../../applications/report-preparation-failure/report-preparation-failure.ts";
-import type { StartPreparationHandler } from "../../applications/start-preparation/start-preparation.ts";
+import type { MarkAssembledHandler } from "../../applications/preparation/mark-assembled/mark-assembled.ts";
+import type { MarkReadyForPickupHandler } from "../../applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";
+import type { ReportPreparationDelayHandler } from "../../applications/preparation/report-preparation-delay/report-preparation-delay.ts";
+import type { ReportPreparationFailureHandler } from "../../applications/preparation/report-preparation-failure/report-preparation-failure.ts";
+import type { StartPreparationHandler } from "../../applications/preparation/start-preparation/start-preparation.ts";
 import { toRestaurantOrderMessage } from "./messages.ts";
 
 export type KitchenRpcDependencies = Readonly<{

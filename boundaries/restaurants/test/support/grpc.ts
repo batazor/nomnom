@@ -22,8 +22,8 @@ import { BatchGetRestaurantsHandler } from "../../slices/restaurant/applications
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
 import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
-import type { ListActiveRestaurantOrdersHandler } from "../../slices/restaurantorder/applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/list-incoming-orders/list-incoming-orders.ts";
+import type { ListActiveRestaurantOrdersHandler } from "../../slices/restaurantorder/applications/board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/board/list-incoming-orders/list-incoming-orders.ts";
 import { createKitchenWorld, ordersService } from "./kitchen.ts";
 
 export const context = undefined as never;

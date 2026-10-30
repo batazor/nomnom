@@ -1,4 +1,4 @@
-import type { CookAssigner } from "../../../restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { CookAssigner } from "../../../restaurantorder/applications/preparation/start-preparation/start-preparation.ts";
 import { NoCookAvailableError } from "../../../restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import type { Cook, CookRepository } from "../../domains/cook/cook.ts";
 import type { CookWorkload } from "../cook-workload/cook-workload.ts";

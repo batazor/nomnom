@@ -8,37 +8,37 @@ import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
 import type {
   KitchenQueueEntry,
   KitchenQueueReader,
-} from "../../applications/get-kitchen-queue/get-kitchen-queue.ts";
-import type { RestaurantOrderReader } from "../../applications/get-restaurant-order/get-restaurant-order.ts";
+} from "../../applications/board/get-kitchen-queue/get-kitchen-queue.ts";
 import type {
   KitchenOrderInState,
   KitchenOrdersInStatesReader,
-} from "../../applications/kitchen-board/kitchen-board.ts";
+} from "../../applications/board/kitchen-board/kitchen-board.ts";
 import type {
   ActivePreparation,
   ActivePreparationsReader,
-} from "../../applications/list-active-preparations/list-active-preparations.ts";
+} from "../../applications/board/list-active-preparations/list-active-preparations.ts";
 import type {
   ActiveRestaurantOrder,
   ActiveRestaurantOrdersReader,
-} from "../../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
+} from "../../applications/board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import type {
   IncomingOrder,
   IncomingOrdersReader,
-} from "../../applications/list-incoming-orders/list-incoming-orders.ts";
+} from "../../applications/board/list-incoming-orders/list-incoming-orders.ts";
 import type {
   ReadyOrder,
   ReadyOrdersReader,
-} from "../../applications/list-ready-orders/list-ready-orders.ts";
+} from "../../applications/board/list-ready-orders/list-ready-orders.ts";
 import type {
   ScheduledOrder,
   ScheduledOrdersReader,
-} from "../../applications/list-scheduled-orders/list-scheduled-orders.ts";
+} from "../../applications/board/list-scheduled-orders/list-scheduled-orders.ts";
+import type { RestaurantOrderReader } from "../../applications/get-restaurant-order/get-restaurant-order.ts";
+import type { StartedOrders } from "../../applications/preparation/start-preparation/start-preparation.ts";
 import {
   type RestaurantOrderView,
   snapshotToView,
 } from "../../applications/restaurant-order-view/restaurant-order-view.ts";
-import type { StartedOrders } from "../../applications/start-preparation/start-preparation.ts";
 import {
   DuplicateOrderIdError,
   leavesOf,

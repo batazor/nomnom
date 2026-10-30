@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RecordPickupHandler } from "../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
+import { RecordPickupHandler } from "../slices/restaurantorder/applications/preparation/record-pickup/record-pickup.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { cook, createKitchenWorld } from "./support/kitchen.ts";
 import { createInfrastructure } from "./support/restaurants.ts";

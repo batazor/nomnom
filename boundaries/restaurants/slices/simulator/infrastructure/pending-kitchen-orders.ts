@@ -1,4 +1,4 @@
-import type { KitchenOrdersInStatesReader } from "../../restaurantorder/applications/kitchen-board/kitchen-board.ts";
+import type { KitchenOrdersInStatesReader } from "../../restaurantorder/applications/board/kitchen-board/kitchen-board.ts";
 import type {
   PendingKitchenOrder,
   PendingKitchenOrdersReader,

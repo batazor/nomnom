@@ -15,7 +15,7 @@ import {
 } from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
-import type { CookAssigner } from "../../restaurantorder/applications/start-preparation/start-preparation.ts";
+import type { CookAssigner } from "../../restaurantorder/applications/preparation/start-preparation/start-preparation.ts";
 import type { CookPoolAccess } from "../applications/access-control/access-control.ts";
 import { PoolCookAssigner } from "../applications/assign-cook/assign-cook.ts";
 import type { ChangeCookDependencies } from "../applications/change-cook/change-cook.ts";
