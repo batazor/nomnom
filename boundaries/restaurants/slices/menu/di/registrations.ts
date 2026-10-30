@@ -53,8 +53,9 @@ export interface MenuDependencies {
 /** What the slice provides to the process and to other slices. */
 export interface MenuCradle {
   /**
-   * Only `MenuItemAvailabilityChanged` of the Menu aggregate is written to the
-   * Outbox (explicit allowlist, topic restaurants.v1.menu-events).
+   * `MenuItemAdded`, `MenuItemUpdated` and `MenuItemAvailabilityChanged` of the
+   * Menu aggregate are written to the Outbox (explicit allowlist, topic
+   * restaurants.v1.menu-events).
    */
   readonly menuOutboxEventMapper: OutboxEventMapper;
   readonly menus: MenuRepository;
