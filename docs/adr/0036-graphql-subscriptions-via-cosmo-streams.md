@@ -69,7 +69,9 @@ BFF из [ADR 2 BFF](../../boundaries/bff/docs/adr/0002-bff-as-the-client-entry-
   или отсутствующий заказ — `NOT_FOUND`, подписчик получает error-событие без данных. Проверено на
   Router 0.363.0: Authorization каждого подписчика доходит до lookup, без токена —
   `Unauthenticated`.
-- **Транспорт к клиенту — SSE**, а не WebSocket: Router поддерживает оба. Каждая подписка —
+- **Транспорт к клиенту — SSE**, а не WebSocket: Router поддерживает оба, но вход WebSocket в
+  образе выключен (`websocket.enabled: false` в `config.production.yaml`), потому что сообщения
+  после upgrade не проходят через local rate limit Envoy Gateway. Каждая подписка —
   отдельный HTTP-запрос с тем же `Authorization`, CORS и Cloudflare, что и у query, без
   протокола `connection_init`, sticky-сессий и состояния соединения. UI использует `graphql-sse`
   в режиме distinct connections через `subscriptionExchange` urql.

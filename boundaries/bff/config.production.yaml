@@ -112,6 +112,11 @@ headers:
       - op: propagate
         named: X-Nomnom-Market
 
+# ADR 36: clients subscribe over SSE only. An unused WebSocket entry would stay open
+# by default, and messages after the upgrade pass the local rate limit of Envoy Gateway.
+websocket:
+  enabled: false
+
 # ADR 36: Cosmo Streams consume Order Change Notifications from Kafka and
 # courier positions from the Valkey of delivery (FR-668). The Helm chart
 # requires BFF__KAFKA_BROKERS and BFF__TRACKS_REDIS_URL; an unreachable
