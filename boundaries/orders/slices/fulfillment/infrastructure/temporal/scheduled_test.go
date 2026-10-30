@@ -64,7 +64,7 @@ func newScheduled(t *testing.T, plans ...temporal.Plan) *scheduled {
 			return plan, nil
 		}).
 		Run(s.call(temporal.ActivityPlanSchedule))
-	for _, name := range []string{temporal.ActivityQueueRestaurantOrder, temporal.ActivityReleaseSlotReservation} {
+	for _, name := range []string{temporal.ActivityQueueRestaurantOrder, temporal.ActivityReleaseSlotReservation, temporal.ActivityRecordRestaurantPickup} {
 		s.env.OnActivity(name, mock.Anything, mock.Anything).Return(nil).Run(s.call(name))
 	}
 	return s
@@ -140,6 +140,7 @@ func TestWorkflowRunsTheScheduledRoute(t *testing.T) {
 		temporal.ActivityPlanSchedule,
 		temporal.ActivityQueueRestaurantOrder,
 		temporal.ActivityCreateDelivery,
+		temporal.ActivityRecordRestaurantPickup,
 		temporal.ActivityCapturePayment,
 		temporal.ActivityCompleteOrder,
 	}, s.calls)
@@ -287,6 +288,7 @@ func TestWorkflowWithoutScheduledRouteVersionTakesTheASAPRoute(t *testing.T) {
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
+		temporal.ActivityRecordRestaurantPickup,
 		temporal.ActivityCapturePayment,
 		temporal.ActivityCompleteOrder,
 	}, s.calls)

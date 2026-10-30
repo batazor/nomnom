@@ -179,6 +179,21 @@ func (r *Restaurants) QueueOrder(ctx context.Context, request neighbours.QueueRe
 	return mapError("restaurants.QueueRestaurantOrder", err)
 }
 
+// RecordPickup takes the order off the kitchen board; a repeat succeeds without
+// changes. NotFound and FailedPrecondition mean the kitchen no longer holds it as
+// ready: there is nothing to take off, and the Order goes on.
+func (r *Restaurants) RecordPickup(ctx context.Context, request neighbours.RestaurantPickupRequest) error {
+	_, err := r.client.RecordRestaurantOrderPickup(ctx, &restaurantsv1.RecordRestaurantOrderPickupRequest{
+		OrderId:    request.OrderID,
+		PickedUpAt: timestamppb.New(request.PickedUpAt),
+	})
+	switch status.Code(err) {
+	case codes.NotFound, codes.FailedPrecondition:
+		return nil
+	}
+	return mapError("restaurants.RecordRestaurantOrderPickup", err)
+}
+
 // ConfirmSlot confirms the held reservation; a window that filled up after the
 // hold expired is the decision not confirmed.
 func (r *Restaurants) ConfirmSlot(ctx context.Context, request neighbours.SlotRequest) (neighbours.SlotDecision, error) {

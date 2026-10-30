@@ -222,6 +222,10 @@ spec:
         - method:
             type: Exact
             service: nomnom.restaurants.v1.RestaurantsService
+            method: RecordRestaurantOrderPickup
+        - method:
+            type: Exact
+            service: nomnom.restaurants.v1.RestaurantsService
             method: ReserveScheduledSlot
         - method:
             type: Exact

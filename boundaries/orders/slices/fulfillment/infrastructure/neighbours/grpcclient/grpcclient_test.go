@@ -266,3 +266,33 @@ func TestRestaurantsQueueConfirmAndReleaseSlot(t *testing.T) {
 	assert.False(t, unavailable.Confirmed, "a full window is a decision, not an error")
 	require.NoError(t, restaurants.ReleaseSlot(context.Background(), slot))
 }
+
+// The kitchen that no longer holds the order as ready has nothing to take off:
+// the Order goes on. Any other failure is retried by the Activity.
+func TestRestaurantsRecordPickup(t *testing.T) {
+	pickedUpAt := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		serverErr error
+		wantErr   bool
+	}{
+		"recorded":            {},
+		"unknown order":       {serverErr: status.Error(codes.NotFound, "no order")},
+		"not ready":           {serverErr: status.Error(codes.FailedPrecondition, "invalid_transition")},
+		"kitchen unavailable": {serverErr: status.Error(codes.Unavailable, "down"), wantErr: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			conn, _, server, _ := serve(t)
+			server.EXPECT().RecordRestaurantOrderPickup(mock.Anything, mock.MatchedBy(func(r *restaurantsv1.RecordRestaurantOrderPickupRequest) bool {
+				return r.GetOrderId() == "order-1" && r.GetPickedUpAt().AsTime().Equal(pickedUpAt)
+			})).Return(&restaurantsv1.RecordRestaurantOrderPickupResponse{}, tc.serverErr).Once()
+
+			err := grpcclient.NewRestaurants(conn).RecordPickup(context.Background(), neighbours.RestaurantPickupRequest{OrderID: "order-1", PickedUpAt: pickedUpAt})
+
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

@@ -34,6 +34,7 @@ var activityPriority = map[string]int{
 	ActivityConfirmSlotReservation:     PriorityCustomer,
 	ActivityRequestRestaurantOrder:     PriorityFulfillment,
 	ActivityQueueRestaurantOrder:       PriorityFulfillment,
+	ActivityRecordRestaurantPickup:     PriorityFulfillment,
 	ActivityCreateDelivery:             PriorityFulfillment,
 	ActivityCapturePayment:             PriorityFulfillment,
 	ActivityCancelRestaurantOrder:      PriorityFulfillment,
@@ -62,6 +63,7 @@ var activityByStep = map[fulfillment.StepKind]string{
 	fulfillment.StepPlanSchedule:               ActivityPlanSchedule,
 	fulfillment.StepReplanSchedule:             ActivityPlanSchedule,
 	fulfillment.StepQueueRestaurantOrder:       ActivityQueueRestaurantOrder,
+	fulfillment.StepRecordRestaurantPickup:     ActivityRecordRestaurantPickup,
 	fulfillment.StepReleaseSlotReservation:     ActivityReleaseSlotReservation,
 }
 
@@ -83,16 +85,20 @@ func Workflow(ctx workflow.Context, in Input) (Result, error) {
 	return r.drive(ctx)
 }
 
-// newProcess chooses the route by the Delivery Window of the input. The
-// scheduled route exists only in histories that record ScheduledRouteChangeID;
-// an ASAP input records nothing new, so histories started before the change
-// replay unchanged.
+// newProcess chooses the route by the Delivery Window of the input and by the
+// patches its history records. The scheduled route exists only in histories that
+// record ScheduledRouteChangeID, the Pickup step only in those that record
+// RestaurantPickupChangeID, so histories started before them replay unchanged.
 func newProcess(ctx workflow.Context, in Input) *fulfillment.Process {
+	process := fulfillment.New(in.Policy.Policy)
 	if in.DeliveryWindow != nil &&
 		workflow.GetVersion(ctx, ScheduledRouteChangeID, workflow.DefaultVersion, ScheduledRouteVersion) == ScheduledRouteVersion {
-		return fulfillment.NewScheduled(in.Policy.Policy)
+		process = fulfillment.NewScheduled(in.Policy.Policy)
 	}
-	return fulfillment.New(in.Policy.Policy)
+	if workflow.GetVersion(ctx, RestaurantPickupChangeID, workflow.DefaultVersion, RestaurantPickupVersion) == RestaurantPickupVersion {
+		process.ReportPickupToRestaurant()
+	}
+	return process
 }
 
 type run struct {
@@ -207,6 +213,8 @@ func (r *run) stepInput(ctx workflow.Context, step fulfillment.Step) StepInput {
 	switch step.Kind {
 	case fulfillment.StepCompleteOrder, fulfillment.StepRecordPaymentAuthorization:
 		input.DecidedAt = workflow.Now(ctx)
+	case fulfillment.StepRecordRestaurantPickup:
+		input.DecidedAt = r.process.PickedUpAt()
 	case fulfillment.StepRequestRestaurantOrder, fulfillment.StepReplanSchedule:
 		input.PlannedReadyAt = r.process.Plan().PlannedReadyAt
 	case fulfillment.StepQueueRestaurantOrder:

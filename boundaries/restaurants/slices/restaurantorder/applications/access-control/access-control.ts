@@ -1,4 +1,4 @@
-import type { Subject } from "../../../pkg/authz/subject.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
 
 // Authorization ports of the `restaurantorder` slice over `restaurant:<id>`,
 // one per kind of caller; each use case depends only on the one it checks.
@@ -32,9 +32,4 @@ export interface RestaurantOrderViewAccess {
     subject: Subject,
     restaurantId: string,
   ): Promise<boolean>;
-}
-
-/** Source of Pickup facts: the `service` identity behind `delivery` events. */
-export interface PickupWitnessAccess {
-  canRecordPickup(subject: Subject): Promise<boolean>;
 }

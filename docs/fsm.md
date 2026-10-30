@@ -342,7 +342,7 @@ stateDiagram-v2
     CLOSED --> [*]
 ```
 
-`IN_KITCHEN × ReportDelay` — targetless (`stay`): заказ остаётся в своём leaf state. `READY` — успешное завершение работы кухни: заказ ждёт курьера на kitchen board. Pickup принадлежит `delivery`; `restaurants` узнаёт о нём из Integration Event `DeliveryPickedUp` (Record Pickup) и переводит заказ в `PICKED_UP` — он уходит с kitchen board. Pickup раньше `READY` (Delivery создаётся сразу после Acceptance) — `InvalidTransition`: consumer подтверждает событие как бизнес-исход, заказ остаётся в своём state.
+`IN_KITCHEN × ReportDelay` — targetless (`stay`): заказ остаётся в своём leaf state. `READY` — успешное завершение работы кухни: заказ ждёт курьера на kitchen board. Pickup принадлежит `delivery`; `restaurants` узнаёт о нём командой `RecordRestaurantOrderPickup` от workflow `orders`, а не из событий `delivery`. Pickup раньше `READY` (Delivery создаётся сразу после Acceptance) — `InvalidTransition`: consumer подтверждает событие как бизнес-исход, заказ остаётся в своём state.
 
 | source | trigger | guard | target | failure |
 | --- | --- | --- | --- | --- |

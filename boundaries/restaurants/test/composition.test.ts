@@ -224,10 +224,9 @@ test("the consumer container resolves every registration", async () => {
     }
     const { cradle } = container;
     assert.equal(cradle.worker, cradle.worker, "worker is a singleton");
-    assert.ok(Object.hasOwn(cradle.recordPickup, "execute"));
-    // Record Pickup is authorized only for the delivery event stream; the
-    // consumer no longer creates Restaurant Orders from OrderPlaced.
-    assert.equal("canOperateKitchen" in cradle.pickupWitnessAccess, false);
+    // The consumer writes no Restaurant Orders: the workflow of orders creates
+    // them and reports the Pickup by RPC.
+    assert.equal("recordPickup" in cradle, false);
   } finally {
     await container.dispose();
     await database.close();

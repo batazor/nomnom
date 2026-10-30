@@ -126,6 +126,18 @@ func (a *Activities) QueueRestaurantOrder(ctx context.Context, in StepInput) err
 	}))
 }
 
+// RecordRestaurantPickup tells the kitchen the courier took the Order: restaurants
+// reads nothing from delivery.
+func (a *Activities) RecordRestaurantPickup(ctx context.Context, in StepInput) error {
+	if in.OrderID == "" || in.IdempotencyKey == "" || in.DecidedAt.IsZero() {
+		return classify(usecase.InvalidInput("step", "order_id, idempotency_key and decided_at are required"))
+	}
+	return classify(a.Restaurants.RecordPickup(ctx, neighbours.RestaurantPickupRequest{
+		OrderID:    in.OrderID,
+		PickedUpAt: in.DecidedAt,
+	}))
+}
+
 // ConfirmSlotReservation confirms the Delivery Window held by Place Order
 // after the payment is recorded (FR-682).
 func (a *Activities) ConfirmSlotReservation(ctx context.Context, in StepInput) (SlotDecision, error) {

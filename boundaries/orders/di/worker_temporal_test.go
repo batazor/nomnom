@@ -179,6 +179,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 		fulfillmenttemporal.ActivityRecordPaymentAuthorization: fulfillmenttemporal.PriorityFulfillment,
 		fulfillmenttemporal.ActivityRequestRestaurantOrder:     fulfillmenttemporal.PriorityFulfillment,
 		fulfillmenttemporal.ActivityCreateDelivery:             fulfillmenttemporal.PriorityFulfillment,
+		fulfillmenttemporal.ActivityRecordRestaurantPickup:     fulfillmenttemporal.PriorityFulfillment,
 		fulfillmenttemporal.ActivityCapturePayment:             fulfillmenttemporal.PriorityFulfillment,
 		fulfillmenttemporal.ActivityCompleteOrder:              fulfillmenttemporal.PriorityBookkeeping,
 	}, priorities)

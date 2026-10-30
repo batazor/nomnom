@@ -1,8 +1,8 @@
 // Command restaurants-consumer consumes Integration Events of other contexts
-// through a Transactional Inbox in MongoDB (ADR 11, ADR 28, ADR 31): now
-// `nomnom.delivery.v1.DeliveryPickedUp` of `delivery.v1.delivery-events`, which
-// records the Pickup of the Restaurant Order, and refreshes the catalog read
-// cache by own events. The Restaurant Order itself is created only by the
+// through a Transactional Inbox in MongoDB (ADR 11, ADR 28, ADR 31): now its own
+// `restaurants.v1.restaurant-order-events` for Wait Time Statistics, and refreshes
+// the catalog read cache by own events. The kitchen does not read neighbours: the
+// Pickup comes from the fulfillment workflow of orders (RPC RecordRestaurantOrderPickup). The Restaurant Order itself is created only by the
 // fulfillment workflow of orders (RPC ReceiveOrderRequest) after payment.
 // Replicas share one consumer group. It follows the same runtime contract as cmd/restaurants
 // (pkg/lifecycle): management port with /health/*, SIGTERM, readiness delay

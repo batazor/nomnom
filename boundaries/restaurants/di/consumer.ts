@@ -75,19 +75,6 @@ import {
   DatabaseRestaurantCatalog,
   DatabaseRestaurantWaitTimes,
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
-import type { PickupWitnessAccess } from "../slices/restaurantorder/applications/access-control.ts";
-import { RecordPickupHandler } from "../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
-import type { RestaurantOrderRepository } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
-import {
-  createDeliveryPickedUpHandler,
-  DELIVERY_EVENTS_TOPIC,
-  DELIVERY_PICKED_UP_CONSUMER,
-  DeliveryEventSourceAccessControl,
-} from "../slices/restaurantorder/infrastructure/integration/delivery-picked-up.ts";
-import {
-  type KitchenChangeNotifier,
-  kitchenChangeNotifier,
-} from "../slices/restaurantorder/infrastructure/integration/kitchen-changes.ts";
 import { RESTAURANT_ORDER_EVENTS_TOPIC } from "../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 import {
   ObservedDatabaseUnitOfWork,
@@ -143,22 +130,15 @@ export interface ConsumerCradle {
   readonly clock: Clock;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: DatabaseUnitOfWork;
-  readonly restaurantOrders: RestaurantOrderRepository;
   readonly inbox: Inbox;
-  readonly kitchenChanges: KitchenChangeNotifier;
   readonly consumerMetrics: ConsumerMetrics;
-  /** Allows only Record Pickup from the delivery event stream. */
-  readonly pickupWitnessAccess: PickupWitnessAccess;
-  readonly recordPickup: RecordPickupHandler;
-  readonly deliveryPickedUp: EventHandler;
-  readonly deliveryEventsProcessor: MessageProcessor;
   readonly waitTimePolicy: WaitTimePolicy;
   /** Records the context's own Restaurant Order facts (FR-644). */
   readonly recordWaitTime: RecordWaitTimeHandler;
   readonly waitTimeProcessor: MessageProcessor;
   /**
-   * Consumer group of `delivery.v1.delivery-events` and
-   * `restaurants.v1.restaurant-order-events` and the cache refresh group of
+   * Consumer group of `restaurants.v1.restaurant-order-events` and the cache
+   * refresh group of
    * `restaurants.v1.restaurant-events` and `restaurants.v1.menu-events`, run
    * by the Lifecycle.
    */
@@ -192,78 +172,11 @@ export const createConsumerContainer = (
       ({ databaseClient, domainMetrics }: ConsumerCradle) =>
         new ObservedDatabaseUnitOfWork(databaseClient, domainMetrics),
     ).singleton(),
-    // ADR 36: every Restaurant Order the consumer writes changes the kitchen
-    // board, so its Change Notification goes to the same Outbox transaction.
-    kitchenChanges: asFunction(({ db, unitOfWork, clock }: ConsumerCradle) =>
-      kitchenChangeNotifier(
-        unitOfWork,
-        new DatabaseOutbox(db, unitOfWork, { metadata: currentTraceMetadata }),
-        () => clock.now(),
-      ),
-    ).singleton(),
-    restaurantOrders: asFunction(
-      ({ db, unitOfWork, kitchenChanges, domainMetrics }: ConsumerCradle) =>
-        new ObservedRestaurantOrderRepository(
-          new DatabaseRestaurantOrderRepository(
-            createRestaurantOrderCollection(db, unitOfWork),
-            kitchenChanges,
-          ),
-          domainMetrics,
-        ),
-    ).singleton(),
     inbox: asFunction(
       ({ db, unitOfWork, clock }: ConsumerCradle) =>
         new DatabaseInbox(db, unitOfWork, () => clock.now()),
     ).singleton(),
     consumerMetrics: asFunction(() => new OtelConsumerMetrics()).singleton(),
-    pickupWitnessAccess: asFunction(
-      () => new DeliveryEventSourceAccessControl(),
-    ).singleton(),
-    recordPickup: asFunction(
-      ({ pickupWitnessAccess, unitOfWork, restaurantOrders }: ConsumerCradle) =>
-        new RecordPickupHandler({
-          accessControl: pickupWitnessAccess,
-          unitOfWork,
-          restaurantOrders,
-        }),
-    ).singleton(),
-    deliveryPickedUp: asFunction(({ recordPickup }: ConsumerCradle) =>
-      createDeliveryPickedUpHandler({ recordPickup }),
-    ).singleton(),
-    // Own Inbox name: the handler of the delivery stream is a consumer of its
-    // own (ADR 11), in the same consumer group.
-    deliveryEventsProcessor: asFunction(
-      ({
-        consumerConfig,
-        deliveryPickedUp,
-        inbox,
-        deadLetters,
-        schemas,
-        consumerMetrics,
-        logger,
-      }: ConsumerCradle) => {
-        const log = logger.child({
-          operation: "kafka.consume",
-          "messaging.consumer.group.name": consumerConfig.groupId,
-        });
-        return new MessageProcessor({
-          consumer: DELIVERY_PICKED_UP_CONSUMER,
-          group: consumerConfig.groupId,
-          handlers: [deliveryPickedUp],
-          inbox,
-          deadLetters,
-          schemas,
-          retry: {
-            maxRetries: consumerConfig.maxRetries,
-            initialIntervalMs: consumerConfig.retryInitialIntervalMs,
-            maxIntervalMs: consumerConfig.retryMaxIntervalMs,
-          },
-          metrics: consumerMetrics,
-          log: log.info,
-          warn: log.warn,
-        });
-      },
-    ).singleton(),
     waitTimePolicy: asFunction(
       () =>
         new WaitTimePolicy({
@@ -374,7 +287,6 @@ export const createConsumerContainer = (
     worker: asFunction(
       ({
         kafkaConsumer,
-        deliveryEventsProcessor,
         waitTimeProcessor,
         consumerConfig,
         cacheRefreshConsumer,
@@ -384,9 +296,8 @@ export const createConsumerContainer = (
         new ParallelWorkers([
           new KafkaConsumerWorker({
             client: kafkaConsumer,
-            topics: [DELIVERY_EVENTS_TOPIC, RESTAURANT_ORDER_EVENTS_TOPIC],
+            topics: [RESTAURANT_ORDER_EVENTS_TOPIC],
             handler: new TopicRouter({
-              [DELIVERY_EVENTS_TOPIC]: deliveryEventsProcessor,
               [RESTAURANT_ORDER_EVENTS_TOPIC]: waitTimeProcessor,
             }),
             groupId: consumerConfig.groupId,

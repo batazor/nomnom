@@ -2,41 +2,38 @@ import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
-import { MarketId } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   AlreadyInStateError,
-  MarketMismatchError,
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
-import type { PickupWitnessAccess } from "../access-control.ts";
+import type { FulfillmentProcessAccess } from "../access-control/access-control.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
-} from "../restaurant-order-view.ts";
+} from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type RecordPickup = Readonly<{
-  /** `service` identity of the `delivery` event stream. */
+  /** `service` identity of the `orders` fulfillment process. */
   subject: Subject;
   /** Contract `Order ID` of `orders`; one Restaurant Order per Order. */
   orderId: string;
-  /** Market of the Delivery (`DeliveryPickedUp.market_id`), when named. */
-  marketId?: string;
   pickedUpAt: Date;
 }>;
 
 /**
- * The courier took the order (Pickup of `delivery`): a `READY` Restaurant
- * Order goes to `PICKED_UP` and leaves the kitchen board. A repeat for a
- * `PICKED_UP` order changes nothing. The fact stays local: no Integration
- * Event. The save carries the kitchen Change Notification (ADR 36).
+ * The courier took the order, as the workflow of `orders` reports: the kitchen
+ * knows nothing about delivery. A `READY` Restaurant Order goes to `PICKED_UP`
+ * and leaves the kitchen board. A repeat for a `PICKED_UP` order changes
+ * nothing. The fact stays local: no Integration Event. The save carries the
+ * kitchen Change Notification (ADR 36).
  */
 export class RecordPickupHandler {
-  readonly #accessControl: PickupWitnessAccess;
+  readonly #accessControl: FulfillmentProcessAccess;
   readonly #unitOfWork: UnitOfWork;
   readonly #restaurantOrders: RestaurantOrderRepository;
 
   constructor(dependencies: {
-    accessControl: PickupWitnessAccess;
+    accessControl: FulfillmentProcessAccess;
     unitOfWork: UnitOfWork;
     restaurantOrders: RestaurantOrderRepository;
   }) {
@@ -47,25 +44,13 @@ export class RecordPickupHandler {
 
   async execute(command: RecordPickup): Promise<RestaurantOrderView> {
     await requirePermission(
-      this.#accessControl.canRecordPickup(command.subject),
+      this.#accessControl.canCoordinateFulfillment(command.subject),
       "record pickup",
     );
     return this.#unitOfWork.run(async () => {
       const order = await this.#restaurantOrders.findByOrderId(command.orderId);
       if (order === undefined) {
         throw new NotFoundError("RestaurantOrder", command.orderId);
-      }
-      // A Delivery is in the Market of its order (ADR 41); another Market
-      // names a different order, and neither is picked silently.
-      if (
-        command.marketId !== undefined &&
-        !MarketId.of(command.marketId).equals(order.marketId)
-      ) {
-        throw new MarketMismatchError({
-          orderId: command.orderId,
-          expectedMarketId: order.marketId.value,
-          requestedMarketId: command.marketId,
-        });
       }
       try {
         order.recordPickup({ pickedUpAt: command.pickedUpAt });

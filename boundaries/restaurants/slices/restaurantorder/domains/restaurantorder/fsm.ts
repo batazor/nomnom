@@ -207,8 +207,8 @@ export const TRANSITIONS: readonly TransitionRow[] = [
   { source: S.Queued, trigger: T.StartPreparation, target: S.Preparing },
   { source: S.Preparing, trigger: T.MarkAssembled, target: S.Assembled },
   { source: S.Assembled, trigger: T.MarkReady, target: S.Ready },
-  // The courier took the order (DeliveryPickedUp of delivery): it leaves the
-  // kitchen board.
+  // The courier took the order, reported by the workflow of orders: it leaves
+  // the kitchen board.
   { source: S.Ready, trigger: T.RecordPickup, target: S.PickedUp },
   { source: C.Open, trigger: T.Cancel, target: S.Cancelled },
   {

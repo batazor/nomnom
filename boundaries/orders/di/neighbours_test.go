@@ -29,6 +29,10 @@ func (approvingNeighbours) RequestOrder(_ context.Context, request ports.Restaur
 	return "restaurant-" + request.OrderID, nil
 }
 
+func (approvingNeighbours) RecordPickup(context.Context, ports.RestaurantPickupRequest) error {
+	return nil
+}
+
 func (approvingNeighbours) QueueOrder(context.Context, ports.QueueRequest) error { return nil }
 
 func (approvingNeighbours) ConfirmSlot(context.Context, ports.SlotRequest) (ports.SlotDecision, error) {

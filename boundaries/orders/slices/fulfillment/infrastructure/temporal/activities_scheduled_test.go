@@ -110,3 +110,18 @@ func TestPlanScheduleActivityReturnsThePlan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, windowPlan(), plan)
 }
+
+// The kitchen gets the Pickup with its own moment; a step without it is a bug.
+func TestRecordRestaurantPickupActivity(t *testing.T) {
+	a, restaurants, _, _ := scheduledActivities(t)
+	pickedUpAt := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	restaurants.EXPECT().RecordPickup(mock.Anything, ports.RestaurantPickupRequest{OrderID: orderID, PickedUpAt: pickedUpAt}).
+		Return(nil).Once()
+
+	require.NoError(t, a.RecordRestaurantPickup(context.Background(), temporal.StepInput{
+		OrderID: orderID, IdempotencyKey: "order:order-1:record_restaurant_pickup", DecidedAt: pickedUpAt,
+	}))
+
+	err := a.RecordRestaurantPickup(context.Background(), temporal.StepInput{OrderID: orderID, IdempotencyKey: "order:order-1:record_restaurant_pickup"})
+	require.Error(t, err)
+}

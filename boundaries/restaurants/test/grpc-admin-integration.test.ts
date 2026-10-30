@@ -213,6 +213,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
       setOpeningHours: unused,
       setScheduledOrderSettings: unused,
       queueRestaurantOrder: unused,
+      recordPickup: unused,
       listScheduledSlots: unused,
       reserveScheduledSlot: unused,
       confirmScheduledSlot: unused,

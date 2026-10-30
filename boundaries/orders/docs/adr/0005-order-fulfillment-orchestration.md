@@ -109,6 +109,14 @@ AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → P
 - `RequestRestaurantOrder` запланированного заказа возвращает `restaurant_order_id`; workflow передаёт его в `QueueRestaurantOrder` (idempotency key `order_id + queue`). ASAP-маршрут результат этой Activity не читает.
 - Отмену запланированного заказа покупатель видит до `window_start − CANCELLATION__SCHEDULED_CUTOFF` (cancellation policy по данным `Order`); Update `CancellationRequested` в stage `scheduled` ведёт к `CancelRestaurantOrder`, `ReleaseSlotReservation`, `CancelPaymentAuthorization`.
 
+### Соседи не знают друг о друге
+
+Процессом рулит только workflow: кухня не знает про оплату и доставку, доставка — про кухню и оплату. Соседи публикуют факты о своём, workflow решает следующий шаг и отдаёт команду. Хореография, где сервисы реагируют на события друг друга, рассмотрена и отклонена: знание о порядке шагов разошлось бы по сервисам, таймауты и компенсации потеряли бы единого владельца, а процесс нигде не был бы виден целиком. Цена — `orders` знает всех соседей, зато они не связаны между собой.
+
+Курьера workflow вызывает при принятии заказа рестораном, а не при готовности: поиск идёт параллельно с готовкой, и еда не лежит, пока ищут курьера. У Scheduled Order момент задаёт `CourierRequestAt`.
+
+Факт забора кухня получает командой: получив `DeliveryPickedUp` и `RestaurantOrderReady`, workflow выполняет шаг `RecordRestaurantPickup` (RPC `RecordRestaurantOrderPickup`, patch `restaurant-pickup`). Шаг ждёт готовности кухни, а оплата не ждёт кухню. Заказ, который кухня уже не держит как готовый, не останавливает процесс.
+
 ### Saga
 
 Компенсации — orchestration-based Saga. Workflow ведёт журнал подтверждённых шагов и вызывает только применимые compensation Activities (`CancelDelivery`, `CancelRestaurantOrder`, `ReleaseSlotReservation`, `CancelPaymentAuthorization`, `RefundPayment`), каждая со стабильным idempotency key, timeout, retry policy и telemetry. Резервация окна запланированного заказа существует с Place Order, поэтому журнал содержит её с начала: при отказе оплаты, отмене или неудаче до Pickup workflow вызывает `ReleaseSlotReservation` (ключ `order_id + release_slot`); после Pickup окно отработало и не освобождается, неподтверждённая резервация (`slot_unavailable`) — тоже.

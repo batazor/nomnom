@@ -39,6 +39,7 @@ var activityNames = []string{
 	fulfillmenttemporal.ActivityConfirmSlotReservation,
 	fulfillmenttemporal.ActivityPlanSchedule,
 	fulfillmenttemporal.ActivityQueueRestaurantOrder,
+	fulfillmenttemporal.ActivityRecordRestaurantPickup,
 	fulfillmenttemporal.ActivityReleaseSlotReservation,
 }
 

@@ -40,6 +40,8 @@ Update `CancellationRequested` принимается до Pickup; позже и
 
 ## Запланированный заказ
 
+Шаг `RecordRestaurantPickup` идёт под patch `restaurant-pickup`: история без этой метки воспроизводится без шага.
+
 Вход с `DeliveryWindow` (из `OrderPlaced`) под patch `scheduled-route` (`workflow.GetVersion` только для такого входа) создаёт `fulfillment.NewScheduled`: `ConfirmSlotReservation` и `PlanSchedule` перед `RequestRestaurantOrder`, stage `scheduled` после Acceptance, моменты плана (`replan_at`, `start_at`, `courier_request_at`) — таймеры главного цикла через `NextDeadline`/`Expire`, шаги `PlanSchedule` (replan, тот же `planned_ready_at`), `QueueRestaurantOrder` (`restaurant_order_id` из результата `RequestRestaurantOrder`), `CreateDelivery`. Компенсация резервации — `ReleaseSlotReservation`; `slot_unavailable` при подтверждении завершает `Order` кодом `slot_unavailable`. Решение — [ADR 5](../../../../docs/adr/0005-order-fulfillment-orchestration.md#запланированный-заказ).
 
 ## Activities

@@ -64,6 +64,12 @@ type Process struct {
 	deliveryCreated     bool
 	deliveryClosed      bool
 
+	// reportsPickup: the route tells the kitchen about the Pickup. A run recorded
+	// before this step keeps its route.
+	reportsPickup            bool
+	restaurantPickupRecorded bool
+	pickedUpAt               time.Time
+
 	accepted bool
 	ready    bool
 	assigned bool
@@ -100,6 +106,12 @@ func NewScheduled(policy Policy) *Process {
 	p.schedule = &schedule{}
 	return p
 }
+
+// ReportPickupToRestaurant adds the step that tells the kitchen about the Pickup.
+func (p *Process) ReportPickupToRestaurant() { p.reportsPickup = true }
+
+// PickedUpAt is the moment of the Pickup; zero before it.
+func (p *Process) PickedUpAt() time.Time { return p.pickedUpAt }
 
 // Failed reports that a negative outcome is chosen and the Saga must run.
 func (p *Process) Failed() bool { return p.failure != nil && p.final == "" }

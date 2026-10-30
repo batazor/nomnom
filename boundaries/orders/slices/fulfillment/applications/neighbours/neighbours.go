@@ -96,6 +96,12 @@ type QueueRequest struct {
 	IdempotencyKey    string
 }
 
+// RestaurantPickupRequest reports that the courier took the Order.
+type RestaurantPickupRequest struct {
+	OrderID    string
+	PickedUpAt time.Time
+}
+
 // Restaurants is the client port of restaurants. Acceptance arrives later as
 // RestaurantOrderAccepted or RestaurantOrderRejected.
 type Restaurants interface {
@@ -103,6 +109,9 @@ type Restaurants interface {
 	RequestOrder(ctx context.Context, request RestaurantOrderRequest) (string, error)
 	CancelOrder(ctx context.Context, request RestaurantOrderRequest) error
 	QueueOrder(ctx context.Context, request QueueRequest) error
+	// RecordPickup succeeds for an order the kitchen no longer holds as ready:
+	// a cancelled or an unknown one has nothing to take off the board.
+	RecordPickup(ctx context.Context, request RestaurantPickupRequest) error
 	ConfirmSlot(ctx context.Context, request SlotRequest) (SlotDecision, error)
 	// ReleaseSlot succeeds for a missing reservation.
 	ReleaseSlot(ctx context.Context, request SlotRequest) error

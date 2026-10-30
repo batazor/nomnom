@@ -180,6 +180,7 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
       setOpeningHours: unused,
       setScheduledOrderSettings: unused,
       queueRestaurantOrder: unused,
+      recordPickup: unused,
       listScheduledSlots: unused,
       reserveScheduledSlot: unused,
       confirmScheduledSlot: unused,

@@ -27,13 +27,13 @@ import type {
   FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
-} from "../applications/access-control.ts";
+} from "../applications/access-control/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import {
   GetKitchenQueueHandler,
   type KitchenQueueOrdering,
 } from "../applications/get-kitchen-queue/get-kitchen-queue.ts";
-import type { KitchenCommandDependencies } from "../applications/kitchen-command.ts";
+import type { KitchenCommandDependencies } from "../applications/kitchen-command/kitchen-command.ts";
 import { ListActiveRestaurantOrdersHandler } from "../applications/list-active-restaurant-orders/list-active-restaurant-orders.ts";
 import { ListIncomingOrdersHandler } from "../applications/list-incoming-orders/list-incoming-orders.ts";
 import { ListScheduledOrdersHandler } from "../applications/list-scheduled-orders/list-scheduled-orders.ts";
@@ -41,6 +41,7 @@ import { MarkAssembledHandler } from "../applications/mark-assembled/mark-assemb
 import { MarkReadyForPickupHandler } from "../applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import { QueueRestaurantOrderHandler } from "../applications/queue-restaurant-order/queue-restaurant-order.ts";
 import { ReceiveOrderRequestHandler } from "../applications/receive-order-request/receive-order-request.ts";
+import { RecordPickupHandler } from "../applications/record-pickup/record-pickup.ts";
 import { RejectOrderHandler } from "../applications/reject-order/reject-order.ts";
 import { ReportPreparationDelayHandler } from "../applications/report-preparation-delay/report-preparation-delay.ts";
 import { ReportPreparationFailureHandler } from "../applications/report-preparation-failure/report-preparation-failure.ts";
@@ -123,6 +124,7 @@ export interface RestaurantOrderCradle {
   readonly cancelRestaurantOrder: CancelRestaurantOrderHandler;
   /** Queue Restaurant Order of `orders` at the planned start (FR-224). */
   readonly queueRestaurantOrder: QueueRestaurantOrderHandler;
+  readonly recordPickup: RecordPickupHandler;
   readonly acceptRestaurantOrder: AcceptOrderHandler;
   readonly rejectRestaurantOrder: RejectOrderHandler;
   readonly startPreparation: StartPreparationHandler;
@@ -228,6 +230,16 @@ export const registerRestaurantOrder = (
           accessControl: cradle.kitchenAccessControl,
           restaurantOrders: cradle.restaurantOrders,
           clock: cradle.clock,
+        }),
+        cradle.domainMetrics,
+      ),
+    ).singleton(),
+    recordPickup: asFunction((cradle: Cradle) =>
+      observeTransitionRejections(
+        new RecordPickupHandler({
+          accessControl: cradle.kitchenAccessControl,
+          unitOfWork: cradle.unitOfWork,
+          restaurantOrders: cradle.restaurantOrders,
         }),
         cradle.domainMetrics,
       ),

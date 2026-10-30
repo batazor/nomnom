@@ -37,6 +37,10 @@ service RestaurantsService {
   // start (FR-224); service identity of orders only. A repeat for a QUEUED
   // order succeeds without changes.
   rpc QueueRestaurantOrder(QueueRestaurantOrderRequest) returns (QueueRestaurantOrderResponse);
+  // Records that the courier took a READY order, which leaves the kitchen board;
+  // service identity of orders only. A repeat for a PICKED_UP order succeeds
+  // without changes.
+  rpc RecordRestaurantOrderPickup(RecordRestaurantOrderPickupRequest) returns (RecordRestaurantOrderPickupResponse);
 
   // Delivery windows of scheduled orders (FR-673..FR-675, FR-695, FR-703).
   // ListScheduledSlots is public, like GetRestaurant. Reserve, Confirm and
@@ -252,6 +256,15 @@ message QueueRestaurantOrderRequest {
 }
 
 message QueueRestaurantOrderResponse {
+  RestaurantOrder restaurant_order = 1;
+}
+
+message RecordRestaurantOrderPickupRequest {
+  string order_id = 1;
+  google.protobuf.Timestamp picked_up_at = 2;
+}
+
+message RecordRestaurantOrderPickupResponse {
   RestaurantOrder restaurant_order = 1;
 }
 

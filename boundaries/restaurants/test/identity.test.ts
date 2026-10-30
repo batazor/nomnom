@@ -383,6 +383,9 @@ test("a gRPC call with a valid token reaches the handler as the service subject"
     queueRestaurantOrder: {
       execute: () => Promise.reject(new Error("unused")),
     },
+    recordPickup: {
+      execute: () => Promise.reject(new Error("unused")),
+    },
     listScheduledSlots: { execute: () => Promise.reject(new Error("unused")) },
     reserveScheduledSlot: {
       execute: () => Promise.reject(new Error("unused")),

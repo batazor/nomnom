@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { after, before, describe, test } from "node:test";
 
 import {
@@ -20,10 +19,12 @@ const KAFKA_IMAGE = "apache/kafka:4.3.1";
 const SCHEMA_REGISTRY_IMAGE =
   "docker.io/confluentinc/cp-schema-registry:8.4.0@sha256:12cd2770fa25df65243dabafd5eef5337ea1145a3cb85afc8a27f7151dfa2999";
 
-const DELIVERY_EVENTS = new URL(
-  "../../delivery/infrastructure/grpc/nomnom/delivery/v1/events.proto",
-  import.meta.url,
-);
+/** One schema file with two events: a schema id names both of its subjects. */
+const EVENTS_SCHEMA = `syntax = "proto3";
+package nomnom.test.v1;
+message FirstHappened { string id = 1; }
+message SecondHappened { string id = 1; }
+`;
 
 describe("HttpSchemaRegistry against Confluent Schema Registry", () => {
   let network: StartedNetwork;
@@ -66,17 +67,19 @@ describe("HttpSchemaRegistry against Confluent Schema Registry", () => {
       .withStartupTimeout(180_000)
       .start();
     url = new URL(`http://127.0.0.1:${registryContainer.getMappedPort(8081)}/`);
-    const schema = await readFile(DELIVERY_EVENTS, "utf8");
     for (const subject of [
-      "nomnom.delivery.v1.DeliveryPickedUp",
-      "nomnom.delivery.v1.DeliveryCompleted",
+      "nomnom.test.v1.FirstHappened",
+      "nomnom.test.v1.SecondHappened",
     ]) {
       const response = await fetch(
         new URL(`subjects/${subject}/versions`, url),
         {
           method: "POST",
           headers: { "Content-Type": "application/vnd.schemaregistry.v1+json" },
-          body: JSON.stringify({ schemaType: "PROTOBUF", schema }),
+          body: JSON.stringify({
+            schemaType: "PROTOBUF",
+            schema: EVENTS_SCHEMA,
+          }),
         },
       );
       assert.equal(response.status, 200, await response.clone().text());
@@ -94,8 +97,8 @@ describe("HttpSchemaRegistry against Confluent Schema Registry", () => {
     const registry = new HttpSchemaRegistry({ url, timeoutMs: 5_000 });
 
     assert.deepEqual([...(await registry.subjects(schemaId))].sort(), [
-      "nomnom.delivery.v1.DeliveryCompleted",
-      "nomnom.delivery.v1.DeliveryPickedUp",
+      "nomnom.test.v1.FirstHappened",
+      "nomnom.test.v1.SecondHappened",
     ]);
   });
 

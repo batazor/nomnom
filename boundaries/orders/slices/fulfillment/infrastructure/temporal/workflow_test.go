@@ -64,6 +64,7 @@ func newHarness(t *testing.T) *harness {
 		temporal.ActivityRefundPayment,
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityCancelRestaurantOrder,
+		temporal.ActivityRecordRestaurantPickup,
 		temporal.ActivityCreateDelivery,
 		temporal.ActivityCancelDelivery,
 		temporal.ActivityCompleteOrder,
@@ -157,6 +158,7 @@ func TestWorkflowCompletesOrder(t *testing.T) {
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
+		temporal.ActivityRecordRestaurantPickup,
 		temporal.ActivityCapturePayment,
 		temporal.ActivityCompleteOrder,
 	}, h.calls)
@@ -165,13 +167,16 @@ func TestWorkflowCompletesOrder(t *testing.T) {
 		{OrderID: orderID, IdempotencyKey: "order:order-1:record_payment_authorization", DecidedAt: h.steps[1].DecidedAt},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:request_restaurant_order"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:create_delivery"},
+		{OrderID: orderID, IdempotencyKey: "order:order-1:record_restaurant_pickup", DecidedAt: h.steps[4].DecidedAt},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:capture_payment"},
 		{OrderID: orderID, IdempotencyKey: "order:order-1:complete_order", DecidedAt: h.steps[len(h.steps)-1].DecidedAt},
 	}, h.steps)
-	// The payment and completion moments are the workflow time of their steps.
+	// The payment and completion moments are the workflow time of their steps,
+	// the kitchen gets the moment of the Pickup.
 	assert.False(t, h.steps[1].DecidedAt.IsZero())
+	assert.False(t, h.steps[4].DecidedAt.IsZero())
 	assert.False(t, h.steps[len(h.steps)-1].DecidedAt.IsZero())
-	for _, step := range append([]temporal.StepInput{h.steps[0]}, h.steps[2:len(h.steps)-1]...) {
+	for _, step := range []temporal.StepInput{h.steps[0], h.steps[2], h.steps[3], h.steps[5]} {
 		assert.True(t, step.DecidedAt.IsZero(), step.IdempotencyKey)
 	}
 }
@@ -250,6 +255,7 @@ func TestWorkflowWaitsForCourierWithoutDeadline(t *testing.T) {
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
+		temporal.ActivityRecordRestaurantPickup,
 		temporal.ActivityCapturePayment,
 		temporal.ActivityCompleteOrder,
 	}, h.calls)
@@ -272,6 +278,7 @@ func TestWorkflowRefundsAfterCapture(t *testing.T) {
 		temporal.ActivityRecordPaymentAuthorization,
 		temporal.ActivityRequestRestaurantOrder,
 		temporal.ActivityCreateDelivery,
+		temporal.ActivityRecordRestaurantPickup,
 		temporal.ActivityCapturePayment,
 		temporal.ActivityRefundPayment,
 		temporal.ActivityFailOrCancelOrder,
@@ -296,6 +303,7 @@ func TestWorkflowSchedulesActivitiesWithTheirPriority(t *testing.T) {
 		temporal.ActivityRecordPaymentAuthorization: temporal.PriorityFulfillment,
 		temporal.ActivityRequestRestaurantOrder:     temporal.PriorityFulfillment,
 		temporal.ActivityCreateDelivery:             temporal.PriorityFulfillment,
+		temporal.ActivityRecordRestaurantPickup:     temporal.PriorityFulfillment,
 		temporal.ActivityCapturePayment:             temporal.PriorityFulfillment,
 		temporal.ActivityFailOrCancelOrder:          temporal.PriorityFulfillment,
 	}, h.priorities)
@@ -367,4 +375,49 @@ func TestWorkflowRejectsEmptyOrderID(t *testing.T) {
 	var application *sdktemporal.ApplicationError
 	require.True(t, errors.As(h.env.GetWorkflowError(), &application))
 	assert.Equal(t, temporal.ErrTypeInvalidInput, application.Type())
+}
+
+// A run recorded before the Pickup step replays without it.
+func TestWorkflowWithoutRestaurantPickupVersionSkipsTheStep(t *testing.T) {
+	h := newHarness(t)
+	h.env.OnGetVersion(temporal.RestaurantPickupChangeID, workflow.DefaultVersion, temporal.RestaurantPickupVersion).
+		Return(workflow.DefaultVersion)
+	h.deliverAll()
+
+	result := h.run(policy())
+
+	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCompleted}, result)
+	assert.NotContains(t, h.calls, temporal.ActivityRecordRestaurantPickup)
+}
+
+// The Pickup reaches the kitchen with its own moment, once the kitchen reported
+// the order ready: an earlier one waits.
+func TestWorkflowReportsPickupToTheKitchenAfterReady(t *testing.T) {
+	h := newHarness(t)
+	h.signalAt(time.Minute, temporal.SignalRestaurantOrderAccepted, "accepted")
+	h.signalAt(2*time.Minute, temporal.SignalCourierAssignedToDelivery, "assigned")
+	h.signalAt(3*time.Minute, temporal.SignalDeliveryPickedUp, "picked-up")
+	h.signalAt(4*time.Minute, temporal.SignalRestaurantOrderReady, "ready")
+	h.signalAt(5*time.Minute, temporal.SignalDeliveryCompleted, "delivered")
+
+	result := h.run(policy())
+
+	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCompleted}, result)
+	var capture, pickup int
+	for i, call := range h.calls {
+		switch call {
+		case temporal.ActivityCapturePayment:
+			capture = i
+		case temporal.ActivityRecordRestaurantPickup:
+			pickup = i
+		}
+	}
+	assert.Less(t, capture, pickup, "the money does not wait for the kitchen")
+	var reported temporal.StepInput
+	for _, step := range h.steps {
+		if step.IdempotencyKey == temporal.WorkflowID(orderID)+":record_restaurant_pickup" {
+			reported = step
+		}
+	}
+	assert.False(t, reported.DecidedAt.IsZero(), "the kitchen gets the moment of the Pickup")
 }

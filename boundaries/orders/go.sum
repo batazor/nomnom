@@ -10,8 +10,12 @@ buf.build/gen/go/nomnom/payments/protocolbuffers/go v1.36.12-20261030084627-9fc7
 buf.build/gen/go/nomnom/payments/protocolbuffers/go v1.36.12-20261030084627-9fc7e7fde41f.2/go.mod h1:atY5jtayquANLyQo+hJEg3507wn5WBzv35dbD8DKycA=
 buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030084627-27ccc405ec08.1 h1:A9E0lA9HdXKL1jhm1qxvoma60HF/wo2QbwVEoMkIV4Q=
 buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030084627-27ccc405ec08.1/go.mod h1:x4C0pqyr8YsjmuOMcRH0R+WigfhXG2sOiiAv1S+DHKU=
+buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030090148-fbaafd0e9cfa.1 h1:NQ35rD3dp5xb5nJcuMU+er/Jo6KPOn+ix97SrPRCNJQ=
+buf.build/gen/go/nomnom/restaurants/grpc/go v1.6.2-20261030090148-fbaafd0e9cfa.1/go.mod h1:jjfikZwxZ/ZfytAnXQMC75UGXj2t6cC70bJrV1b6c+o=
 buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030084627-27ccc405ec08.2 h1:W4hPMl17wTJBlL92DN7wXmZM3yqdFgKLUkgX0EfhmFM=
 buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030084627-27ccc405ec08.2/go.mod h1:VatDf2QB6c7S3FzIfj3j1jhvpia0fXp+Pd4qf2tCWoc=
+buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030090148-fbaafd0e9cfa.2 h1:oimeDRtdbhxcDAFMPVU0rpefmm7JCi0Di1F1Kb7IVXQ=
+buf.build/gen/go/nomnom/restaurants/protocolbuffers/go v1.36.12-20261030090148-fbaafd0e9cfa.2/go.mod h1:VatDf2QB6c7S3FzIfj3j1jhvpia0fXp+Pd4qf2tCWoc=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.123.0 h1:2NAUJwPR47q+E35uaJeYoNhuNEM9kM8SjgRgdeOJUSE=
 cloud.google.com/go/compute/metadata v0.9.0 h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdBtwLoEkH9Zs=

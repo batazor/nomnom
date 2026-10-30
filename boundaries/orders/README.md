@@ -319,7 +319,7 @@ Place Order Temporal не вызывает. Дубликат Inbox тоже вы
 ```text
 Order placed → Authorize payment → Record payment in Order → Request Acceptance
 → wait (accepted | rejected | timer) → Create Delivery / wait Assignment
-→ wait Preparation → wait Pickup → Capture payment
+→ wait Preparation → wait Pickup → Record Pickup in kitchen → Capture payment
 → wait Delivery Completion → Complete Order
 ```
 

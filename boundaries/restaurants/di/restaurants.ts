@@ -51,12 +51,12 @@ import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
 import type { Clock } from "../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../pkg/usecase/id-generator.ts";
-import type { CookPoolAccess } from "../slices/cook/applications/access-control.ts";
+import type { CookPoolAccess } from "../slices/cook/applications/access-control/access-control.ts";
 import {
   type CookCradle,
   registerCook,
 } from "../slices/cook/di/registrations.ts";
-import type { MenuAccessControl } from "../slices/menu/applications/access-control.ts";
+import type { MenuAccessControl } from "../slices/menu/applications/access-control/access-control.ts";
 import {
   type MenuCradle,
   registerMenu,
@@ -66,7 +66,7 @@ import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
   StaffRelationshipWriter,
-} from "../slices/restaurant/applications/access-control.ts";
+} from "../slices/restaurant/applications/access-control/access-control.ts";
 import {
   type RestaurantCradle,
   registerRestaurant,
@@ -87,12 +87,12 @@ import {
   ObservedOutbox,
   RestaurantOrderDomainMetrics,
 } from "../slices/restaurantorder/infrastructure/observability/domain-metrics.ts";
-import type { SlotReservationAccess } from "../slices/scheduleslot/applications/access-control.ts";
+import type { SlotReservationAccess } from "../slices/scheduleslot/applications/access-control/access-control.ts";
 import {
   registerScheduleSlot,
   type ScheduleSlotCradle,
 } from "../slices/scheduleslot/di/registrations.ts";
-import type { SimulatorAccess } from "../slices/simulator/applications/access-control.ts";
+import type { SimulatorAccess } from "../slices/simulator/applications/access-control/access-control.ts";
 import {
   registerSimulator,
   type SimulatorCradle,
@@ -314,6 +314,7 @@ const processRegistrations = (
       receiveOrderRequest: cradle.receiveOrderRequest,
       cancelRestaurantOrder: cradle.cancelRestaurantOrder,
       queueRestaurantOrder: cradle.queueRestaurantOrder,
+      recordPickup: cradle.recordPickup,
       listScheduledSlots: cradle.listScheduledSlots,
       reserveScheduledSlot: cradle.reserveScheduledSlot,
       confirmScheduledSlot: cradle.confirmScheduledSlot,

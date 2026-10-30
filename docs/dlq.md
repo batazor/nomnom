@@ -23,12 +23,12 @@ Consumer отправляет в `<stream>.dlq` то, что повтором н
 | Контекст | Pod | Команда | Стримы |
 | --- | --- | --- | --- |
 | `orders` | `-n nomnom-orders deploy/orders-consumer` | `/orders-admin` | `restaurants.v1.restaurant-order-events`, `delivery.v1.delivery-events`, `orders.v1.order-relationships`, `orders.v1.order-events` |
-| `restaurants` | `-n nomnom-restaurants deploy/restaurants-consumer` | `node dist/cmd/restaurants-admin/main.js` (в dev-образе `make kind-dev` — `node cmd/restaurants-admin/main.ts`) | `delivery.v1.delivery-events` |
+| `restaurants` | `-n nomnom-restaurants deploy/restaurants-consumer` | `node dist/cmd/restaurants-admin/main.js` (в dev-образе `make kind-dev` — `node cmd/restaurants-admin/main.ts`) | `restaurants.v1.restaurant-order-events` |
 
 Примеры ниже — для `orders`; для `restaurants` подставляются pod, команда и стрим из таблицы:
 
 ```bash
-kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/restaurants-admin/main.js dlq list --stream delivery.v1.delivery-events
+kubectl -n nomnom-restaurants exec deploy/restaurants-consumer -- node dist/cmd/restaurants-admin/main.js dlq list --stream restaurants.v1.restaurant-order-events
 ```
 
 1. Посмотреть неразобранные записи группы:

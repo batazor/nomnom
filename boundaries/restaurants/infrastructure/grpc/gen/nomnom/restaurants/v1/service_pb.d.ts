@@ -411,6 +411,43 @@ export declare type QueueRestaurantOrderResponse = Message<"nomnom.restaurants.v
 export declare const QueueRestaurantOrderResponseSchema: GenMessage<QueueRestaurantOrderResponse>;
 
 /**
+ * @generated from message nomnom.restaurants.v1.RecordRestaurantOrderPickupRequest
+ */
+export declare type RecordRestaurantOrderPickupRequest = Message<"nomnom.restaurants.v1.RecordRestaurantOrderPickupRequest"> & {
+  /**
+   * @generated from field: string order_id = 1;
+   */
+  orderId: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp picked_up_at = 2;
+   */
+  pickedUpAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RecordRestaurantOrderPickupRequest.
+ * Use `create(RecordRestaurantOrderPickupRequestSchema)` to create a new message.
+ */
+export declare const RecordRestaurantOrderPickupRequestSchema: GenMessage<RecordRestaurantOrderPickupRequest>;
+
+/**
+ * @generated from message nomnom.restaurants.v1.RecordRestaurantOrderPickupResponse
+ */
+export declare type RecordRestaurantOrderPickupResponse = Message<"nomnom.restaurants.v1.RecordRestaurantOrderPickupResponse"> & {
+  /**
+   * @generated from field: nomnom.restaurants.v1.RestaurantOrder restaurant_order = 1;
+   */
+  restaurantOrder?: RestaurantOrder | undefined;
+};
+
+/**
+ * Describes the message nomnom.restaurants.v1.RecordRestaurantOrderPickupResponse.
+ * Use `create(RecordRestaurantOrderPickupResponseSchema)` to create a new message.
+ */
+export declare const RecordRestaurantOrderPickupResponseSchema: GenMessage<RecordRestaurantOrderPickupResponse>;
+
+/**
  * @generated from message nomnom.restaurants.v1.ListScheduledSlotsRequest
  */
 export declare type ListScheduledSlotsRequest = Message<"nomnom.restaurants.v1.ListScheduledSlotsRequest"> & {
@@ -2542,6 +2579,18 @@ export declare const RestaurantsService: GenService<{
     methodKind: "unary";
     input: typeof QueueRestaurantOrderRequestSchema;
     output: typeof QueueRestaurantOrderResponseSchema;
+  },
+  /**
+   * Records that the courier took a READY order, which leaves the kitchen board;
+   * service identity of orders only. A repeat for a PICKED_UP order succeeds
+   * without changes.
+   *
+   * @generated from rpc nomnom.restaurants.v1.RestaurantsService.RecordRestaurantOrderPickup
+   */
+  recordRestaurantOrderPickup: {
+    methodKind: "unary";
+    input: typeof RecordRestaurantOrderPickupRequestSchema;
+    output: typeof RecordRestaurantOrderPickupResponseSchema;
   },
   /**
    * Delivery windows of scheduled orders (FR-673..FR-675, FR-695, FR-703).

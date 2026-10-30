@@ -147,3 +147,28 @@ func TestProcessStage(t *testing.T) {
 		})
 	}
 }
+
+// The kitchen learns about the Pickup from the route, only once it reported the
+// order ready; a run without the patch has no such step.
+func TestProcessReportsPickupToRestaurant(t *testing.T) {
+	s := newProcess(t)
+	s.p.ReportPickupToRestaurant()
+	s.run()
+	s.fact(fulfillment.FactRestaurantOrderAccepted)
+	s.run()
+	s.fact(fulfillment.FactCourierAssignedToDelivery)
+	s.fact(fulfillment.FactDeliveryPickedUp)
+	step, ok := s.p.Next()
+	require.True(t, ok)
+	assert.Equal(t, fulfillment.StepCapturePayment, step.Kind, "the money does not wait for the kitchen")
+	s.run()
+
+	s.fact(fulfillment.FactRestaurantOrderReady)
+	step, ok = s.p.Next()
+	require.True(t, ok)
+	assert.Equal(t, fulfillment.StepRecordRestaurantPickup, step.Kind)
+	s.run()
+	assert.False(t, s.p.PickedUpAt().IsZero())
+	_, ok = s.p.Next()
+	assert.False(t, ok, "the step runs once")
+}

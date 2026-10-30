@@ -509,6 +509,63 @@ func (_c *MockRestaurants_QueueOrder_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// RecordPickup provides a mock function for the type MockRestaurants
+func (_mock *MockRestaurants) RecordPickup(ctx context.Context, request neighbours.RestaurantPickupRequest) error {
+	ret := _mock.Called(ctx, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordPickup")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, neighbours.RestaurantPickupRequest) error); ok {
+		r0 = returnFunc(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRestaurants_RecordPickup_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordPickup'
+type MockRestaurants_RecordPickup_Call struct {
+	*mock.Call
+}
+
+// RecordPickup is a helper method to define mock.On call
+//   - ctx context.Context
+//   - request neighbours.RestaurantPickupRequest
+func (_e *MockRestaurants_Expecter) RecordPickup(ctx any, request any) *MockRestaurants_RecordPickup_Call {
+	return &MockRestaurants_RecordPickup_Call{Call: _e.mock.On("RecordPickup", ctx, request)}
+}
+
+func (_c *MockRestaurants_RecordPickup_Call) Run(run func(ctx context.Context, request neighbours.RestaurantPickupRequest)) *MockRestaurants_RecordPickup_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 neighbours.RestaurantPickupRequest
+		if args[1] != nil {
+			arg1 = args[1].(neighbours.RestaurantPickupRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurants_RecordPickup_Call) Return(err error) *MockRestaurants_RecordPickup_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRestaurants_RecordPickup_Call) RunAndReturn(run func(ctx context.Context, request neighbours.RestaurantPickupRequest) error) *MockRestaurants_RecordPickup_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ReleaseSlot provides a mock function for the type MockRestaurants
 func (_mock *MockRestaurants) ReleaseSlot(ctx context.Context, request neighbours.SlotRequest) error {
 	ret := _mock.Called(ctx, request)

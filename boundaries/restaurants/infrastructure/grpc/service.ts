@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
-import type { ServiceImpl } from "@connectrpc/connect";
+import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import type { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";
 import type { HireCookHandler } from "../../slices/cook/applications/hire-cook/hire-cook.ts";
 import type { PutCookOnLineHandler } from "../../slices/cook/applications/put-cook-on-line/put-cook-on-line.ts";
@@ -34,6 +34,7 @@ import type { MarkAssembledHandler } from "../../slices/restaurantorder/applicat
 import type { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";
 import type { QueueRestaurantOrderHandler } from "../../slices/restaurantorder/applications/queue-restaurant-order/queue-restaurant-order.ts";
 import type { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/receive-order-request/receive-order-request.ts";
+import type { RecordPickupHandler } from "../../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
 import type { RejectOrderHandler } from "../../slices/restaurantorder/applications/reject-order/reject-order.ts";
 import type { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/report-preparation-delay/report-preparation-delay.ts";
 import type { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/report-preparation-failure/report-preparation-failure.ts";
@@ -57,6 +58,7 @@ import {
   ListRestaurantsResponseSchema,
   QueueRestaurantOrderResponseSchema,
   ReceiveOrderRequestResponseSchema,
+  RecordRestaurantOrderPickupResponseSchema,
   RegisterRestaurantResponseSchema,
   type RestaurantsService,
   RevokeStaffResponseSchema,
@@ -96,6 +98,7 @@ export type RestaurantsServiceDependencies = Readonly<{
   receiveOrderRequest: Pick<ReceiveOrderRequestHandler, "execute">;
   cancelRestaurantOrder: Pick<CancelRestaurantOrderHandler, "execute">;
   queueRestaurantOrder: Pick<QueueRestaurantOrderHandler, "execute">;
+  recordPickup: Pick<RecordPickupHandler, "execute">;
   listScheduledSlots: Pick<ListScheduledSlotsHandler, "execute">;
   reserveScheduledSlot: Pick<ReserveScheduledSlotHandler, "execute">;
   confirmScheduledSlot: Pick<ConfirmScheduledSlotHandler, "execute">;
@@ -317,6 +320,35 @@ export const createRestaurantsService = (
           restaurantOrderId: request.restaurantOrderId,
         });
         return create(QueueRestaurantOrderResponseSchema, {
+          restaurantOrder: toRestaurantOrderMessage(view),
+        });
+      } catch (error) {
+        throw transportError(error);
+      }
+    },
+
+    // Record Pickup: the courier took the order, reported by the workflow of
+    // orders; `service` identity of orders only.
+    async recordRestaurantOrderPickup(request, context) {
+      try {
+        const subject = withRequestRevision(
+          await subjects.resolve(context),
+          context,
+        );
+        requireField("order_id", request.orderId);
+        const pickedUpAt = optionalDate(request.pickedUpAt);
+        if (pickedUpAt === undefined) {
+          throw new ConnectError(
+            "picked_up_at is required",
+            Code.InvalidArgument,
+          );
+        }
+        const view = await dependencies.recordPickup.execute({
+          subject,
+          orderId: request.orderId,
+          pickedUpAt,
+        });
+        return create(RecordRestaurantOrderPickupResponseSchema, {
           restaurantOrder: toRestaurantOrderMessage(view),
         });
       } catch (error) {

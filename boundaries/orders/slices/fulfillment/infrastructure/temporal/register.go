@@ -36,6 +36,7 @@ func Register(registry Registry, activities *Activities) {
 		ActivityConfirmSlotReservation:     activities.ConfirmSlotReservation,
 		ActivityPlanSchedule:               activities.PlanSchedule,
 		ActivityQueueRestaurantOrder:       activities.QueueRestaurantOrder,
+		ActivityRecordRestaurantPickup:     activities.RecordRestaurantPickup,
 		ActivityReleaseSlotReservation:     activities.ReleaseSlotReservation,
 	} {
 		if _, ok := activityPriority[name]; !ok {

@@ -36,6 +36,7 @@ export const RESTAURANTS_USE_CASES = {
   receiveOrderRequest: command("receive_order_request"),
   cancelRestaurantOrder: command("cancel_restaurant_order"),
   queueRestaurantOrder: command("queue_restaurant_order"),
+  recordPickup: command("record_pickup"),
   listScheduledSlots: query("list_scheduled_slots"),
   reserveScheduledSlot: command("reserve_scheduled_slot"),
   confirmScheduledSlot: command("confirm_scheduled_slot"),
@@ -59,7 +60,6 @@ export const RESTAURANTS_USE_CASES = {
 
 /** Use cases of `cmd/restaurants-consumer` by cradle key. */
 export const CONSUMER_USE_CASES = {
-  recordPickup: command("record_pickup"),
   recordWaitTime: command("record_wait_time"),
 } as const;
 

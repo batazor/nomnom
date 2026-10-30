@@ -63,6 +63,8 @@ const (
 	ActivityPlanSchedule           = "PlanSchedule"
 	ActivityQueueRestaurantOrder   = "QueueRestaurantOrder"
 	ActivityReleaseSlotReservation = "ReleaseSlotReservation"
+
+	ActivityRecordRestaurantPickup = "RecordRestaurantPickup"
 )
 
 // The scheduled route is introduced under a Temporal patch (FR-682): a run
@@ -72,6 +74,13 @@ const (
 const (
 	ScheduledRouteChangeID = "scheduled-route"
 	ScheduledRouteVersion  = workflow.Version(1)
+)
+
+// The kitchen learns about the Pickup from the workflow under a Temporal patch:
+// a run recorded before it replays without the step.
+const (
+	RestaurantPickupChangeID = "restaurant-pickup"
+	RestaurantPickupVersion  = workflow.Version(1)
 )
 
 // Application error types crossing the workflow boundary.

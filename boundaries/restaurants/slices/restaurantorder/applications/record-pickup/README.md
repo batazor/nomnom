@@ -3,7 +3,7 @@
 ## Сценарий
 
 - **Тип:** Command.
-- **Actor:** `delivery` — источник факта Pickup (Integration Event `nomnom.delivery.v1.DeliveryPickedUp`).
+- **Actor:** fulfillment workflow `orders` (`service` identity): кухня ничего не знает о доставке, факт Pickup приходит командой.
 - **Намерение:** Узнать, что курьер забрал готовый заказ, и снять его с kitchen board.
 - **Результат:** `READY` Restaurant Order переходит в `PICKED_UP`; повтор для `PICKED_UP` — no-op.
 
@@ -11,23 +11,21 @@
 
 - **Владелец:** `restaurants/slices/restaurantorder`.
 - **Домен:** `domains/restaurantorder` — `RestaurantOrder.recordPickup` (`READY × RecordPickup → PICKED_UP`, [FSM](../../../../../../docs/fsm.md)).
-- **Взаимодействие:** Вызывается только consumer `DeliveryPickedUp` (`cmd/restaurants-consumer`, Transactional Inbox `restaurants.delivery-picked-up`, `infrastructure/integration/delivery-picked-up.ts`); subject — `service:delivery`, порт `PickupWitnessAccess`. Факт `RestaurantOrderPickedUp` локальный: Integration Event не публикуется. Сохранение пишет Change Notification кухни (ADR 36), поэтому kitchen board обновляется подпиской. Заказ ищется по `order_id`; неизвестный — `not_found`, Pickup не из `READY` — `invalid_transition` (бизнес-исход consumer); `market_id` события, отличный от Market заказа, — `market_mismatch` (DLQ).
+- **Взаимодействие:** gRPC `RecordRestaurantOrderPickup` (`order_id`, `picked_up_at`) через internal gateway; только `service` identity `orders`, платформенная проверка до чтения заказа. Вызывает Activity `RecordRestaurantPickup`, когда workflow уже получил и готовность кухни, и `DeliveryPickedUp`. Заказ не в `READY` — `invalid_transition` (`FAILED_PRECONDITION`), неизвестный — `not_found`.
 
 ## Последовательность
 
 ```mermaid
 sequenceDiagram
-    participant Kafka as delivery.v1.delivery-events
-    participant Consumer as restaurants-consumer
+    participant Workflow as Workflow orders
     participant App as Record Pickup
     participant Order as Restaurant Order
     participant Store as Unit of Work
-    Kafka->>Consumer: DeliveryPickedUp
-    Consumer->>App: order_id, market_id, occurred_at
+    Workflow->>App: RecordRestaurantOrderPickup(order_id, picked_up_at)
     App->>Order: recordPickup (READY → PICKED_UP)
     App->>Store: save + Change Notification кухни
     Store-->>App: commit
-    App-->>Consumer: ack через Inbox
+    App-->>Workflow: restaurant_order
 ```
 
 Общий каталог: [Restaurants use cases](../../../../README.md#use-cases).

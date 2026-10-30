@@ -13,6 +13,7 @@ const (
 	StepRecordPaymentAuthorization StepKind = "record_payment_authorization"
 	StepRequestRestaurantOrder     StepKind = "request_restaurant_order"
 	StepCancelRestaurantOrder      StepKind = "cancel_restaurant_order"
+	StepRecordRestaurantPickup     StepKind = "record_restaurant_pickup"
 	StepCreateDelivery             StepKind = "create_delivery"
 	StepCancelDelivery             StepKind = "cancel_delivery"
 	StepCompleteOrder              StepKind = "complete_order"
@@ -62,6 +63,10 @@ func (p *Process) Next() (step Step, ok bool) {
 		return routeStep(StepQueueRestaurantOrder), true
 	case p.accepted && !p.deliveryCreated && (p.schedule == nil || p.schedule.courierDue):
 		return routeStep(StepCreateDelivery), true
+	case p.reportsPickup && p.pickedUp && p.ready && !p.restaurantPickupRecorded:
+		// The kitchen knows nothing about delivery: its order leaves the board
+		// by this command, once the kitchen has reported it ready.
+		return routeStep(StepRecordRestaurantPickup), true
 	case p.pickedUp && !p.captured:
 		return routeStep(StepCapturePayment), true
 	case p.done:
@@ -96,6 +101,8 @@ func (p *Process) Confirm(step Step, approved bool, at time.Time) {
 	case StepRequestRestaurantOrder:
 		p.restaurantRequested = true
 		p.acceptanceDeadline = at.Add(p.policy.AcceptanceTimeout)
+	case StepRecordRestaurantPickup:
+		p.restaurantPickupRecorded = true
 	case StepCreateDelivery:
 		p.deliveryCreated = true
 	case StepCapturePayment:

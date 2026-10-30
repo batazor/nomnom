@@ -1883,6 +1883,74 @@ func (_c *MockRestaurantsServiceServer_ReceiveOrderRequest_Call) RunAndReturn(ru
 	return _c
 }
 
+// RecordRestaurantOrderPickup provides a mock function for the type MockRestaurantsServiceServer
+func (_mock *MockRestaurantsServiceServer) RecordRestaurantOrderPickup(context1 context.Context, recordRestaurantOrderPickupRequest *restaurantsv1.RecordRestaurantOrderPickupRequest) (*restaurantsv1.RecordRestaurantOrderPickupResponse, error) {
+	ret := _mock.Called(context1, recordRestaurantOrderPickupRequest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordRestaurantOrderPickup")
+	}
+
+	var r0 *restaurantsv1.RecordRestaurantOrderPickupResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.RecordRestaurantOrderPickupRequest) (*restaurantsv1.RecordRestaurantOrderPickupResponse, error)); ok {
+		return returnFunc(context1, recordRestaurantOrderPickupRequest)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *restaurantsv1.RecordRestaurantOrderPickupRequest) *restaurantsv1.RecordRestaurantOrderPickupResponse); ok {
+		r0 = returnFunc(context1, recordRestaurantOrderPickupRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*restaurantsv1.RecordRestaurantOrderPickupResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *restaurantsv1.RecordRestaurantOrderPickupRequest) error); ok {
+		r1 = returnFunc(context1, recordRestaurantOrderPickupRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordRestaurantOrderPickup'
+type MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call struct {
+	*mock.Call
+}
+
+// RecordRestaurantOrderPickup is a helper method to define mock.On call
+//   - context1 context.Context
+//   - recordRestaurantOrderPickupRequest *restaurantsv1.RecordRestaurantOrderPickupRequest
+func (_e *MockRestaurantsServiceServer_Expecter) RecordRestaurantOrderPickup(context1 any, recordRestaurantOrderPickupRequest any) *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call {
+	return &MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call{Call: _e.mock.On("RecordRestaurantOrderPickup", context1, recordRestaurantOrderPickupRequest)}
+}
+
+func (_c *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call) Run(run func(context1 context.Context, recordRestaurantOrderPickupRequest *restaurantsv1.RecordRestaurantOrderPickupRequest)) *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *restaurantsv1.RecordRestaurantOrderPickupRequest
+		if args[1] != nil {
+			arg1 = args[1].(*restaurantsv1.RecordRestaurantOrderPickupRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call) Return(recordRestaurantOrderPickupResponse *restaurantsv1.RecordRestaurantOrderPickupResponse, err error) *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call {
+	_c.Call.Return(recordRestaurantOrderPickupResponse, err)
+	return _c
+}
+
+func (_c *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call) RunAndReturn(run func(context1 context.Context, recordRestaurantOrderPickupRequest *restaurantsv1.RecordRestaurantOrderPickupRequest) (*restaurantsv1.RecordRestaurantOrderPickupResponse, error)) *MockRestaurantsServiceServer_RecordRestaurantOrderPickup_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RegisterRestaurant provides a mock function for the type MockRestaurantsServiceServer
 func (_mock *MockRestaurantsServiceServer) RegisterRestaurant(context1 context.Context, registerRestaurantRequest *restaurantsv1.RegisterRestaurantRequest) (*restaurantsv1.RegisterRestaurantResponse, error) {
 	ret := _mock.Called(context1, registerRestaurantRequest)

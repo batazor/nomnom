@@ -58,6 +58,7 @@ const createWorld = async () => {
     setOpeningHours: unused,
     setScheduledOrderSettings: unused,
     queueRestaurantOrder: unused,
+    recordPickup: unused,
     listScheduledSlots: unused,
     reserveScheduledSlot: unused,
     confirmScheduledSlot: unused,

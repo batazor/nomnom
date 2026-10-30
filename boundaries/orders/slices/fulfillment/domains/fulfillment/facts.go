@@ -212,6 +212,7 @@ func (p *Process) onPickedUp(at time.Time) string {
 		return "already picked up"
 	}
 	p.pickedUp = true
+	p.pickedUpAt = at
 	p.deliveryDeadline = at.Add(p.policy.DeliveryTimeout)
 	return ""
 }
