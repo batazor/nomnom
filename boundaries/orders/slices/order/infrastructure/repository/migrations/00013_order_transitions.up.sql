@@ -4,6 +4,10 @@
 -- restaurants and delivery. A cancellation joins the history with its known time;
 -- the time of a past completion was not stored. order_details is projected again
 -- at process start.
+--
+-- order_facts stays: the previous version of the code and PINNED workers of open
+-- workflows still read and write it (ADR 42). A later migration removes it after
+-- they drain; what they record until then does not reach the history.
 CREATE TABLE order_transitions (
     order_id    TEXT        NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
     trigger     TEXT        NOT NULL,
@@ -29,5 +33,3 @@ WHERE fact <> 'courier_assigned';
 
 INSERT INTO order_transitions (order_id, trigger, occurred_at)
 SELECT id, 'cancel', cancelled_at FROM orders WHERE cancelled_at IS NOT NULL;
-
-DROP TABLE order_facts;

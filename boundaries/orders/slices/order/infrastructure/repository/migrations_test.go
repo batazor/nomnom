@@ -203,9 +203,10 @@ func TestOrderTransitionsMigrationMapsFacts(t *testing.T) {
 	got, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	require.NoError(t, err)
 	assert.ElementsMatch(t, want, got)
-	var journal *string
-	require.NoError(t, conn.QueryRow(ctx, `SELECT to_regclass('order_facts')::text`).Scan(&journal))
-	assert.Nil(t, journal)
+	// The previous version of the code still reads the journal (ADR 42).
+	var journal int
+	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM order_facts`).Scan(&journal))
+	assert.Equal(t, len(mapped)+1, journal)
 }
 
 // migrationsBefore is the order migration set without first and every later file.
