@@ -1,8 +1,10 @@
 """The Payment streams over a real PostgreSQL: FR-742–FR-744, FR-746, FR-747, FR-749."""
 
 import contextlib
+import json
 import threading
 import unittest
+from pathlib import Path
 from typing import Any, LiteralString, override
 from unittest import mock
 
@@ -10,7 +12,8 @@ import psycopg
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import HistogramDataPoint, InMemoryMetricReader
-from payment_fakes import MARKET, NOW, ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, NOW, ORCHESTRATOR, REQUESTER, PaymentsTestKit
+from psycopg.types.json import Jsonb
 
 from infrastructure.repository import Database
 from pkg.usecase import ConcurrencyConflictError
@@ -40,7 +43,10 @@ from slices.payment.infrastructure.repository import (
     UnreadableStoredDataError,
     repositories,
 )
+from slices.payment.infrastructure.repository.event_codec import encode_snapshot
+from slices.payment.infrastructure.repository.repositories import project_payment
 
+STREAMS = Path(__file__).parent / "fixtures" / "payment_streams"
 AMOUNT = Money.parse("25.00", "EUR")
 PAYMENT = PaymentId("payment-1")
 ORDER = OrderId("order-1")
@@ -83,7 +89,9 @@ class PaymentEventStoreTest(unittest.TestCase):
         """Payment with 4 events: Created, Requested, Succeeded, Authorized."""
         self.payments.add(new_payment())
         payment = self.stored()
-        payment.request_operation(OperationId("op-a"), OperationKind.AUTHORIZE, "key-a", NOW)
+        payment.request_operation(
+            OperationId("op-a"), OperationKind.AUTHORIZE, "key-a", NOW, REQUESTER
+        )
         self.payments.save(payment)
         payment = self.stored()
         payment.complete_operation(OperationId("op-a"), OperationOutcome.success("auth-1"), NOW)
@@ -153,8 +161,12 @@ class PaymentEventStoreTest(unittest.TestCase):
     def test_ac_1026_stale_write_conflicts_and_leaves_no_events(self) -> None:
         self.payments.add(new_payment())
         first, second = self.stored(), self.stored()
-        first.request_operation(OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW)
-        second.request_operation(OperationId("op-2"), OperationKind.AUTHORIZE, "key-2", NOW)
+        first.request_operation(
+            OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER
+        )
+        second.request_operation(
+            OperationId("op-2"), OperationKind.AUTHORIZE, "key-2", NOW, REQUESTER
+        )
 
         self.assertEqual(self.payments.save(first), 2)
         with self.assertRaises(ConcurrencyConflictError):
@@ -246,17 +258,21 @@ class PaymentEventStoreTest(unittest.TestCase):
     def test_ac_1035_commit_jumping_over_the_boundary_writes_a_snapshot(self) -> None:
         self.authorized()
         payment = self.stored()
-        payment.request_operation(OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW)
+        payment.request_operation(
+            OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW, REQUESTER
+        )
         payment.complete_operation(OperationId("op-c"), OperationOutcome.success(), NOW)
         # Одним commit: Requested, Succeeded, Captured — версии 5, 6, 7.
         self.assertEqual(self.payments.save(payment), 7)
-        self.assertEqual(self.snapshot_row(), (7, 1))
+        self.assertEqual(self.snapshot_row(), (7, 2))
         self.assertEqual(self.rows("SELECT count(*) FROM payment_snapshots"), [(1,)])
 
     def test_ac_1036_rollback_keeps_neither_events_nor_snapshot(self) -> None:
         self.authorized()
         payment = self.stored()
-        payment.request_operation(OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW)
+        payment.request_operation(
+            OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW, REQUESTER
+        )
 
         def work() -> None:
             self.payments.save(payment)
@@ -271,7 +287,9 @@ class PaymentEventStoreTest(unittest.TestCase):
     def test_failed_snapshot_write_rolls_the_events_back(self) -> None:
         self.authorized()
         payment = self.stored()
-        payment.request_operation(OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW)
+        payment.request_operation(
+            OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW, REQUESTER
+        )
 
         with (
             mock.patch.object(repositories, "write_snapshot", side_effect=RuntimeError("boom")),
@@ -288,7 +306,9 @@ class PaymentEventStoreTest(unittest.TestCase):
         """Payment with a snapshot of version 5 and a stream of 6 events."""
         self.authorized()
         payment = self.stored()
-        payment.request_operation(OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW)
+        payment.request_operation(
+            OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW, REQUESTER
+        )
         self.payments.save(payment)
         payment = self.stored()
         payment.complete_operation(OperationId("op-c"), OperationOutcome.declined("no"), NOW)
@@ -314,7 +334,7 @@ class PaymentEventStoreTest(unittest.TestCase):
 
     def test_ac_1038_load_applies_only_the_tail(self) -> None:
         full = self.snapshotted()
-        self.assertEqual(self.snapshot_row(), (5, 1))
+        self.assertEqual(self.snapshot_row(), (5, 2))
         self.reader.get_metrics_data()
 
         with mock.patch.object(repositories, "read_events", wraps=repositories.read_events) as read:
@@ -350,10 +370,10 @@ class PaymentEventStoreTest(unittest.TestCase):
         for key in ("x-1", "x-2"):
             payment = self.stored()
             operation = OperationId(f"op-{key}")
-            payment.request_operation(operation, OperationKind.CAPTURE, key, NOW)
+            payment.request_operation(operation, OperationKind.CAPTURE, key, NOW, REQUESTER)
             payment.complete_operation(operation, OperationOutcome.declined("no"), NOW)
             self.payments.save(payment)
-        self.assertEqual(self.snapshot_row(), (10, 1))
+        self.assertEqual(self.snapshot_row(), (10, 2))
         self.assertEqual(self.stored().version, 10)
 
     def test_ac_1041_unreadable_snapshot_of_the_current_schema_is_an_error(self) -> None:
@@ -363,6 +383,57 @@ class PaymentEventStoreTest(unittest.TestCase):
 
         with self.assertRaises(UnreadableStoredDataError):
             self.stored()
+
+    def test_data_recorded_before_requested_by_keeps_working(self) -> None:
+        """Events and a snapshot of the old schemas, then a new operation on top of them."""
+        fixture = STREAMS / "captured_and_refunded.json"
+        recorded = json.loads(fixture.read_text())["events"][:4]
+        with self.database.connection() as conn:
+            for version, event in enumerate(recorded, start=1):
+                conn.execute(
+                    "INSERT INTO payment_events (payment_id, version, event_type, schema_version, "
+                    "payload, traceparent, recorded_at) VALUES ('payment-g', %s, %s, %s, %s, '', now())",
+                    (
+                        version,
+                        event["event_type"],
+                        event["schema_version"],
+                        Jsonb(event["payload"]),
+                    ),
+                )
+        loaded = self.stored("payment-g")
+        self.assertIsNone(loaded.operations[0].requested_by)
+        old_state = encode_snapshot(loaded.model)
+        del old_state["operations"][0]["requested_by"]
+        with self.database.connection() as conn:
+            project_payment(conn, loaded.model, loaded.version)
+            conn.execute(
+                "INSERT INTO payment_snapshots (payment_id, version, schema_version, state, "
+                "recorded_at) VALUES ('payment-g', 4, 1, %s, now())",
+                (Jsonb(old_state),),
+            )
+
+        # Снапшот старой схемы не используется, и его отсутствие в разборе — не ошибка.
+        payment = self.stored("payment-g")
+        self.assertEqual(payment.version, 4)
+        payment.request_operation(
+            OperationId("op-c"), OperationKind.CAPTURE, "key-c", NOW, REQUESTER
+        )
+        self.assertEqual(self.payments.save(payment), 5)
+
+        self.assertEqual(self.snapshot_row("payment-g"), (5, 2))
+        stored = self.stored("payment-g")
+        self.assertEqual([op.requested_by for op in stored.operations], [None, REQUESTER])
+        self.assertEqual(
+            [
+                row[0]
+                for row in self.rows(
+                    "SELECT schema_version FROM payment_events WHERE payment_id = %s "
+                    "AND event_type = 'PaymentOperationRequested' ORDER BY version",
+                    "payment-g",
+                )
+            ],
+            [1, 2],
+        )
 
     def test_gap_in_the_stream_is_an_error(self) -> None:
         self.authorized()

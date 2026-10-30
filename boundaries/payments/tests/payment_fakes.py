@@ -42,6 +42,7 @@ from slices.payment.domains.payment import (
     Money,
     OperationId,
     OperationKind,
+    OperationRequester,
     OperationState,
     OrderId,
     Payment,
@@ -57,6 +58,7 @@ from slices.payment.domains.payment import (
     PaymentOperationSucceeded,
     PaymentRefunded,
     PaymentState,
+    RequesterKind,
 )
 from slices.payment.infrastructure.observability import FsmMetrics
 from slices.payment.infrastructure.repository import (
@@ -74,6 +76,7 @@ T = TypeVar("T")
 
 ORCHESTRATOR = Subject(SubjectKind.SERVICE, "orders-activity-worker")
 OPERATOR = Subject(SubjectKind.USER, "operator-1")
+REQUESTER = OperationRequester(RequesterKind.SERVICE, ORCHESTRATOR.id)
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 # Market of the test Orders (the launch Market of ADR 41).
 MARKET = MarketId("berlin")
@@ -308,7 +311,7 @@ class PaymentsTestKit:
         target = OperationId(operation_id)
         events: list[PaymentDomainEvent] = [
             PaymentOperationRequested(
-                target, payment_id, kind, idempotency_key, payment.amount, now
+                target, payment_id, kind, idempotency_key, payment.amount, now, REQUESTER
             )
         ]
         if state is OperationState.SUCCEEDED:

@@ -15,7 +15,7 @@ from typing import Any, override
 import psycopg
 import pytest
 from opentelemetry import trace
-from payment_fakes import MARKET, NOW, ORCHESTRATOR, FakePaymentProvider, FakePermissions
+from payment_fakes import MARKET, NOW, ORCHESTRATOR, REQUESTER, FakePaymentProvider, FakePermissions
 
 from infrastructure.repository import (
     PAYMENT_EVENTS_TOPIC,
@@ -120,7 +120,9 @@ class RepositoryIntegrationTest(unittest.TestCase):
 
     def _authorized_events(self, payment: Payment) -> list[PaymentDomainEvent]:
         operation = OperationId(f"op-{payment.version}")
-        payment.request_operation(operation, OperationKind.AUTHORIZE, f"key-{operation}", NOW)
+        payment.request_operation(
+            operation, OperationKind.AUTHORIZE, f"key-{operation}", NOW, REQUESTER
+        )
         return payment.complete_operation(operation, OperationOutcome.success("auth-ref"), NOW)
 
     def _outbox_rows(self) -> list[tuple[Any, ...]]:
@@ -150,7 +152,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
         payment = self._payment()
         first = OperationId("operation-1")
         payment.request_operation(
-            first, OperationKind.AUTHORIZE, "key-1", NOW + timedelta(minutes=1)
+            first, OperationKind.AUTHORIZE, "key-1", NOW + timedelta(minutes=1), REQUESTER
         )
         self.payments.save(payment)
         payment.complete_operation(
@@ -189,13 +191,17 @@ class RepositoryIntegrationTest(unittest.TestCase):
     def test_mapped_violation_keeps_unit_of_work_usable(self) -> None:
         self._payment()
         other = self._payment("payment-2", "order-2")
-        other.request_operation(OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW)
+        other.request_operation(
+            OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER
+        )
         self.payments.save(other)
 
         def work() -> str:
             payment = self.payments.get(PaymentId("payment-1"))
             assert payment is not None
-            payment.request_operation(OperationId("op-2"), OperationKind.AUTHORIZE, "key-1", NOW)
+            payment.request_operation(
+                OperationId("op-2"), OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER
+            )
             with contextlib.suppress(DuplicateIdempotencyKeyError):
                 self.payments.save(payment)
             # Nested run joins the same transaction.

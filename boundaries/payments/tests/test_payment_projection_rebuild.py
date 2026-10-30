@@ -12,7 +12,7 @@ from unittest import mock
 
 import psycopg
 import pytest
-from payment_fakes import NOW, ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import NOW, ORCHESTRATOR, REQUESTER, PaymentsTestKit
 
 from entrypoints.payments_admin import main as admin
 from infrastructure.repository import Database
@@ -118,7 +118,7 @@ class ProjectionRebuilderTest(unittest.TestCase):
 
         self.assertEqual(result.snapshots, 1)
         rows = self.table("payment_snapshots")
-        self.assertEqual([(row[0], row[1], row[2]) for row in rows], [(payment_id, 5, 1)])
+        self.assertEqual([(row[0], row[1], row[2]) for row in rows], [(payment_id, 5, 2)])
         self.assertEqual(self.rebuilder.check(), [])
         stored = self.payments.get(payment_id)
         assert stored is not None
@@ -185,7 +185,9 @@ class ProjectionRebuilderTest(unittest.TestCase):
         operation = OperationId("op-1")
         writer_payment = self.payments.get(payment_id)
         assert writer_payment is not None
-        writer_payment.request_operation(operation, OperationKind.AUTHORIZE, "key-1", NOW)
+        writer_payment.request_operation(
+            operation, OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER
+        )
         read_during_rebuild: list[Any] = []
         real_stream_ids = projection_rebuild.stream_ids
 

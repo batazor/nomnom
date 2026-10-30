@@ -12,6 +12,7 @@ from slices.payment.domains.payment import (
     OperationId,
     OperationKind,
     OperationOutcome,
+    OperationRequester,
     OperationState,
     OrderId,
     Payment,
@@ -28,6 +29,7 @@ from slices.payment.domains.payment import (
     PaymentOperationRequested,
     PaymentOperationSucceeded,
     PaymentState,
+    RequesterKind,
     RequestOperation,
     crosses_snapshot_boundary,
     decide,
@@ -42,10 +44,11 @@ AMOUNT = Money.parse("25.00", "EUR")
 OPERATION = OperationId("op-1")
 FACT = (PAYMENT, ORDER, MARKET, AMOUNT)
 CREATED = PaymentCreated(*FACT)
+REQUESTER = OperationRequester(RequesterKind.USER, "operator-1", "bff")
 
 
 def requested(kind: OperationKind) -> PaymentOperationRequested:
-    return PaymentOperationRequested(OPERATION, PAYMENT, kind, "key-1", AMOUNT, NOW)
+    return PaymentOperationRequested(OPERATION, PAYMENT, kind, "key-1", AMOUNT, NOW, REQUESTER)
 
 
 def fold(events: list[PaymentDomainEvent]) -> PaymentModel | None:
@@ -68,7 +71,7 @@ CASES = [
     Case(
         "request",
         [CREATED],
-        RequestOperation(OPERATION, OperationKind.AUTHORIZE, "key-1", NOW),
+        RequestOperation(OPERATION, OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER),
         [requested(OperationKind.AUTHORIZE)],
     ),
     Case(
@@ -121,7 +124,9 @@ class DecideTest(unittest.TestCase):
 
     def test_commands_of_a_missing_payment_are_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            decide(None, RequestOperation(OPERATION, OperationKind.AUTHORIZE, "key-1", NOW))
+            decide(
+                None, RequestOperation(OPERATION, OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER)
+            )
 
 
 class EvolveTest(unittest.TestCase):
@@ -141,6 +146,19 @@ class EvolveTest(unittest.TestCase):
         self.assertEqual(state.provider_reference, "auth-1")
         self.assertEqual(state.operations[0].state, OperationState.SUCCEEDED)
         self.assertEqual(state.operations[0].provider_reference, "auth-1")
+
+    def test_operation_keeps_who_requested_it(self) -> None:
+        state = fold([CREATED, requested(OperationKind.AUTHORIZE)])
+        assert state is not None
+        self.assertEqual(state.operations[0].requested_by, REQUESTER)
+
+    def test_event_recorded_before_requested_by_replays_as_unknown(self) -> None:
+        old = PaymentOperationRequested(
+            OPERATION, PAYMENT, OperationKind.AUTHORIZE, "key-1", AMOUNT, NOW, None
+        )
+        state = fold([CREATED, old])
+        assert state is not None
+        self.assertIsNone(state.operations[0].requested_by)
 
     def test_ac_1023_cancelled_authorization_clears_provider_reference(self) -> None:
         state = fold(

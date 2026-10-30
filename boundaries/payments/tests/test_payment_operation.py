@@ -16,6 +16,7 @@ from slices.payment.domains.payment import (
     OperationKind,
     OperationMismatchError,
     OperationOutcome,
+    OperationRequester,
     OperationState,
     OperationTrigger,
     OrderId,
@@ -31,11 +32,13 @@ from slices.payment.domains.payment import (
     PaymentOperationSucceeded,
     PaymentRefunded,
     PaymentState,
+    RequesterKind,
     UnknownOperationKindError,
 )
 from slices.payment.domains.payment.operation import OPERATION_TRANSITIONS
 
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
+REQUESTER = OperationRequester(RequesterKind.SERVICE, "orders-activity-worker")
 AMOUNT = Money.parse("10.00", "EUR")
 PAYMENT_ID = PaymentId("payment-1")
 OPERATION_ID = OperationId("op-1")
@@ -110,7 +113,9 @@ class RequestOperationTest(unittest.TestCase):
     def test_records_a_pending_operation(self) -> None:
         payment = make_payment()
 
-        operation = payment.request_operation(OPERATION_ID, OperationKind.AUTHORIZE, "key-1", NOW)
+        operation = payment.request_operation(
+            OPERATION_ID, OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER
+        )
 
         self.assertEqual(operation.state, OperationState.PENDING)
         self.assertEqual(operation.amount, AMOUNT)
@@ -122,12 +127,14 @@ class RequestOperationTest(unittest.TestCase):
 
         with self.assertRaises(OperationAlreadyPendingError):
             payment.request_operation(
-                OperationId("op-2"), OperationKind.CANCEL_AUTHORIZATION, "key-2", NOW
+                OperationId("op-2"), OperationKind.CANCEL_AUTHORIZATION, "key-2", NOW, REQUESTER
             )
 
     def test_rejects_blank_key(self) -> None:
         with self.assertRaises(ValueError):
-            make_payment().request_operation(OPERATION_ID, OperationKind.AUTHORIZE, " ", NOW)
+            make_payment().request_operation(
+                OPERATION_ID, OperationKind.AUTHORIZE, " ", NOW, REQUESTER
+            )
 
 
 class CompleteOperationTest(unittest.TestCase):

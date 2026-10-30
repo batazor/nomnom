@@ -30,7 +30,14 @@ from .fsm import (
     PaymentTrigger,
     TransitionResult,
 )
-from .ids import OperationId, OperationKind, OrderId, PaymentId
+from .ids import (
+    OperationId,
+    OperationKind,
+    OperationRequester,
+    OrderId,
+    PaymentId,
+    RequesterKind,
+)
 from .model import PaymentModel
 from .operation import (
     InvalidOperationTransitionError,
@@ -89,6 +96,7 @@ __all__ = [
     "OperationKindRules",
     "OperationMismatchError",
     "OperationOutcome",
+    "OperationRequester",
     "OperationState",
     "OperationTrigger",
     "OrderId",
@@ -118,6 +126,7 @@ __all__ = [
     "PaymentState",
     "PaymentTrigger",
     "RequestOperation",
+    "RequesterKind",
     "SpecificationResult",
     "TransitionResult",
     "UnknownOperationKindError",

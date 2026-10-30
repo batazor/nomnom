@@ -18,6 +18,7 @@ from slices.payment.domains.payment import (
     Money,
     OperationId,
     OperationKind,
+    OperationRequester,
     OperationState,
     OrderId,
     PaymentAuthorizationCancelled,
@@ -34,11 +35,12 @@ from slices.payment.domains.payment import (
     PaymentOperationSucceeded,
     PaymentRefunded,
     PaymentState,
+    RequesterKind,
 )
 
 # Поднимается при любом изменении формы снапшота или смысла evolve: снапшот другой версии
 # не используется, состояние собирается из всего потока.
-SNAPSHOT_SCHEMA_VERSION = 1
+SNAPSHOT_SCHEMA_VERSION = 2
 
 type Payload = dict[str, Any]
 
@@ -84,6 +86,18 @@ def _decode_money(value: Mapping[str, str]) -> Money:
     return Money.parse(value["amount"], value["currency"])
 
 
+def _encode_requester(requester: OperationRequester) -> Payload:
+    return {
+        "kind": requester.kind.value,
+        "id": requester.id,
+        "delegate": requester.delegate,
+    }
+
+
+def _decode_requester(value: Mapping[str, str | None]) -> OperationRequester:
+    return OperationRequester(RequesterKind(value["kind"]), str(value["id"]), value["delegate"])
+
+
 _TEXT = _Field(str, str)
 _PAYMENT_ID = _Field(str, PaymentId)
 _ORDER_ID = _Field(str, OrderId)
@@ -94,6 +108,8 @@ _KIND = _Field(lambda kind: kind.value, OperationKind)
 _OPERATION_STATE = _Field(lambda state: state.value, OperationState)
 _PAYMENT_STATE = _Field(lambda state: state.value, PaymentState)
 _TIME = _Field(datetime.isoformat, datetime.fromisoformat)
+
+_REQUESTER = _Field(_encode_requester, _decode_requester)
 
 _PAYMENT_FACT: Mapping[str, _Field] = {
     "payment_id": _PAYMENT_ID,
@@ -115,7 +131,7 @@ _SCHEMAS: dict[str, _EventSchema] = {
     "PaymentCreated": _EventSchema(PaymentCreated, 1, _PAYMENT_FACT),
     "PaymentOperationRequested": _EventSchema(
         PaymentOperationRequested,
-        1,
+        2,
         {
             "operation_id": _OPERATION_ID,
             "payment_id": _PAYMENT_ID,
@@ -123,6 +139,7 @@ _SCHEMAS: dict[str, _EventSchema] = {
             "idempotency_key": _TEXT,
             "amount": _MONEY,
             "requested_at": _TIME,
+            "requested_by": _optional(_REQUESTER),
         },
     ),
     "PaymentOperationSucceeded": _EventSchema(
@@ -168,7 +185,10 @@ _SCHEMAS: dict[str, _EventSchema] = {
 _TYPE_OF = {schema.event_class: name for name, schema in _SCHEMAS.items()}
 
 # (event_type, schema_version) → функция, поднимающая payload на следующую версию.
-UPCASTERS: dict[tuple[str, int], Callable[[Payload], Payload]] = {}
+UPCASTERS: dict[tuple[str, int], Callable[[Payload], Payload]] = {
+    # До версии 2 автор не записывался: он неизвестен, и подставлять значение нельзя.
+    ("PaymentOperationRequested", 1): lambda payload: {**payload, "requested_by": None},
+}
 
 
 def encode_event(event: PaymentDomainEvent) -> EncodedEvent:
@@ -210,6 +230,7 @@ _OPERATION_FIELDS: Mapping[str, _Field] = {
     "provider_reference": _optional(_TEXT),
     "decline_reason": _optional(_TEXT),
     "completed_at": _optional(_TIME),
+    "requested_by": _optional(_REQUESTER),
 }
 
 _SNAPSHOT_FIELDS: Mapping[str, _Field] = {

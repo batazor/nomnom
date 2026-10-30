@@ -1,5 +1,6 @@
 """Identifiers and operation kinds shared by the payment model modules."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -13,6 +14,22 @@ class OrderId(str):
 
 class OperationId(str):
     """Identifier of a Payment Operation, sent to the Provider as the merchant reference."""
+
+
+class RequesterKind(StrEnum):
+    """Whether a Payment Operation was requested by an end user or a service workload."""
+
+    USER = "user"
+    SERVICE = "service"
+
+
+@dataclass(frozen=True)
+class OperationRequester:
+    """Who requested a Payment Operation; ``delegate`` is the service acting for a user."""
+
+    kind: RequesterKind
+    id: str
+    delegate: str | None = None
 
 
 class OperationKind(StrEnum):

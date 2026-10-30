@@ -1,0 +1,89 @@
+{
+  "state": "authorized",
+  "provider_reference": "auth-1",
+  "operations": [
+    [
+      "op-authorize",
+      "succeeded"
+    ],
+    [
+      "op-capture",
+      "pending"
+    ]
+  ],
+  "events": [
+    {
+      "event_type": "PaymentCreated",
+      "schema_version": 1,
+      "payload": {
+        "payment_id": "payment-h",
+        "order_id": "order-h",
+        "market_id": "berlin",
+        "amount": {
+          "amount": "25.00",
+          "currency": "EUR"
+        }
+      }
+    },
+    {
+      "event_type": "PaymentOperationRequested",
+      "schema_version": 1,
+      "payload": {
+        "operation_id": "op-authorize",
+        "payment_id": "payment-h",
+        "kind": "authorize",
+        "idempotency_key": "k-a",
+        "amount": {
+          "amount": "25.00",
+          "currency": "EUR"
+        },
+        "requested_at": "2026-10-25T10:00:00+00:00"
+      }
+    },
+    {
+      "event_type": "PaymentOperationSucceeded",
+      "schema_version": 1,
+      "payload": {
+        "operation_id": "op-authorize",
+        "payment_id": "payment-h",
+        "kind": "authorize",
+        "provider_reference": "auth-1",
+        "completed_at": "2026-10-25T10:01:00+00:00"
+      }
+    },
+    {
+      "event_type": "PaymentAuthorized",
+      "schema_version": 1,
+      "payload": {
+        "payment_id": "payment-h",
+        "order_id": "order-h",
+        "market_id": "berlin",
+        "amount": {
+          "amount": "25.00",
+          "currency": "EUR"
+        },
+        "provider_reference": "auth-1"
+      }
+    },
+    {
+      "event_type": "PaymentOperationRequested",
+      "schema_version": 2,
+      "payload": {
+        "operation_id": "op-capture",
+        "payment_id": "payment-h",
+        "kind": "capture",
+        "idempotency_key": "k-c",
+        "amount": {
+          "amount": "25.00",
+          "currency": "EUR"
+        },
+        "requested_at": "2026-10-31T10:00:00+00:00",
+        "requested_by": {
+          "kind": "user",
+          "id": "operator-1",
+          "delegate": "bff"
+        }
+      }
+    }
+  ]
+}

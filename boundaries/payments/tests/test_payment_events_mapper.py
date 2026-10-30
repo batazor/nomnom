@@ -88,7 +88,7 @@ class PaymentEventsMapperTest(unittest.TestCase):
         events = (
             PaymentCreated(PAYMENT, ORDER, MARKET, AMOUNT),
             PaymentOperationRequested(
-                OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "key-1", AMOUNT, NOW
+                OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "key-1", AMOUNT, NOW, None
             ),
             PaymentOperationSucceeded(
                 OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "ref-1", NOW

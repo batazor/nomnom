@@ -7,7 +7,7 @@ in the allowlist of the Outbox mapper are published as Integration Events.
 from dataclasses import dataclass
 from datetime import datetime
 
-from .ids import OperationId, OperationKind, OrderId, PaymentId
+from .ids import OperationId, OperationKind, OperationRequester, OrderId, PaymentId
 from .vo.market import MarketId
 from .vo.money import Money
 
@@ -75,7 +75,11 @@ class PaymentFailed:
 
 @dataclass(frozen=True)
 class PaymentOperationRequested:
-    """A Payment Operation is recorded before the Provider is called."""
+    """A Payment Operation is recorded before the Provider is called.
+
+    ``requested_by`` is ``None`` only in events recorded before the field existed: it is
+    unknown who requested them.
+    """
 
     operation_id: OperationId
     payment_id: PaymentId
@@ -83,6 +87,7 @@ class PaymentOperationRequested:
     idempotency_key: str
     amount: Money
     requested_at: datetime
+    requested_by: OperationRequester | None
 
 
 @dataclass(frozen=True)

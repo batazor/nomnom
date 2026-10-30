@@ -36,6 +36,10 @@ _Avoid_: Payment ID, order ID
 Одна логическая попытка Authorization, Capture, Cancel Authorization или Refund с idempotency key и стабильным результатом; часть агрегата Payment.
 _Avoid_: Transaction, attempt
 
+**Operation Requester**:
+Тот, кто запросил Payment Operation: пользователь или сервис, для пользователя также сервис-делегат. Неизвестен у операций, записанных до появления поля.
+_Avoid_: Actor, initiator
+
 **Payment Event Stream**:
 Неизменяемая последовательность событий одного Payment, источник истины его состояния ([ADR 2](docs/adr/0002-event-sourcing-for-payment.md)).
 _Avoid_: Audit log, journal

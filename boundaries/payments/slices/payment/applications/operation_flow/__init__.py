@@ -22,10 +22,12 @@ from slices.payment.domains.payment import (
     InvalidTransitionError,
     OperationAlreadyPendingError,
     OperationKind,
+    OperationRequester,
     PaymentId,
     PaymentOperation,
     PaymentRepository,
     PaymentState,
+    RequesterKind,
     rules_of,
 )
 
@@ -128,7 +130,7 @@ class PaymentOperationExecutor:
         rules = rules_of(kind)
         require_permission(self._permissions, subject, rules.permission, PaymentResource(target))
 
-        reservation = self._reserve(target, key, kind)
+        reservation = self._reserve(target, key, kind, _requester(subject))
         operation = reservation.operation
         if operation.is_completed:
             return PaymentOperationResult.of(operation, reservation.payment_state, replayed=True)
@@ -151,7 +153,13 @@ class PaymentOperationExecutor:
             applied.operation, applied.payment_state, replayed=not applied.applied
         )
 
-    def _reserve(self, payment_id: PaymentId, key: str, kind: OperationKind) -> _Reservation:
+    def _reserve(
+        self,
+        payment_id: PaymentId,
+        key: str,
+        kind: OperationKind,
+        requested_by: OperationRequester,
+    ) -> _Reservation:
         operation_id = self._operation_ids.new_operation_id()
         requested_at = self._clock.now()
 
@@ -170,7 +178,9 @@ class PaymentOperationExecutor:
             if owner is not None and owner.id != payment_id:
                 raise IdempotencyKeyConflictError(key)
             try:
-                operation = payment.request_operation(operation_id, kind, key, requested_at)
+                operation = payment.request_operation(
+                    operation_id, kind, key, requested_at, requested_by
+                )
             except InvalidTransitionError as error:
                 self._transitions.rejected(error)
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
@@ -191,3 +201,7 @@ class PaymentOperationExecutor:
         # sees it. Requests of this Payment conflict on its stream and the Unit of Work
         # retries them.
         return self._uow.run(reserve)
+
+
+def _requester(subject: Subject) -> OperationRequester:
+    return OperationRequester(RequesterKind(subject.kind.value), subject.id, subject.delegate)

@@ -5,7 +5,7 @@ import pytest
 from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
-from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
+from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
 from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
@@ -28,6 +28,7 @@ from slices.payment.domains.payment import (
     Money,
     OperationId,
     OperationKind,
+    OperationRequester,
     OperationState,
     OrderId,
     PaymentAuthorized,
@@ -35,6 +36,7 @@ from slices.payment.domains.payment import (
     PaymentId,
     PaymentOperationDeclined,
     PaymentState,
+    RequesterKind,
 )
 
 KEY = "order-1:authorize"
@@ -79,6 +81,26 @@ class AuthorizePaymentTest(unittest.TestCase):
                     self.kit.payment(self.payment_id).provider_reference or "",
                 )
             ],
+        )
+
+    def test_operation_records_who_requested_it(self) -> None:
+        result = self.handler.handle(self.authorize())
+
+        self.assertEqual(
+            self.kit.operation(result.operation_id).requested_by,
+            OperationRequester(RequesterKind.SERVICE, ORCHESTRATOR.id),
+        )
+
+    def test_operation_records_the_user_and_the_delegate(self) -> None:
+        user = Subject(SubjectKind.USER, "operator-1", delegate="bff")
+
+        result = self.handler.handle(
+            AuthorizePaymentInput(subject=user, payment_id=self.payment_id, idempotency_key=KEY)
+        )
+
+        self.assertEqual(
+            self.kit.operation(result.operation_id).requested_by,
+            OperationRequester(RequesterKind.USER, "operator-1", "bff"),
         )
 
     def test_ac_405_declined_authorization_fails_payment(self) -> None:

@@ -13,7 +13,7 @@ from .events import (
     PaymentRefunded,
 )
 from .fsm import PaymentState, PaymentTrigger, TransitionResult
-from .ids import OperationId, OperationKind, OrderId, PaymentId
+from .ids import OperationId, OperationKind, OperationRequester, OrderId, PaymentId
 from .model import PaymentModel
 from .operation import OperationOutcome, PaymentOperation
 from .vo.market import MarketId
@@ -93,10 +93,14 @@ class Payment:
         kind: OperationKind,
         idempotency_key: str,
         requested_at: datetime,
+        requested_by: OperationRequester,
     ) -> PaymentOperation:
         """Record a pending Payment Operation and return it; see ``decide`` for the errors."""
         self._record(
-            decide(self.model, RequestOperation(operation_id, kind, idempotency_key, requested_at))
+            decide(
+                self.model,
+                RequestOperation(operation_id, kind, idempotency_key, requested_at, requested_by),
+            )
         )
         return self._model.operations[-1]
 

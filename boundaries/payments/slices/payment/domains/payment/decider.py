@@ -21,7 +21,7 @@ from .events import (
     PaymentRefunded,
 )
 from .fsm import PaymentState, ensure_allowed
-from .ids import OperationId, OperationKind, OrderId, PaymentId
+from .ids import OperationId, OperationKind, OperationRequester, OrderId, PaymentId
 from .model import PaymentModel
 from .operation import (
     OperationAlreadyPendingError,
@@ -55,6 +55,7 @@ class RequestOperation:
     kind: OperationKind
     idempotency_key: str
     requested_at: datetime
+    requested_by: OperationRequester
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ def _request(payment: PaymentModel, command: RequestOperation) -> list[PaymentDo
             command.idempotency_key,
             payment.amount,
             command.requested_at,
+            command.requested_by,
         )
     ]
 
@@ -174,6 +176,7 @@ def evolve(state: PaymentModel | None, event: PaymentDomainEvent) -> PaymentMode
                 event.idempotency_key,
                 event.amount,
                 event.requested_at,
+                requested_by=event.requested_by,
             )
             return replace(payment, operations=(*payment.operations, operation))
         case PaymentOperationSucceeded():

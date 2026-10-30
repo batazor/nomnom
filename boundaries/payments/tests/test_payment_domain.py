@@ -24,7 +24,14 @@ from slices.payment.domains.payment.fsm import (
     lineage,
     transition,
 )
-from slices.payment.domains.payment.ids import OperationId, OperationKind, OrderId, PaymentId
+from slices.payment.domains.payment.ids import (
+    OperationId,
+    OperationKind,
+    OperationRequester,
+    OrderId,
+    PaymentId,
+    RequesterKind,
+)
 from slices.payment.domains.payment.model import PaymentModel
 from slices.payment.domains.payment.operation import OperationOutcome
 from slices.payment.domains.payment.payment import Payment
@@ -32,6 +39,7 @@ from slices.payment.domains.payment.vo.market import InvalidMarketIdError, Marke
 from slices.payment.domains.payment.vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
+REQUESTER = OperationRequester(RequesterKind.SERVICE, "orders-activity-worker")
 _S = PaymentState
 _T = PaymentTrigger
 _C = PaymentCompoundState
@@ -144,7 +152,7 @@ def run_operation(
     operation_id: str | None = None,
 ) -> list[PaymentDomainEvent]:
     target = OperationId(operation_id or f"op-{kind.value}")
-    payment.request_operation(target, kind, f"key-{target}", NOW)
+    payment.request_operation(target, kind, f"key-{target}", NOW, REQUESTER)
     payment.pull_events()
     return payment.complete_operation(target, outcome, NOW)
 
@@ -162,7 +170,9 @@ class PaymentDomainTest(unittest.TestCase):
         )
 
         with self.assertRaises(AlreadyInStateError) as duplicate:
-            payment.request_operation(OperationId("op-2"), OperationKind.AUTHORIZE, "key-2", NOW)
+            payment.request_operation(
+                OperationId("op-2"), OperationKind.AUTHORIZE, "key-2", NOW, REQUESTER
+            )
         self.assertEqual(duplicate.exception.state, PaymentState.AUTHORIZED)
 
         run_operation(payment, OperationKind.CAPTURE, OperationOutcome.success())
@@ -172,13 +182,15 @@ class PaymentDomainTest(unittest.TestCase):
         self.assertEqual(payment.pull_events(), [])
 
         with self.assertRaises(AlreadyInStateError):
-            payment.request_operation(OperationId("op-3"), OperationKind.REFUND, "key-3", NOW)
+            payment.request_operation(
+                OperationId("op-3"), OperationKind.REFUND, "key-3", NOW, REQUESTER
+            )
         self.assertEqual(payment.pull_events(), [])
 
     def test_authorization_guard_requires_provider_reference(self) -> None:
         payment = self.payment()
         operation = payment.request_operation(
-            OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW
+            OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW, REQUESTER
         )
         with self.assertRaises(GuardFailedError) as raised:
             payment.complete_operation(operation.id, OperationOutcome.success("  "), NOW)
@@ -203,13 +215,15 @@ class PaymentDomainTest(unittest.TestCase):
         )
         with self.assertRaises(AlreadyInStateError):
             payment.request_operation(
-                OperationId("op-2"), OperationKind.CANCEL_AUTHORIZATION, "key-2", NOW
+                OperationId("op-2"), OperationKind.CANCEL_AUTHORIZATION, "key-2", NOW, REQUESTER
             )
 
     def test_invalid_transition_does_not_change_state(self) -> None:
         payment = self.payment()
         with self.assertRaises(InvalidTransitionError) as raised:
-            payment.request_operation(OperationId("op-1"), OperationKind.CAPTURE, "key-1", NOW)
+            payment.request_operation(
+                OperationId("op-1"), OperationKind.CAPTURE, "key-1", NOW, REQUESTER
+            )
         self.assertEqual(raised.exception.from_state, PaymentState.PENDING)
         self.assertEqual(raised.exception.trigger, PaymentTrigger.CAPTURE)
         self.assertEqual(payment.state, PaymentState.PENDING)

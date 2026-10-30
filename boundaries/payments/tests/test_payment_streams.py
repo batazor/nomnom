@@ -1,22 +1,29 @@
 """Recorded streams stay readable and snapshots never change the result (FR-745, FR-747).
 
 ``fixtures/payment_streams`` is written once and never edited: a change of events, schemas
-or ``evolve`` that breaks a stream must come with an upcaster, not with a new fixture.
+or ``evolve`` that breaks a stream must come with an upcaster, not with an edited fixture.
 """
 
 import json
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 from slices.payment.domains.payment import (
+    Money,
+    OperationId,
+    OperationKind,
+    OperationRequester,
     OperationState,
     Payment,
     PaymentCreated,
     PaymentDomainEvent,
     PaymentId,
+    PaymentOperationRequested,
     PaymentState,
+    RequesterKind,
 )
 from slices.payment.infrastructure.repository import UnreadableStoredDataError
 from slices.payment.infrastructure.repository.event_codec import (
@@ -51,7 +58,12 @@ class RecordedStreamsTest(unittest.TestCase):
     def test_streams_are_recorded(self) -> None:
         self.assertEqual(
             set(recorded_streams()),
-            {"captured_and_refunded", "declined_authorization", "cancelled_authorization"},
+            {
+                "captured_and_refunded",
+                "declined_authorization",
+                "cancelled_authorization",
+                "mixed_schema_versions",
+            },
         )
 
     def test_ac_1032_recorded_stream_reads_into_the_expected_state(self) -> None:
@@ -88,7 +100,12 @@ class RecordedStreamsTest(unittest.TestCase):
                 with self.subTest(name, event=raw["event_type"]):
                     encoded = encode_event(event)
                     self.assertEqual(encoded.event_type, raw["event_type"])
-                    self.assertEqual(encoded.payload, raw["payload"])
+                    self.assertEqual(
+                        decode_event(encoded.event_type, encoded.schema_version, encoded.payload),
+                        event,
+                    )
+                    if raw["schema_version"] == encoded.schema_version:
+                        self.assertEqual(encoded.payload, raw["payload"])
 
     def test_amount_keeps_its_exact_scale(self) -> None:
         event = decode_event("PaymentCreated", 1, CREATED_PAYLOAD)
@@ -113,6 +130,45 @@ class VersioningTest(unittest.TestCase):
         ):
             with self.subTest(payload=payload), self.assertRaises(UnreadableStoredDataError):
                 decode_event("PaymentCreated", 1, payload)
+
+    def test_requested_operation_of_version_1_has_an_unknown_requester(self) -> None:
+        stream = recorded_streams()["mixed_schema_versions"]
+        payload = stream["events"][1]["payload"]
+        self.assertNotIn("requested_by", payload)
+
+        event = decode_event("PaymentOperationRequested", 1, payload)
+
+        assert isinstance(event, PaymentOperationRequested)
+        self.assertIsNone(event.requested_by)
+        # Строка не меняется: апкаст живёт только в памяти.
+        self.assertNotIn("requested_by", payload)
+
+    def test_mixed_stream_keeps_the_requester_of_new_events(self) -> None:
+        payment = Payment.from_history(
+            None, 0, decoded(recorded_streams()["mixed_schema_versions"])
+        )
+
+        self.assertEqual(
+            [op.requested_by for op in payment.operations],
+            [None, OperationRequester(RequesterKind.USER, "operator-1", "bff")],
+        )
+
+    def test_new_event_is_written_at_the_current_version(self) -> None:
+        encoded = encode_event(
+            PaymentOperationRequested(
+                OperationId("op-1"),
+                PaymentId("payment-1"),
+                OperationKind.CAPTURE,
+                "key-1",
+                Money.parse("1", "EUR"),
+                datetime(2026, 10, 31, tzinfo=UTC),
+                OperationRequester(RequesterKind.SERVICE, "worker"),
+            )
+        )
+        self.assertEqual(encoded.schema_version, 2)
+        self.assertEqual(
+            encoded.payload["requested_by"], {"kind": "service", "id": "worker", "delegate": None}
+        )
 
     def test_old_version_goes_through_the_upcaster(self) -> None:
         schema = _SCHEMAS["PaymentCreated"]
