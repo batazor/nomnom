@@ -24,7 +24,7 @@ from dataclasses import dataclass
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 from yoyo import read_migrations
-from yoyo.backends import get_backend_class
+from yoyo.backends.core.postgresql import PostgresqlPsycopgBackend
 from yoyo.connections import DatabaseURI
 from yoyo.migrations import MigrationList
 
@@ -38,8 +38,21 @@ _BACKEND = "postgresql+psycopg"
 _LOCK_KEY = 0x7061796D656E7473  # "payments"
 # Bound of every lock wait of a migration. Migrations run during a rolling update next
 # to live traffic: an ALTER TABLE queued behind a long transaction would stall every
-# query of the table behind it, so it fails fast and the pod retries on restart.
-_LOCK_TIMEOUT = "-c lock_timeout=5s"
+# query of the table behind it, so it fails fast and the pod retries on restart. It is a
+# statement, not a startup option of the connection: the pooler rejects those.
+_LOCK_TIMEOUT = "SET lock_timeout = '5s'"
+
+
+class _LockTimeoutBackend(PostgresqlPsycopgBackend):
+    """Yoyo backend with the lock timeout on every connection it opens.
+
+    Yoyo applies each migration on a connection of its own. Only yoyo connections: the
+    advisory lock waits for another replica unbounded.
+    """
+
+    def init_connection(self, connection: psycopg.Connection) -> None:
+        super().init_connection(connection)
+        connection.execute(_LOCK_TIMEOUT)
 
 
 class MissingMigrationsError(RuntimeError):
@@ -95,11 +108,7 @@ def migrate(settings: database.Config, sets: Sequence[MigrationSet]) -> list[str
     with psycopg.connect(**params, autocommit=True) as lock:
         lock.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         try:
-            # Only the yoyo connections: the advisory lock waits for another replica unbounded.
-            options = " ".join(o for o in (params.get("options"), _LOCK_TIMEOUT) if o)
-            uri = DatabaseURI(
-                _BACKEND, None, None, None, None, None, {**params, "options": options}
-            )
+            uri = DatabaseURI(_BACKEND, None, None, None, None, None, params)
             applied: list[str] = []
             for migration_set in sets:
                 applied.extend(_apply(uri, migration_set))
@@ -110,7 +119,7 @@ def migrate(settings: database.Config, sets: Sequence[MigrationSet]) -> list[str
 
 def _apply(uri: DatabaseURI, migration_set: MigrationSet) -> list[str]:
     """Apply pending migrations of one set on its own yoyo connection."""
-    backend = get_backend_class(_BACKEND)(uri, migration_set.migration_table)
+    backend = _LockTimeoutBackend(uri, migration_set.migration_table)
     # Журнал и версия внутренней схемы yoyo общие для всех migration tables схемы: для
     # второй таблицы yoyo запустил бы upgrade, который создаёт их заново и копирует в неё
     # чужой журнал. Поэтому у каждого набора свои.

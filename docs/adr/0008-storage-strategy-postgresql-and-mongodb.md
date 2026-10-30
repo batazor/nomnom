@@ -70,6 +70,16 @@ MongoDB не отменяет моделирование схемы. Конкр�
 
 Контракты репозиториев остаются в `domains` или `applications` согласно их назначению. Реализации репозиториев, SQL/BSON-модели хранения, запросы и преобразования между persistence- и внутренними типами располагаются в `infrastructure` соответствующего сервиса или vertical slice. Доменные модели и прикладные контракты не зависят от SQL, BSON, драйверов, ORM или ODM.
 
+### Пулер соединений PostgreSQL
+
+Приложения подключаются к PostgreSQL через PgBouncer в **session mode**. Миграции и catch-up проекции `orders` держат session-level advisory lock, драйверы кэшируют prepared statements на соединении, а PgBouncer не сообщает о таком коде в transaction mode: lock молча перестаёт защищать.
+
+Session mode не экономит соединения: соединение клиента занимает server-соединение. `pool_size` базы вмещает Σ(replicas × maxConns) всех процессов владельца и соединения миграций.
+
+Мимо пулера идут Debezium (logical replication, [ADR 37](0037-outbox-delivery-via-debezium-cdc.md)) и экспортеры метрик сервера. Параметры сессии задаются `SET` после подключения, а не startup-параметрами: PgBouncer отклоняет незнакомые ему параметры.
+
+Развёртывание в kind — chart `ops/kind/bootstrap` (`templates/pgbouncer.yaml`).
+
 ### Открытые вопросы и следующие шаги
 
 Отдельными решениями или SDD-сценариями должны быть определены:

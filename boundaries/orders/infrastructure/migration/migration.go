@@ -36,8 +36,9 @@ const lockKey int64 = 0x6f7264657273
 // lockTimeout bounds every lock wait of a migration. Migrations run during a
 // rolling update next to live traffic: an ALTER TABLE queued behind a long
 // transaction would stall every query of the table behind it, so it fails
-// fast and the pod retries on restart.
-const lockTimeout = "5s"
+// fast and the pod retries on restart. It is a statement, not a startup
+// parameter of the connection: the pooler rejects those.
+const lockTimeout = "SET lock_timeout = '5s'"
 
 // versionTablePrefix precedes the ID of a Set in its golang-migrate version
 // table: schema_migrations_<id>.
@@ -91,10 +92,8 @@ func Apply(ctx context.Context, cfg database.Config, sets ...Set) error {
 		return fmt.Errorf("migration lock: %w", err)
 	}
 
-	migrationConfig := connConfig.Copy()
-	migrationConfig.RuntimeParams["lock_timeout"] = lockTimeout
 	for _, set := range sets {
-		if err := applySet(ctx, cfg, migrationConfig, set); err != nil {
+		if err := applySet(ctx, cfg, connConfig, set); err != nil {
 			return fmt.Errorf("migrations %s: %w", set.ID, err)
 		}
 	}
@@ -128,7 +127,10 @@ func validate(sets []Set) error {
 // applySet runs one Set on a database/sql pool of its own: the driver closes
 // the pool with the migrator.
 func applySet(ctx context.Context, cfg database.Config, connConfig *pgx.ConnConfig, set Set) error {
-	db := stdlib.OpenDB(*connConfig)
+	db := stdlib.OpenDB(*connConfig, stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, lockTimeout)
+		return err
+	}))
 	db.SetMaxOpenConns(maxConns)
 	db.SetMaxIdleConns(maxConns)
 	db.SetConnMaxLifetime(cfg.MaxConnLifetime)

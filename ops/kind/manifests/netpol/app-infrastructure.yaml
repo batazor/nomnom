@@ -1,6 +1,7 @@
 # Инфраструктурные подключения через штатные endpoints, по владельцам.
-# PostgreSQL в kind — один сервер (chart ops/kind/bootstrap): сеть пускает к нему только
-# контексты с базой, а в чужую базу не пускает сам сервер (роль владельца, CONNECT, pg_hba).
+# PostgreSQL в kind — один сервер за PgBouncer (chart ops/kind/bootstrap): сеть пускает к пулеру
+# только контексты с базой, напрямую к серверу — никого из них, а в чужую базу не пускает сам
+# сервер (роль владельца, CONNECT, pg_hba).
 # Доступ к БД есть только у её владельца; фикстура инфраструктуру не использует, BFF читает
 # JWKS identity providers и Kafka (Cosmo Streams, ADR 36).
 ---
@@ -20,10 +21,10 @@ spec:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgres
+              app.kubernetes.io/name: pgbouncer
       ports:
         - protocol: TCP
-          port: 5432
+          port: 6432
     - to:
         - namespaceSelector:
             matchLabels:
@@ -160,10 +161,10 @@ spec:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgres
+              app.kubernetes.io/name: pgbouncer
       ports:
         - protocol: TCP
-          port: 5432
+          port: 6432
     - to:
         - namespaceSelector:
             matchLabels:
@@ -223,10 +224,10 @@ spec:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgres
+              app.kubernetes.io/name: pgbouncer
       ports:
         - protocol: TCP
-          port: 5432
+          port: 6432
     - to:
         - namespaceSelector:
             matchLabels:
@@ -266,10 +267,10 @@ spec:
               nomnom.dev/tier: infra
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgres
+              app.kubernetes.io/name: pgbouncer
       ports:
         - protocol: TCP
-          port: 5432
+          port: 6432
     - to:
         - namespaceSelector:
             matchLabels:

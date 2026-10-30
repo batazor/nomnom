@@ -1,0 +1,127 @@
+# PgBouncer перед PostgreSQL (ADR 8): приложения ходят на него по DSN <owner>-postgres, порт 6432.
+# Только session mode: миграции и catch-up проекции orders держат session-level advisory lock,
+# драйверы кэшируют prepared statements на соединении, а PgBouncer не сообщает о таком коде в
+# transaction mode.
+# Мимо пулера идут соединения, которым он не подходит: Debezium (logical replication, ADR 37),
+# экспортеры Alloy (метрики сервера, ADR 9), kubectl exec по сокету.
+# Роль и периметр прежние: PgBouncer подключается к серверу ролью клиента, pg_hba пускает её только
+# в её базу. Пароли лежат открытым текстом: SCRAM к серверу PgBouncer считает из них.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pgbouncer-users
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  userlist.txt: |
+    {{- range $owner := .Values.postgres.owners }}
+    {{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
+    "{{ $owner }}" "{{ $password }}"
+    {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+data:
+  pgbouncer.ini: |
+    [databases]
+    {{- range $owner := .Values.postgres.owners }}
+    {{ $owner }} = host=postgres.nomnom-data.svc.cluster.local port=5432 dbname={{ $owner }} pool_size={{ required (printf "postgres.pooler.poolSize.%s is required" $owner) (index $.Values.postgres.pooler.poolSize $owner) }}
+    {{- end }}
+
+    [pgbouncer]
+    listen_addr = *
+    listen_port = 6432
+    unix_socket_dir =
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = session
+    max_client_conn = {{ required "postgres.pooler.maxClientConn is required" .Values.postgres.pooler.maxClientConn }}
+    # sqlx отправляет его при подключении; значение не влияет на бинарный протокол.
+    ignore_startup_parameters = extra_float_digits
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: nomnom-data
+  labels:
+    app.kubernetes.io/name: pgbouncer
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pgbouncer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pgbouncer
+      annotations:
+        # PgBouncer читает конфиг при старте.
+        checksum/config: {{ printf "%v %v" .Values.postgres.owners .Values.postgres.pooler | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pgbouncer
+          image: {{ .Values.images.pgbouncer }}
+          ports:
+            - name: pgbouncer
+              containerPort: 6432
+          readinessProbe:
+            tcpSocket:
+              port: pgbouncer
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pgbouncer
+              readOnly: true
+      volumes:
+        - name: config
+          projected:
+            defaultMode: 0440
+            sources:
+              - configMap:
+                  name: pgbouncer-config
+              - secret:
+                  name: pgbouncer-users
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: nomnom-data
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pgbouncer
+  ports:
+    - name: pgbouncer
+      port: 6432
+      targetPort: pgbouncer

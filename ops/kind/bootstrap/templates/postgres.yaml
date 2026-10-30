@@ -9,9 +9,11 @@
 # emptyDir: данные не переживают пересоздание Pod; init SQL выполняется на пустом PGDATA.
 # Пароль владельца — Secret postgres-<owner> (nomnom-data), DSN приложения — Secret
 # <owner>-postgres (nomnom-<owner>, ключ dsn); оба из одного значения, сохраняемого между deploy.
+# DSN приложения ведёт в PgBouncer (templates/pgbouncer.yaml), экспортеры и Debezium идут на сервер.
 {{- $host := "postgres.nomnom-data.svc.cluster.local" }}
 {{- $admin := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "postgres-admin" "key" "password" "length" 48) }}
 {{- $alloy := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "postgres-alloy" "key" "password" "length" 48) }}
+{{- $pooler := "pgbouncer.nomnom-data.svc.cluster.local" }}
 {{- $dsns := dict }}
 {{- range $owner := .Values.postgres.owners }}
 {{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
@@ -37,7 +39,7 @@ metadata:
     {{- include "bootstrap.labels" $ | nindent 4 }}
 type: Opaque
 data:
-  dsn: {{ printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" $owner $password $host $owner | b64enc }}
+  dsn: {{ printf "postgres://%s:%s@%s:6432/%s?sslmode=disable" $owner $password $pooler $owner | b64enc }}
 {{- end }}
 ---
 apiVersion: v1

@@ -9,7 +9,7 @@ metadata:
 spec:
   description: >
     Под политиками delivery и payments достают Kafka, а чужие БД и Temporal закрыты: БД
-    доступна только владельцу, Temporal — только orders.
+    доступна только владельцу и только через PgBouncer, Temporal — только orders.
   scenarios:
     - bindings:
         - {name: from_namespace, value: nomnom-delivery}
@@ -22,9 +22,19 @@ spec:
         - {name: port, value: 9092}
         - {name: expect, value: open}
     - bindings:
-        - {name: from_namespace, value: nomnom-restaurants}
+        - {name: from_namespace, value: nomnom-delivery}
+        - {name: host, value: pgbouncer.nomnom-data.svc.cluster.local}
+        - {name: port, value: 6432}
+        - {name: expect, value: open}
+    - bindings:
+        - {name: from_namespace, value: nomnom-delivery}
         - {name: host, value: postgres.nomnom-data.svc.cluster.local}
         - {name: port, value: 5432}
+        - {name: expect, value: closed}
+    - bindings:
+        - {name: from_namespace, value: nomnom-restaurants}
+        - {name: host, value: pgbouncer.nomnom-data.svc.cluster.local}
+        - {name: port, value: 6432}
         - {name: expect, value: closed}
     - bindings:
         - {name: from_namespace, value: nomnom-payments}

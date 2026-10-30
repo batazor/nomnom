@@ -61,7 +61,7 @@ ORM и ODM не используются. Запросы пишутся на SQL
   на lock-коллекции и повторяет `up`, пока lock занят; миграции идемпотентны
   ([локальный ADR 2](../../boundaries/restaurants/docs/adr/0002-mongodb-collections-and-document-boundaries.md#эволюция-схемы)).
 - Advisory lock берётся до `lock_timeout`, ожидание другой реплики им не ограничено. Сами
-  миграции идут с `lock_timeout = 5s`: во время rolling update `ALTER TABLE`, вставший в очередь
+  миграции идут с `lock_timeout = 5s`, заданным `SET` на их соединении (startup-параметр отклонил бы PgBouncer, [ADR 8](0008-storage-strategy-postgresql-and-mongodb.md)): во время rolling update `ALTER TABLE`, вставший в очередь
   за транзакцией живого трафика, задержал бы все запросы к таблице, поэтому он падает, транзакция
   миграции откатывается, pod повторяет её после рестарта.
 - Каждый файл миграции — одна транзакция. golang-migrate помечает версию `dirty` перед файлом;

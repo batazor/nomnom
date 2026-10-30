@@ -136,7 +136,9 @@ make kind-down
   позиций курьеров, FR-661: ACL-пользователь `delivery` только публикует в `delivery.tracks.*`, URL — Secret
   `delivery-valkey`; `bff` только подписывается, URL — Secret `bff-tracks-valkey` в `nomnom-bff`) в
   `nomnom-data` (`emptyDir`). Secret DSN
-  кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`). Миграции
+  кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`) и ведёт в PgBouncer
+  (`pgbouncer.nomnom-data:6432`, session mode, `pool_size` — `postgres.pooler` в `bootstrap/values.yaml`);
+  напрямую к серверу ходят только Debezium и экспортеры Alloy. Миграции
   каждый процесс применяет сам при старте ([ADR 42](../../docs/adr/0042-schema-migrations-at-process-startup.md)).
 
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в
@@ -218,7 +220,7 @@ releases с pod template label `skaffold.dev/run-id`, а хранилища де
 | Deployment, Service и PVC `nomnom-data/dex` ([ADR 35](../../docs/adr/0035-browser-login-via-dex-and-pkce.md)) | `templates/dex.yaml`, `dex.*` в values: storage sqlite3 на PVC `dex-data` (ключи подписи и refresh tokens переживают перезапуск pod), staticPasswords (`demo` и `operator` `@nomnom.test`, пароль `nomnom`), public client `nomnom-ui`, audience `nomnom-bff`; **только для kind** | браузер (port-forward), BFF и Router (JWKS) |
 | ConfigMap `spicedb-bootstrap`, Deployment и Service `spicedb` (`nomnom-authz`) | `--set-file` из `authorization/` и kind-only grants `authz/bootstrap-kind.yaml`; checksum в pod template перезапускает SpiceDB только при изменении schema/bootstrap | — |
 | Secret `spicedb-preshared-key` (`preshared-key`) в `nomnom-authz` и неймспейсах контекстов | `lookup` или `randAlphaNum 64` | SpiceDB, контексты |
-| Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-data/postgres-admin`, `nomnom-data/postgres-alloy`, `nomnom-observability/alloy-postgres` (DSN роли `alloy`) | `lookup` или `randAlphaNum 48`; DSN из того же значения | PostgreSQL, приложения, Alloy |
+| Secret `nomnom-data/postgres-<owner>` (`password`), `nomnom-<owner>/<owner>-postgres` (`dsn`), `nomnom-data/postgres-admin`, `nomnom-data/postgres-alloy`, `nomnom-data/pgbouncer-users` (`userlist.txt`), `nomnom-observability/alloy-postgres` (DSN роли `alloy`) | `lookup` или `randAlphaNum 48`; DSN и `userlist.txt` из того же значения | PostgreSQL, PgBouncer, приложения, Alloy |
 | Secret `nomnom-data/mongodb-restaurants` (`root-password`, `password`, `keyfile`), `nomnom-restaurants/restaurants-mongodb` (`uri`) | `lookup` или `randAlphaNum` | MongoDB, restaurants |
 | Deployment и Service `postgres` — один сервер с базами и ролями `orders`, `payments`, `delivery`, `controlplane` (init SQL ConfigMap `postgres-config`), MongoDB `restaurants` | шаблоны chart, `emptyDir` | — |
 | replica set `rs0` и пользователь `restaurants` MongoDB | Job `mongodb-restaurants-init` (hook): `mongosh`, идемпотентно | restaurants |

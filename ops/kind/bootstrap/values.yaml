@@ -5,6 +5,7 @@
 images:
   spicedb: authzed/spicedb:v1.57.0@sha256:a170d372c9f6b921bb6849064df6ca3566dd5b174882c1a2c4300c2ae1d60efd
   postgres: postgres:18.6-alpine3.24@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+  pgbouncer: ghcr.io/cloudnative-pg/pgbouncer:1.26.1@sha256:c96417dce3f7ee82a1cb6df65309ebb7efec0a449363c333c043e2fe0c636097
   mongodb: mongo:8.3.13@sha256:0e900a3364da37b76d642b73b0bba56bd4c6c509ab470cf700436fd866bee3ff
   # ADR 43: кеш чтения каталога restaurants.
   valkey: valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
@@ -42,6 +43,16 @@ postgres:
     - payments
     - delivery
     - controlplane
+  # templates/pgbouncer.yaml, session mode: соединение клиента держит server-соединение. poolSize
+  # базы — Σ(replicas × maxConns) всех процессов владельца, по 2 соединения миграций на процесс и
+  # запас на rolling update. Сумма с Debezium и экспортерами помещается в max_connections сервера (100).
+  pooler:
+    maxClientConn: 200
+    poolSize:
+      orders: 32
+      payments: 16
+      delivery: 24
+      controlplane: 10
 
 identity:
   # ADR 27: issuer projected ServiceAccount tokens, ожидаемый values контекстов.
