@@ -33,7 +33,7 @@ from slices.payment.applications.errors import (
     ProviderResultConflictError,
 )
 
-from .webhook import SIGNATURE_HEADER, InvalidWebhookError, WebhookVerifier, parse_callback
+from .webhook import InvalidWebhookError, WebhookFormat, WebhookVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ _ERROR_STATUS: tuple[tuple[type[Exception], int], ...] = (
 
 def create_webhook_handler(
     verifier: WebhookVerifier,
+    webhook_format: WebhookFormat,
     callbacks: Handler[ApplyProviderCallbackInput, ApplyProviderCallbackResult],
     now: Callable[[], datetime],
     tracer_provider: trace.TracerProvider | None = None,
@@ -63,6 +64,7 @@ def create_webhook_handler(
 
     The handler verifies the signature, maps the body and applies it through ``callbacks``;
     application errors map to 4xx so that only technical failures make the provider redeliver.
+    A message without an operation is answered 200 and applies nothing.
     """
     tracer = trace.get_tracer(INSTRUMENTATION, tracer_provider=tracer_provider)
 
@@ -107,8 +109,12 @@ def create_webhook_handler(
                 return
             body = self.rfile.read(length)
             try:
-                verifier.verify(self.headers.get(SIGNATURE_HEADER), body, now())
-                result = callbacks.handle(parse_callback(body))
+                verifier.verify(self.headers.get(webhook_format.signature_header), body, now())
+                command = webhook_format.parse(body)
+                if command is None:
+                    self._reply(200, {"status": "ignored"})
+                    return
+                result = callbacks.handle(command)
             except Exception as error:
                 for error_type, status in _ERROR_STATUS:
                     if isinstance(error, error_type):

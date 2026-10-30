@@ -9,6 +9,8 @@ Body: ``{"id": <message id>, "operation_id": ..., "status": "succeeded"|"decline
 import hashlib
 import hmac
 import json
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackInput
@@ -65,14 +67,20 @@ def _parse_header(header: str) -> tuple[int, list[str]]:
     return timestamp, signatures
 
 
-def parse_callback(body: bytes) -> ApplyProviderCallbackInput:
-    """Map a verified body; call only after ``WebhookVerifier.verify``."""
+def parse_body(body: bytes) -> dict[str, object]:
+    """Decode a webhook body, which is a JSON object in every format."""
     try:
         payload = json.loads(body)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise InvalidWebhookError("webhook body is not JSON") from error
     if not isinstance(payload, dict):
         raise InvalidWebhookError("webhook body must be an object")
+    return payload
+
+
+def parse_callback(body: bytes) -> ApplyProviderCallbackInput:
+    """Map a verified body; call only after ``WebhookVerifier.verify``."""
+    payload = parse_body(body)
     message_id = payload.get("id")
     operation_id = payload.get("operation_id")
     if not isinstance(message_id, str) or not isinstance(operation_id, str):
@@ -89,3 +97,17 @@ def parse_callback(body: bytes) -> ApplyProviderCallbackInput:
     else:
         raise InvalidWebhookError("webhook status must be succeeded or declined")
     return ApplyProviderCallbackInput(message_id, operation_id, outcome)
+
+
+@dataclass(frozen=True)
+class WebhookFormat:
+    """Wire format of one provider: its signature header and body mapping.
+
+    ``parse`` returns ``None`` for a message that says nothing about an operation.
+    """
+
+    signature_header: str
+    parse: Callable[[bytes], ApplyProviderCallbackInput | None]
+
+
+SANDBOX_WEBHOOK_FORMAT = WebhookFormat(SIGNATURE_HEADER, parse_callback)

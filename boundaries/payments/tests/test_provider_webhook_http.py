@@ -15,7 +15,10 @@ from slices.payment.applications.apply_provider_callback import ApplyProviderCal
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
 from slices.payment.infrastructure.provider import (
     MAX_BODY_BYTES,
+    SANDBOX_WEBHOOK_FORMAT,
     SIGNATURE_HEADER,
+    STRIPE_SIGNATURE_HEADER,
+    STRIPE_WEBHOOK_FORMAT,
     WEBHOOK_PATH,
     WebhookVerifier,
     create_webhook_handler,
@@ -39,7 +42,10 @@ class ProviderWebhookHttpTest(unittest.TestCase):
         )
         callbacks = ApplyProviderCallbackHandler(self.kit.uow, self.kit.inbox, self.kit.applier())
         handler = create_webhook_handler(
-            WebhookVerifier(SECRET, timedelta(minutes=5)), callbacks, lambda: NOW
+            WebhookVerifier(SECRET, timedelta(minutes=5)),
+            SANDBOX_WEBHOOK_FORMAT,
+            callbacks,
+            lambda: NOW,
         )
         self.worker = HttpWorker(("127.0.0.1", 0), handler, name="webhooks")
         self.worker.start()
@@ -96,6 +102,64 @@ class ProviderWebhookHttpTest(unittest.TestCase):
 
     def test_oversized_body_is_413(self) -> None:
         self.assertEqual(self.post(b"x" * (MAX_BODY_BYTES + 1))[0], 413)
+
+
+@pytest.mark.usefixtures("database")
+class StripeWebhookHttpTest(unittest.TestCase):
+    database: Database
+
+    @override
+    def setUp(self) -> None:
+        self.kit = PaymentsTestKit(self.database)
+        payment_id = self.kit.given_payment(PaymentState.AUTHORIZED)
+        self.operation_id = self.kit.given_operation(
+            payment_id, OperationKind.CAPTURE, "order-1:capture"
+        )
+        handler = create_webhook_handler(
+            WebhookVerifier(SECRET, timedelta(minutes=5)),
+            STRIPE_WEBHOOK_FORMAT,
+            ApplyProviderCallbackHandler(self.kit.uow, self.kit.inbox, self.kit.applier()),
+            lambda: NOW,
+        )
+        self.worker = HttpWorker(("127.0.0.1", 0), handler, name="webhooks")
+        self.worker.start()
+        self.thread = threading.Thread(target=self.worker.run, daemon=True)
+        self.thread.start()
+
+    @override
+    def tearDown(self) -> None:
+        self.worker.shutdown(time.monotonic() + 2)
+        self.thread.join(2)
+
+    def post(self, event_type: str, metadata: dict[str, str]):
+        body = json.dumps(
+            {
+                "id": "evt_1",
+                "type": event_type,
+                "data": {"object": {"id": "pi_1", "metadata": metadata}},
+            }
+        ).encode()
+        # Stripe sends a v0 signature next to v1 in test mode; the verifier skips it.
+        signature = sign_payload(SECRET, int(NOW.timestamp()), body) + ",v0=ignored"
+        connection = http.client.HTTPConnection("127.0.0.1", self.worker.port, timeout=5)
+        try:
+            connection.request("POST", WEBHOOK_PATH, body, {STRIPE_SIGNATURE_HEADER: signature})
+            response = connection.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            connection.close()
+
+    def test_event_of_an_operation_is_applied(self) -> None:
+        status, payload = self.post(
+            "payment_intent.succeeded", {"operation_id": str(self.operation_id)}
+        )
+        self.assertEqual((status, payload["status"]), (200, "applied"))
+        self.assertEqual(self.kit.operation(self.operation_id).state, OperationState.SUCCEEDED)
+
+    def test_event_without_an_operation_is_ignored_with_200(self) -> None:
+        status, payload = self.post("charge.succeeded", {})
+        self.assertEqual((status, payload["status"]), (200, "ignored"))
+        self.assertEqual(self.kit.operation(self.operation_id).state, OperationState.PENDING)
 
 
 class _Worker:

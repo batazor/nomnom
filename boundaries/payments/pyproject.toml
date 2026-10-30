@@ -15,6 +15,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.6",
     "pydantic-settings>=2.11.0",
     "pyjwt[crypto]>=2.15.1",
+    "stripe>=16.1.0",
     "yoyo-migrations>=9.0.0",
 ]
 

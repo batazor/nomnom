@@ -371,3 +371,34 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
+---
+# payments: Stripe API для PROVIDER__KIND=stripe (ops/kind/values/payments-stripe.yaml). Fake
+# наружу не ходит, поэтому в e2e правило не используется. toFQDNs работает по ответам DNS,
+# которые видит прокси Cilium: DNS-правило пропускает все имена, разрешённые allow-dns-egress.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-stripe-egress
+  namespace: nomnom-payments
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: payments
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: api.stripe.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

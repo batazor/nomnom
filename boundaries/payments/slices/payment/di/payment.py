@@ -46,7 +46,12 @@ from slices.payment.infrastructure.observability import (
 )
 from slices.payment.infrastructure.observability import usecases as names
 from slices.payment.infrastructure.provider import (
+    SANDBOX_WEBHOOK_FORMAT,
+    STRIPE_WEBHOOK_FORMAT,
     FakePaymentProvider,
+    StripePaymentProvider,
+    WebhookFormat,
+    create_stripe_client,
 )
 from slices.payment.infrastructure.repository import (
     DatabasePaymentOutbox,
@@ -93,9 +98,22 @@ def create_permission_checker(
 
 
 def create_provider(settings: ProviderSettings) -> PaymentProviderGateway:
-    """Payment provider port: the sandbox of ``PROVIDER__KIND=fake``."""
+    """Payment provider port: the sandbox of ``fake`` or the test mode of ``stripe``."""
     if settings.kind == "fake":
         return FakePaymentProvider()
+    if settings.kind == "stripe":
+        return StripePaymentProvider(
+            create_stripe_client(settings.stripe_api_key, settings.stripe_timeout.total_seconds())
+        )
+    raise ProviderConfigurationError(f"unsupported PROVIDER__KIND {settings.kind!r}")
+
+
+def webhook_format_of(settings: ProviderSettings) -> WebhookFormat:
+    """Wire format of the webhooks of ``PROVIDER__KIND``."""
+    if settings.kind == "fake":
+        return SANDBOX_WEBHOOK_FORMAT
+    if settings.kind == "stripe":
+        return STRIPE_WEBHOOK_FORMAT
     raise ProviderConfigurationError(f"unsupported PROVIDER__KIND {settings.kind!r}")
 
 

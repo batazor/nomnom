@@ -294,7 +294,48 @@ Histograms в секундах получают явные границы `SECON
 
 При одной реплике это 10 server-соединений; соединение миграций закрывается до открытия пула. Debezium держит своё соединение репликации к базе (не через пулер). Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`; `db.client.connection.pool.name=payments`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
-Не реализованы: client реального провайдера (есть только `fake`), Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `SPICEDB__ENDPOINT`, `PROVIDER__KIND=fake` и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Не реализованы: боевой провайдер (есть `fake` и [Stripe test mode](#stripe-test-mode)), Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `SPICEDB__ENDPOINT`, `PROVIDER__KIND` (`fake` или `stripe`) и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+
+### Stripe test mode
+
+`PROVIDER__KIND=stripe` подключает настоящий API Stripe в тестовом режиме: пример реального провайдера без реальных денег. `fake` остаётся провайдером kind e2e и CI: там нет ключа и выхода в интернет. Адаптер — `slices/payment/infrastructure/provider/stripe_gateway.py`, разбор webhook — `stripe_webhook.py`.
+
+| Операция | Вызов Stripe | Успех | Ссылка провайдера |
+| --- | --- | --- | --- |
+| Authorize | `POST /v1/payment_intents`, `capture_method=manual`, `confirm=true` | `requires_capture` | `pi_...` |
+| Capture | `POST /v1/payment_intents/{id}/capture` | `succeeded` | `pi_...` |
+| Cancel Authorization | `POST /v1/payment_intents/{id}/cancel` | `canceled` | `pi_...` |
+| Refund | `POST /v1/refunds`, весь списанный остаток | `succeeded` | `re_...` |
+
+- **Карта.** В домене карты нет, поэтому карту заменяет серверный тестовый `pm_card_visa`. Авторизация на 666.00 использует `pm_card_visa_chargeDeclined`, как отказ `fake`. Stripe Elements и ввод карты клиентом не подключены.
+- **Идемпотентность.** `idempotency_key` операции передаётся в `Idempotency-Key`. Stripe хранит ключ ограниченное время (не меньше 24 часов): повтор после этого выполняется как новый запрос.
+- **Ошибки.** `CardError` и `InvalidRequestError` повтором не исправить, это отказ операции. Остальное, включая неверный ключ, — `ProviderUnavailableError`: `orders` повторяет шаг, пока причину не устранят.
+- **Суммы.** Поддержаны `EUR`, `USD`, `GBP` с двумя знаками после запятой. Другие валюты и суммы получают отказ `stripe_unsupported_amount`: у них иные минорные единицы.
+- **Webhooks.** Подпись проверяет тот же `WebhookVerifier`, заголовок — `Stripe-Signature`, путь — `POST /webhooks/provider`. Операцию находит `metadata.operation_id`. Отображаются `payment_intent.amount_capturable_updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `refund.updated`, `refund.failed`. Остальные события и объекты без `operation_id` получают 200 (`ignored`).
+
+Ограничения: `payment_intent.canceled` не отображается, отмена получает результат в ответе API. Действия из Stripe Dashboard и истечение авторизации через 7 дней до `Payment` не доходят, состояние разойдётся.
+
+| Переменная | Значение |
+| --- | --- |
+| `PROVIDER__STRIPE_API_KEY` | Обязательна при `PROVIDER__KIND=stripe`, только `sk_test_...`, иначе ошибка startup. Только из Secret. |
+| `PROVIDER__STRIPE_TIMEOUT` | Deadline одного запроса, `<int>(ms\|s\|m)`, по умолчанию `10s`. |
+| `PROVIDER__WEBHOOK_SECRET` | `whsec_...` от `stripe listen` или endpoint в Dashboard. |
+
+Запуск в kind: Stripe не достучится до кластера, webhooks доставляет Stripe CLI. Секрет печатает `stripe listen`, его порт — `WEBHOOKS_HOST_PORT` (`18085`):
+
+```bash
+stripe listen --skip-verify --forward-to https://api.nomnom.localhost:18085/webhooks/provider
+```
+
+```bash
+kubectl -n nomnom-payments create secret generic payments-stripe --from-literal=api-key="$STRIPE_API_KEY" --from-literal=webhook-secret="$STRIPE_WEBHOOK_SECRET"
+```
+
+```bash
+helm upgrade payments boundaries/payments/ops/helm -n nomnom-payments --reuse-values -f ops/kind/values/payments-stripe.yaml
+```
+
+Выход на `api.stripe.com` разрешает `CiliumNetworkPolicy allow-stripe-egress` из `ops/kind/manifests/netpol/app-infrastructure.yaml`. Следующий `make kind-deploy` возвращает `fake`.
 
 ## Запуск
 

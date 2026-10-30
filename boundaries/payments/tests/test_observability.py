@@ -63,6 +63,7 @@ from slices.payment.domains.payment import (
 from slices.payment.infrastructure.observability import ObservedProvider, classify_payment_error
 from slices.payment.infrastructure.observability import usecases as names
 from slices.payment.infrastructure.provider import (
+    SANDBOX_WEBHOOK_FORMAT,
     WEBHOOK_PATH,
     FakePaymentProvider,
     WebhookVerifier,
@@ -573,6 +574,7 @@ class WebhookSpanTest(unittest.TestCase):
         kit.given_payment(PaymentState.AUTHORIZED)
         handler = create_webhook_handler(
             WebhookVerifier("whsec", timedelta(minutes=5)),
+            SANDBOX_WEBHOOK_FORMAT,
             ApplyProviderCallbackHandler(kit.uow, kit.inbox, kit.applier()),
             lambda: datetime(2026, 10, 25, tzinfo=UTC),
             signals.tracer_provider,

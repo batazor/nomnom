@@ -77,7 +77,7 @@ class FakeProviderTest(unittest.TestCase):
             patch.dict(
                 os.environ,
                 {
-                    "PROVIDER__KIND": "stripe",
+                    "PROVIDER__KIND": "unknown",
                     "EVENT_STORE__SNAPSHOT_EVERY": "5",
                     "EVENT_STORE__SUBJECT_KEK": "k" * 32,
                 },

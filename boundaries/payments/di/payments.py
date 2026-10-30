@@ -18,7 +18,7 @@ from infrastructure.grpc.identity import SubjectResolver, create_subject_resolve
 from infrastructure.grpc.servicer import PaymentsHandlers
 from infrastructure.grpc.worker import GrpcWorker
 from pkg.lifecycle import HttpWorker, WorkerGroup
-from slices.payment.di.payment import PaymentContainer, spicedb_client
+from slices.payment.di.payment import PaymentContainer, spicedb_client, webhook_format_of
 from slices.payment.infrastructure.provider import WebhookVerifier, create_webhook_handler
 
 
@@ -70,6 +70,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
                 config.payment_provider.provided.webhook_secret,
                 config.payment_provider.provided.webhook_tolerance,
             ),
+            providers.Callable(webhook_format_of, config.payment_provider),
             payment.callbacks,
             payment.clock.provided.now,
         ),
