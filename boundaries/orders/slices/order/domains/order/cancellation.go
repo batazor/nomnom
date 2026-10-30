@@ -47,7 +47,8 @@ type CancellationWindow struct {
 }
 
 // CheckCancellation reports whether a Cancellation Request is admissible at requestedAt
-// without changing the Order: the window policy first, then the FSM row for cancel.
+// without changing the Order: the window policy first, then the FSM row for cancel
+// and the rule that an Order with a known outcome is settled by the workflow.
 func (o *Order) CheckCancellation(requestedAt time.Time, window CancellationWindow) error {
 	policy := WithinCancellationWindow(CancellationWindowContext{
 		Now:      requestedAt,
@@ -57,8 +58,13 @@ func (o *Order) CheckCancellation(requestedAt time.Time, window CancellationWind
 	if !policy.Satisfied() {
 		return CancellationNotAllowed(policy)
 	}
-	_, err := transition(o.state, TriggerCancel, TransitionInput{RequestedAt: requestedAt})
-	return err
+	if _, err := transition(o.state, TriggerCancel, TransitionInput{RequestedAt: requestedAt}); err != nil {
+		return err
+	}
+	if !o.state.AcceptsCancellation() {
+		return InvalidTransition{From: o.state, Trigger: TriggerCancel}
+	}
+	return nil
 }
 
 // Cancel records the final negative outcome chosen by the fulfillment process.

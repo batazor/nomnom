@@ -214,61 +214,74 @@ aggregate_type, from_state, trigger, to_state, result
 
 ## Order
 
-Statechart aggregate `Order` в `orders`; реализация — `boundaries/orders/slices/order/domains/order/fsm.go`. Положение заказа в Fulfillment — только его state; клиентский статус BFF отображает из state, а не вычисляет из фактов. Fulfillment Facts — журнал: когда шаг произошёл и почему, решения по нему не принимаются.
+Statechart aggregate `Order` в `orders`; реализация — `boundaries/orders/slices/order/domains/order/fsm.go`. `Order` — заказ покупателя: его states говорят на языке покупателя и не копируют чужие автоматы. Кухня ведёт свой `RestaurantOrder` (`QUEUED`, `ASSEMBLED`…), доставка — свою `Delivery` (`Waiting`, `Assigned`…); их внутренние states в `Order` не попадают, а факты соседей переводятся в шаги покупателя. Поиск и назначение курьера — states `Delivery`, BFF берёт курьера из `delivery`. Клиентский статус BFF отображает из state, а не вычисляет из фактов. Fulfillment Facts — журнал: когда шаг произошёл и почему, решения по нему не принимаются.
 
 Compound states:
 
 | Compound state | Входит | Смысл |
 | --- | --- | --- |
-| `open` | `placed`, `paid`, `confirmed`, `preparing`, `ready`, `picked_up` | Open Order: Fulfillment не завершён; Order можно отменить и записать Fulfillment Fact |
+| `open` | `in_progress`, `settling` | Open Order: Fulfillment не завершён, можно записать Fulfillment Fact |
+| `in_progress` | `placed`, `paid`, `confirmed`, `preparing`, `ready`, `picked_up` | Итог неизвестен: прогресс идёт вперёд, покупатель может запросить отмену |
+| `settling` | `rejected`, `delivery_failed`, `delivered` | Итог известен, workflow его завершает; отмена покупателем недоступна |
 | `closed` | `cancelled`, `completed` | Closed Order: terminal states (`IsFinal()`) |
 
 ```mermaid
 stateDiagram-v2
     [*] --> placed: Place
-    state open {
+    state in_progress {
         placed --> paid: authorize_payment
         paid --> confirmed: confirm
         confirmed --> preparing: start_preparation
         preparing --> ready: mark_ready
         ready --> picked_up: pick_up
     }
+    state settling {
+        rejected
+        delivery_failed
+        delivered
+    }
     state closed {
         cancelled
         completed
     }
-    confirmed --> completed: complete
-    preparing --> completed: complete
-    ready --> completed: complete
-    picked_up --> completed: complete
-    open --> cancelled: cancel
-    open --> open: record_fact (stay)
+    in_progress --> rejected: reject
+    in_progress --> delivery_failed: fail_delivery
+    in_progress --> delivered: deliver
+    delivered --> completed: complete
+    in_progress --> cancelled: cancel
+    settling --> cancelled: cancel (Saga)
     closed --> [*]
 ```
 
-На диаграмме — основной путь. Переходы монотонны: факты `restaurants` и `delivery` приходят из разных топиков без общего порядка, поэтому факт может перепрыгнуть ещё не сообщённый шаг, а факт уже пройденного шага не двигает заказ назад и только дописывается в журнал. Заказ никогда не идёт назад.
+На диаграмме — основной путь. Переходы монотонны: факты `restaurants` и `delivery` приходят из разных топиков без общего порядка, поэтому факт может перепрыгнуть ещё не сообщённый шаг, а факт уже пройденного шага не двигает заказ назад и только дописывается в журнал. Заказ никогда не идёт назад. Известный итог завершает прогресс: в `settling` любые поздние факты только дописываются в журнал.
 
 Строка — исход `trigger` из `state`; `→ x` — переход, `stay` — state не меняется, факт пишется в журнал:
 
-| state | `authorize_payment` | `confirm` | `start_preparation` | `mark_ready` | `pick_up` | `complete` |
-| --- | --- | --- | --- | --- | --- | --- |
-| `placed` | → `paid` | → `confirmed` | → `preparing` | → `ready` | → `picked_up` | invalid |
-| `paid` | `stay` | → `confirmed` | → `preparing` | → `ready` | → `picked_up` | invalid |
-| `confirmed` | invalid | `AlreadyInState` | → `preparing` | → `ready` | → `picked_up` | → `completed` |
-| `preparing` | invalid | `stay` | `stay` | → `ready` | → `picked_up` | → `completed` |
-| `ready` | invalid | `stay` | `stay` | `stay` | → `picked_up` | → `completed` |
-| `picked_up` | invalid | `stay` | `stay` | `stay` | `stay` | → `completed` |
+| state | `authorize_payment` | `confirm` | `start_preparation` | `mark_ready` | `pick_up` |
+| --- | --- | --- | --- | --- | --- |
+| `placed` | → `paid` | → `confirmed` | → `preparing` | → `ready` | → `picked_up` |
+| `paid` | `stay` | → `confirmed` | → `preparing` | → `ready` | → `picked_up` |
+| `confirmed` | invalid | `AlreadyInState` | → `preparing` | → `ready` | → `picked_up` |
+| `preparing` | invalid | `stay` | `stay` | → `ready` | → `picked_up` |
+| `ready` | invalid | `stay` | `stay` | `stay` | → `picked_up` |
+| `picked_up` | invalid | `stay` | `stay` | `stay` | `stay` |
+| `settling` | invalid | `stay` | `stay` | `stay` | `stay` |
 
 Для всех этих trigger guard — `occurred_at` задан, иначе `GuardFailed{occurred_at_required}`.
 
-Строки на compound state:
+Остальные строки:
 
 | source | trigger | guard | target | failure |
 | --- | --- | --- | --- | --- |
+| `in_progress` | `reject` | `occurred_at` задан | `rejected` | `GuardFailed{occurred_at_required}` |
+| `in_progress` | `fail_delivery` | `occurred_at` задан | `delivery_failed` | `GuardFailed{occurred_at_required}` |
+| `in_progress` | `deliver` | `occurred_at` задан | `delivered` | `GuardFailed{occurred_at_required}` |
+| `settling` | `reject`, `fail_delivery`, `deliver` | `occurred_at` задан | `stay` | `GuardFailed{occurred_at_required}` |
+| `delivered` | `complete` | `occurred_at` задан | `completed` | `GuardFailed{occurred_at_required}` |
 | `open` | `cancel` | `requested_at` задан | `cancelled` | `GuardFailed{requested_at_required}` |
 | `open` | `record_fact` | `occurred_at` задан | `stay` | `GuardFailed{occurred_at_required}` |
 
-`record_fact` не двигает заказ. Им записываются данные: `courier_assigned` (курьера могут снять и назначить другого, это ортогонально цепочке, см. `CourierAssignment`), отрицательные `restaurant_rejected` и `delivery_failed` (итог выбирает Saga через `cancel`), `delivery_completed` (итог — `complete` от workflow) и сроки `ExpectedTimes`.
+`record_fact` — данные соседа, а не положение заказа: `courier_assigned` и сроки `ExpectedTimes`.
 
 Повтор факта на `stay` — `FactAlreadyRecorded`. Строгие повторы с явным `AlreadyInState`:
 
@@ -278,9 +291,11 @@ stateDiagram-v2
 | `cancelled` | `cancel` | `AlreadyInState{cancelled}` |
 | `completed` | `complete` | `AlreadyInState{completed}` |
 
-Все остальные пары `state × trigger` дают `InvalidTransition`: `placed × complete` и `paid × complete` (Completion только после подтверждения), любой trigger из `closed`, кроме повторов. Факт для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). `authorize_payment` допускается только в `placed` и `paid`: ресторан запрашивается после оплаты, поэтому заказ дальше `paid` оплату уже прошёл. Failure пока завершается тем же `cancelled` с видом итога `failure`.
+Все остальные пары `state × trigger` дают `InvalidTransition`: `complete` вне `delivered` (Completion только после доставки), любой trigger из `closed`, кроме повторов. Факт для Closed Order — `InvalidTransition`, который Fulfillment reflector трактует как поздний факт (`IsFinal()`). `authorize_payment` допускается только в `placed` и `paid`: ресторан запрашивается после оплаты, поэтому заказ дальше `paid` оплату уже прошёл.
 
-`AcceptsCancellation()` и `IsFinal()` — принадлежность к `open` и `closed`, а не ручные списки states. Окно отмены от положения внутри `open` не зависит.
+`rejected` и `delivery_failed` — итог уже известен покупателю, но компенсации и код причины задаёт Saga, она и переводит заказ в `cancelled` с видом итога `failure`. `delivered` завершает workflow через `complete`.
+
+`IsFinal()` — принадлежность к `closed`, `AcceptsCancellation()` — к `in_progress`, а не ручные списки states. `CheckCancellation` отказывает покупателю в `settling`; сам `cancel` от Saga там допустим.
 
 ## Kitchen / Preparation
 

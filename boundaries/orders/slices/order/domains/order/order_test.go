@@ -47,6 +47,8 @@ func TestOrderLifecycleUsesStrictTypedOutcomes(t *testing.T) {
 	require.True(t, errors.As(err, &already))
 	assert.Equal(t, StateConfirmed, already.State)
 
+	_, err = order.RecordDeliveryCompletion(testNow)
+	require.NoError(t, err)
 	completed, err := order.Complete(testNow)
 	require.NoError(t, err)
 	assert.Equal(t, StateCompleted, completed.To)
@@ -170,6 +172,7 @@ func newTestOrder(t *testing.T) *Order {
 func TestOnlyCancelledAndCompletedAreFinal(t *testing.T) {
 	final := map[State]bool{
 		StatePlaced: false, StatePaid: false, StateConfirmed: false, StatePreparing: false, StateReady: false, StatePickedUp: false,
+		StateRejected: false, StateDeliveryFailed: false, StateDelivered: false,
 		StateCancelled: true, StateCompleted: true,
 	}
 	require.Len(t, final, len(allStates))

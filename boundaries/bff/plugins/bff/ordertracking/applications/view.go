@@ -163,8 +163,10 @@ func status(order OrderSnapshot) (Status, error) {
 		return StatusReceived, nil
 	case "paid":
 		return StatusPaid, nil
-	case "completed":
+	case "delivered", "completed":
 		return StatusDelivered, nil
+	case "rejected", "delivery_failed":
+		return StatusFailed, nil
 	case "cancelled":
 		if order.Cancellation != nil && order.Cancellation.Outcome == "failure" {
 			return StatusFailed, nil
@@ -189,6 +191,13 @@ func status(order OrderSnapshot) (Status, error) {
 
 func endReason(order OrderSnapshot) EndReason {
 	if order.Cancellation == nil {
+		// The Saga has not named the reason yet; the outcome is already known.
+		switch order.State {
+		case "rejected":
+			return EndRestaurantRejected
+		case "delivery_failed":
+			return EndDeliveryFailed
+		}
 		return ""
 	}
 	if reason, ok := endReasonOfCode[order.Cancellation.ReasonCode]; ok {

@@ -23,7 +23,7 @@ import (
 // OrderDetailsProjectionVersion is the shape of order_details.details. A change
 // of the document increments it: catch-up at process start projects every row
 // of an older version again.
-const OrderDetailsProjectionVersion = 4
+const OrderDetailsProjectionVersion = 5
 
 // projectionBatch bounds the Orders projected again in one pass of catch-up
 // and rebuild; each Order is projected in its own transaction.

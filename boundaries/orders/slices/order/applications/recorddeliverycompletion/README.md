@@ -34,7 +34,7 @@ sequenceDiagram
 
 Handler: [`recorddeliverycompletion.go`](recorddeliverycompletion.go), unit-тесты: [`recorddeliverycompletion_test.go`](recorddeliverycompletion_test.go).
 
-- **Поведение:** `Input{EventID, OrderID, OccurredAt}` → `Order.RecordDeliveryCompletion`: факт `delivery_completed`; `Order` не завершается — Completion фиксирует `completeorder`.
+- **Поведение:** `Input{EventID, OrderID, OccurredAt}` → `Order.RecordDeliveryCompletion`: факт `delivery_completed` и переход в `delivered`; `Order` не завершается — Completion фиксирует `completeorder`.
 - **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; общий поток — [`fulfillment.Reflector`](../fulfillment/README.md).
 - **Inbox consumer:** `orders.recorddeliverycompletion`; повтор `event_id` даёт outcome `duplicate` и повторное уведомление workflow с тем же `event_id`.
 - **Outcomes:** `applied`, `already_applied` (повтор факта под новым `event_id`), `ignored_late` (`Order` в `completed`/`cancelled`, `event_id` фиксируется), `duplicate`. Закрытый workflow не является ошибкой (`WorkflowNotified=false`); прочая ошибка уведомления возвращается, чтобы событие было доставлено повторно.

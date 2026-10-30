@@ -17,12 +17,19 @@ const (
 	StatePreparing State = "preparing"
 	StateReady     State = "ready"
 	StatePickedUp  State = "picked_up"
-	StateCancelled State = "cancelled"
-	StateCompleted State = "completed"
+	// StateRejected, StateDeliveryFailed and StateDelivered are the outcome of a
+	// neighbour known to the customer, while the workflow still settles it: the
+	// Saga cancels, the route completes.
+	StateRejected       State = "rejected"
+	StateDeliveryFailed State = "delivery_failed"
+	StateDelivered      State = "delivered"
+	StateCancelled      State = "cancelled"
+	StateCompleted      State = "completed"
 )
 
 var allStates = [...]State{
 	StatePlaced, StatePaid, StateConfirmed, StatePreparing, StateReady, StatePickedUp,
+	StateRejected, StateDeliveryFailed, StateDelivered,
 	StateCancelled, StateCompleted,
 }
 
@@ -34,11 +41,16 @@ const (
 	// CompoundOpen is an Open Order: Fulfillment is not finished, the Order
 	// can be cancelled and records Fulfillment Facts.
 	CompoundOpen CompoundState = "open"
+	// CompoundInProgress is an Open Order whose outcome is not known: progress
+	// moves it forward and the customer can request a cancellation.
+	CompoundInProgress CompoundState = "in_progress"
+	// CompoundSettling is an Open Order with a known outcome the workflow settles.
+	CompoundSettling CompoundState = "settling"
 	// CompoundClosed is a Closed Order: a final outcome of the lifecycle.
 	CompoundClosed CompoundState = "closed"
 )
 
-var allCompoundStates = [...]CompoundState{CompoundOpen, CompoundClosed}
+var allCompoundStates = [...]CompoundState{CompoundOpen, CompoundInProgress, CompoundSettling, CompoundClosed}
 
 // node is a State or a CompoundState of the hierarchy.
 type node string
@@ -48,16 +60,21 @@ const topLevel node = ""
 
 // parent of every node of the hierarchy.
 var parent = map[node]node{
-	node(CompoundOpen):   topLevel,
-	node(CompoundClosed): topLevel,
-	node(StatePlaced):    node(CompoundOpen),
-	node(StatePaid):      node(CompoundOpen),
-	node(StateConfirmed): node(CompoundOpen),
-	node(StatePreparing): node(CompoundOpen),
-	node(StateReady):     node(CompoundOpen),
-	node(StatePickedUp):  node(CompoundOpen),
-	node(StateCancelled): node(CompoundClosed),
-	node(StateCompleted): node(CompoundClosed),
+	node(CompoundOpen):        topLevel,
+	node(CompoundClosed):      topLevel,
+	node(CompoundInProgress):  node(CompoundOpen),
+	node(CompoundSettling):    node(CompoundOpen),
+	node(StatePlaced):         node(CompoundInProgress),
+	node(StatePaid):           node(CompoundInProgress),
+	node(StateConfirmed):      node(CompoundInProgress),
+	node(StatePreparing):      node(CompoundInProgress),
+	node(StateReady):          node(CompoundInProgress),
+	node(StatePickedUp):       node(CompoundInProgress),
+	node(StateRejected):       node(CompoundSettling),
+	node(StateDeliveryFailed): node(CompoundSettling),
+	node(StateDelivered):      node(CompoundSettling),
+	node(StateCancelled):      node(CompoundClosed),
+	node(StateCompleted):      node(CompoundClosed),
 }
 
 // lineage is the state followed by its ancestors up to the top level.
@@ -82,9 +99,10 @@ func isIn(state State, compound CompoundState) bool {
 // IsFinal reports whether the state is a terminal outcome of the Order lifecycle.
 func (s State) IsFinal() bool { return isIn(s, CompoundClosed) }
 
-// AcceptsCancellation reports whether an Order in this State can be cancelled:
-// TriggerCancel is declared on CompoundOpen, CheckCancellation resolves it.
-func (s State) AcceptsCancellation() bool { return isIn(s, CompoundOpen) }
+// AcceptsCancellation reports whether the customer can request a cancellation
+// of an Order in this State: its outcome is not known yet. The Saga itself
+// cancels any Open Order by TriggerCancel.
+func (s State) AcceptsCancellation() bool { return isIn(s, CompoundInProgress) }
 
 type Trigger string
 
@@ -94,11 +112,14 @@ const (
 	TriggerStartPreparation Trigger = "start_preparation"
 	TriggerMarkReady        Trigger = "mark_ready"
 	TriggerPickUp           Trigger = "pick_up"
+	TriggerReject           Trigger = "reject"
+	TriggerFailDelivery     Trigger = "fail_delivery"
+	TriggerDeliver          Trigger = "deliver"
 	TriggerCancel           Trigger = "cancel"
 	TriggerComplete         Trigger = "complete"
-	// TriggerRecordFact records data that does not advance the Order: a courier
-	// assignment, a negative fact the Saga acts on, a delivery completion and a
-	// reported deadline. Its target state equals the source state.
+	// TriggerRecordFact records data of a neighbour that is not a position of the
+	// Order: a courier assignment, whose states belong to Delivery, and a reported
+	// deadline. Its target state equals the source state.
 	TriggerRecordFact Trigger = "record_fact"
 )
 
@@ -106,7 +127,8 @@ const (
 // keeps the State by it, whichever trigger stayed.
 var allTriggers = [...]Trigger{
 	TriggerRecordFact, TriggerAuthorizePayment, TriggerConfirm, TriggerStartPreparation,
-	TriggerMarkReady, TriggerPickUp, TriggerCancel, TriggerComplete,
+	TriggerMarkReady, TriggerPickUp, TriggerReject, TriggerFailDelivery, TriggerDeliver,
+	TriggerCancel, TriggerComplete,
 }
 
 type TransitionInput struct {
@@ -187,7 +209,8 @@ func occurredAtIsPresent(input TransitionInput) error {
 // Progress is monotonic: facts of restaurants and delivery arrive from separate
 // topics without a common order, so a fact may jump the Order forward over a
 // step that has not been reported yet, and a fact of a step already passed stays
-// and is only added to the journal of facts.
+// and is only added to the journal of facts. A known outcome ends progress: later
+// facts only join the journal.
 var transitions = []transitionRow{
 	{source: node(StatePlaced), trigger: TriggerAuthorizePayment, target: to(StatePaid), guard: occurredAtIsPresent},
 	{source: node(StatePaid), trigger: TriggerAuthorizePayment, target: stay, guard: occurredAtIsPresent},
@@ -219,10 +242,19 @@ var transitions = []transitionRow{
 	{source: node(StateReady), trigger: TriggerPickUp, target: to(StatePickedUp), guard: occurredAtIsPresent},
 	{source: node(StatePickedUp), trigger: TriggerPickUp, target: stay, guard: occurredAtIsPresent},
 
-	{source: node(StateConfirmed), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
-	{source: node(StatePreparing), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
-	{source: node(StateReady), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
-	{source: node(StatePickedUp), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
+	{source: node(CompoundInProgress), trigger: TriggerReject, target: to(StateRejected), guard: occurredAtIsPresent},
+	{source: node(CompoundInProgress), trigger: TriggerFailDelivery, target: to(StateDeliveryFailed), guard: occurredAtIsPresent},
+	{source: node(CompoundInProgress), trigger: TriggerDeliver, target: to(StateDelivered), guard: occurredAtIsPresent},
+
+	{source: node(CompoundSettling), trigger: TriggerConfirm, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundSettling), trigger: TriggerStartPreparation, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundSettling), trigger: TriggerMarkReady, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundSettling), trigger: TriggerPickUp, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundSettling), trigger: TriggerReject, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundSettling), trigger: TriggerFailDelivery, target: stay, guard: occurredAtIsPresent},
+	{source: node(CompoundSettling), trigger: TriggerDeliver, target: stay, guard: occurredAtIsPresent},
+
+	{source: node(StateDelivered), trigger: TriggerComplete, target: to(StateCompleted), guard: occurredAtIsPresent},
 
 	{source: node(CompoundOpen), trigger: TriggerCancel, target: to(StateCancelled), guard: requestedAtIsPresent},
 	{source: node(CompoundOpen), trigger: TriggerRecordFact, target: stay, guard: occurredAtIsPresent},

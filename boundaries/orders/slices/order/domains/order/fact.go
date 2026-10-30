@@ -63,7 +63,7 @@ func isKnownFact(fact FulfillmentFact) bool {
 }
 
 func (o *Order) RecordRestaurantRejection(occurredAt time.Time, reason string) (TransitionResult, error) {
-	return o.recordFact(TriggerRecordFact, FactRestaurantRejected, occurredAt, reason)
+	return o.recordFact(TriggerReject, FactRestaurantRejected, occurredAt, reason)
 }
 
 // RecordPaymentAuthorization records the approved Authorization and moves the
@@ -90,11 +90,11 @@ func (o *Order) RecordPickup(occurredAt time.Time) (TransitionResult, error) {
 }
 
 func (o *Order) RecordDeliveryCompletion(occurredAt time.Time) (TransitionResult, error) {
-	return o.recordFact(TriggerRecordFact, FactDeliveryCompleted, occurredAt, "")
+	return o.recordFact(TriggerDeliver, FactDeliveryCompleted, occurredAt, "")
 }
 
 func (o *Order) RecordDeliveryFailure(occurredAt time.Time, reason string) (TransitionResult, error) {
-	return o.recordFact(TriggerRecordFact, FactDeliveryFailed, occurredAt, reason)
+	return o.recordFact(TriggerFailDelivery, FactDeliveryFailed, occurredAt, reason)
 }
 
 // recordFact lets the FSM decide the transition by state first, then enforces

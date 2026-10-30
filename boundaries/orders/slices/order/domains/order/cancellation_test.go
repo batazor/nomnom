@@ -123,6 +123,7 @@ func testReason(t *testing.T) CancellationReason {
 func TestOnlyOpenStatesAcceptCancellation(t *testing.T) {
 	accepts := map[State]bool{
 		StatePlaced: true, StatePaid: true, StateConfirmed: true, StatePreparing: true, StateReady: true, StatePickedUp: true,
+		StateRejected: false, StateDeliveryFailed: false, StateDelivered: false,
 		StateCancelled: false, StateCompleted: false,
 	}
 	require.Len(t, accepts, len(allStates))

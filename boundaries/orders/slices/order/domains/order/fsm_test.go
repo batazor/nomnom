@@ -27,6 +27,20 @@ func TestTransitionMatrix(t *testing.T) {
 		outcomes[repeat] = already
 		return outcomes
 	}
+	settling := func(state State, complete expectedOutcome) map[Trigger]expectedOutcome {
+		outcomes := map[Trigger]expectedOutcome{
+			TriggerAuthorizePayment: invalid,
+			TriggerCancel:           {to: StateCancelled},
+			TriggerComplete:         complete,
+		}
+		for _, trigger := range []Trigger{
+			TriggerConfirm, TriggerStartPreparation, TriggerMarkReady, TriggerPickUp,
+			TriggerReject, TriggerFailDelivery, TriggerDeliver, TriggerRecordFact,
+		} {
+			outcomes[trigger] = stays(state)
+		}
+		return outcomes
+	}
 	matrix := map[State]map[Trigger]expectedOutcome{
 		StatePlaced: {
 			TriggerAuthorizePayment: {to: StatePaid},
@@ -36,6 +50,9 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerPickUp:           {to: StatePickedUp},
 			TriggerCancel:           {to: StateCancelled},
 			TriggerComplete:         invalid,
+			TriggerReject:           {to: StateRejected},
+			TriggerFailDelivery:     {to: StateDeliveryFailed},
+			TriggerDeliver:          {to: StateDelivered},
 			TriggerRecordFact:       stays(StatePlaced),
 		},
 		StatePaid: {
@@ -46,6 +63,9 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerPickUp:           {to: StatePickedUp},
 			TriggerCancel:           {to: StateCancelled},
 			TriggerComplete:         invalid,
+			TriggerReject:           {to: StateRejected},
+			TriggerFailDelivery:     {to: StateDeliveryFailed},
+			TriggerDeliver:          {to: StateDelivered},
 			TriggerRecordFact:       stays(StatePaid),
 		},
 		StateConfirmed: {
@@ -55,7 +75,10 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerMarkReady:        {to: StateReady},
 			TriggerPickUp:           {to: StatePickedUp},
 			TriggerCancel:           {to: StateCancelled},
-			TriggerComplete:         {to: StateCompleted},
+			TriggerComplete:         invalid,
+			TriggerReject:           {to: StateRejected},
+			TriggerFailDelivery:     {to: StateDeliveryFailed},
+			TriggerDeliver:          {to: StateDelivered},
 			TriggerRecordFact:       stays(StateConfirmed),
 		},
 		StatePreparing: {
@@ -65,7 +88,10 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerMarkReady:        {to: StateReady},
 			TriggerPickUp:           {to: StatePickedUp},
 			TriggerCancel:           {to: StateCancelled},
-			TriggerComplete:         {to: StateCompleted},
+			TriggerComplete:         invalid,
+			TriggerReject:           {to: StateRejected},
+			TriggerFailDelivery:     {to: StateDeliveryFailed},
+			TriggerDeliver:          {to: StateDelivered},
 			TriggerRecordFact:       stays(StatePreparing),
 		},
 		StateReady: {
@@ -75,7 +101,10 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerMarkReady:        stays(StateReady),
 			TriggerPickUp:           {to: StatePickedUp},
 			TriggerCancel:           {to: StateCancelled},
-			TriggerComplete:         {to: StateCompleted},
+			TriggerComplete:         invalid,
+			TriggerReject:           {to: StateRejected},
+			TriggerFailDelivery:     {to: StateDeliveryFailed},
+			TriggerDeliver:          {to: StateDelivered},
 			TriggerRecordFact:       stays(StateReady),
 		},
 		StatePickedUp: {
@@ -85,11 +114,17 @@ func TestTransitionMatrix(t *testing.T) {
 			TriggerMarkReady:        stays(StatePickedUp),
 			TriggerPickUp:           stays(StatePickedUp),
 			TriggerCancel:           {to: StateCancelled},
-			TriggerComplete:         {to: StateCompleted},
+			TriggerComplete:         invalid,
+			TriggerReject:           {to: StateRejected},
+			TriggerFailDelivery:     {to: StateDeliveryFailed},
+			TriggerDeliver:          {to: StateDelivered},
 			TriggerRecordFact:       stays(StatePickedUp),
 		},
-		StateCancelled: closed(TriggerCancel),
-		StateCompleted: closed(TriggerComplete),
+		StateRejected:       settling(StateRejected, invalid),
+		StateDeliveryFailed: settling(StateDeliveryFailed, invalid),
+		StateDelivered:      settling(StateDelivered, expectedOutcome{to: StateCompleted}),
+		StateCancelled:      closed(TriggerCancel),
+		StateCompleted:      closed(TriggerComplete),
 	}
 	input := TransitionInput{RequestedAt: testNow, OccurredAt: testNow}
 

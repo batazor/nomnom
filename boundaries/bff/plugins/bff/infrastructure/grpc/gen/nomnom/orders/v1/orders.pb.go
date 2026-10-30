@@ -75,40 +75,49 @@ func (OrderPriority) EnumDescriptor() ([]byte, []int) {
 type OrderState int32
 
 const (
-	OrderState_ORDER_STATE_UNSPECIFIED OrderState = 0
-	OrderState_ORDER_STATE_PLACED      OrderState = 1
-	OrderState_ORDER_STATE_CONFIRMED   OrderState = 2
-	OrderState_ORDER_STATE_CANCELLED   OrderState = 3
-	OrderState_ORDER_STATE_COMPLETED   OrderState = 4
-	OrderState_ORDER_STATE_PAID        OrderState = 5
-	OrderState_ORDER_STATE_PREPARING   OrderState = 6
-	OrderState_ORDER_STATE_READY       OrderState = 7
-	OrderState_ORDER_STATE_PICKED_UP   OrderState = 8
+	OrderState_ORDER_STATE_UNSPECIFIED     OrderState = 0
+	OrderState_ORDER_STATE_PLACED          OrderState = 1
+	OrderState_ORDER_STATE_CONFIRMED       OrderState = 2
+	OrderState_ORDER_STATE_CANCELLED       OrderState = 3
+	OrderState_ORDER_STATE_COMPLETED       OrderState = 4
+	OrderState_ORDER_STATE_PAID            OrderState = 5
+	OrderState_ORDER_STATE_PREPARING       OrderState = 6
+	OrderState_ORDER_STATE_READY           OrderState = 7
+	OrderState_ORDER_STATE_PICKED_UP       OrderState = 8
+	OrderState_ORDER_STATE_REJECTED        OrderState = 9
+	OrderState_ORDER_STATE_DELIVERY_FAILED OrderState = 10
+	OrderState_ORDER_STATE_DELIVERED       OrderState = 11
 )
 
 // Enum value maps for OrderState.
 var (
 	OrderState_name = map[int32]string{
-		0: "ORDER_STATE_UNSPECIFIED",
-		1: "ORDER_STATE_PLACED",
-		2: "ORDER_STATE_CONFIRMED",
-		3: "ORDER_STATE_CANCELLED",
-		4: "ORDER_STATE_COMPLETED",
-		5: "ORDER_STATE_PAID",
-		6: "ORDER_STATE_PREPARING",
-		7: "ORDER_STATE_READY",
-		8: "ORDER_STATE_PICKED_UP",
+		0:  "ORDER_STATE_UNSPECIFIED",
+		1:  "ORDER_STATE_PLACED",
+		2:  "ORDER_STATE_CONFIRMED",
+		3:  "ORDER_STATE_CANCELLED",
+		4:  "ORDER_STATE_COMPLETED",
+		5:  "ORDER_STATE_PAID",
+		6:  "ORDER_STATE_PREPARING",
+		7:  "ORDER_STATE_READY",
+		8:  "ORDER_STATE_PICKED_UP",
+		9:  "ORDER_STATE_REJECTED",
+		10: "ORDER_STATE_DELIVERY_FAILED",
+		11: "ORDER_STATE_DELIVERED",
 	}
 	OrderState_value = map[string]int32{
-		"ORDER_STATE_UNSPECIFIED": 0,
-		"ORDER_STATE_PLACED":      1,
-		"ORDER_STATE_CONFIRMED":   2,
-		"ORDER_STATE_CANCELLED":   3,
-		"ORDER_STATE_COMPLETED":   4,
-		"ORDER_STATE_PAID":        5,
-		"ORDER_STATE_PREPARING":   6,
-		"ORDER_STATE_READY":       7,
-		"ORDER_STATE_PICKED_UP":   8,
+		"ORDER_STATE_UNSPECIFIED":     0,
+		"ORDER_STATE_PLACED":          1,
+		"ORDER_STATE_CONFIRMED":       2,
+		"ORDER_STATE_CANCELLED":       3,
+		"ORDER_STATE_COMPLETED":       4,
+		"ORDER_STATE_PAID":            5,
+		"ORDER_STATE_PREPARING":       6,
+		"ORDER_STATE_READY":           7,
+		"ORDER_STATE_PICKED_UP":       8,
+		"ORDER_STATE_REJECTED":        9,
+		"ORDER_STATE_DELIVERY_FAILED": 10,
+		"ORDER_STATE_DELIVERED":       11,
 	}
 )
 
@@ -873,7 +882,7 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\rOrderPriority\x12\x1e\n" +
 	"\x1aORDER_PRIORITY_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ORDER_PRIORITY_STANDARD\x10\x01\x12\x1a\n" +
-	"\x16ORDER_PRIORITY_PREMIUM\x10\x02*\xf5\x01\n" +
+	"\x16ORDER_PRIORITY_PREMIUM\x10\x02*\xcb\x02\n" +
 	"\n" +
 	"OrderState\x12\x1b\n" +
 	"\x17ORDER_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -884,7 +893,11 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x10ORDER_STATE_PAID\x10\x05\x12\x19\n" +
 	"\x15ORDER_STATE_PREPARING\x10\x06\x12\x15\n" +
 	"\x11ORDER_STATE_READY\x10\a\x12\x19\n" +
-	"\x15ORDER_STATE_PICKED_UP\x10\bB\xed\x01\n" +
+	"\x15ORDER_STATE_PICKED_UP\x10\b\x12\x18\n" +
+	"\x14ORDER_STATE_REJECTED\x10\t\x12\x1f\n" +
+	"\x1bORDER_STATE_DELIVERY_FAILED\x10\n" +
+	"\x12\x19\n" +
+	"\x15ORDER_STATE_DELIVERED\x10\vB\xed\x01\n" +
 	"\x14com.nomnom.orders.v1B\vOrdersProtoP\x01Zfgithub.com/batazor/nomnom/boundaries/bff/plugins/bff/infrastructure/grpc/gen/nomnom/orders/v1;ordersv1\xa2\x02\x03NOX\xaa\x02\x10Nomnom.Orders.V1\xca\x02\x10Nomnom\\Orders\\V1\xe2\x02\x1cNomnom\\Orders\\V1\\GPBMetadata\xea\x02\x12Nomnom::Orders::V1b\x06proto3"
 
 var (

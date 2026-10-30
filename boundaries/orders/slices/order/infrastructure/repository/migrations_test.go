@@ -117,6 +117,43 @@ func TestFulfillmentStatesMigrationDerivesStateFromFacts(t *testing.T) {
 		}
 	}
 
+	require.NoError(t, migration.Apply(ctx, cfg, migrationsBefore(t, "00012_settling_states.up.sql")))
+
+	for _, tt := range tests {
+		var state string
+		require.NoError(t, conn.QueryRow(ctx, `SELECT state FROM orders WHERE id = $1`, tt.id).Scan(&state))
+		assert.Equal(t, tt.want, state, tt.id)
+	}
+}
+
+// An open Order with a known outcome moves to it; a closed Order stays.
+func TestSettlingStatesMigrationDerivesStateFromFacts(t *testing.T) {
+	ctx := context.Background()
+	cfg := database.Config{DSN: emptyOrdersDatabase(t), MaxConns: 1}
+	require.NoError(t, migration.Apply(ctx, cfg, migrationsBefore(t, "00012_settling_states.up.sql")))
+
+	conn, err := pgx.Connect(ctx, cfg.DSN)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	tests := []struct {
+		id, state, fact, want string
+	}{
+		{"rejected", "paid", "restaurant_rejected", "rejected"},
+		{"delivery-failed", "picked_up", "delivery_failed", "delivery_failed"},
+		{"delivered", "picked_up", "delivery_completed", "delivered"},
+		{"in-progress", "preparing", "preparation_started", "preparing"},
+		{"cancelled", "cancelled", "restaurant_rejected", "cancelled"},
+		{"completed", "completed", "delivery_completed", "completed"},
+	}
+	for _, tt := range tests {
+		_, err := conn.Exec(ctx, `INSERT INTO orders (id, customer_id, restaurant_id, market_id, total_amount, total_currency, state, placed_at, version, priority)
+			VALUES ($1, 'customer-1', 'restaurant-1', 'berlin', 10, 'EUR', $2, now(), 1, 'STANDARD')`, tt.id, tt.state)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, `INSERT INTO order_facts (order_id, fact, occurred_at) VALUES ($1, $2, now())`, tt.id, tt.fact)
+		require.NoError(t, err)
+	}
+
 	require.NoError(t, migration.Apply(ctx, cfg, repository.Migrations))
 
 	for _, tt := range tests {

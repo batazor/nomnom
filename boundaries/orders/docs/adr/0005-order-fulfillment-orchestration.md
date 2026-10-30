@@ -119,14 +119,18 @@ AuthorizePayment → RecordPaymentAuthorization → ConfirmSlotReservation → P
 
 | Что | Владелец |
 | --- | --- |
-| Order State (`placed`, `paid`, `confirmed`, `preparing`, `ready`, `picked_up`, `cancelled`, `completed`), журнал Fulfillment Facts, инварианты | `Order` в PostgreSQL `orders` |
+| Order State (`placed`, `paid`, `confirmed`, `preparing`, `ready`, `picked_up`, `rejected`, `delivery_failed`, `delivered`, `cancelled`, `completed`), журнал Fulfillment Facts, инварианты | `Order` в PostgreSQL `orders` |
 | Workflow Stage: стадия, результаты шагов, обработанные `event_id`, таймеры, журнал compensation | Temporal Event History |
 | Доставка интеграционных событий | Kafka + Outbox/Inbox |
 | Клиентские чтения | CQRS read model |
 
+У каждого контекста свой заказ и свой автомат: `RestaurantOrder` у кухни, `Delivery` у доставки, `Order` у покупателя. `Order` не копирует чужие states, а переводит факты соседей на язык покупателя: `preparing`, `ready`, `picked_up`, `rejected`, `delivery_failed`, `delivered`. Поиск и назначение курьера — states `Delivery`, в `Order` они не дублируются: `courier_assigned` остаётся записью журнала, а `CourierAssignment` нужен для доступа курьера и порядка событий; самого курьера BFF читает из `delivery`.
+
 Order State — результат шагов Fulfillment, Workflow Stage — ожидание следующего: `preparing` значит «приготовление началось», а ждёт ли процесс готовности и с каким таймером, знает только workflow. Раньше прогресс хранился только фактами, а статус BFF вычислял из их набора: это был неявный автомат в другом сервисе. Теперь положение заказа — один state, а факты — журнал времени и причин (модель переходов — [FSM](../../../../docs/fsm.md#order)).
 
-Факты `restaurants` и `delivery` приходят из разных топиков, поэтому переходы монотонны: факт может перепрыгнуть несообщённый шаг, а отставший только дописывается в журнал. Строгий порядок давал бы `InvalidTransition`, откат Inbox и повторы на нормальной перестановке событий. Порядок шагов по-прежнему задаёт workflow, `Order` его не проверяет. Назначение курьера — данные (`CourierAssignment`), а не state: оно ортогонально цепочке и может быть снято.
+Факты `restaurants` и `delivery` приходят из разных топиков, поэтому переходы монотонны: факт может перепрыгнуть несообщённый шаг, а отставший только дописывается в журнал. Строгий порядок давал бы `InvalidTransition`, откат Inbox и повторы на нормальной перестановке событий. Порядок шагов по-прежнему задаёт workflow, `Order` его не проверяет.
+
+Отрицательный факт и доставка сразу меняют state: покупатель не должен видеть «везут» после провала доставки. Компенсации и код причины задаёт Saga, поэтому `rejected` и `delivery_failed` промежуточные и завершаются `cancelled`, а `delivered` — `complete`.
 | Authorization | SpiceDB в use case владельца |
 
 Workflow не читает БД. Stage публикуется низкокардинальным Search Attribute и не становится Order State.

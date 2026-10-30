@@ -27,7 +27,7 @@ func TestObservedStoreCountsRetriedCompletionOnce(t *testing.T) {
 	t.Cleanup(func() { otel.SetMeterProvider(previous) })
 
 	mem := repositorytest.Open(t)
-	require.NoError(t, mem.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
+	require.NoError(t, mem.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateDelivered))))
 	store := observability.ObservedStore{UnitOfWork: mem, Outbox: mem, Metrics: observability.NewDomainMetrics(nil)}
 	handler := completeorder.NewHandler(store, mem, store)
 

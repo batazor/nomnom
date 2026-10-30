@@ -89,7 +89,7 @@ func TestPlaceChecksOrderabilityAndRecordsOrderPlaced(t *testing.T) {
 }
 
 func TestCompleteRecordsOrderCompletedOnce(t *testing.T) {
-	order := orderInState(t, StateConfirmed)
+	order := orderInState(t, StateDelivered)
 
 	completedAt := testNow.Add(time.Hour)
 	_, err := order.Complete(completedAt)
@@ -103,11 +103,11 @@ func TestCompleteRecordsOrderCompletedOnce(t *testing.T) {
 }
 
 func TestCompleteRequiresCompletedAt(t *testing.T) {
-	order := orderInState(t, StateConfirmed)
+	order := orderInState(t, StateDelivered)
 
 	_, err := order.Complete(time.Time{})
 	var guard GuardFailed
 	require.True(t, errors.As(err, &guard))
-	assert.Equal(t, StateConfirmed, order.State())
+	assert.Equal(t, StateDelivered, order.State())
 	assert.Empty(t, order.PullEvents())
 }

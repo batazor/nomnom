@@ -419,6 +419,21 @@ export enum OrderState {
    * @generated from enum value: ORDER_STATE_PICKED_UP = 8;
    */
   PICKED_UP = 8,
+
+  /**
+   * @generated from enum value: ORDER_STATE_REJECTED = 9;
+   */
+  REJECTED = 9,
+
+  /**
+   * @generated from enum value: ORDER_STATE_DELIVERY_FAILED = 10;
+   */
+  DELIVERY_FAILED = 10,
+
+  /**
+   * @generated from enum value: ORDER_STATE_DELIVERED = 11;
+   */
+  DELIVERED = 11,
 }
 
 /**

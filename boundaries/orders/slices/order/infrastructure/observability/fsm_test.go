@@ -61,7 +61,7 @@ func TestObservedStoreCountsFSMTransitions(t *testing.T) {
 	reader := installMeter(t)
 	store, pg := observedStore(t)
 	ctx := context.Background()
-	require.NoError(t, pg.Add(ctx, ordertest.New(t, "order-1", ordertest.WithState(order.StateConfirmed))))
+	require.NoError(t, pg.Add(ctx, ordertest.New(t, "order-1", ordertest.WithState(order.StateDelivered))))
 	complete := completeorder.NewHandler(store, store, store)
 	finalize := failorcancelorder.NewHandler(store, store, store)
 	completedAt := ordertest.PlacedAt.Add(time.Hour)
@@ -78,7 +78,7 @@ func TestObservedStoreCountsFSMTransitions(t *testing.T) {
 
 	got := transitions(t, collect(t, reader)["nomnom.fsm.transitions"])
 	assert.Equal(t, map[attribute.Distinct]int64{
-		transitionSet(order.StateConfirmed, order.StateCompleted, order.TriggerComplete, "applied"): 1,
+		transitionSet(order.StateDelivered, order.StateCompleted, order.TriggerComplete, "applied"): 1,
 		transitionSet(order.StateCompleted, order.StateCompleted, order.TriggerCancel, "rejected"):  1,
 	}, got)
 }

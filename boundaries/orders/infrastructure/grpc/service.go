@@ -292,6 +292,12 @@ func orderState(state order.State) ordersv1.OrderState {
 		return ordersv1.OrderState_ORDER_STATE_READY
 	case order.StatePickedUp:
 		return ordersv1.OrderState_ORDER_STATE_PICKED_UP
+	case order.StateRejected:
+		return ordersv1.OrderState_ORDER_STATE_REJECTED
+	case order.StateDeliveryFailed:
+		return ordersv1.OrderState_ORDER_STATE_DELIVERY_FAILED
+	case order.StateDelivered:
+		return ordersv1.OrderState_ORDER_STATE_DELIVERED
 	case order.StateCancelled:
 		return ordersv1.OrderState_ORDER_STATE_CANCELLED
 	case order.StateCompleted:

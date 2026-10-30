@@ -176,7 +176,7 @@ func TestRecordPaymentAuthorizationActivityRequiresDecidedAt(t *testing.T) {
 }
 
 func TestCompleteOrderActivityIsIdempotent(t *testing.T) {
-	a, store := activities(t, order.StateConfirmed)
+	a, store := activities(t, order.StateDelivered)
 
 	require.NoError(t, a.CompleteOrder(context.Background(), completeStep))
 	require.NoError(t, a.CompleteOrder(context.Background(), completeStep))
