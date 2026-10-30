@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 143; пар «метрика × сервис» со статусом «есть»: 141.
+Метрик в инвентаре: 143; пар «метрика × сервис» со статусом «есть»: 149.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -200,7 +200,7 @@ Outbox публикует Debezium в Kafka Connect (ADR 37). Prometheus JMX exp
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_fsm_transitions_total` | FSM transition decorator | counter | `nomnom_fsm_aggregate_type`, `nomnom_fsm_from_state`, `nomnom_fsm_to_state`, `nomnom_fsm_trigger`, `nomnom_fsm_result`, `nomnom_fsm_terminal` | `orders`: ожидается<br>`orders-worker`: ожидается<br>`orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается<br>`payments`: ожидается | `result`: applied | rejected (invalid transition); `terminal`: true | false. |
+| `nomnom_fsm_transitions_total` | FSM transition decorator | counter | `nomnom_fsm_aggregate_type`, `nomnom_fsm_from_state`, `nomnom_fsm_to_state`, `nomnom_fsm_trigger`, `nomnom_fsm_result`, `nomnom_fsm_terminal` | `orders`: ожидается<br>`orders-worker`: есть<br>`orders-consumer`: есть<br>`restaurants`: есть<br>`delivery`: есть<br>`payments`: есть | `result`: applied | rejected (invalid transition); `terminal`: true | false. |
 
 <a id="temporal"></a>
 
@@ -266,9 +266,9 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `nomnom_orders_placed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders`: есть | — |
-| `nomnom_orders_completed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders-worker`: ожидается<br>`orders-consumer`: ожидается | — |
-| `nomnom_orders_cancelled_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: ожидается | — |
-| `nomnom_orders_failed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders-worker`: ожидается | — |
+| `nomnom_orders_completed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | — | `orders-worker`: есть<br>`orders-consumer`: ожидается | — |
+| `nomnom_orders_cancelled_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders`: ожидается<br>`orders-worker`: есть | — |
+| `nomnom_orders_failed_total` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | counter | `nomnom_reason` | `orders-worker`: есть | — |
 | `nomnom_orders_cancellation_requests_total` | use case decorator | counter | `nomnom_outcome` | `orders`: ожидается | — |
 | `nomnom_orders_fulfillment_duration_seconds` | Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork) | histogram | — | `orders-worker`: ожидается | — |
 | `nomnom_orders_in_state` | projection/polling | gauge | `nomnom_order_state` | `orders`: ожидается | Требует отдельной projection; PromQL по counters не эмулируется. |

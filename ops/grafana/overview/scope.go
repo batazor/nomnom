@@ -81,6 +81,20 @@ func (s Scope) Over(window, metric string, matchers ...string) string {
 	return inner + fmt.Sprintf(` and on (job, instance) max_over_time(target_info{%s, deployment_environment_name=~"$environment"}[%s])`, s.job(), window)
 }
 
+// Grown — точный прирост counter за окно без экстраполяции increase(): последнее
+// значение минус значение на начало окна, а у series, появившейся внутри окна, — минус
+// ноль. Рестарт даёт новую series (instance — service.instance.id), сбросов внутри
+// series нет. Для точных долей воронки, где экстраполяция даёт этапы больше начала.
+func (s Scope) Grown(window, metric string, matchers ...string) string {
+	series := s.Sel(metric, matchers...)
+	last := fmt.Sprintf("max_over_time(%s[%s])", series, window)
+	inner := fmt.Sprintf("(%s - (%s offset %s or 0 * %s))", last, series, window, last)
+	if s.Job != "" || s.Literal {
+		return inner
+	}
+	return inner + fmt.Sprintf(` and on (job, instance) max_over_time(target_info{%s, deployment_environment_name=~"$environment"}[%s])`, s.job(), window)
+}
+
 // Gauge — значение gauge с фильтром environment/version.
 func (s Scope) Gauge(metric string, matchers ...string) string {
 	return s.filter(s.Sel(metric, matchers...))

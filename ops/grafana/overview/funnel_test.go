@@ -20,10 +20,14 @@ func TestStageReachedCountsCrossingOfTheStage(t *testing.T) {
 		`nomnom_fsm_result="applied"`,
 		`job=~"nomnom/(orders|orders-worker|orders-consumer)"`,
 		`[$__range]`,
+		`offset $__range`,
 	} {
 		if !strings.Contains(preparing, want) {
 			t.Errorf("%s: нет %s", preparing, want)
 		}
+	}
+	if strings.Contains(preparing, "increase(") {
+		t.Errorf("increase() экстраполирует, этап может стать больше начала воронки: %s", preparing)
 	}
 	if strings.Contains(preparing, "$service") {
 		t.Errorf("воронка идёт через все роли, фильтр $service её исказит: %s", preparing)

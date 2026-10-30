@@ -225,7 +225,7 @@ var Metrics = []Metric{
 	{Name: "nomnom_uow_retries_total", Section: "uow", Type: Counter, Source: "Unit of Work decorator", Labels: []string{"nomnom_reason"}, Status: expected(contextServices...), Note: "`reason`: serialization | deadlock | write_conflict | other."},
 
 	// fsm
-	{Name: "nomnom_fsm_transitions_total", Section: "fsm", Type: Counter, Source: "FSM transition decorator", Labels: []string{"nomnom_fsm_aggregate_type", "nomnom_fsm_from_state", "nomnom_fsm_to_state", "nomnom_fsm_trigger", "nomnom_fsm_result", "nomnom_fsm_terminal"}, Status: expected(contextServices...), Note: "`result`: applied | rejected (invalid transition); `terminal`: true | false."},
+	{Name: "nomnom_fsm_transitions_total", Section: "fsm", Type: Counter, Source: "FSM transition decorator", Labels: []string{"nomnom_fsm_aggregate_type", "nomnom_fsm_from_state", "nomnom_fsm_to_state", "nomnom_fsm_trigger", "nomnom_fsm_result", "nomnom_fsm_terminal"}, Status: verified([]string{OrdersConsumer, OrdersWorker, Restaurants, Delivery, Payments}, Orders), Note: "`result`: applied | rejected (invalid transition); `terminal`: true | false."},
 
 	// temporal
 	{Name: "temporal_request_total", Section: "temporal", Type: Counter, Source: "Temporal SDK client", Labels: []string{"operation", "namespace"}, Status: verified([]string{OrdersWorker, OrdersConsumer}), Note: "`operation=\"StartWorkflowExecution\"` — запуск workflow (клиент `orders-consumer`)."},
@@ -256,9 +256,9 @@ var Metrics = []Metric{
 
 	// domain: orders
 	{Name: "nomnom_orders_placed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: verified([]string{Orders})},
-	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(OrdersWorker, OrdersConsumer)},
-	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: expected(Orders, OrdersWorker)},
-	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: expected(OrdersWorker)},
+	{Name: "nomnom_orders_completed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: verified([]string{OrdersWorker}, OrdersConsumer)},
+	{Name: "nomnom_orders_cancelled_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: verified([]string{OrdersWorker}, Orders)},
+	{Name: "nomnom_orders_failed_total", Section: "domain", Type: Counter, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Labels: []string{"nomnom_reason"}, Status: verified([]string{OrdersWorker})},
 	{Name: "nomnom_orders_cancellation_requests_total", Section: "domain", Type: Counter, Source: "use case decorator", Labels: []string{"nomnom_outcome"}, Status: expected(Orders)},
 	{Name: "nomnom_orders_fulfillment_duration_seconds", Section: "domain", Type: Histogram, Source: "Domain Events после commit Unit of Work (ObservedStore / ObservedUnitOfWork)", Status: expected(OrdersWorker)},
 	{Name: "nomnom_orders_in_state", Section: "domain", Type: Gauge, Source: "projection/polling", Labels: []string{"nomnom_order_state"}, Status: expected(Orders), Note: "Требует отдельной projection; PromQL по counters не эмулируется."},
