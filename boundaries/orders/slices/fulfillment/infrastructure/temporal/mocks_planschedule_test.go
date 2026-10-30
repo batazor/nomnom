@@ -6,7 +6,7 @@ package temporal_test
 
 import (
 	"context"
-	"nomnom/orders/slices/order/applications/planschedule"
+	"nomnom/orders/slices/order/applications/placement/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"time"

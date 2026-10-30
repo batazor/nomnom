@@ -13,8 +13,8 @@ import (
 
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
-	"nomnom/orders/slices/order/applications/getfulfillmentorder"
-	"nomnom/orders/slices/order/applications/planschedule"
+	"nomnom/orders/slices/order/applications/lookup/getfulfillmentorder"
+	"nomnom/orders/slices/order/applications/placement/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"

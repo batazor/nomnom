@@ -6,7 +6,7 @@ package grpcadapter_test
 
 import (
 	"context"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/placement/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"time"
 

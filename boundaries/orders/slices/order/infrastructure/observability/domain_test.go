@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/slices/order/applications/requestordercancellation"
+	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )

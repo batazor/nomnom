@@ -65,7 +65,7 @@ Kafka естественно входит только во входные use c
 
 ## Структура слайсов
 
-Слайсы `orders` следуют [общей DDD-структуре и правилам зависимостей](../README.md#организация-кода-внутри-контекста). Модули находятся в `slices/<slice>/`; внутри `applications/` каждый use case имеет отдельный Go package, например `slices/order/applications/confirmorder`. Только shared packages находятся в `pkg/`; код отдельного слайса или entrypoint туда не помещается. Единственная каноническая модель `Order` и её инварианты используются всеми use cases модуля `order`.
+Слайсы `orders` следуют [общей DDD-структуре и правилам зависимостей](../README.md#организация-кода-внутри-контекста). Модули находятся в `slices/<slice>/`; внутри `applications/` каждый use case имеет отдельный Go package, например `slices/order/applications/kitchen/confirmorder`. Только shared packages находятся в `pkg/`; код отдельного слайса или entrypoint туда не помещается. Единственная каноническая модель `Order` и её инварианты используются всеми use cases модуля `order`.
 
 | Слайс | Содержание |
 | --- | --- |
@@ -490,7 +490,7 @@ redelivery повторяет событие.
 к SpiceDB, отмена Delivery (`DeliveryCancelled`) удаляет `order#delivery` и очищает
 `delivery_id`; событие применяется, если относится к сохранённой Delivery и его версия не ниже
 сохранённой, и снимает сохранённого курьера. Снятие сохраняется со своей версией (миграции `00003`, `00004`), даже если
-назначение ещё не обработано, поэтому более старое назначение после него пропускается. См. [Record Courier Release](slices/order/applications/recordcourierrelease/README.md).
+назначение ещё не обработано, поэтому более старое назначение после него пропускается. См. [Record Courier Release](slices/order/applications/delivery/recordcourierrelease/README.md).
 
 Связи `order#customer`, `order#restaurant` и `order#delivery` в SpiceDB ([ADR 18](../../docs/adr/0018-spicedb-for-authorization.md))
 use cases не пишут. Place Order, Record Courier Assignment (новая Delivery) и Record Courier Release

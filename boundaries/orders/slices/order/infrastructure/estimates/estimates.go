@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/planschedule"
+	"nomnom/orders/slices/order/applications/placement/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 

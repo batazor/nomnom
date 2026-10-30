@@ -12,8 +12,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/completeorder"
-	"nomnom/orders/slices/order/applications/failorcancelorder"
+	"nomnom/orders/slices/order/applications/closure/completeorder"
+	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/observability"

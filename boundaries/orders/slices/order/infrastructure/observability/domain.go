@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/order/applications/requestordercancellation"
+	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 )
 
