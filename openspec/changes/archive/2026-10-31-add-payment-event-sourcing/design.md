@@ -1,6 +1,6 @@
 # Design
 
-Решение и отклонённые варианты — в [ADR 2 payments](../../../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md). Здесь — как его реализовать.
+Решение и отклонённые варианты — в [ADR 2 payments](../../../../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md). Здесь — как его реализовать.
 
 ## Схема
 

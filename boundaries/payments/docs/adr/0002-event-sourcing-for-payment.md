@@ -8,7 +8,7 @@ Accepted
 
 Связан с [1. Использовать PostgreSQL для хранилища payments](0001-use-postgresql-for-payments-storage.md) и общесистемными [ADR 13](../../../../docs/adr/0013-transactional-outbox-for-integration-event-publishing.md), [ADR 20](../../../../docs/adr/0020-unit-of-work-for-local-transactions.md), [ADR 21](../../../../docs/adr/0021-pure-fsm-transitions.md), [ADR 25](../../../../docs/adr/0025-integration-event-publication.md), [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md), [ADR 39](../../../../docs/adr/0039-data-access-without-orm.md).
 
-Реализация — change [`add-payment-event-sourcing`](../../../../openspec/changes/add-payment-event-sourcing/). На этом шаге фиксируются решение и спецификация; код и схема не меняются.
+Реализация — change [`add-payment-event-sourcing`](../../../../openspec/changes/archive/2026-10-31-add-payment-event-sourcing/), спецификация — [`payment-event-sourcing`](../../../../openspec/specs/payment-event-sourcing/spec.md).
 
 ## Context
 

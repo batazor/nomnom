@@ -4,7 +4,7 @@
 
 Проект учебный, и Event Sourcing в нём ещё не пробовали. `Payment` подходит для первого опыта: поток короткий, журнал фактов о деньгах полезен сам по себе, а чистая FSM уже есть. Сейчас `payments` и `payment_operations` хранят только текущие строки, поэтому историю `Payment` восстановить нельзя.
 
-Решение и отклонённые варианты описаны в [ADR 2 payments](../../../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md).
+Решение и отклонённые варианты описаны в [ADR 2 payments](../../../../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md).
 
 ## What Changes
 
