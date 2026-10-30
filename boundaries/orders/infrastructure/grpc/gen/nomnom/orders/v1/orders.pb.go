@@ -148,128 +148,6 @@ func (OrderState) EnumDescriptor() ([]byte, []int) {
 	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{1}
 }
 
-type Money struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Amount        string                 `protobuf:"bytes,1,opt,name=amount,proto3" json:"amount,omitempty"`
-	Currency      string                 `protobuf:"bytes,2,opt,name=currency,proto3" json:"currency,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Money) Reset() {
-	*x = Money{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Money) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Money) ProtoMessage() {}
-
-func (x *Money) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Money.ProtoReflect.Descriptor instead.
-func (*Money) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Money) GetAmount() string {
-	if x != nil {
-		return x.Amount
-	}
-	return ""
-}
-
-func (x *Money) GetCurrency() string {
-	if x != nil {
-		return x.Currency
-	}
-	return ""
-}
-
-type OrderItem struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	MenuItemId string                 `protobuf:"bytes,1,opt,name=menu_item_id,json=menuItemId,proto3" json:"menu_item_id,omitempty"`
-	Quantity   int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	UnitPrice  *Money                 `protobuf:"bytes,3,opt,name=unit_price,json=unitPrice,proto3" json:"unit_price,omitempty"`
-	// Menu Item name at Place Order, like unit_price; empty for Orders placed
-	// before the name was kept.
-	Name          string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *OrderItem) Reset() {
-	*x = OrderItem{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *OrderItem) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*OrderItem) ProtoMessage() {}
-
-func (x *OrderItem) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use OrderItem.ProtoReflect.Descriptor instead.
-func (*OrderItem) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *OrderItem) GetMenuItemId() string {
-	if x != nil {
-		return x.MenuItemId
-	}
-	return ""
-}
-
-func (x *OrderItem) GetQuantity() int32 {
-	if x != nil {
-		return x.Quantity
-	}
-	return 0
-}
-
-func (x *OrderItem) GetUnitPrice() *Money {
-	if x != nil {
-		return x.UnitPrice
-	}
-	return nil
-}
-
-func (x *OrderItem) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
 // Applied transition of the Order state machine (docs/fsm.md#order).
 type OrderTransition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -281,7 +159,7 @@ type OrderTransition struct {
 
 func (x *OrderTransition) Reset() {
 	*x = OrderTransition{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[2]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -293,7 +171,7 @@ func (x *OrderTransition) String() string {
 func (*OrderTransition) ProtoMessage() {}
 
 func (x *OrderTransition) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[2]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -306,7 +184,7 @@ func (x *OrderTransition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderTransition.ProtoReflect.Descriptor instead.
 func (*OrderTransition) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{2}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *OrderTransition) GetTrigger() string {
@@ -323,66 +201,6 @@ func (x *OrderTransition) GetOccurredAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type Cancellation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Outcome       string                 `protobuf:"bytes,1,opt,name=outcome,proto3" json:"outcome,omitempty"`
-	ReasonCode    string                 `protobuf:"bytes,2,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
-	CancelledAt   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=cancelled_at,json=cancelledAt,proto3" json:"cancelled_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Cancellation) Reset() {
-	*x = Cancellation{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Cancellation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Cancellation) ProtoMessage() {}
-
-func (x *Cancellation) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Cancellation.ProtoReflect.Descriptor instead.
-func (*Cancellation) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *Cancellation) GetOutcome() string {
-	if x != nil {
-		return x.Outcome
-	}
-	return ""
-}
-
-func (x *Cancellation) GetReasonCode() string {
-	if x != nil {
-		return x.ReasonCode
-	}
-	return ""
-}
-
-func (x *Cancellation) GetCancelledAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CancelledAt
-	}
-	return nil
-}
-
 // Interval in which Request Order Cancellation admits a request. Whether it is
 // open now is decided by the reader's clock; the request itself is checked again.
 type CancellationWindow struct {
@@ -395,7 +213,7 @@ type CancellationWindow struct {
 
 func (x *CancellationWindow) Reset() {
 	*x = CancellationWindow{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +225,7 @@ func (x *CancellationWindow) String() string {
 func (*CancellationWindow) ProtoMessage() {}
 
 func (x *CancellationWindow) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +238,7 @@ func (x *CancellationWindow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancellationWindow.ProtoReflect.Descriptor instead.
 func (*CancellationWindow) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{4}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CancellationWindow) GetOpensAt() *timestamppb.Timestamp {
@@ -472,7 +290,7 @@ type Order struct {
 
 func (x *Order) Reset() {
 	*x = Order{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[5]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -484,7 +302,7 @@ func (x *Order) String() string {
 func (*Order) ProtoMessage() {}
 
 func (x *Order) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[5]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -497,7 +315,7 @@ func (x *Order) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Order.ProtoReflect.Descriptor instead.
 func (*Order) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{5}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Order) GetOrderId() string {
@@ -626,59 +444,6 @@ func (x *Order) GetCourierAssignedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// Delivery window [start, end) of a scheduled Order.
-type DeliveryWindow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
-	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeliveryWindow) Reset() {
-	*x = DeliveryWindow{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeliveryWindow) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeliveryWindow) ProtoMessage() {}
-
-func (x *DeliveryWindow) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeliveryWindow.ProtoReflect.Descriptor instead.
-func (*DeliveryWindow) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *DeliveryWindow) GetStart() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Start
-	}
-	return nil
-}
-
-func (x *DeliveryWindow) GetEnd() *timestamppb.Timestamp {
-	if x != nil {
-		return x.End
-	}
-	return nil
-}
-
 // Error detail of PlaceOrder FAILED_PRECONDITION with reason SLOT_UNAVAILABLE
 // (FR-692): the nearest available windows of the restaurant.
 type SlotUnavailable struct {
@@ -690,7 +455,7 @@ type SlotUnavailable struct {
 
 func (x *SlotUnavailable) Reset() {
 	*x = SlotUnavailable{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[7]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -702,7 +467,7 @@ func (x *SlotUnavailable) String() string {
 func (*SlotUnavailable) ProtoMessage() {}
 
 func (x *SlotUnavailable) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[7]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -715,7 +480,7 @@ func (x *SlotUnavailable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotUnavailable.ProtoReflect.Descriptor instead.
 func (*SlotUnavailable) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{7}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SlotUnavailable) GetAlternatives() []*DeliveryWindow {
@@ -743,7 +508,7 @@ type OrderSummary struct {
 
 func (x *OrderSummary) Reset() {
 	*x = OrderSummary{}
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[8]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +520,7 @@ func (x *OrderSummary) String() string {
 func (*OrderSummary) ProtoMessage() {}
 
 func (x *OrderSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[8]
+	mi := &file_nomnom_orders_v1_orders_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +533,7 @@ func (x *OrderSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderSummary.ProtoReflect.Descriptor instead.
 func (*OrderSummary) Descriptor() ([]byte, []int) {
-	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{8}
+	return file_nomnom_orders_v1_orders_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *OrderSummary) GetOrderId() string {
@@ -824,26 +589,11 @@ var File_nomnom_orders_v1_orders_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnomnom/orders/v1/orders.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\";\n" +
-	"\x05Money\x12\x16\n" +
-	"\x06amount\x18\x01 \x01(\tR\x06amount\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\"\x95\x01\n" +
-	"\tOrderItem\x12 \n" +
-	"\fmenu_item_id\x18\x01 \x01(\tR\n" +
-	"menuItemId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\x126\n" +
-	"\n" +
-	"unit_price\x18\x03 \x01(\v2\x17.nomnom.orders.v1.MoneyR\tunitPrice\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\"h\n" +
+	"\x1dnomnom/orders/v1/orders.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/values.proto\"h\n" +
 	"\x0fOrderTransition\x12\x18\n" +
 	"\atrigger\x18\x01 \x01(\tR\atrigger\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"occurredAt\"\x88\x01\n" +
-	"\fCancellation\x12\x18\n" +
-	"\aoutcome\x18\x01 \x01(\tR\aoutcome\x12\x1f\n" +
-	"\vreason_code\x18\x02 \x01(\tR\n" +
-	"reasonCode\x12=\n" +
-	"\fcancelled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vcancelledAt\"\x84\x01\n" +
+	"occurredAt\"\x84\x01\n" +
 	"\x12CancellationWindow\x125\n" +
 	"\bopens_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aopensAt\x127\n" +
 	"\tcloses_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bclosesAt\"\xd5\b\n" +
@@ -869,10 +619,7 @@ const file_nomnom_orders_v1_orders_proto_rawDesc = "" +
 	"\x0fdelivery_window\x18\x12 \x01(\v2 .nomnom.orders.v1.DeliveryWindowR\x0edeliveryWindow\x12C\n" +
 	"\vtransitions\x18\x13 \x03(\v2!.nomnom.orders.v1.OrderTransitionR\vtransitions\x12J\n" +
 	"\x13courier_assigned_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\x11courierAssignedAtJ\x04\b\x05\x10\x06J\x04\b\t\x10\n" +
-	"R\x10delivery_addressR\x11fulfillment_facts\"p\n" +
-	"\x0eDeliveryWindow\x120\n" +
-	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"W\n" +
+	"R\x10delivery_addressR\x11fulfillment_facts\"W\n" +
 	"\x0fSlotUnavailable\x12D\n" +
 	"\falternatives\x18\x01 \x03(\v2 .nomnom.orders.v1.DeliveryWindowR\falternatives\"\xb1\x02\n" +
 	"\fOrderSummary\x12\x19\n" +
@@ -917,53 +664,49 @@ func file_nomnom_orders_v1_orders_proto_rawDescGZIP() []byte {
 }
 
 var file_nomnom_orders_v1_orders_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_nomnom_orders_v1_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_nomnom_orders_v1_orders_proto_goTypes = []any{
 	(OrderPriority)(0),            // 0: nomnom.orders.v1.OrderPriority
 	(OrderState)(0),               // 1: nomnom.orders.v1.OrderState
-	(*Money)(nil),                 // 2: nomnom.orders.v1.Money
-	(*OrderItem)(nil),             // 3: nomnom.orders.v1.OrderItem
-	(*OrderTransition)(nil),       // 4: nomnom.orders.v1.OrderTransition
-	(*Cancellation)(nil),          // 5: nomnom.orders.v1.Cancellation
-	(*CancellationWindow)(nil),    // 6: nomnom.orders.v1.CancellationWindow
-	(*Order)(nil),                 // 7: nomnom.orders.v1.Order
-	(*DeliveryWindow)(nil),        // 8: nomnom.orders.v1.DeliveryWindow
-	(*SlotUnavailable)(nil),       // 9: nomnom.orders.v1.SlotUnavailable
-	(*OrderSummary)(nil),          // 10: nomnom.orders.v1.OrderSummary
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*OrderTransition)(nil),       // 2: nomnom.orders.v1.OrderTransition
+	(*CancellationWindow)(nil),    // 3: nomnom.orders.v1.CancellationWindow
+	(*Order)(nil),                 // 4: nomnom.orders.v1.Order
+	(*SlotUnavailable)(nil),       // 5: nomnom.orders.v1.SlotUnavailable
+	(*OrderSummary)(nil),          // 6: nomnom.orders.v1.OrderSummary
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*OrderItem)(nil),             // 8: nomnom.orders.v1.OrderItem
+	(*Money)(nil),                 // 9: nomnom.orders.v1.Money
+	(*Cancellation)(nil),          // 10: nomnom.orders.v1.Cancellation
+	(*DeliveryWindow)(nil),        // 11: nomnom.orders.v1.DeliveryWindow
 }
 var file_nomnom_orders_v1_orders_proto_depIdxs = []int32{
-	2,  // 0: nomnom.orders.v1.OrderItem.unit_price:type_name -> nomnom.orders.v1.Money
-	11, // 1: nomnom.orders.v1.OrderTransition.occurred_at:type_name -> google.protobuf.Timestamp
-	11, // 2: nomnom.orders.v1.Cancellation.cancelled_at:type_name -> google.protobuf.Timestamp
-	11, // 3: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
-	11, // 4: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
-	3,  // 5: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
-	2,  // 6: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
-	1,  // 7: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
-	11, // 8: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
-	5,  // 9: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
-	6,  // 10: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
-	11, // 11: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
-	11, // 12: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
-	11, // 13: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
-	0,  // 14: nomnom.orders.v1.Order.priority:type_name -> nomnom.orders.v1.OrderPriority
-	2,  // 15: nomnom.orders.v1.Order.premium_fee:type_name -> nomnom.orders.v1.Money
-	8,  // 16: nomnom.orders.v1.Order.delivery_window:type_name -> nomnom.orders.v1.DeliveryWindow
-	4,  // 17: nomnom.orders.v1.Order.transitions:type_name -> nomnom.orders.v1.OrderTransition
-	11, // 18: nomnom.orders.v1.Order.courier_assigned_at:type_name -> google.protobuf.Timestamp
-	11, // 19: nomnom.orders.v1.DeliveryWindow.start:type_name -> google.protobuf.Timestamp
-	11, // 20: nomnom.orders.v1.DeliveryWindow.end:type_name -> google.protobuf.Timestamp
-	8,  // 21: nomnom.orders.v1.SlotUnavailable.alternatives:type_name -> nomnom.orders.v1.DeliveryWindow
-	1,  // 22: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
-	2,  // 23: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
-	11, // 24: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
-	7,  // 25: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	7,  // 0: nomnom.orders.v1.OrderTransition.occurred_at:type_name -> google.protobuf.Timestamp
+	7,  // 1: nomnom.orders.v1.CancellationWindow.opens_at:type_name -> google.protobuf.Timestamp
+	7,  // 2: nomnom.orders.v1.CancellationWindow.closes_at:type_name -> google.protobuf.Timestamp
+	8,  // 3: nomnom.orders.v1.Order.items:type_name -> nomnom.orders.v1.OrderItem
+	9,  // 4: nomnom.orders.v1.Order.total:type_name -> nomnom.orders.v1.Money
+	1,  // 5: nomnom.orders.v1.Order.state:type_name -> nomnom.orders.v1.OrderState
+	7,  // 6: nomnom.orders.v1.Order.placed_at:type_name -> google.protobuf.Timestamp
+	10, // 7: nomnom.orders.v1.Order.cancellation:type_name -> nomnom.orders.v1.Cancellation
+	3,  // 8: nomnom.orders.v1.Order.cancellation_window:type_name -> nomnom.orders.v1.CancellationWindow
+	7,  // 9: nomnom.orders.v1.Order.expected_ready_at:type_name -> google.protobuf.Timestamp
+	7,  // 10: nomnom.orders.v1.Order.expected_pickup_at:type_name -> google.protobuf.Timestamp
+	7,  // 11: nomnom.orders.v1.Order.expected_delivered_at:type_name -> google.protobuf.Timestamp
+	0,  // 12: nomnom.orders.v1.Order.priority:type_name -> nomnom.orders.v1.OrderPriority
+	9,  // 13: nomnom.orders.v1.Order.premium_fee:type_name -> nomnom.orders.v1.Money
+	11, // 14: nomnom.orders.v1.Order.delivery_window:type_name -> nomnom.orders.v1.DeliveryWindow
+	2,  // 15: nomnom.orders.v1.Order.transitions:type_name -> nomnom.orders.v1.OrderTransition
+	7,  // 16: nomnom.orders.v1.Order.courier_assigned_at:type_name -> google.protobuf.Timestamp
+	11, // 17: nomnom.orders.v1.SlotUnavailable.alternatives:type_name -> nomnom.orders.v1.DeliveryWindow
+	1,  // 18: nomnom.orders.v1.OrderSummary.state:type_name -> nomnom.orders.v1.OrderState
+	9,  // 19: nomnom.orders.v1.OrderSummary.total:type_name -> nomnom.orders.v1.Money
+	7,  // 20: nomnom.orders.v1.OrderSummary.placed_at:type_name -> google.protobuf.Timestamp
+	4,  // 21: nomnom.orders.v1.OrderSummary.order:type_name -> nomnom.orders.v1.Order
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_nomnom_orders_v1_orders_proto_init() }
@@ -971,13 +714,14 @@ func file_nomnom_orders_v1_orders_proto_init() {
 	if File_nomnom_orders_v1_orders_proto != nil {
 		return
 	}
+	file_nomnom_orders_v1_values_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nomnom_orders_v1_orders_proto_rawDesc), len(file_nomnom_orders_v1_orders_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   9,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

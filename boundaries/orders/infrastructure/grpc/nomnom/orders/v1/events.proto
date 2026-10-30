@@ -3,7 +3,7 @@ syntax = "proto3";
 package nomnom.orders.v1;
 
 import "google/protobuf/timestamp.proto";
-import "nomnom/orders/v1/orders.proto";
+import "nomnom/orders/v1/values.proto";
 
 // Integration Events стрима orders.v1.order-events (ADR 13, ADR 25). Envelope
 // (event_id, event_type, occurred_at, aggregate_*) передаётся в Kafka headers;

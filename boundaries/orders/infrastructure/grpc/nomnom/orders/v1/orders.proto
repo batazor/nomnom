@@ -3,6 +3,7 @@ syntax = "proto3";
 package nomnom.orders.v1;
 
 import "google/protobuf/timestamp.proto";
+import "nomnom/orders/v1/values.proto";
 
 // Premium Priority of an Order (FR-650): a premium Order is prepared first.
 enum OrderPriority {
@@ -26,30 +27,10 @@ enum OrderState {
   ORDER_STATE_DELIVERED = 11;
 }
 
-message Money {
-  string amount = 1;
-  string currency = 2;
-}
-
-message OrderItem {
-  string menu_item_id = 1;
-  int32 quantity = 2;
-  Money unit_price = 3;
-  // Menu Item name at Place Order, like unit_price; empty for Orders placed
-  // before the name was kept.
-  string name = 4;
-}
-
 // Applied transition of the Order state machine (docs/fsm.md#order).
 message OrderTransition {
   string trigger = 1;
   google.protobuf.Timestamp occurred_at = 2;
-}
-
-message Cancellation {
-  string outcome = 1;
-  string reason_code = 2;
-  google.protobuf.Timestamp cancelled_at = 3;
 }
 
 // Interval in which Request Order Cancellation admits a request. Whether it is
@@ -91,12 +72,6 @@ message Order {
   repeated OrderTransition transitions = 19;
   // Time of the current Courier Assignment; unset without a courier.
   google.protobuf.Timestamp courier_assigned_at = 20;
-}
-
-// Delivery window [start, end) of a scheduled Order.
-message DeliveryWindow {
-  google.protobuf.Timestamp start = 1;
-  google.protobuf.Timestamp end = 2;
 }
 
 // Error detail of PlaceOrder FAILED_PRECONDITION with reason SLOT_UNAVAILABLE

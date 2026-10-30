@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package nomnom.orders.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Values shared by the gRPC API and Integration Events. Only what events.proto
+// imports lives here: the file is registered in the Schema Registry under
+// FULL_TRANSITIVE (ADR 25), so the card of the Order stays out of it.
+
+message Money {
+  string amount = 1;
+  string currency = 2;
+}
+
+message OrderItem {
+  string menu_item_id = 1;
+  int32 quantity = 2;
+  Money unit_price = 3;
+  // Menu Item name at Place Order, like unit_price; empty for Orders placed
+  // before the name was kept.
+  string name = 4;
+}
+
+message Cancellation {
+  string outcome = 1;
+  string reason_code = 2;
+  google.protobuf.Timestamp cancelled_at = 3;
+}
+
+// Delivery window [start, end) of a scheduled Order.
+message DeliveryWindow {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}

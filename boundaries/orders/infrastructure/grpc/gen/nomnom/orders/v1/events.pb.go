@@ -247,7 +247,7 @@ var File_nomnom_orders_v1_events_proto protoreflect.FileDescriptor
 
 const file_nomnom_orders_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/orders.proto\"\xf1\x02\n" +
+	"\x1dnomnom/orders/v1/events.proto\x12\x10nomnom.orders.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dnomnom/orders/v1/values.proto\"\xf1\x02\n" +
 	"\vOrderPlaced\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -308,7 +308,7 @@ func file_nomnom_orders_v1_events_proto_init() {
 	if File_nomnom_orders_v1_events_proto != nil {
 		return
 	}
-	file_nomnom_orders_v1_orders_proto_init()
+	file_nomnom_orders_v1_values_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

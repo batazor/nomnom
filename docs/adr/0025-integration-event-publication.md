@@ -78,6 +78,7 @@ Outbox хранит payload — байты Protobuf контракта. Value з
 - Subject Integration Event — полное имя Protobuf-сообщения, равное `event_type` (record name strategy): в одном стриме несколько типов событий. Импортированный файл модуля регистрируется под subject = путь файла и указывается в `references`.
 - Схемы регистрирует только шаг деплоя `ops/schema-registration` из buf-модулей контекстов ([ADR 7](0007-grpc-contracts-and-buf-schema-registry.md)); producers, SMT и consumers Registry только читают.
 - Глобальный режим совместимости Registry — `FULL_TRANSITIVE`: несовместимая версия (смена типа поля, удаление сообщения) отклоняется и останавливает деплой. Удаление поля и перестановку номеров ловит `buf breaking` в PR.
+- Импортированный файл попадает под тот же режим, поэтому events-файл импортирует только типы своих событий. Карточка gRPC API в такой файл не входит: иначе новое сообщение или поле read model останавливало бы деплой (`nomnom/orders/v1/values.proto` и `orders.proto`).
 - Consumer сверяет subjects id схемы записи с `event_type`. Value вне wire format, неизвестный id и схема другого `event_type` — `deserialization`, запись уходит в `<stream>.dlq`; недоступный Registry — transient, partition ждёт.
 
 ### Стабильный `event_id`
