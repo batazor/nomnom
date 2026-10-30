@@ -4,8 +4,9 @@
 //! waiting deliveries are those of the requested Market only. The query reads couriers, offers and deliveries, so it belongs to
 //! the `delivery` slice; the right is the `courier` slice's `ManageCouriers`.
 
-use crate::pkg::application::{Clock, Subject};
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };

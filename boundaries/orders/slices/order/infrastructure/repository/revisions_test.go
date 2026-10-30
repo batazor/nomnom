@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 )
 
@@ -27,5 +27,5 @@ func TestAuthorizationRevision(t *testing.T) {
 	revision, found, err := store.Revision(ctx, string(id))
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, application.AuthorizationRevision("zed-token"), revision)
+	assert.Equal(t, authz.AuthorizationRevision("zed-token"), revision)
 }

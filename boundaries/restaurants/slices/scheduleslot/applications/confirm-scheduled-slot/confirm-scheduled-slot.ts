@@ -1,11 +1,11 @@
-import type { Clock } from "../../../../pkg/application/clock.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import {
   ConcurrencyConflictError,
   NotFoundError,
-} from "../../../../pkg/application/errors.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
-import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
+} from "../../../../pkg/usecase/errors.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   type DeliveryWindow,

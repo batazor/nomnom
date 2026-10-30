@@ -5,7 +5,7 @@ import {
   jwtVerify,
 } from "jose";
 
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
 import { CLOCK_TOLERANCE_SECONDS, SERVICE_TOKEN_ALGORITHMS } from "./jwks.ts";
 
 const BEARER = /^Bearer +(\S+)$/i;

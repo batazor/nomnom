@@ -5,23 +5,24 @@ import (
 	"context"
 	"errors"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 const (
-	PermissionView application.Permission   = "view"
-	ResourceOrder  application.ResourceType = "order"
+	PermissionView authz.Permission   = "view"
+	ResourceOrder  authz.ResourceType = "order"
 )
 
 type Query struct {
-	Subject application.Subject
+	Subject authz.Subject
 	OrderID order.ID
 }
 
 type Authorizer interface {
-	Check(ctx context.Context, check application.AccessCheck) error
+	Check(ctx context.Context, check authz.AccessCheck) error
 }
 
 // Reader reads the OrderDetails projection; it returns order.ErrOrderNotFound
@@ -50,7 +51,7 @@ func (h Handler) Handle(ctx context.Context, q Query) (orderdetails.View, error)
 		return orderdetails.View{}, err
 	}
 	if q.OrderID == "" {
-		return orderdetails.View{}, application.InvalidInput("order_id", "is required")
+		return orderdetails.View{}, usecase.InvalidInput("order_id", "is required")
 	}
 	details, readErr := h.reader.OrderDetails(ctx, q.OrderID)
 	missing := errors.Is(readErr, order.ErrOrderNotFound)
@@ -58,12 +59,12 @@ func (h Handler) Handle(ctx context.Context, q Query) (orderdetails.View, error)
 		return orderdetails.View{}, readErr
 	}
 	if missing || !q.Subject.IsUser(string(details.CustomerID)) {
-		err := h.authorizer.Check(ctx, application.AccessCheck{
+		err := h.authorizer.Check(ctx, authz.AccessCheck{
 			Subject:    q.Subject,
 			Permission: PermissionView,
-			Resource:   application.Resource{Type: ResourceOrder, ID: string(q.OrderID)},
+			Resource:   authz.Resource{Type: ResourceOrder, ID: string(q.OrderID)},
 		})
-		if err := application.FailClosed(err); err != nil {
+		if err := authz.FailClosed(err); err != nil {
 			return orderdetails.View{}, err
 		}
 		if missing {

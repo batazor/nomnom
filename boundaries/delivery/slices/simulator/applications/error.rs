@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::pkg::application::AuthorizationError;
+use crate::pkg::authz::AuthorizationError;
 use crate::pkg::persistence::RepositoryError;
 
 /// Error of a `simulator` slice use case.

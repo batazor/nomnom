@@ -4,22 +4,23 @@ package listcustomerorders
 import (
 	"context"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
 
 const (
-	PermissionViewOrders application.Permission   = "view_orders"
-	ResourceCustomer     application.ResourceType = "customer"
+	PermissionViewOrders authz.Permission   = "view_orders"
+	ResourceCustomer     authz.ResourceType = "customer"
 
 	DefaultLimit = 20
 	MaxLimit     = 100
 )
 
 type Query struct {
-	Subject    application.Subject
+	Subject    authz.Subject
 	CustomerID order.CustomerID
 	// MarketID is required (ADR 41): the history lists only Orders of this Market.
 	MarketID string
@@ -63,11 +64,11 @@ type PageRequest struct {
 }
 
 type Authorizer interface {
-	Check(ctx context.Context, check application.AccessCheck) error
+	Check(ctx context.Context, check authz.AccessCheck) error
 }
 
 // Reader pages the OrderDetails projection filtered by CustomerID and MarketID and returns
-// application.ErrInvalidInput for a malformed cursor.
+// usecase.ErrInvalidInput for a malformed cursor.
 type Reader interface {
 	ListCustomerOrders(ctx context.Context, request PageRequest) (Rows, error)
 }
@@ -87,32 +88,32 @@ func (h Handler) Handle(ctx context.Context, q Query) (Page, error) {
 		return Page{}, err
 	}
 	if q.CustomerID == "" {
-		return Page{}, application.InvalidInput("customer_id", "is required")
+		return Page{}, usecase.InvalidInput("customer_id", "is required")
 	}
 	if q.MarketID == "" {
-		return Page{}, application.InvalidInput("market_id", "is required")
+		return Page{}, usecase.InvalidInput("market_id", "is required")
 	}
 	marketID, err := vo.NewMarketID(q.MarketID)
 	if err != nil {
-		return Page{}, application.InvalidInput("market_id", "must match ^[a-z][a-z0-9-]{1,31}$")
+		return Page{}, usecase.InvalidInput("market_id", "must match ^[a-z][a-z0-9-]{1,31}$")
 	}
 	limit := q.Limit
 	switch {
 	case limit == 0:
 		limit = DefaultLimit
 	case limit < 0 || limit > MaxLimit:
-		return Page{}, application.InvalidInput("limit", "must be between 1 and 100")
+		return Page{}, usecase.InvalidInput("limit", "must be between 1 and 100")
 	}
 
 	// The owner is known to domain storage, so the Customer's own history is
 	// filtered by customer_id without the authorization graph.
 	if !q.Subject.IsUser(string(q.CustomerID)) {
-		err := h.authorizer.Check(ctx, application.AccessCheck{
+		err := h.authorizer.Check(ctx, authz.AccessCheck{
 			Subject:    q.Subject,
 			Permission: PermissionViewOrders,
-			Resource:   application.Resource{Type: ResourceCustomer, ID: string(q.CustomerID)},
+			Resource:   authz.Resource{Type: ResourceCustomer, ID: string(q.CustomerID)},
 		})
-		if err := application.FailClosed(err); err != nil {
+		if err := authz.FailClosed(err); err != nil {
 			return Page{}, err
 		}
 	}

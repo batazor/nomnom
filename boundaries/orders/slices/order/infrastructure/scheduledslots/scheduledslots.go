@@ -16,8 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"nomnom/orders/pkg/application"
-	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -98,7 +98,7 @@ func mapError(restaurantID order.RestaurantID, err error) error {
 	const call = "restaurants.ReserveScheduledSlot"
 	switch code := status.Code(err); {
 	case code == codes.InvalidArgument:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, application.ErrInvalidInput, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, usecase.ErrInvalidInput, err)
 	case code == codes.NotFound:
 		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, placeorder.ErrUnknownRestaurant, err)
 	case code == codes.FailedPrecondition && reason(err) == ReasonScheduledOrdersUnavailable:
@@ -108,7 +108,7 @@ func mapError(restaurantID order.RestaurantID, err error) error {
 	case code == codes.Canceled || errors.Is(err, context.Canceled):
 		return fmt.Errorf("%s %q: %w", call, restaurantID, err)
 	default:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, application.ErrDependencyUnavailable, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, usecase.ErrDependencyUnavailable, err)
 	}
 }
 

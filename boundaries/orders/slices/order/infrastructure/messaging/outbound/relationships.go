@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )

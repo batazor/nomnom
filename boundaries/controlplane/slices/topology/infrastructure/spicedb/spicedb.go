@@ -16,21 +16,22 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 )
 
 // ErrUnavailable means SpiceDB did not answer; use cases fail closed on it.
-var ErrUnavailable = fmt.Errorf("authorization service: %w", application.ErrDependencyUnavailable)
+var ErrUnavailable = fmt.Errorf("authorization service: %w", usecase.ErrDependencyUnavailable)
 
-// Authorizer checks application.AccessCheck as `<type>:<id>#<permission>` for
+// Authorizer checks authz.AccessCheck as `<type>:<id>#<permission>` for
 // `user:<id>` or `service:<id>`.
 type Authorizer struct {
 	permissions v1.PermissionsServiceClient
 	timeout     time.Duration
 }
 
-var _ application.Authorizer = (*Authorizer)(nil)
+var _ authz.Authorizer = (*Authorizer)(nil)
 
 // Dial connects lazily to SpiceDB with the preshared key.
 func Dial(cfg config.SpiceDBConfig) (*authzed.Client, error) {
@@ -59,7 +60,7 @@ func NewAuthorizer(permissions v1.PermissionsServiceClient, timeout time.Duratio
 
 // Check asks SpiceDB with full consistency: grants of the operator change
 // rarely, and a write must not pass on a stale revoked grant.
-func (a *Authorizer) Check(ctx context.Context, check application.AccessCheck) error {
+func (a *Authorizer) Check(ctx context.Context, check authz.AccessCheck) error {
 	ctx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
 	resp, err := a.permissions.CheckPermission(ctx, &v1.CheckPermissionRequest{
@@ -72,7 +73,7 @@ func (a *Authorizer) Check(ctx context.Context, check application.AccessCheck) e
 		return fmt.Errorf("%w: check %s on %s:%s: %w", ErrUnavailable, check.Permission, check.Resource.Type, check.Resource.ID, err)
 	}
 	if resp.GetPermissionship() != v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION {
-		return fmt.Errorf("%w: %s %s on %s:%s", application.ErrPermissionDenied,
+		return fmt.Errorf("%w: %s %s on %s:%s", authz.ErrPermissionDenied,
 			check.Subject, check.Permission, check.Resource.Type, check.Resource.ID)
 	}
 	return nil

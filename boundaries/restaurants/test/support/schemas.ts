@@ -3,7 +3,7 @@
 import {
   type SchemaSubjects,
   UnknownSchemaError,
-} from "../../pkg/infrastructure/messaging/schema-registry.ts";
+} from "../../infrastructure/messaging/schema-registry.ts";
 
 /** Schema id the tests frame their records with. */
 export const SCHEMA_ID = 7;

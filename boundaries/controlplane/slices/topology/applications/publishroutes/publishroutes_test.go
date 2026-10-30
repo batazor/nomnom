@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
@@ -61,5 +61,5 @@ func TestAFailedApplyIsUnavailable(t *testing.T) {
 
 	err := publishroutes.New(reg, &applier{reg: reg, err: errors.New("apiserver down")}).Publish(context.Background())
 	assert.ErrorIs(t, err, publishroutes.ErrRoutesUnavailable)
-	assert.ErrorIs(t, err, application.ErrDependencyUnavailable)
+	assert.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
 }

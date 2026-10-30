@@ -127,7 +127,7 @@ KafkaConnect; Cluster Operator регистрирует коннектор и с
 | `cdc.connect.cluster`, `cdc.connect.namespace` | Ресурс `KafkaConnect`, к которому относится коннектор, например `kafka-connect` в `nomnom-infra`. |
 | `cdc.schemaRegistryUrl` | Schema Registry SMT `SchemaFraming`, например `http://schema-registry.nomnom-infra.svc.cluster.local:8081`. |
 | `cdc.connectionString` | `mongodb.connection.string` коннектора — ссылка config provider Connect, например `${dir:/mnt/cdc:restaurants-uri}`, не URI с паролем. |
-| `cdc.connector.config` | Контракт Outbox (общий для окружений); меняется вместе с `pkg/infrastructure/repository/outbox.ts`. |
+| `cdc.connector.config` | Контракт Outbox (общий для окружений); меняется вместе с `infrastructure/repository/outbox.ts`. |
 
 Состояние — `GET /connectors/restaurants-outbox/status`; после исправления документа, остановившего
 коннектор, — `POST /connectors/restaurants-outbox/restart?includeTasks=true`.

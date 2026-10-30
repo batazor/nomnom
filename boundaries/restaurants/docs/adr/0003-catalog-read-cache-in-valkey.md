@@ -32,7 +32,7 @@ Order и так читает каталог до своей транзакции
 
 ### Заполнение и обновление по событиям
 
-`pkg/infrastructure/valkey/read-cache.ts`: промах читает MongoDB и кладёт JSON результата
+`infrastructure/valkey/read-cache.ts`: промах читает MongoDB и кладёт JSON результата
 `SET NX` с `CACHE__TTL` (1m), не задерживая ответ.
 `BatchGetRestaurants` и `BatchGetMenus` (ADR 7) читают те же ключи одним `MGET` (`ReadCache.readMany`),
 все промахи пачки — одним запросом MongoDB по `$in`, и кладут каждый найденный результат `SET NX`
@@ -45,7 +45,7 @@ Outbox и Debezium: `RestaurantOpened`/`RestaurantClosed` и смену уров
 `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` (`restaurants.v1.menu-events`;
 `MenuItemAdded` и `MenuItemUpdated` добавлены в контракт ради этого, FR-613). `restaurants-consumer` читает их
 своей consumer group `CACHE__REFRESH_GROUP` (`restaurants-cache`, новая группа начинает с конца
-стрима; `pkg/infrastructure/valkey/refresh.ts`), перечитывает ресторан или меню из MongoDB уже
+стрима; `infrastructure/valkey/refresh.ts`), перечитывает ресторан или меню из MongoDB уже
 после commit и перезаписывает ключ обычным `SET` с TTL. Для ресторана ещё увеличивается
 поколение страниц списка его Market (`INCR restaurants:list:generation:pages:<marketId>`, Market — из
 сохранённого ресторана; [ADR 41](../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md):

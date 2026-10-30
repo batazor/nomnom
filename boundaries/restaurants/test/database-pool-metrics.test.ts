@@ -10,7 +10,7 @@ import {
 } from "@opentelemetry/sdk-metrics";
 import type { MongoClient } from "mongodb";
 
-import { DatabasePoolMetrics } from "../pkg/infrastructure/repository/pool-metrics.ts";
+import { DatabasePoolMetrics } from "../infrastructure/repository/pool-metrics.ts";
 
 class TestReader extends MetricReader {
   protected async onShutdown(): Promise<void> {}

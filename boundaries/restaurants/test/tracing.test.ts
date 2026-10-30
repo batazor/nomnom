@@ -8,7 +8,7 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
-import type { Outbox } from "../pkg/application/outbox.ts";
+import type { Outbox } from "../pkg/outbox/outbox.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import {
   installPropagation,

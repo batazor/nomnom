@@ -17,8 +17,8 @@ import {
 import {
   type CacheMetrics,
   ReadCache,
-} from "../../../../pkg/infrastructure/valkey/read-cache.ts";
-import type { CacheRefreshes } from "../../../../pkg/infrastructure/valkey/refresh.ts";
+} from "../../../../infrastructure/valkey/read-cache.ts";
+import type { CacheRefreshes } from "../../../../infrastructure/valkey/refresh.ts";
 import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
 import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";

@@ -11,8 +11,9 @@ import (
 	"log/slog"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
@@ -54,9 +55,9 @@ type Keys interface {
 type Dependencies struct {
 	Switch              Switch
 	Catalog             Catalog
-	PlaceOrder          application.Handler[placeorder.Input, placeorder.Result]
-	GetOrder            application.Handler[getorder.Query, orderdetails.View]
-	RequestCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
+	PlaceOrder          usecase.Handler[placeorder.Input, placeorder.Result]
+	GetOrder            usecase.Handler[getorder.Query, orderdetails.View]
+	RequestCancellation usecase.Handler[requestordercancellation.Input, requestordercancellation.Result]
 	Random              Random
 	Keys                Keys
 	CustomerID          string
@@ -81,8 +82,8 @@ func New(deps Dependencies) *Customer {
 	return &Customer{deps: deps}
 }
 
-func (c *Customer) subject() application.Subject {
-	return application.Subject{Kind: application.SubjectUser, ID: c.deps.CustomerID}
+func (c *Customer) subject() authz.Subject {
+	return authz.Subject{Kind: authz.SubjectUser, ID: c.deps.CustomerID}
 }
 
 // Tick performs the actions due at now. A disabled Simulator drops the

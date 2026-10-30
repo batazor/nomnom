@@ -11,16 +11,17 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
 
-// AC-635: the API table answers every application.ErrorKind.
+// AC-635: the API table answers every usecase.ErrorKind.
 func TestTransportTableCoversEveryKind(t *testing.T) {
-	for _, kind := range application.ErrorKinds() {
+	for _, kind := range usecase.ErrorKinds() {
 		answer, ok := transportByKind[kind]
 		assert.True(t, ok, kind)
 		assert.NotEmpty(t, answer.reason, kind)
@@ -35,15 +36,15 @@ func TestTransportErrorKeepsPublishedCodesAndReasons(t *testing.T) {
 		reason string
 	}{
 		{ErrUnauthenticated, codes.Unauthenticated, "AUTHENTICATION_REQUIRED"},
-		{application.ErrDependencyUnavailable, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
+		{usecase.ErrDependencyUnavailable, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
 		{fulfillment.ErrWorkflowNotFound, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
-		{application.FailClosed(fmt.Errorf("spicedb: %w", application.ErrDependencyUnavailable)), codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
+		{authz.FailClosed(fmt.Errorf("spicedb: %w", usecase.ErrDependencyUnavailable)), codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
 		{placeorder.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
 		{placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
 		{placeorder.ErrPremiumUnavailable, codes.FailedPrecondition, "PREMIUM_UNAVAILABLE"},
 		{placeorder.ErrScheduledOrdersUnavailable, codes.FailedPrecondition, "SCHEDULED_ORDERS_UNAVAILABLE"},
 		{order.ErrInvalidDeliveryWindow, codes.InvalidArgument, "INVALID_ORDER"},
-		{application.InvalidInput("order_id", "is required"), codes.InvalidArgument, "INVALID_ARGUMENT"},
+		{usecase.InvalidInput("order_id", "is required"), codes.InvalidArgument, "INVALID_ARGUMENT"},
 		{order.NotOrderable{}, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},
 		{vo.ErrInvalidQuantity, codes.InvalidArgument, "INVALID_ORDER"},
 		{order.ErrOrderRequiresItems, codes.InvalidArgument, "INVALID_ORDER"},
@@ -52,10 +53,10 @@ func TestTransportErrorKeepsPublishedCodesAndReasons(t *testing.T) {
 		{order.InvalidTransition{}, codes.FailedPrecondition, "ORDER_STATE_CONFLICT"},
 		{fulfillment.ErrCancellationRefused, codes.FailedPrecondition, "ORDER_STATE_CONFLICT"},
 		{order.GuardFailed{Reason: "occurred_at_required"}, codes.FailedPrecondition, "ORDER_STATE_CONFLICT"},
-		{application.ErrPermissionDenied, codes.PermissionDenied, "OPERATION_NOT_ALLOWED"},
+		{authz.ErrPermissionDenied, codes.PermissionDenied, "OPERATION_NOT_ALLOWED"},
 		{order.ErrOrderNotFound, codes.NotFound, "ORDER_NOT_FOUND"},
 		{order.ErrOrderAlreadyExists, codes.AlreadyExists, "ORDER_ALREADY_EXISTS"},
-		{application.ErrConcurrencyConflict, codes.Aborted, "CONCURRENCY_CONFLICT"},
+		{usecase.ErrConcurrencyConflict, codes.Aborted, "CONCURRENCY_CONFLICT"},
 		{errors.New("connection reset"), codes.Internal, "INTERNAL_ERROR"},
 	}
 	for _, tt := range tests {
@@ -74,5 +75,5 @@ func TestTransportErrorKeepsPublishedCodesAndReasons(t *testing.T) {
 // Internal and unavailable failures do not leak their cause to the caller.
 func TestTransportErrorHidesTechnicalCauses(t *testing.T) {
 	assert.Equal(t, "internal error", status.Convert(transportError(errors.New("pq: password=secret"))).Message())
-	assert.Equal(t, "dependency unavailable", status.Convert(transportError(fmt.Errorf("dial 10.0.0.1: %w", application.ErrDependencyUnavailable))).Message())
+	assert.Equal(t, "dependency unavailable", status.Convert(transportError(fmt.Errorf("dial 10.0.0.1: %w", usecase.ErrDependencyUnavailable))).Message())
 }

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/orderdetails"
@@ -29,10 +29,10 @@ type SimulatorSwitch interface {
 // OrderHandlers are the order use cases the API serves. The composition root
 // fills them from the assembled order slice.
 type OrderHandlers struct {
-	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
-	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
-	GetOrder                 application.Handler[getorder.Query, orderdetails.View]
-	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
+	PlaceOrder               usecase.Handler[placeorder.Input, placeorder.Result]
+	RequestOrderCancellation usecase.Handler[requestordercancellation.Input, requestordercancellation.Result]
+	GetOrder                 usecase.Handler[getorder.Query, orderdetails.View]
+	ListCustomerOrders       usecase.Handler[listcustomerorders.Query, listcustomerorders.Page]
 }
 
 type Service struct {
@@ -125,7 +125,7 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 	var windowStart time.Time
 	if request.GetDeliveryWindowStart() != nil {
 		if err := request.GetDeliveryWindowStart().CheckValid(); err != nil {
-			return nil, transportError(application.InvalidInput("delivery_window_start", "is not a valid timestamp"))
+			return nil, transportError(usecase.InvalidInput("delivery_window_start", "is not a valid timestamp"))
 		}
 		windowStart = request.GetDeliveryWindowStart().AsTime()
 	}

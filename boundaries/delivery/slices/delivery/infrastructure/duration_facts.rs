@@ -78,7 +78,7 @@ pub fn handling_error(error: &DeliveryApplicationError) -> HandlingError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pkg::application::UnitOfWorkError;
+    use crate::pkg::unit_of_work::UnitOfWorkError;
     use crate::slices::delivery::domains::delivery::DeliveryId;
 
     use super::super::integration_events::COURIER_ASSIGNED_TO_DELIVERY;

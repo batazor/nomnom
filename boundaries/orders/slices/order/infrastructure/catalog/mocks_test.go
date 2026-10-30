@@ -6,7 +6,7 @@ package catalog_test
 
 import (
 	"context"
-	"nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 
 	mock "github.com/stretchr/testify/mock"
 )

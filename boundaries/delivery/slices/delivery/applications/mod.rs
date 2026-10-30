@@ -31,7 +31,7 @@ pub mod tracking;
 #[cfg(test)]
 mod test_support;
 
-use crate::pkg::application::{Clock, required_identifier};
+use crate::pkg::usecase::{Clock, required_identifier};
 use crate::slices::courier::domains::courier::{CourierId, MarketId};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,

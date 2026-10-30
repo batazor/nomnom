@@ -20,12 +20,7 @@ from infrastructure.authorization import (
     PERMISSION_MAPPING,
     SpiceDBPermissionChecker,
 )
-from pkg.application import (
-    AuthorizationUnavailableError,
-    PermissionDeniedError,
-    Subject,
-    SubjectKind,
-)
+from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings, load_settings
 from slices.payment.applications.access import require_permission
 from slices.payment.applications.ports import PaymentPermission, PaymentResource

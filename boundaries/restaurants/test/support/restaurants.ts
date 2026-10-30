@@ -1,7 +1,7 @@
-import type { Clock } from "../../pkg/application/clock.ts";
-import type { IdGenerator } from "../../pkg/application/id-generator.ts";
-import type { Outbox } from "../../pkg/application/outbox.ts";
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
+import type { Outbox } from "../../pkg/outbox/outbox.ts";
+import type { Clock } from "../../pkg/usecase/clock.ts";
+import type { IdGenerator } from "../../pkg/usecase/id-generator.ts";
 import type {
   AuthorizationRevision,
   OwnerRelationshipWriter,

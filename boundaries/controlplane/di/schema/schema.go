@@ -7,8 +7,8 @@ package schema
 import (
 	"context"
 
+	"github.com/batazor/nomnom/boundaries/controlplane/infrastructure/migration"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config/database"
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/migration"
 	topologyrepository "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/repository"
 )
 

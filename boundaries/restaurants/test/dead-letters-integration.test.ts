@@ -6,12 +6,12 @@ import {
   type DeadLetter,
   KafkaDeadLetters,
   REDRIVEN_FROM_HEADER,
-} from "../pkg/infrastructure/kafka/dead-letters.ts";
-import { KafkaPublisher } from "../pkg/infrastructure/kafka/publisher.ts";
+} from "../infrastructure/kafka/dead-letters.ts";
+import { KafkaPublisher } from "../infrastructure/kafka/publisher.ts";
 import {
   DEAD_LETTER_HEADERS,
   deadLetterTopic,
-} from "../pkg/infrastructure/messaging/processor.ts";
+} from "../infrastructure/messaging/processor.ts";
 import { kafkaBrokers } from "./support/global-containers.ts";
 
 // A group resolves only its own dead letters against the Kafka testcontainer

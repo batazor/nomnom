@@ -3,7 +3,7 @@ package repository
 import (
 	"embed"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/migration"
+	"github.com/batazor/nomnom/boundaries/controlplane/infrastructure/migration"
 )
 
 //go:embed migrations/*.sql

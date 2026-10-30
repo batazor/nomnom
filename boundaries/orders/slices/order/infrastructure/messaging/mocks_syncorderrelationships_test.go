@@ -6,7 +6,7 @@ package messaging_test
 
 import (
 	"context"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 
@@ -50,22 +50,22 @@ func (_m *MockRelationships) EXPECT() *MockRelationships_Expecter {
 }
 
 // SyncOrderRelationships provides a mock function for the type MockRelationships
-func (_mock *MockRelationships) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (application.AuthorizationRevision, error) {
+func (_mock *MockRelationships) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (authz.AuthorizationRevision, error) {
 	ret := _mock.Called(ctx, orderID, subjects)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SyncOrderRelationships")
 	}
 
-	var r0 application.AuthorizationRevision
+	var r0 authz.AuthorizationRevision
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, order.ID, syncorderrelationships.Subjects) (application.AuthorizationRevision, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, order.ID, syncorderrelationships.Subjects) (authz.AuthorizationRevision, error)); ok {
 		return returnFunc(ctx, orderID, subjects)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, order.ID, syncorderrelationships.Subjects) application.AuthorizationRevision); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, order.ID, syncorderrelationships.Subjects) authz.AuthorizationRevision); ok {
 		r0 = returnFunc(ctx, orderID, subjects)
 	} else {
-		r0 = ret.Get(0).(application.AuthorizationRevision)
+		r0 = ret.Get(0).(authz.AuthorizationRevision)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, order.ID, syncorderrelationships.Subjects) error); ok {
 		r1 = returnFunc(ctx, orderID, subjects)
@@ -111,12 +111,12 @@ func (_c *MockRelationships_SyncOrderRelationships_Call) Run(run func(ctx contex
 	return _c
 }
 
-func (_c *MockRelationships_SyncOrderRelationships_Call) Return(authorizationRevision application.AuthorizationRevision, err error) *MockRelationships_SyncOrderRelationships_Call {
+func (_c *MockRelationships_SyncOrderRelationships_Call) Return(authorizationRevision authz.AuthorizationRevision, err error) *MockRelationships_SyncOrderRelationships_Call {
 	_c.Call.Return(authorizationRevision, err)
 	return _c
 }
 
-func (_c *MockRelationships_SyncOrderRelationships_Call) RunAndReturn(run func(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (application.AuthorizationRevision, error)) *MockRelationships_SyncOrderRelationships_Call {
+func (_c *MockRelationships_SyncOrderRelationships_Call) RunAndReturn(run func(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (authz.AuthorizationRevision, error)) *MockRelationships_SyncOrderRelationships_Call {
 	_c.Call.Return(run)
 	return _c
 }

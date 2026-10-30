@@ -16,7 +16,7 @@ from typing import NoReturn, Protocol
 import grpc
 import jwt
 
-from pkg.application import Subject, SubjectKind
+from pkg.authz import Subject, SubjectKind
 from pkg.config import IdentitySettings
 
 from .identity_tokens import (

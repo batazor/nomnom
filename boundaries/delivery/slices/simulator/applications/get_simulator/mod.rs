@@ -1,7 +1,7 @@
 //! Get Simulator: оператор платформы читает переключатель Simulator
 //! (`platform#operate_simulator`, FR-604).
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
 use super::authorization::SimulatorAuthorization;

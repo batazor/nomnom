@@ -8,7 +8,7 @@ import {
   OrderPriority,
   RestaurantOrderState,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { PermissionDeniedError } from "../pkg/application/errors.ts";
+import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import {
   InvalidOrderScheduleError,
   InvalidRestaurantOrderError,

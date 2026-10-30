@@ -14,8 +14,8 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 
-	"nomnom/orders/pkg/application"
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
@@ -43,19 +43,19 @@ const (
 
 // Handlers are the application handlers the order slice consumes events with.
 type Handlers struct {
-	ConfirmOrder             application.Handler[confirmorder.Input, confirmorder.Result]
-	RejectOrder              application.Handler[rejectorder.Input, rejectorder.Result]
-	RecordPreparationStarted application.Handler[recordpreparationstarted.Input, recordpreparationstarted.Result]
-	RecordOrderReady         application.Handler[recordorderready.Input, recordorderready.Result]
-	RecordPreparationDelay   application.Handler[recordpreparationdelay.Input, recordpreparationdelay.Result]
-	RelayPreparationIssue    application.Handler[relaypreparationissue.Input, relaypreparationissue.Result]
-	RecordCourierAssignment  application.Handler[recordcourierassignment.Input, recordcourierassignment.Result]
-	RecordCourierRelease     application.Handler[recordcourierrelease.Input, recordcourierrelease.Result]
-	RecordPickup             application.Handler[recordpickup.Input, recordpickup.Result]
-	RecordDeliveryCompletion application.Handler[recorddeliverycompletion.Input, recorddeliverycompletion.Result]
-	RecordDeliveryFailure    application.Handler[recorddeliveryfailure.Input, recorddeliveryfailure.Result]
-	SyncOrderRelationships   application.Handler[syncorderrelationships.Input, syncorderrelationships.Result]
-	StartFulfillment         application.Handler[startfulfillment.Input, startfulfillment.Result]
+	ConfirmOrder             usecase.Handler[confirmorder.Input, confirmorder.Result]
+	RejectOrder              usecase.Handler[rejectorder.Input, rejectorder.Result]
+	RecordPreparationStarted usecase.Handler[recordpreparationstarted.Input, recordpreparationstarted.Result]
+	RecordOrderReady         usecase.Handler[recordorderready.Input, recordorderready.Result]
+	RecordPreparationDelay   usecase.Handler[recordpreparationdelay.Input, recordpreparationdelay.Result]
+	RelayPreparationIssue    usecase.Handler[relaypreparationissue.Input, relaypreparationissue.Result]
+	RecordCourierAssignment  usecase.Handler[recordcourierassignment.Input, recordcourierassignment.Result]
+	RecordCourierRelease     usecase.Handler[recordcourierrelease.Input, recordcourierrelease.Result]
+	RecordPickup             usecase.Handler[recordpickup.Input, recordpickup.Result]
+	RecordDeliveryCompletion usecase.Handler[recorddeliverycompletion.Input, recorddeliverycompletion.Result]
+	RecordDeliveryFailure    usecase.Handler[recorddeliveryfailure.Input, recorddeliveryfailure.Result]
+	SyncOrderRelationships   usecase.Handler[syncorderrelationships.Input, syncorderrelationships.Result]
+	StartFulfillment         usecase.Handler[startfulfillment.Input, startfulfillment.Result]
 }
 
 // Streams returns one handler group per consumed stream.
@@ -179,18 +179,18 @@ func isDuplicate(out any) bool {
 func transient(err error) error { return err }
 
 // classByKind is the consumer error class (ADR 28) of every
-// application.ErrorKind: redelivery cannot fix invalid input, a missing Order
+// usecase.ErrorKind: redelivery cannot fix invalid input, a missing Order
 // or a denial; a domain refusal is an expected business outcome; the rest is
 // retried.
-var classByKind = map[application.ErrorKind]func(error) error{
-	application.KindInvalidInput:  messaging.Permanent,
-	application.KindNotFound:      messaging.Permanent,
-	application.KindPermission:    messaging.Permanent,
-	application.KindDomainRule:    messaging.Business,
-	application.KindAlreadyExists: messaging.Business,
-	application.KindConflict:      transient,
-	application.KindUnavailable:   transient,
-	application.KindInternal:      transient,
+var classByKind = map[usecase.ErrorKind]func(error) error{
+	usecase.KindInvalidInput:  messaging.Permanent,
+	usecase.KindNotFound:      messaging.Permanent,
+	usecase.KindPermission:    messaging.Permanent,
+	usecase.KindDomainRule:    messaging.Business,
+	usecase.KindAlreadyExists: messaging.Business,
+	usecase.KindConflict:      transient,
+	usecase.KindUnavailable:   transient,
+	usecase.KindInternal:      transient,
 }
 
 // classify marks a handler error with the class of its kind.

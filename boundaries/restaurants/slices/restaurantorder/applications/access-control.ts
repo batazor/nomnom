@@ -1,4 +1,4 @@
-import type { Subject } from "../../../pkg/application/subject.ts";
+import type { Subject } from "../../../pkg/authz/subject.ts";
 
 // Authorization ports of the `restaurantorder` slice over `restaurant:<id>`,
 // one per kind of caller; each use case depends only on the one it checks.

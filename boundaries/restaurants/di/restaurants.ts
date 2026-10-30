@@ -18,6 +18,13 @@ import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
+import { outboxEventMapperByAggregate } from "../infrastructure/outbox/integration-event.ts";
+import type { DatabaseConnection } from "../infrastructure/repository/client.ts";
+import {
+  DatabaseOutbox,
+  type OutboxEventMapper,
+} from "../infrastructure/repository/outbox.ts";
+import type { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
 import { SpiceDbAccessControl } from "../infrastructure/spicedb/access-control.ts";
 import { ObservedPermissionsClient } from "../infrastructure/spicedb/check-telemetry.ts";
 import {
@@ -25,9 +32,7 @@ import {
   type SpiceDbClient,
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import type { Clock } from "../pkg/application/clock.ts";
-import type { IdGenerator } from "../pkg/application/id-generator.ts";
-import type { Outbox } from "../pkg/application/outbox.ts";
+import { CacheMetrics } from "../infrastructure/valkey/read-cache.ts";
 import type {
   KitchenConfig,
   ReconcilerConfig,
@@ -38,23 +43,14 @@ import type {
   ValkeyConfig,
   WaitTimeConfig,
 } from "../pkg/config/config.ts";
-import {
-  createProcessContainer,
-  type Registrations,
-} from "../pkg/di/container.ts";
-import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
-import type { DatabaseConnection } from "../pkg/infrastructure/repository/client.ts";
-import {
-  DatabaseOutbox,
-  type OutboxEventMapper,
-} from "../pkg/infrastructure/repository/outbox.ts";
-import type { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
-import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
 import type { Worker } from "../pkg/lifecycle/lifecycle.ts";
 import { PeriodicLoop, WorkerWithLoops } from "../pkg/lifecycle/periodic.ts";
+import type { Outbox } from "../pkg/outbox/outbox.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
+import type { Clock } from "../pkg/usecase/clock.ts";
+import type { IdGenerator } from "../pkg/usecase/id-generator.ts";
 import type { CookPoolAccess } from "../slices/cook/applications/access-control.ts";
 import {
   type CookCradle,
@@ -101,6 +97,7 @@ import {
   registerSimulator,
   type SimulatorCradle,
 } from "../slices/simulator/di/registrations.ts";
+import { createProcessContainer, type Registrations } from "./container.ts";
 import { instrumentUseCases, RESTAURANTS_USE_CASES } from "./usecases.ts";
 
 /** First reconciliation pass shortly after start. */

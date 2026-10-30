@@ -5,7 +5,7 @@
 //! `courier:<id>#self@user:<id>` is written to the authorization graph; a
 //! failed write aborts the registration (fail closed).
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus, MarketId,
@@ -88,7 +88,7 @@ mod tests {
         RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::pkg::application::RelationshipWriteError;
+    use crate::pkg::authz::RelationshipWriteError;
     use crate::pkg::persistence::AuthorizationRevision;
     use crate::slices::courier::domains::courier::{CourierNameError, MarketIdError};
 

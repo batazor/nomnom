@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { ConcurrencyConflictError } from "../pkg/application/errors.ts";
-import { DatabaseOutboxOutsideUnitOfWorkError } from "../pkg/infrastructure/repository/outbox.ts";
+import { DatabaseOutboxOutsideUnitOfWorkError } from "../infrastructure/repository/outbox.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
-} from "../pkg/infrastructure/repository/versioned-collection.ts";
+} from "../infrastructure/repository/versioned-collection.ts";
+import { ConcurrencyConflictError } from "../pkg/usecase/errors.ts";
 import { createTestDatabase, RecordedOutbox } from "./support/database.ts";
 
 const aggregate = { type: "Restaurant", id: "r-1", version: 1 };

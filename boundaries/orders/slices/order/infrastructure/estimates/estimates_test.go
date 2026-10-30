@@ -17,9 +17,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"nomnom/orders/pkg/application"
-	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
+	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/estimates"
@@ -83,8 +83,8 @@ func TestDeliveryDurationOfTheMarket(t *testing.T) {
 
 func TestEstimateErrorsKeepTransportRetryable(t *testing.T) {
 	for code, want := range map[codes.Code]error{
-		codes.Unavailable:     application.ErrDependencyUnavailable,
-		codes.InvalidArgument: application.ErrInvalidInput,
+		codes.Unavailable:     usecase.ErrDependencyUnavailable,
+		codes.InvalidArgument: usecase.ErrInvalidInput,
 	} {
 		t.Run(code.String(), func(t *testing.T) {
 			conn, _, delivery := serve(t)

@@ -18,8 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"nomnom/orders/pkg/application"
-	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/scheduledslots"
@@ -94,11 +94,11 @@ func TestReserveMapsErrors(t *testing.T) {
 		err  error
 		want error
 	}{
-		"window off the grid":          {err: status.Error(codes.InvalidArgument, "off the grid"), want: application.ErrInvalidInput},
+		"window off the grid":          {err: status.Error(codes.InvalidArgument, "off the grid"), want: usecase.ErrInvalidInput},
 		"unknown restaurant":           {err: status.Error(codes.NotFound, "no restaurant"), want: placeorder.ErrUnknownRestaurant},
 		"scheduled orders unavailable": {err: scheduledUnavailable.Err(), want: placeorder.ErrScheduledOrdersUnavailable},
 		"unknown precondition":         {err: status.Error(codes.FailedPrecondition, "other"), want: scheduledslots.ErrInvalidReservation},
-		"transport":                    {err: status.Error(codes.Unavailable, "down"), want: application.ErrDependencyUnavailable},
+		"transport":                    {err: status.Error(codes.Unavailable, "down"), want: usecase.ErrDependencyUnavailable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			server := NewMockRestaurantsServiceServer(t)

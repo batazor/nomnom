@@ -22,8 +22,8 @@ use std::time::Instant;
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Histogram, Meter};
 
-use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
 use crate::pkg::telemetry::SECONDS_BUCKETS;
+use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 
 use super::{Connection, Store};
 

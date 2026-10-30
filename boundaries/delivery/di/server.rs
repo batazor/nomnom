@@ -514,7 +514,7 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::{RecordingAssignment, RecordingRelationships};
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::pkg::application::Subject;
+    use crate::pkg::authz::Subject;
     use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
     use crate::slices::courier::applications::{
         register_courier, set_courier_availability, update_courier_location,

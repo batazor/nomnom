@@ -1,5 +1,5 @@
-import type { Outbox } from "../../../pkg/application/outbox.ts";
-import { publishAggregateChange } from "../../../pkg/application/publish-aggregate-change.ts";
+import type { Outbox } from "../../../pkg/outbox/outbox.ts";
+import { publishAggregateChange } from "../../../pkg/outbox/publish-aggregate-change.ts";
 import type { Menu, MenuRepository } from "../domains/menu/menu.ts";
 
 /** Business facts of the menu that leave the context through the Outbox. */

@@ -4,7 +4,7 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::delivery::applications::authorization::{DeliveryPermission, DeliveryResource};

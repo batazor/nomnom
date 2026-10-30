@@ -4,7 +4,7 @@ import test from "node:test";
 import { v1 } from "@authzed/authzed-node";
 
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import { AuthorizationUnavailableError } from "../pkg/application/errors.ts";
+import { AuthorizationUnavailableError } from "../pkg/authz/errors.ts";
 import { loadConfig } from "../pkg/config/config.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
 

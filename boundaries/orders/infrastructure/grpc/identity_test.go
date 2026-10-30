@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
 )
 
@@ -64,7 +64,7 @@ func TestServiceTokenResolverSharedVectors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			subject, err := resolver.Resolve(withAuthorization("Bearer " + v.Tokens[name]))
 			require.NoError(t, err)
-			assert.Equal(t, application.Subject{Kind: application.SubjectService, ID: v.ExpectedService}, subject)
+			assert.Equal(t, authz.Subject{Kind: authz.SubjectService, ID: v.ExpectedService}, subject)
 		})
 	}
 	for _, name := range v.Rejected {
@@ -187,7 +187,7 @@ func TestUserAssertionSharedVectors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			subject, err := resolver.Resolve(withAssertion(v.DelegateToken, v.Tokens[name]))
 			require.NoError(t, err)
-			assert.Equal(t, application.Subject{Kind: application.SubjectUser, ID: v.ExpectedSubject}, subject)
+			assert.Equal(t, authz.Subject{Kind: authz.SubjectUser, ID: v.ExpectedSubject}, subject)
 		})
 	}
 	for _, name := range v.Rejected {
@@ -208,7 +208,7 @@ func TestUserAssertionRequiresDelegate(t *testing.T) {
 
 	subject, err := resolver.Resolve(withAssertion(v.NonDelegateToken))
 	require.NoError(t, err)
-	assert.Equal(t, application.Subject{Kind: application.SubjectService, ID: "orders-worker"}, subject)
+	assert.Equal(t, authz.Subject{Kind: authz.SubjectService, ID: "orders-worker"}, subject)
 }
 
 func TestUserAssertionRequiresServiceToken(t *testing.T) {

@@ -5,7 +5,7 @@ import {
   jwtVerify,
 } from "jose";
 
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
 import { CLOCK_TOLERANCE_SECONDS, USER_ASSERTION_ALGORITHMS } from "./jwks.ts";
 
 /** gRPC metadata с user assertion BFF (ADR 32). */

@@ -7,8 +7,8 @@ package schema
 import (
 	"context"
 
+	"nomnom/orders/infrastructure/migration"
 	"nomnom/orders/pkg/config/database"
-	"nomnom/orders/pkg/migration"
 	orderrepository "nomnom/orders/slices/order/infrastructure/repository"
 	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
 )

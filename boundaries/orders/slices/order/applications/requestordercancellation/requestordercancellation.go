@@ -9,18 +9,19 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 const (
-	PermissionCancel application.Permission   = "cancel"
-	ResourceOrder    application.ResourceType = "order"
+	PermissionCancel authz.Permission   = "cancel"
+	ResourceOrder    authz.ResourceType = "order"
 )
 
 type Input struct {
-	Subject application.Subject
+	Subject authz.Subject
 	OrderID order.ID
 	// RequestID is the client idempotency key of this Cancellation Request.
 	RequestID string
@@ -39,7 +40,7 @@ type Result struct {
 }
 
 type Authorizer interface {
-	Check(ctx context.Context, check application.AccessCheck) error
+	Check(ctx context.Context, check authz.AccessCheck) error
 }
 
 type Orders interface {
@@ -56,7 +57,7 @@ type Dependencies struct {
 	Authorizer Authorizer
 	Orders     Orders
 	Policy     CancellationPolicy
-	Clock      application.Clock
+	Clock      usecase.Clock
 	Workflow   fulfillment.CancellationRequester
 }
 
@@ -73,10 +74,10 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, err
 	}
 	if in.OrderID == "" {
-		return Result{}, application.InvalidInput("order_id", "is required")
+		return Result{}, usecase.InvalidInput("order_id", "is required")
 	}
 	if in.RequestID == "" {
-		return Result{}, application.InvalidInput("request_id", "is required")
+		return Result{}, usecase.InvalidInput("request_id", "is required")
 	}
 
 	// The Customer cancels the own Order by customer_id: order#customer is
@@ -88,12 +89,12 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, readErr
 	}
 	if missing || !in.Subject.IsUser(string(current.CustomerID())) {
-		err := h.deps.Authorizer.Check(ctx, application.AccessCheck{
+		err := h.deps.Authorizer.Check(ctx, authz.AccessCheck{
 			Subject:    in.Subject,
 			Permission: PermissionCancel,
-			Resource:   application.Resource{Type: ResourceOrder, ID: string(in.OrderID)},
+			Resource:   authz.Resource{Type: ResourceOrder, ID: string(in.OrderID)},
 		})
-		if err := application.FailClosed(err); err != nil {
+		if err := authz.FailClosed(err); err != nil {
 			return Result{}, err
 		}
 		if missing {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
 )
 
 var ErrUnauthenticated = errors.New("caller identity is not authenticated")
@@ -12,5 +12,5 @@ var ErrUnauthenticated = errors.New("caller identity is not authenticated")
 // SubjectResolver authenticates the transport caller and returns the verified
 // application identity. Implementations, not RPC messages, own credentials.
 type SubjectResolver interface {
-	Resolve(ctx context.Context) (application.Subject, error)
+	Resolve(ctx context.Context) (authz.Subject, error)
 }

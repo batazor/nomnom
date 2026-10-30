@@ -34,7 +34,8 @@ linters:
             - "!$test"
           allow:
             - $gostd
-            - github.com/batazor/nomnom/boundaries/controlplane/pkg/application
+            - github.com/batazor/nomnom/boundaries/controlplane/pkg/authz
+            - github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase
             - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains
             - github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications
         shared-packages:

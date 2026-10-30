@@ -11,7 +11,8 @@ from typing import Any
 
 from psycopg import errors
 
-from pkg.application import AggregateRef, ConcurrencyConflictError
+from pkg.outbox import AggregateRef
+from pkg.usecase import ConcurrencyConflictError
 from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,

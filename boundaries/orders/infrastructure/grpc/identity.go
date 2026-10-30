@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
 )
 
@@ -51,41 +51,41 @@ func NewSubjectResolver(cfg config.IdentityConfig) (SubjectResolver, error) {
 	return &ServiceTokenSubjectResolver{service: service, user: user, now: time.Now}, nil
 }
 
-func (r *ServiceTokenSubjectResolver) Resolve(ctx context.Context) (application.Subject, error) {
+func (r *ServiceTokenSubjectResolver) Resolve(ctx context.Context) (authz.Subject, error) {
 	subject, err := r.resolve(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "caller identity rejected", "error", err)
-		return application.Subject{}, ErrUnauthenticated
+		return authz.Subject{}, ErrUnauthenticated
 	}
 	return subject, nil
 }
 
-func (r *ServiceTokenSubjectResolver) resolve(ctx context.Context) (application.Subject, error) {
+func (r *ServiceTokenSubjectResolver) resolve(ctx context.Context) (authz.Subject, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	service, err := r.service.verify(md, r.now)
 	if err != nil {
-		return application.Subject{}, err
+		return authz.Subject{}, err
 	}
 	assertions := md.Get(UserAssertionMetadata)
 	if len(assertions) == 0 {
-		return application.Subject{Kind: application.SubjectService, ID: service}, nil
+		return authz.Subject{Kind: authz.SubjectService, ID: service}, nil
 	}
 	return r.resolveUser(service, assertions)
 }
 
 // resolveUser accepts the asserted user only from an allowed delegate. The
 // delegate and jti are logged for audit; the assertion itself never is.
-func (r *ServiceTokenSubjectResolver) resolveUser(delegate string, assertions []string) (application.Subject, error) {
+func (r *ServiceTokenSubjectResolver) resolveUser(delegate string, assertions []string) (authz.Subject, error) {
 	if len(assertions) != 1 || assertions[0] == "" {
-		return application.Subject{}, fmt.Errorf("%s metadata must be present once", UserAssertionMetadata)
+		return authz.Subject{}, fmt.Errorf("%s metadata must be present once", UserAssertionMetadata)
 	}
 	if !r.user.accepts(delegate) {
-		return application.Subject{}, fmt.Errorf("user assertion from %s: service is not an allowed delegate", delegate)
+		return authz.Subject{}, fmt.Errorf("user assertion from %s: service is not an allowed delegate", delegate)
 	}
 	claims, err := r.user.verify(assertions[0], r.service.audience, r.now)
 	if err != nil {
-		return application.Subject{}, fmt.Errorf("user assertion from %s (jti %q): %w", delegate, claims.ID, err)
+		return authz.Subject{}, fmt.Errorf("user assertion from %s (jti %q): %w", delegate, claims.ID, err)
 	}
 	slog.Info("user assertion accepted", slog.String("delegate", delegate), slog.String("jti", claims.ID))
-	return application.Subject{Kind: application.SubjectUser, ID: claims.Subject}, nil
+	return authz.Subject{Kind: authz.SubjectUser, ID: claims.Subject}, nil
 }

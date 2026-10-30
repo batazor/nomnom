@@ -8,8 +8,10 @@
 //! stored ones. The new Delivery and its `DeliveryCreated` fact are written
 //! in one Unit of Work; a replay writes nothing.
 
-use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork, UnitOfWorkError};
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
+use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryRepository, OrderId, VirtualCity,

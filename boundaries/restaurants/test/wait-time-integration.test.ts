@@ -11,9 +11,9 @@ import {
   RestaurantOrderReadySchema,
   RestaurantWaitLevelChangedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import type { Envelope } from "../pkg/infrastructure/messaging/envelope.ts";
-import type { EventHandler } from "../pkg/infrastructure/messaging/processor.ts";
-import { DatabaseOutbox } from "../pkg/infrastructure/repository/outbox.ts";
+import type { Envelope } from "../infrastructure/messaging/envelope.ts";
+import type { EventHandler } from "../infrastructure/messaging/processor.ts";
+import { DatabaseOutbox } from "../infrastructure/repository/outbox.ts";
 import {
   RecordWaitTimeHandler,
   WAIT_TIME_AGGREGATE_TYPE,

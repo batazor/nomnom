@@ -44,7 +44,7 @@ Outbox читает **polling relay** — отдельный процесс `<co
 Логическая запись ADR 13: `event_id`, `event_type`, `aggregate_type`, `aggregate_id`, `aggregate_version`, `occurred_at`, `topic`, `payload` (Protobuf контракта), `metadata` (`traceparent`, `causation_id`), плюс `seq`, `published_at`, `attempts`, `last_error`.
 
 - `event_id` — UUIDv5 в namespace `8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13` от `"{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}"`, где `event_type` — полное имя Protobuf-сообщения. Уникальный индекс по `event_id`; конфликт откатывает транзакцию. Если одна транзакция создаёт для aggregate несколько событий одного типа, use case фиксирует иной способ в SDD.
-- Kafka message key — `aggregate_id`. Kafka headers — `event_id`, `event_type`, `occurred_at` (RFC 3339), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent`; формат совпадает с `orders` (`pkg/messaging/envelope.go`), чтобы consumers не зависели от языка publisher.
+- Kafka message key — `aggregate_id`. Kafka headers — `event_id`, `event_type`, `occurred_at` (RFC 3339), `aggregate_type`, `aggregate_id`, `aggregate_version`, `traceparent`; формат совпадает с `orders` (`infrastructure/messaging/envelope.go`), чтобы consumers не зависели от языка publisher.
 - Mapper Domain Event → Integration Event находится в `infrastructure` слайса. Domain Event без контракта не попадает в Outbox: mapper отбирает публикуемые типы явно, а не по умолчанию.
 
 ### Topics

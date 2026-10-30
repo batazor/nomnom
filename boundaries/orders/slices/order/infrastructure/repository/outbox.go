@@ -10,7 +10,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/ThreeDotsLabs/watermill/message"
 
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
 )
 
 // ErrOutboxOutsideTransaction: Outbox records exist only with a business change.

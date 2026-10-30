@@ -1,6 +1,6 @@
 import { v1 } from "@authzed/authzed-node";
 
-import { AuthorizationUnavailableError } from "../../pkg/application/errors.ts";
+import { AuthorizationUnavailableError } from "../../pkg/authz/errors.ts";
 import type {
   AuthorizationRevision,
   OwnerRelationshipWriter,

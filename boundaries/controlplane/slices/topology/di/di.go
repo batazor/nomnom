@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/wire"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/archivemarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
@@ -32,7 +32,7 @@ type Module struct {
 	PublishRoutes publishroutes.Handler
 }
 
-func NewModule(store *repository.Store, authorizer application.Authorizer, applier publishroutes.Applier) *Module {
+func NewModule(store *repository.Store, authorizer authz.Authorizer, applier publishroutes.Applier) *Module {
 	markets := repository.NewMarkets(store)
 	routes := publishroutes.New(repository.NewRoutes(store), applier)
 	return &Module{
@@ -46,7 +46,7 @@ func NewModule(store *repository.Store, authorizer application.Authorizer, appli
 
 // NewAuthorizer подключает проверку platform#manage_markets к SpiceDB (ADR 18);
 // без endpoint процесс не стартует.
-func NewAuthorizer(cfg config.SpiceDBConfig) (application.Authorizer, func(), error) {
+func NewAuthorizer(cfg config.SpiceDBConfig) (authz.Authorizer, func(), error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
 	}

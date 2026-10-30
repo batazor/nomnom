@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/customersimulator"

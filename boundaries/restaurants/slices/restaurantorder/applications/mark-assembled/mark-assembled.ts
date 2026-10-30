@@ -1,5 +1,5 @@
-import type { Clock } from "../../../../pkg/application/clock.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { RestaurantOrderRepository } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control.ts";
 import type { KitchenCommand } from "../kitchen-command.ts";

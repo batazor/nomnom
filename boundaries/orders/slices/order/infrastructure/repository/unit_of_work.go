@@ -15,8 +15,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/usecase"
 )
 
 // Retry policy of the outer Unit of Work (ADR 20): bounded by attempts and by
@@ -153,7 +153,7 @@ func retryReason(err error) (string, bool) {
 		return reasonDeadlock, true
 	case errors.As(err, &dbErr) && strings.HasPrefix(dbErr.Code, sqlstateTransactionRollback):
 		return reasonOther, true
-	case errors.Is(err, application.ErrConcurrencyConflict):
+	case errors.Is(err, usecase.ErrConcurrencyConflict):
 		return reasonWriteConflict, true
 	}
 	return "", false

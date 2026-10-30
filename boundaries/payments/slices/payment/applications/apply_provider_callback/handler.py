@@ -7,7 +7,7 @@ provider is not a subject of the payments authorization graph, so no permission 
 
 from dataclasses import dataclass
 
-from pkg.application import UnitOfWork
+from pkg.unit_of_work import UnitOfWork
 from slices.payment.domains.payment import OperationId
 
 from ..errors import InvalidPaymentRequestError

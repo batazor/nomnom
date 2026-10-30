@@ -6,20 +6,20 @@ import {
   MenuItemAvailabilityChangedSchema,
   RestaurantOpenedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
-import type { Subject } from "../pkg/application/subject.ts";
-import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+import { outboxEventMapperByAggregate } from "../infrastructure/outbox/integration-event.ts";
 import {
   connectDatabase,
   type DatabaseConnection,
-} from "../pkg/infrastructure/repository/client.ts";
+} from "../infrastructure/repository/client.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import {
   DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
   outboxEventId,
-} from "../pkg/infrastructure/repository/outbox.ts";
-import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+} from "../infrastructure/repository/outbox.ts";
+import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";

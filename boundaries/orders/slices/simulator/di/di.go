@@ -11,8 +11,8 @@ import (
 	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	gatewayclient "nomnom/orders/infrastructure/gateway"
 	"nomnom/orders/pkg/config"
-	gatewayclient "nomnom/orders/pkg/gateway"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/customersimulator"

@@ -1,5 +1,5 @@
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { CookRepository } from "../../domains/cook/cook.ts";
 import type { CookPoolAccess } from "../access-control.ts";
 import { type CookView, toCookView } from "../cook-view.ts";

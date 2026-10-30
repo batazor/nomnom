@@ -5,7 +5,7 @@ use crate::infrastructure::memory::{
     SequentialIdGenerator, StaticAuthorization, StaticCourierLocator,
 };
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::pkg::application::{RelationshipWriteError, Subject};
+use crate::pkg::authz::{RelationshipWriteError, Subject};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,

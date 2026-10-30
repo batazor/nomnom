@@ -9,14 +9,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	cellvo "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 )
 
 // ErrRoutesUnavailable: the routes were not applied. The registry write stays,
 // and a repeat of the command applies them again.
-var ErrRoutesUnavailable = fmt.Errorf("%w: routes of the public gateway not applied", application.ErrDependencyUnavailable)
+var ErrRoutesUnavailable = fmt.Errorf("%w: routes of the public gateway not applied", usecase.ErrDependencyUnavailable)
 
 // MarketRoute is a Market with the Router of its Market Placement.
 type MarketRoute struct {

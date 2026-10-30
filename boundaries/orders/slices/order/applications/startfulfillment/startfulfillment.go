@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -30,13 +31,13 @@ type Input struct {
 func (in Input) validate() error {
 	switch {
 	case in.EventID == "":
-		return application.InvalidInput("event_id", "is required")
+		return usecase.InvalidInput("event_id", "is required")
 	case in.OrderID == "":
-		return application.InvalidInput("order_id", "is required")
+		return usecase.InvalidInput("order_id", "is required")
 	case in.OccurredAt.IsZero():
-		return application.InvalidInput("occurred_at", "is required")
+		return usecase.InvalidInput("occurred_at", "is required")
 	case in.DeliveryWindowStart.IsZero() != in.DeliveryWindowEnd.IsZero():
-		return application.InvalidInput("delivery_window", "requires start and end")
+		return usecase.InvalidInput("delivery_window", "requires start and end")
 	}
 	return nil
 }
@@ -49,13 +50,13 @@ type Result struct {
 }
 
 type Handler struct {
-	uow      application.UnitOfWork
-	inbox    application.Inbox
+	uow      unitofwork.UnitOfWork
+	inbox    unitofwork.Inbox
 	orders   order.Repository
 	workflow fulfillment.Starter
 }
 
-func NewHandler(uow application.UnitOfWork, inbox application.Inbox, orders order.Repository, workflow fulfillment.Starter) Handler {
+func NewHandler(uow unitofwork.UnitOfWork, inbox unitofwork.Inbox, orders order.Repository, workflow fulfillment.Starter) Handler {
 	return Handler{uow: uow, inbox: inbox, orders: orders, workflow: workflow}
 }
 
@@ -86,7 +87,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		restaurant = current.RestaurantID()
 		return nil
 	}
-	accepted, err := application.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, readOrder)
+	accepted, err := unitofwork.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, readOrder)
 	if err != nil {
 		return Result{}, err
 	}
@@ -103,7 +104,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 
 	err = h.workflow.Start(ctx, fulfillment.StartRequest{OrderID: in.OrderID, RestaurantID: restaurant, EventID: in.EventID, OccurredAt: in.OccurredAt, DeliveryWindow: window})
 	if err != nil {
-		return Result{Outcome: outcome}, fmt.Errorf("%w: start order fulfillment workflow: %w", application.ErrDependencyUnavailable, err)
+		return Result{Outcome: outcome}, fmt.Errorf("%w: start order fulfillment workflow: %w", usecase.ErrDependencyUnavailable, err)
 	}
 	return Result{Outcome: outcome, WorkflowNotified: true}, nil
 }

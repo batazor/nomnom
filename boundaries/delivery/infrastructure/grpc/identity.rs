@@ -26,7 +26,7 @@ use std::sync::Arc;
 use tonic::Status;
 use tonic::metadata::MetadataMap;
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::config::IdentityConfig;
 
 use super::service::SubjectResolver;

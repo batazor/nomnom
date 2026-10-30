@@ -1,6 +1,6 @@
-import { NotFoundError } from "../../../../pkg/application/errors.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { RestaurantOrderViewAccess } from "../access-control.ts";
 import type { RestaurantOrderView } from "../restaurant-order-view.ts";
 

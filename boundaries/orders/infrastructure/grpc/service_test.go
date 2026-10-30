@@ -22,7 +22,8 @@ import (
 
 	grpcadapter "nomnom/orders/infrastructure/grpc"
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
@@ -107,8 +108,8 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 
 func TestListCustomerOrdersCallsApplicationHandler(t *testing.T) {
 	subjects := NewMockSubjectResolver(t)
-	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{
-		Kind: application.SubjectUser,
+	subjects.EXPECT().Resolve(mock.Anything).Return(authz.Subject{
+		Kind: authz.SubjectUser,
 		ID:   "customer-1",
 	}, nil).Once()
 	client := newClient(t, subjects)
@@ -161,8 +162,8 @@ func TestListCustomerOrdersRequiresMarket(t *testing.T) {
 
 func TestServiceReturnsStructuredInvalidArgument(t *testing.T) {
 	subjects := NewMockSubjectResolver(t)
-	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{
-		Kind: application.SubjectUser,
+	subjects.EXPECT().Resolve(mock.Anything).Return(authz.Subject{
+		Kind: authz.SubjectUser,
 		ID:   "customer-1",
 	}, nil).Once()
 	client := newClient(t, subjects)
@@ -183,7 +184,7 @@ func TestServiceReturnsStructuredInvalidArgument(t *testing.T) {
 func TestServiceRejectsUnverifiedCaller(t *testing.T) {
 	// The resolver fails the call as an unverified caller.
 	subjects := NewMockSubjectResolver(t)
-	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{}, grpcadapter.ErrUnauthenticated).Once()
+	subjects.EXPECT().Resolve(mock.Anything).Return(authz.Subject{}, grpcadapter.ErrUnauthenticated).Once()
 	client := newClient(t, subjects)
 
 	_, err := client.ListCustomerOrders(context.Background(), &ordersv1.ListCustomerOrdersRequest{
@@ -203,8 +204,8 @@ func TestGetOrderMapsCancellationWindow(t *testing.T) {
 		require.NoError(t, store.Add(context.Background(), o))
 	}
 	subjects := NewMockSubjectResolver(t)
-	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{
-		Kind: application.SubjectUser,
+	subjects.EXPECT().Resolve(mock.Anything).Return(authz.Subject{
+		Kind: authz.SubjectUser,
 		ID:   "customer-1",
 	}, nil).Times(2)
 	client := newClientWith(t, subjects, store, authorizer)
@@ -350,7 +351,7 @@ func TestPlaceOrderRefusesUnknownPriority(t *testing.T) {
 	requireReason(t, err, codes.InvalidArgument, "INVALID_ARGUMENT")
 }
 
-var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
+var customer = authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"}
 
 func requireReason(t *testing.T, err error, code codes.Code, reason string) {
 	t.Helper()
@@ -408,7 +409,7 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", application.ErrDependencyUnavailable)).Once()
+		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", usecase.ErrDependencyUnavailable)).Once()
 	subjects := NewMockSubjectResolver(t)
 	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
 	client := newClientWithPorts(t, subjects, repositorytest.Open(t), NewMockAuthorizer(t), commandPorts{
@@ -520,7 +521,7 @@ func errorInfo(t *testing.T, err error) *errdetails.ErrorInfo {
 // AC-510: a service subject is not a Customer.
 func TestPlaceOrderDeniesServiceSubject(t *testing.T) {
 	subjects := NewMockSubjectResolver(t)
-	subjects.EXPECT().Resolve(mock.Anything).Return(application.Subject{Kind: application.SubjectService, ID: "bff"}, nil).Once()
+	subjects.EXPECT().Resolve(mock.Anything).Return(authz.Subject{Kind: authz.SubjectService, ID: "bff"}, nil).Once()
 	client := newClient(t, subjects)
 
 	_, err := client.PlaceOrder(context.Background(), placeRequest())
@@ -661,12 +662,12 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 	})
 	t.Run("spicedb unavailable", func(t *testing.T) {
 		// Only a subject other than the Customer is checked in SpiceDB.
-		supportConsole := application.Subject{Kind: application.SubjectService, ID: "support-console"}
+		supportConsole := authz.Subject{Kind: authz.SubjectService, ID: "support-console"}
 		authorizer := NewMockAuthorizer(t)
-		authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
+		authorizer.EXPECT().Check(mock.Anything, authz.AccessCheck{
 			Subject:    supportConsole,
 			Permission: requestordercancellation.PermissionCancel,
-			Resource:   application.Resource{Type: requestordercancellation.ResourceOrder, ID: "order-1"},
+			Resource:   authz.Resource{Type: requestordercancellation.ResourceOrder, ID: "order-1"},
 		}).Return(spicedb.ErrUnavailable).Once()
 		store := repositorytest.Open(t)
 		require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))

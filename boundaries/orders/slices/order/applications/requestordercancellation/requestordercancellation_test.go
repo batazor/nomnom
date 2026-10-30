@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
@@ -20,7 +21,7 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
+var customer = authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"}
 
 type env struct {
 	store      *repositorytest.Store
@@ -50,7 +51,7 @@ func newEnv(t *testing.T, state order.State, policy requestordercancellation.Can
 	return e
 }
 
-func input(subject application.Subject) requestordercancellation.Input {
+func input(subject authz.Subject) requestordercancellation.Input {
 	return requestordercancellation.Input{Subject: subject, OrderID: "order-1", RequestID: "cancel-1", Reason: "changed_mind"}
 }
 
@@ -83,13 +84,13 @@ func TestRequestCancellationIsHandedToWorkflow(t *testing.T) {
 
 // AC-115: authorization is checked first and fails closed.
 func TestRequestCancellationRequiresPermission(t *testing.T) {
-	stranger := application.Subject{Kind: application.SubjectUser, ID: "customer-2"}
+	stranger := authz.Subject{Kind: authz.SubjectUser, ID: "customer-2"}
 	tests := []struct {
 		name     string
-		subject  application.Subject
+		subject  authz.Subject
 		checkErr error
 	}{
-		{name: "another customer", subject: stranger, checkErr: application.ErrPermissionDenied},
+		{name: "another customer", subject: stranger, checkErr: authz.ErrPermissionDenied},
 		{name: "authorization unavailable", subject: stranger, checkErr: errors.New("spicedb timeout")},
 	}
 	for _, tt := range tests {
@@ -97,34 +98,34 @@ func TestRequestCancellationRequiresPermission(t *testing.T) {
 			// The workflow has no expectation: a cancellation request fails the test.
 			e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
 			e.authorizer.EXPECT().
-				Check(mock.Anything, application.AccessCheck{
+				Check(mock.Anything, authz.AccessCheck{
 					Subject:    tt.subject,
 					Permission: requestordercancellation.PermissionCancel,
-					Resource:   application.Resource{Type: requestordercancellation.ResourceOrder, ID: "order-1"},
+					Resource:   authz.Resource{Type: requestordercancellation.ResourceOrder, ID: "order-1"},
 				}).
 				Return(tt.checkErr).
 				Once()
 
 			_, err := e.handler.Handle(context.Background(), input(tt.subject))
 
-			require.ErrorIs(t, err, application.ErrPermissionDenied)
+			require.ErrorIs(t, err, authz.ErrPermissionDenied)
 		})
 	}
 
 	// A denied subject learns nothing about a missing Order either.
 	e := newEnv(t, order.StatePlaced, fake.AlwaysOpen{})
 	e.authorizer.EXPECT().
-		Check(mock.Anything, application.AccessCheck{
+		Check(mock.Anything, authz.AccessCheck{
 			Subject:    stranger,
 			Permission: requestordercancellation.PermissionCancel,
-			Resource:   application.Resource{Type: requestordercancellation.ResourceOrder, ID: "missing"},
+			Resource:   authz.Resource{Type: requestordercancellation.ResourceOrder, ID: "missing"},
 		}).
-		Return(application.ErrPermissionDenied).
+		Return(authz.ErrPermissionDenied).
 		Once()
 	missing := input(stranger)
 	missing.OrderID = "missing"
 	_, err := e.handler.Handle(context.Background(), missing)
-	require.ErrorIs(t, err, application.ErrPermissionDenied)
+	require.ErrorIs(t, err, authz.ErrPermissionDenied)
 }
 
 // The Customer cancels the own Order by customer_id, before orders-consumer
@@ -220,7 +221,7 @@ func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) 
 	_, err = e.handler.Handle(context.Background(), noRequestID)
 	// The authorizer has no expectation: the Customer is not checked; invalid
 	// input is rejected before any read.
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }
 
 // fixedWindow is the production cancellation policy with the given window.

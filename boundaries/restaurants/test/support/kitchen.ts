@@ -1,6 +1,6 @@
-import type { Outbox } from "../../pkg/application/outbox.ts";
-import type { Subject } from "../../pkg/application/subject.ts";
-import type { UnitOfWork } from "../../pkg/application/unit-of-work.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
+import type { Outbox } from "../../pkg/outbox/outbox.ts";
+import type { UnitOfWork } from "../../pkg/unit-of-work/unit-of-work.ts";
 import type { CookPoolAccess } from "../../slices/cook/applications/access-control.ts";
 import { PoolCookAssigner } from "../../slices/cook/applications/assign-cook/assign-cook.ts";
 import { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";

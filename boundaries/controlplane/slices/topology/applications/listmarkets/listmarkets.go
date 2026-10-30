@@ -8,13 +8,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/permission"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/market"
 )
 
 type Query struct {
-	Subject application.Subject
+	Subject authz.Subject
 }
 
 // Lister reads every Market that is not archived, by name, then by id.
@@ -23,13 +24,13 @@ type Lister interface {
 }
 
 type Handler struct {
-	authorizer application.Authorizer
+	authorizer authz.Authorizer
 	markets    Lister
 }
 
-var _ application.Handler[Query, []market.Market] = Handler{}
+var _ usecase.Handler[Query, []market.Market] = Handler{}
 
-func New(authorizer application.Authorizer, markets Lister) Handler {
+func New(authorizer authz.Authorizer, markets Lister) Handler {
 	return Handler{authorizer: authorizer, markets: markets}
 }
 

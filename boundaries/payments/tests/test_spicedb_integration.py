@@ -10,7 +10,7 @@ import pytest
 from conftest import SPICEDB_PRESHARED_KEY
 
 from infrastructure.authorization import SpiceDBPermissionChecker, create_spicedb_client
-from pkg.application import AuthorizationUnavailableError, Subject, SubjectKind
+from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.domains.payment import OrderId, PaymentId

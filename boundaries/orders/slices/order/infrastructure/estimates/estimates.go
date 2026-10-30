@@ -14,9 +14,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"nomnom/orders/pkg/application"
-	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
-	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
+	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -83,13 +83,13 @@ func (d *Delivery) EstimateDeliveryDuration(ctx context.Context, marketID vo.Mar
 }
 
 // mapError makes contract violations non-retryable through
-// application.ErrInvalidInput, like the command clients of the worker;
+// usecase.ErrInvalidInput, like the command clients of the worker;
 // transport and identity failures stay retryable until fixed by deployment.
 func mapError(call string, err error) error {
 	switch status.Code(err) {
 	case codes.InvalidArgument, codes.NotFound, codes.FailedPrecondition:
-		return fmt.Errorf("%s: %w: %w", call, application.ErrInvalidInput, err)
+		return fmt.Errorf("%s: %w: %w", call, usecase.ErrInvalidInput, err)
 	default:
-		return fmt.Errorf("%s: %w: %w", call, application.ErrDependencyUnavailable, err)
+		return fmt.Errorf("%s: %w: %w", call, usecase.ErrDependencyUnavailable, err)
 	}
 }

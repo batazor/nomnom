@@ -10,20 +10,19 @@
 // runbook docs/dlq.md), the same contract as orders-admin. `dlq list` writes
 // one JSON line per dead letter to stdout; logs go to stderr.
 import { parseArgs } from "node:util";
-
-import {
-  loadConsumerConfig,
-  loadKafkaConfig,
-  loadLocalEnv,
-} from "../../pkg/config/config.ts";
 import {
   type DeadLetter,
   KafkaDeadLetters,
   REDRIVEN_FROM_HEADER,
   type Through,
-} from "../../pkg/infrastructure/kafka/dead-letters.ts";
-import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
-import { DEAD_LETTER_HEADERS } from "../../pkg/infrastructure/messaging/processor.ts";
+} from "../../infrastructure/kafka/dead-letters.ts";
+import { KafkaPublisher } from "../../infrastructure/kafka/publisher.ts";
+import { DEAD_LETTER_HEADERS } from "../../infrastructure/messaging/processor.ts";
+import {
+  loadConsumerConfig,
+  loadKafkaConfig,
+  loadLocalEnv,
+} from "../../pkg/config/config.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 import { DELIVERY_EVENTS_TOPIC } from "../../slices/restaurantorder/infrastructure/integration/delivery-picked-up.ts";

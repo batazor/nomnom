@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"nomnom/orders/infrastructure/migration"
 	"nomnom/orders/pkg/config/database"
-	"nomnom/orders/pkg/migration"
 	"nomnom/orders/slices/order/infrastructure/repository"
 )
 

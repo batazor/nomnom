@@ -53,7 +53,7 @@ Bounded contexts взаимодействуют через согласован�
 
 Каждый слайс имеет собственный shaku-модуль в `slices/<slice>/di`. Модуль объявляет интерфейс внешних портов слайса и интерфейс его use cases, а реализации портов получает через submodule. Корневой `di` выбирает реализации портов, собирает модули слайсов и итоговый модуль процесса. Shaku импортируют только модули `di`; `domains/` и `applications/` от него не зависят.
 
-Shaku хранит компоненты как `Arc<dyn Interface>` и требует `Send + Sync`. Порты `delivery` этого не требуют, поэтому слайс получает их через собственный интерфейс-агрегатор, а не как отдельные компоненты. Generic `UnitOfWork` недоступен через `dyn`, поэтому `pkg/application` предоставляет object-safe `TransactionScope` и адаптер `ScopedUnitOfWork`, возвращающий его к `UnitOfWork` для handlers.
+Shaku хранит компоненты как `Arc<dyn Interface>` и требует `Send + Sync`. Порты `delivery` этого не требуют, поэтому слайс получает их через собственный интерфейс-агрегатор, а не как отдельные компоненты. Generic `UnitOfWork` недоступен через `dyn`, поэтому `pkg/unit_of_work` предоставляет object-safe `TransactionScope` и адаптер `ScopedUnitOfWork`, возвращающий его к `UnitOfWork` для handlers.
 
 ### Payments
 

@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/telemetry"
 )
 
@@ -54,7 +54,7 @@ func newCheckMetrics() checkMetrics {
 	return checkMetrics{checks: checks, duration: duration}
 }
 
-func (m checkMetrics) record(ctx context.Context, check application.AccessCheck, result string, elapsed time.Duration) {
+func (m checkMetrics) record(ctx context.Context, check authz.AccessCheck, result string, elapsed time.Duration) {
 	attrs := metric.WithAttributes(
 		attribute.String("nomnom.authz.permission", string(check.Permission)),
 		attribute.String("nomnom.authz.resource_type", string(check.Resource.Type)),
@@ -70,7 +70,7 @@ func checkResult(ctx context.Context, err error) string {
 	switch {
 	case err == nil:
 		return resultAllowed
-	case errors.Is(err, application.ErrPermissionDenied):
+	case errors.Is(err, authz.ErrPermissionDenied):
 		return resultDenied
 	case errors.Is(ctx.Err(), context.DeadlineExceeded), errors.Is(err, context.DeadlineExceeded),
 		status.Code(err) == codes.DeadlineExceeded:

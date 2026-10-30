@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::domains::courier::{
     CourierEligibilityContext, CourierEligibilityReason, CourierError, CourierId,

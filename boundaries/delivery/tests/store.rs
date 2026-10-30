@@ -15,9 +15,9 @@ use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::infrastructure::repository::{
     MIGRATION_SETS, OutboxMapper, OutboxRecord, Store, event_id, migrate,
 };
-use delivery::pkg::application::{UnitOfWork, UnitOfWorkError};
 use delivery::pkg::config::database;
 use delivery::pkg::persistence::{AuthorizationRevision, RepositoryError};
+use delivery::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use delivery::slices::courier::applications::update_courier_location::{
     CourierLocationStore, CourierPosition,
 };

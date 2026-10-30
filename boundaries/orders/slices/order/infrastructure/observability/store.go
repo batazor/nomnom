@@ -3,7 +3,7 @@ package observability
 import (
 	"context"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -18,7 +18,7 @@ type Outbox interface {
 // transitions of the saved Orders (DomainMetrics). Every attempt of a retried
 // transaction collects anew. Nil Metrics is a no-op.
 type ObservedStore struct {
-	UnitOfWork application.UnitOfWork
+	UnitOfWork unitofwork.UnitOfWork
 	Orders     order.Repository
 	Outbox     Outbox
 	Metrics    *DomainMetrics

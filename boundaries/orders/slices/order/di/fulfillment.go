@@ -1,10 +1,11 @@
 package di
 
 import (
-	"nomnom/orders/pkg/application"
+	gatewayclient "nomnom/orders/infrastructure/gateway"
 	"nomnom/orders/pkg/config"
-	gatewayclient "nomnom/orders/pkg/gateway"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
 	"nomnom/orders/slices/order/applications/getfulfillmentorder"
@@ -18,17 +19,17 @@ import (
 // FulfillmentModule — use cases слайса order, которые вызывают Activities Order
 // Fulfillment. Слайс fulfillment получает их собранными и не знает их портов.
 type FulfillmentModule struct {
-	GetOrder      application.Handler[getfulfillmentorder.Query, getfulfillmentorder.View]
-	RecordPayment application.Handler[recordpaymentauthorization.Input, recordpaymentauthorization.Result]
-	Complete      application.Handler[completeorder.Input, completeorder.Result]
-	Finalize      application.Handler[failorcancelorder.Input, failorcancelorder.Result]
-	Plan          application.Handler[planschedule.Input, order.SchedulePlan]
+	GetOrder      usecase.Handler[getfulfillmentorder.Query, getfulfillmentorder.View]
+	RecordPayment usecase.Handler[recordpaymentauthorization.Input, recordpaymentauthorization.Result]
+	Complete      usecase.Handler[completeorder.Input, completeorder.Result]
+	Finalize      usecase.Handler[failorcancelorder.Input, failorcancelorder.Result]
+	Plan          usecase.Handler[planschedule.Input, order.SchedulePlan]
 }
 
 // FulfillmentStore — роль хранилища FulfillmentModule: чтение Order, Unit of Work,
 // repository и Outbox use cases Complete Order и Fail Or Cancel Order.
 type FulfillmentStore interface {
-	application.UnitOfWork
+	unitofwork.UnitOfWork
 	order.Repository
 	completeorder.Outbox
 }

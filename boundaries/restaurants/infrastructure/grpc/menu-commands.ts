@@ -5,7 +5,7 @@ import {
   type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
 import type { MenuItemChangeResult } from "../../slices/menu/applications/menu-support.ts";
 import { requireField, transportError } from "./errors.ts";
 import {

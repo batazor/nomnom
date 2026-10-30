@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  NotFoundError,
-  PermissionDeniedError,
-} from "../pkg/application/errors.ts";
-import type { Outbox } from "../pkg/application/outbox.ts";
+import { PermissionDeniedError } from "../pkg/authz/errors.ts";
+import type { Outbox } from "../pkg/outbox/outbox.ts";
+import { NotFoundError } from "../pkg/usecase/errors.ts";
 import {
   AlreadyInStateError,
   GuardFailedError,

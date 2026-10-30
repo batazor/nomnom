@@ -18,9 +18,9 @@ use testcontainers_modules::testcontainers::{Container, ImageExt};
 
 use crate::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::infrastructure::reconcile::ReconciliationStore;
-use crate::pkg::application::{UnitOfWork, UnitOfWorkError};
 use crate::pkg::config::database;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
+use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use crate::slices::courier::applications::update_courier_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPosition,
 };

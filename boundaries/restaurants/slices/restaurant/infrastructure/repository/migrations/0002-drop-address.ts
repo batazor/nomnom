@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /**
  * Slice `restaurant`: the pickup address is dropped from the project, like the

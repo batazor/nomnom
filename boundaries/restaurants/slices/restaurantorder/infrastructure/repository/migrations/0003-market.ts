@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /** States of the `RestaurantOrder` FSM as of this migration. */
 const states = [

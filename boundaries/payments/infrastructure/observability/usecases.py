@@ -4,12 +4,9 @@
 by the Provider is a successful call (``DECLINED`` result), not a rejection.
 """
 
-from pkg.application import (
-    AuthorizationUnavailableError,
-    ConcurrencyConflictError,
-    PermissionDeniedError,
-)
+from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
 from pkg.telemetry.usecase import Failure, Outcome, UseCase
+from pkg.usecase import ConcurrencyConflictError
 from slices.payment.applications.errors import (
     IdempotencyKeyConflictError,
     InvalidPaymentRequestError,

@@ -15,10 +15,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"nomnom/orders/pkg/application"
-	deliveryv1 "nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1"
-	paymentsv1 "nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
-	restaurantsv1 "nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1"
+	deliveryv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1"
+	paymentsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1"
+	restaurantsv1 "nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 )
 
@@ -142,7 +142,7 @@ func (r *Restaurants) RequestOrder(ctx context.Context, request neighbours.Resta
 	}
 	priority, known := restaurantPriority[request.Priority]
 	if !known {
-		return "", fmt.Errorf("%w: order %s has priority %q", application.ErrInvalidInput, request.OrderID, request.Priority)
+		return "", fmt.Errorf("%w: order %s has priority %q", usecase.ErrInvalidInput, request.OrderID, request.Priority)
 	}
 	var schedule *restaurantsv1.OrderSchedule
 	if request.Schedule != nil {
@@ -251,7 +251,7 @@ func (d *Delivery) Cancel(ctx context.Context, request neighbours.DeliveryReques
 	return nil
 }
 
-// mapError makes contract violations non-retryable through application.ErrInvalidInput;
+// mapError makes contract violations non-retryable through usecase.ErrInvalidInput;
 // transport and identity failures stay retryable until fixed by deployment.
 func mapError(call string, err error) error {
 	if err == nil {
@@ -259,7 +259,7 @@ func mapError(call string, err error) error {
 	}
 	switch status.Code(err) {
 	case codes.InvalidArgument, codes.NotFound, codes.FailedPrecondition, codes.AlreadyExists:
-		return fmt.Errorf("%s: %w: %w", call, application.ErrInvalidInput, err)
+		return fmt.Errorf("%s: %w: %w", call, usecase.ErrInvalidInput, err)
 	default:
 		return fmt.Errorf("%s: %w", call, err)
 	}

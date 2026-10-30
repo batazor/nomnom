@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { IntegrationMessage } from "../pkg/infrastructure/messaging/envelope.ts";
+import type { IntegrationMessage } from "../infrastructure/messaging/envelope.ts";
 import {
   type InboundMessage,
   PermanentMessageError,
   parseEnvelope,
-} from "../pkg/infrastructure/messaging/envelope.ts";
+} from "../infrastructure/messaging/envelope.ts";
 import {
   type ConsumerMetrics,
   type ErrorClass,
   type EventHandler,
   MessageProcessor,
-} from "../pkg/infrastructure/messaging/processor.ts";
+} from "../infrastructure/messaging/processor.ts";
 import {
   DatabaseInbox,
   INBOX_COLLECTION,
   type InboxDocument,
-} from "../pkg/infrastructure/repository/inbox.ts";
+} from "../infrastructure/repository/inbox.ts";
 import { createTestDatabase } from "./support/database.ts";
 import { framed, SCHEMA_ID, TestSchemas } from "./support/schemas.ts";
 

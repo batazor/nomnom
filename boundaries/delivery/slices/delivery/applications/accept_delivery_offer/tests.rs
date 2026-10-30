@@ -4,7 +4,7 @@ use super::*;
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::pkg::application::UnitOfWorkError;
+use crate::pkg::unit_of_work::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::domains::courier::{CourierError, CourierStatus, MarketId};
 use crate::slices::delivery::applications::authorization::DeliveryResource;

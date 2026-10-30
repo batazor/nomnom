@@ -11,8 +11,8 @@ from enum import StrEnum
 import psycopg
 from opentelemetry import metrics
 
-from pkg.application import ConcurrencyConflictError
 from pkg.telemetry import SECONDS_BUCKETS
+from pkg.usecase import ConcurrencyConflictError
 
 INSTRUMENTATION = "nomnom.payments.uow"
 

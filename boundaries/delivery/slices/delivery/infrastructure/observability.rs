@@ -44,8 +44,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Histogram, Meter};
 
-use crate::pkg::application::{TransactionScope, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::unit_of_work::{TransactionScope, UnitOfWorkError};
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,

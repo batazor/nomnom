@@ -6,8 +6,8 @@ import (
 	"github.com/google/wire"
 
 	grpcadapter "nomnom/orders/infrastructure/grpc"
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/pkg/messaging"
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	orderdi "nomnom/orders/slices/order/di"
 	simulatordi "nomnom/orders/slices/simulator/di"

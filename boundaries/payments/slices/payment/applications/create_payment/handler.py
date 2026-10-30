@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from pkg.application import Subject
+from pkg.authz import Subject
 from slices.payment.domains.payment import (
     DuplicatePaymentError,
     InvalidMarketIdError,

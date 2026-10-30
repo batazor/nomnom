@@ -20,7 +20,7 @@ use delivery::infrastructure::grpc::v1::delivery_service_client::DeliveryService
 use delivery::infrastructure::grpc::v1::{CancelDeliveryRequest, CreateDeliveryRequest};
 use delivery::infrastructure::grpc::{GrpcTraceLayer, GrpcWorker, SubjectResolver};
 use delivery::infrastructure::memory::StaticAuthorization;
-use delivery::pkg::application::Subject;
+use delivery::pkg::authz::Subject;
 use delivery::pkg::lifecycle::Worker as _;
 
 const TRACE_ID: &str = "0af7651916cd43dd8448eb211c80319c";

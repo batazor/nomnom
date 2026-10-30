@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MeterProvider, MetricReader } from "@opentelemetry/sdk-metrics";
-
-import type { UnitOfWork } from "../pkg/application/unit-of-work.ts";
-import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
+import { DatabaseInbox } from "../infrastructure/repository/inbox.ts";
+import type { UnitOfWork } from "../pkg/unit-of-work/unit-of-work.ts";
 import {
   CancellationRejectionReason,
   type CancelRestaurantOrderResult,

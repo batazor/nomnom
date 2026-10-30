@@ -64,7 +64,7 @@ Restaurant вместе с меню и заказами не объединяе�
 
 ### Эволюция схемы
 
-Миграции встроены в приложение и выполняются библиотекой [migrate-mongo](https://github.com/seppevs/migrate-mongo) ([ADR 39](../../../../docs/adr/0039-data-access-without-orm.md)): каждый процесс (`restaurants`, `restaurants-consumer`) при старте, до обслуживания, своим `MongoClient` (с телеметрией команд и пула) вызывает `migrateRestaurantsDatabase` (`infrastructure/repository/migrate.ts` поверх `pkg/infrastructure/repository/migrate.ts`).
+Миграции встроены в приложение и выполняются библиотекой [migrate-mongo](https://github.com/seppevs/migrate-mongo) ([ADR 39](../../../../docs/adr/0039-data-access-without-orm.md)): каждый процесс (`restaurants`, `restaurants-consumer`) при старте, до обслуживания, своим `MongoClient` (с телеметрией команд и пула) вызывает `migrateRestaurantsDatabase` (`infrastructure/repository/migrate.ts` поверх `infrastructure/repository/run-migrations.ts`).
 
 Каждый вертикальный слайс владеет миграциями своих коллекций. Набор миграций — каталог файлов `<NNNN>-<изменение>.ts` с нумерацией с 0001 в каждом наборе и собственным changelog `migrations_changelog_<id>`.
 
@@ -72,7 +72,7 @@ Restaurant вместе с меню и заказами не объединяе�
 
 | Набор (`id`) | Каталог | Коллекции |
 | --- | --- | --- |
-| `messaging` | `pkg/infrastructure/repository/migrations/` | `outbox`, `inbox`; чистки всего сервиса (остатки polling relay ADR 31, коллекции прежних миграторов) |
+| `messaging` | `infrastructure/repository/migrations/` | `outbox`, `inbox`; чистки всего сервиса (остатки polling relay ADR 31, коллекции прежних миграторов) |
 | `restaurants` | `slices/restaurant/infrastructure/repository/migrations/` | `restaurants` |
 | `menus` | `slices/menu/infrastructure/repository/migrations/` | `menus` |
 | `restaurant_orders` | `slices/restaurantorder/infrastructure/repository/migrations/` | `restaurant_orders` |

@@ -7,8 +7,9 @@
 //! stream without Integration Events or Outbox. A stored position of an
 //! available courier wakes the courier search of its Market (FR-706).
 
-use crate::pkg::application::{Clock, Subject};
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::usecase::Clock;
 use crate::slices::courier::domains::courier::{
     CourierId, CourierRepository, CourierStatus, Location,
 };

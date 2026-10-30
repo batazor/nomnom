@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /** Slice `simulator`: the single Demo Simulator state document (FR-604). */
 export async function up(db: Db): Promise<void> {

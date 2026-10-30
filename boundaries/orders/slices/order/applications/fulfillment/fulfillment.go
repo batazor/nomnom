@@ -10,7 +10,7 @@ import (
 	"errors"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -82,7 +82,7 @@ type Notifier interface {
 type CancellationRequest struct {
 	OrderID     order.ID
 	RequestID   string
-	RequestedBy application.Subject
+	RequestedBy authz.Subject
 	RequestedAt time.Time
 	Reason      string
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.temporal.io/sdk/client"
 
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/telemetry"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	orderdi "nomnom/orders/slices/order/di"

@@ -2,23 +2,22 @@ import { randomUUID } from "node:crypto";
 import { after } from "node:test";
 
 import { BSON, type Db } from "mongodb";
-
-import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
-import type {
-  AggregateRef,
-  PublishableEvent,
-} from "../../pkg/application/outbox.ts";
 import {
   connectDatabase,
   type DatabaseConnection,
-} from "../../pkg/infrastructure/repository/client.ts";
+} from "../../infrastructure/repository/client.ts";
+import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
 import {
   DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
   type OutboxEventMapper,
-} from "../../pkg/infrastructure/repository/outbox.ts";
-import { DatabaseUnitOfWork } from "../../pkg/infrastructure/repository/unit-of-work.ts";
+} from "../../infrastructure/repository/outbox.ts";
+import { DatabaseUnitOfWork } from "../../infrastructure/repository/unit-of-work.ts";
+import type {
+  AggregateRef,
+  PublishableEvent,
+} from "../../pkg/outbox/outbox.ts";
 
 /**
  * MONGODB_URI comes from the global setup of `npm test`

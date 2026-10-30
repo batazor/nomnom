@@ -21,14 +21,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrUnavailable means SpiceDB did not answer; use cases fail closed on it.
-var ErrUnavailable = fmt.Errorf("authorization service: %w", application.ErrDependencyUnavailable)
+var ErrUnavailable = fmt.Errorf("authorization service: %w", usecase.ErrDependencyUnavailable)
 
 const (
 	resourceOrder      = "order"
@@ -42,7 +43,7 @@ const (
 
 // RevisionReader returns the authorization revision stored with an Order.
 type RevisionReader interface {
-	Revision(ctx context.Context, orderID string) (application.AuthorizationRevision, bool, error)
+	Revision(ctx context.Context, orderID string) (authz.AuthorizationRevision, bool, error)
 }
 
 // Permissions is the part of the SpiceDB Permissions API the adapter calls.
@@ -52,7 +53,7 @@ type Permissions interface {
 	WriteRelationships(ctx context.Context, in *v1.WriteRelationshipsRequest, opts ...grpc.CallOption) (*v1.WriteRelationshipsResponse, error)
 }
 
-// Authorizer checks application.AccessCheck as `<type>:<id>#<permission>` for
+// Authorizer checks authz.AccessCheck as `<type>:<id>#<permission>` for
 // `user:<id>` or `service:<id>`. An Order with a stored authorization revision
 // (the ZedToken of its last relationship sync) is checked at least as fresh as
 // that write.
@@ -92,7 +93,7 @@ func NewAuthorizer(permissions Permissions, revisions RevisionReader, timeout ti
 
 // Check answers the AccessCheck and records nomnom.authz.checks and
 // nomnom.authz.check.duration of it (checks.go).
-func (a *Authorizer) Check(ctx context.Context, check application.AccessCheck) error {
+func (a *Authorizer) Check(ctx context.Context, check authz.AccessCheck) error {
 	ctx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
 
@@ -102,7 +103,7 @@ func (a *Authorizer) Check(ctx context.Context, check application.AccessCheck) e
 	return err
 }
 
-func (a *Authorizer) check(ctx context.Context, check application.AccessCheck) error {
+func (a *Authorizer) check(ctx context.Context, check authz.AccessCheck) error {
 
 	consistency := &v1.Consistency{Requirement: &v1.Consistency_MinimizeLatency{MinimizeLatency: true}}
 	if check.Resource.Type == resourceOrder && a.revisions != nil {
@@ -126,7 +127,7 @@ func (a *Authorizer) check(ctx context.Context, check application.AccessCheck) e
 		return fmt.Errorf("%w: check %s on %s:%s: %w", ErrUnavailable, check.Permission, check.Resource.Type, check.Resource.ID, err)
 	}
 	if resp.GetPermissionship() != v1.CheckPermissionResponse_PERMISSIONSHIP_HAS_PERMISSION {
-		return fmt.Errorf("%w: %s %s on %s:%s", application.ErrPermissionDenied,
+		return fmt.Errorf("%w: %s %s on %s:%s", authz.ErrPermissionDenied,
 			check.Subject, check.Permission, check.Resource.Type, check.Resource.ID)
 	}
 	return nil
@@ -137,7 +138,7 @@ func (a *Authorizer) check(ctx context.Context, check application.AccessCheck) e
 // wanted and DELETEs the others in one atomic WriteRelationships, and returns
 // its ZedToken. The result depends only on subjects, so a repeated or late
 // sync is idempotent.
-func (a *Authorizer) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (application.AuthorizationRevision, error) {
+func (a *Authorizer) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (authz.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
 	wanted := map[string]*v1.SubjectReference{
 		relationCustomer:   objectSubject(subjectUser, string(subjects.CustomerID)),
@@ -199,7 +200,7 @@ func sameSubject(a, b *v1.SubjectReference) bool {
 
 // write applies updates in one WriteRelationships request, which SpiceDB
 // commits atomically, and returns the ZedToken of the write.
-func (a *Authorizer) write(ctx context.Context, operation string, updates ...*v1.RelationshipUpdate) (application.AuthorizationRevision, error) {
+func (a *Authorizer) write(ctx context.Context, operation string, updates ...*v1.RelationshipUpdate) (authz.AuthorizationRevision, error) {
 	ctx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
 
@@ -207,7 +208,7 @@ func (a *Authorizer) write(ctx context.Context, operation string, updates ...*v1
 	if err != nil {
 		return "", fmt.Errorf("%w: %s: %w", ErrUnavailable, operation, err)
 	}
-	return application.AuthorizationRevision(resp.GetWrittenAt().GetToken()), nil
+	return authz.AuthorizationRevision(resp.GetWrittenAt().GetToken()), nil
 }
 
 func touch(resource *v1.ObjectReference, relation string, subject *v1.SubjectReference) *v1.RelationshipUpdate {
@@ -222,6 +223,6 @@ func objectSubject(objectType, id string) *v1.SubjectReference {
 	return &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: objectType, ObjectId: id}}
 }
 
-func subject(s application.Subject) *v1.SubjectReference {
+func subject(s authz.Subject) *v1.SubjectReference {
 	return &v1.SubjectReference{Object: &v1.ObjectReference{ObjectType: string(s.Kind), ObjectId: s.ID}}
 }

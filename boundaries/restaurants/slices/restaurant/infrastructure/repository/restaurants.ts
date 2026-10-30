@@ -1,11 +1,10 @@
 import type { Db } from "mongodb";
-
-import { ConcurrencyConflictError } from "../../../../pkg/application/errors.ts";
-import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../../infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
-} from "../../../../pkg/infrastructure/repository/versioned-collection.ts";
+} from "../../../../infrastructure/repository/versioned-collection.ts";
+import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
 import type { AuthorizationRevision } from "../../applications/access-control.ts";
 import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
 import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";

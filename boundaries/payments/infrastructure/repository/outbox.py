@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
-from pkg.application import AggregateRef
+from pkg.outbox import AggregateRef
 from pkg.telemetry import current_traceparent
 from slices.payment.domains.payment import PaymentDomainEvent
 

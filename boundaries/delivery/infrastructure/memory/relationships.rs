@@ -1,6 +1,6 @@
 use std::sync::{Mutex, PoisonError};
 
-use crate::pkg::application::RelationshipWriteError;
+use crate::pkg::authz::RelationshipWriteError;
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::CourierId;

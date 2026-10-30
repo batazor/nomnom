@@ -1,4 +1,4 @@
-import type { Subject } from "../../../pkg/application/subject.ts";
+import type { Subject } from "../../../pkg/authz/subject.ts";
 
 // Authorization port of the `cook` slice over `restaurant:<id>`.
 // Implementations throw when no decision can be obtained (fail closed).

@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/di/schema"
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/config/database"
-	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/testfixture"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"

@@ -12,10 +12,10 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 )
 
-// Телеметрия use cases снаружи: декоратор application.Handler пишет один span и
+// Телеметрия use cases снаружи: декоратор usecase.Handler пишет один span и
 // одно измерение длительности на вызов. Use cases и domain не импортируют
 // OpenTelemetry (docs/observability.md#размещение-в-коде).
 
@@ -98,7 +98,7 @@ func NewUseCases(classify Classifier) *UseCases {
 
 // Instrument декорирует Handle конкретного handler, не меняя результат и
 // ошибку. Метод, а не интерфейс, — чтобы типы In и Out выводились компилятором.
-func Instrument[In, Out any](u *UseCases, uc UseCase, handle func(context.Context, In) (Out, error)) application.Handler[In, Out] {
+func Instrument[In, Out any](u *UseCases, uc UseCase, handle func(context.Context, In) (Out, error)) usecase.Handler[In, Out] {
 	return instrumented[In, Out]{u: u, uc: uc, next: handle}
 }
 

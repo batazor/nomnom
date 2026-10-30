@@ -40,6 +40,11 @@
         <usecase>/
           README.md
       infrastructure/
+      di/
+  infrastructure/
+    <adapter>/
+  di/
+  cmd/
   pkg/
     <shared-package>/
 ```
@@ -97,7 +102,7 @@ Sequence diagram в README используется для нетривиаль�
 
 ### `pkg/`
 
-Содержит общие технические packages bounded context, у которых нет одного business owner: configuration/bootstrap helpers, общие application errors и аналогичные механизмы. Use cases, агрегаты и бизнес-правила в `pkg/` не размещаются.
+Содержит общие библиотеки bounded context, у которых нет одного business owner: контракт use case и его ошибки (`usecase`), identity и authorization (`authz`), локальную транзакцию (`unitofwork`, `unit_of_work`, `unit-of-work`), конфигурацию, lifecycle и telemetry. Имя пакета называет ответственность, а не слой: `pkg/application`, `pkg/infrastructure` и `pkg/di` не создаются. Use cases, агрегаты, бизнес-правила и адаптеры в `pkg/` не размещаются.
 
 ### `infrastructure/`
 
@@ -109,7 +114,7 @@ Sequence diagram в README используется для нетривиаль�
 - транспортные обработчики и адаптеры обмена сообщениями;
 - преобразование транспортных DTO и моделей хранения в прикладные и доменные типы.
 
-Инфраструктура реализует контракты внутренних частей слайса.
+Инфраструктура реализует контракты внутренних частей слайса. Адаптеры всего контекста, которые используют несколько слайсов (gRPC API, messaging, клиент internal gateway, миграции), находятся в `<boundary>/infrastructure/`. Прикладной слой и домены существуют только внутри слайсов.
 
 ### Направление зависимостей
 

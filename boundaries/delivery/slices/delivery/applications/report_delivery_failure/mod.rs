@@ -11,7 +11,8 @@
 //! before Pickup ends the Assignment Workflow, and the released courier wakes
 //! the courier search of its Market (FR-706).
 
-use crate::pkg::application::{Subject, UnitOfWork};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::domains::courier::CourierId;

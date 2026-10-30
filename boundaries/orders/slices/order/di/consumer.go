@@ -1,8 +1,8 @@
 package di
 
 import (
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
@@ -26,8 +26,8 @@ import (
 // Transactional Inbox, repository, Courier Assignment, RelationshipsChanged и
 // чтение субъектов и revision для Sync Order Relationships.
 type InboxStore interface {
-	application.UnitOfWork
-	application.Inbox
+	unitofwork.UnitOfWork
+	unitofwork.Inbox
 	order.Repository
 	order.CourierAssignments
 	syncorderrelationships.Changes

@@ -14,8 +14,8 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository"
@@ -109,7 +109,7 @@ func TestUnitOfWorkRetriesConflicts(t *testing.T) {
 		{"serialization", &pgconn.PgError{Code: "40001"}},
 		{"deadlock", fmt.Errorf("update order: %w", &pgconn.PgError{Code: "40P01"})},
 		{"other", &pgconn.PgError{Code: "40000"}},
-		{"write_conflict", fmt.Errorf("%w: order version 1", application.ErrConcurrencyConflict)},
+		{"write_conflict", fmt.Errorf("%w: order version 1", usecase.ErrConcurrencyConflict)},
 	} {
 		t.Run(tc.reason, func(t *testing.T) {
 			store, reader := meteredStore(t)

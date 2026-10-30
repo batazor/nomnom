@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 )
@@ -138,7 +138,7 @@ func TestRepositoryOptimisticConcurrency(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, store.Save(ctx, first))
-	require.ErrorIs(t, store.Save(ctx, second), application.ErrConcurrencyConflict)
+	require.ErrorIs(t, store.Save(ctx, second), usecase.ErrConcurrencyConflict)
 	require.ErrorIs(t, store.Save(ctx, ordertest.New(t, uniqueID("missing"))), order.ErrOrderNotFound)
 	_, err = store.Get(ctx, uniqueID("missing"))
 	require.ErrorIs(t, err, order.ErrOrderNotFound)

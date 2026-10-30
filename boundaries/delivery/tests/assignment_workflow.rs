@@ -15,7 +15,7 @@ use delivery::infrastructure::memory::{
 };
 use delivery::infrastructure::repository::Store;
 use delivery::infrastructure::temporal::{AssignmentWorkflow, TemporalAssignment, workflow_id};
-use delivery::pkg::application::Subject;
+use delivery::pkg::authz::Subject;
 use delivery::pkg::lifecycle::Worker;
 use delivery::slices::courier::applications::candidate_wake::CandidateWake;
 use delivery::slices::courier::applications::update_courier_location::{

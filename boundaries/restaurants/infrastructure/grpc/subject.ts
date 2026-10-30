@@ -1,7 +1,7 @@
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
 import { decodeJwt, type JSONWebKeySet } from "jose";
 
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
 import type { IdentityConfig } from "../../pkg/config/config.ts";
 import { readJwks, readUserJwks } from "./jwks.ts";
 import { ServiceTokenVerifier } from "./service-token.ts";

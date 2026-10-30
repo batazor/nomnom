@@ -7,8 +7,8 @@ import type {
   AggregateRef,
   ChangeNotification,
   ChangeNotifications,
-} from "../../../../pkg/application/outbox.ts";
-import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
+} from "../../../../pkg/outbox/outbox.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 
 export const KITCHEN_CHANGES_TOPIC = "restaurants.v1.kitchen-changes";
 

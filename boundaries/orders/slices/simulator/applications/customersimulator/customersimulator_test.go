@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
 	orderdi "nomnom/orders/slices/order/di"
@@ -183,7 +183,7 @@ func TestCustomerCancelsPlacedOrderAfterDelay(t *testing.T) {
 	h.workflow.EXPECT().RequestCancellation(mock.Anything, fulfillment.CancellationRequest{
 		OrderID:     h.placedOrders()[0],
 		RequestID:   "key-2",
-		RequestedBy: application.Subject{Kind: application.SubjectUser, ID: customerID},
+		RequestedBy: authz.Subject{Kind: authz.SubjectUser, ID: customerID},
 		RequestedAt: start,
 		Reason:      "simulated customer changed their mind",
 	}).RunAndReturn(func(context.Context, fulfillment.CancellationRequest) error {

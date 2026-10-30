@@ -5,7 +5,7 @@ A declined Capture keeps the Payment ``authorized``; partial capture is not mode
 
 from dataclasses import dataclass
 
-from pkg.application import Subject
+from pkg.authz import Subject
 from slices.payment.domains.payment import OperationKind
 
 from ..operation_flow import PaymentOperationExecutor, PaymentOperationResult

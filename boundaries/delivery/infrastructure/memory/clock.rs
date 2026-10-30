@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
-use crate::pkg::application::{Clock, IdGenerator};
+use crate::pkg::usecase::{Clock, IdGenerator};
 
 /// Clock whose time is set explicitly by the test.
 #[derive(Debug)]

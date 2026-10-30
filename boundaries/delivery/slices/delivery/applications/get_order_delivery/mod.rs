@@ -8,7 +8,7 @@
 //! delivered order. The tracking exists only while the delivery is assigned
 //! or picked up: the channel is a capability, handed out only here.
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::update_courier_location::CourierPosition;
 use crate::slices::courier::domains::courier::{CourierId, CourierName, Location};

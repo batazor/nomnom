@@ -17,7 +17,7 @@ from enum import StrEnum
 
 from opentelemetry import metrics
 
-from pkg.application import AggregateRef
+from pkg.outbox import AggregateRef
 from slices.payment.applications.ports import PaymentOutbox
 from slices.payment.domains.payment import (
     OPERATION_KINDS,

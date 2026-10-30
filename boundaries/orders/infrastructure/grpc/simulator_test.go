@@ -11,15 +11,15 @@ import (
 	"google.golang.org/grpc/status"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
 	simulatorrepository "nomnom/orders/slices/simulator/infrastructure/repository"
 )
 
 var (
-	operator = application.Subject{Kind: application.SubjectUser, ID: "operator-1"}
-	platform = application.Resource{Type: switchsimulator.ResourcePlatform, ID: switchsimulator.PlatformID}
+	operator = authz.Subject{Kind: authz.SubjectUser, ID: "operator-1"}
+	platform = authz.Resource{Type: switchsimulator.ResourcePlatform, ID: switchsimulator.PlatformID}
 )
 
 // AC-761: the operator enables the Simulator; the state survives a restart
@@ -28,7 +28,7 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 	store := repositorytest.Open(t)
 	// Three reads and two writes, each checked in SpiceDB.
 	authorizer := NewMockAuthorizer(t)
-	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
+	authorizer.EXPECT().Check(mock.Anything, authz.AccessCheck{
 		Subject: operator, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
 	}).Return(nil).Times(5)
 	// Three reads and two writes, each resolving the caller.
@@ -62,11 +62,11 @@ func TestSetSimulatorEnabledPersistsForOperator(t *testing.T) {
 // AC-762: a customer is denied and the state does not change.
 func TestSimulatorDeniesNonOperator(t *testing.T) {
 	store := repositorytest.Open(t)
-	customer := application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
+	customer := authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"}
 	authorizer := NewMockAuthorizer(t)
-	authorizer.EXPECT().Check(mock.Anything, application.AccessCheck{
+	authorizer.EXPECT().Check(mock.Anything, authz.AccessCheck{
 		Subject: customer, Permission: switchsimulator.PermissionOperateSimulator, Resource: platform,
-	}).Return(application.ErrPermissionDenied).Times(2)
+	}).Return(authz.ErrPermissionDenied).Times(2)
 	subjects := NewMockSubjectResolver(t)
 	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
 	client := newClientWith(t, subjects, store, authorizer)

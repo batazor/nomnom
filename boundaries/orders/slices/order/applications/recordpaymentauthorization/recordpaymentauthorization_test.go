@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/recordpaymentauthorization"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -64,5 +64,5 @@ func TestRequiresInput(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), recordpaymentauthorization.Input{OrderID: "order-1"})
 
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }

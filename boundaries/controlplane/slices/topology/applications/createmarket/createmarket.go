@@ -10,7 +10,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/permission"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	cellvo "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
@@ -19,7 +20,7 @@ import (
 )
 
 type Command struct {
-	Subject  application.Subject
+	Subject  authz.Subject
 	MarketID string
 	Name     string
 	Currency string
@@ -33,14 +34,14 @@ type Result struct {
 }
 
 type Handler struct {
-	authorizer application.Authorizer
+	authorizer authz.Authorizer
 	markets    market.Repository
 	routes     publishroutes.Publisher
 }
 
-var _ application.Handler[Command, Result] = Handler{}
+var _ usecase.Handler[Command, Result] = Handler{}
 
-func New(authorizer application.Authorizer, markets market.Repository, routes publishroutes.Publisher) Handler {
+func New(authorizer authz.Authorizer, markets market.Repository, routes publishroutes.Publisher) Handler {
 	return Handler{authorizer: authorizer, markets: markets, routes: routes}
 }
 

@@ -8,13 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// AC-635: the Activity table decides retryability for every application.ErrorKind.
+// AC-635: the Activity table decides retryability for every usecase.ErrorKind.
 func TestRetryabilityTableCoversEveryKind(t *testing.T) {
-	for _, kind := range application.ErrorKinds() {
+	for _, kind := range usecase.ErrorKinds() {
 		r, ok := retryabilityByKind[kind]
 		assert.True(t, ok, kind)
 		assert.Equal(t, r.nonRetryable, r.errType != "", kind)
@@ -26,7 +26,7 @@ func TestClassifyKeepsErrorTypes(t *testing.T) {
 		err      error
 		wantType string
 	}{
-		{application.InvalidInput("step", "x"), ErrTypeInvalidInput},
+		{usecase.InvalidInput("step", "x"), ErrTypeInvalidInput},
 		{order.ErrOrderNotFound, ErrTypeOrderNotFound},
 		{order.InvalidTransition{}, ErrTypeInvalidTransition},
 		{order.GuardFailed{Reason: "completed_at_required"}, ErrTypeInvalidTransition},
@@ -39,7 +39,7 @@ func TestClassifyKeepsErrorTypes(t *testing.T) {
 		assert.ErrorIs(t, classify(tt.err), tt.err)
 	}
 
-	for _, err := range []error{application.ErrConcurrencyConflict, application.ErrDependencyUnavailable, errors.New("reset")} {
+	for _, err := range []error{usecase.ErrConcurrencyConflict, usecase.ErrDependencyUnavailable, errors.New("reset")} {
 		var applicationErr *temporal.ApplicationError
 		assert.False(t, errors.As(classify(err), &applicationErr), err)
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 )
@@ -64,5 +64,5 @@ func TestRejectsInvalidInput(t *testing.T) {
 
 	_, err := relaypreparationissue.NewHandler(NewMockNotifier(t)).Handle(context.Background(), in)
 
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }

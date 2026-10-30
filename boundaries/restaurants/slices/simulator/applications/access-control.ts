@@ -1,4 +1,4 @@
-import type { Subject } from "../../../pkg/application/subject.ts";
+import type { Subject } from "../../../pkg/authz/subject.ts";
 
 /**
  * Authorization port of the `simulator` slice: `platform#operate_simulator`

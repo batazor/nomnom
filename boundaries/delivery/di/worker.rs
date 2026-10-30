@@ -29,11 +29,11 @@ use crate::infrastructure::repository::Store;
 use crate::infrastructure::temporal::{
     AssignmentActivities, AssignmentSteps, AssignmentWorkflow, Step, TASK_QUEUE,
 };
-use crate::pkg::application::ScopedUnitOfWork;
 use crate::pkg::config::{TemporalConfig, WorkerConfig};
 use crate::pkg::lifecycle::Worker;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::pkg::telemetry::{self, Telemetry};
+use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::{advance_assignment, expire_delivery_offer};

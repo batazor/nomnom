@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
@@ -93,5 +93,5 @@ func TestDuplicateDelayIsNotAppliedAgain(t *testing.T) {
 func TestDelayRequiresExpectedReadyTime(t *testing.T) {
 	_, err := recordpreparationdelay.NewHandler(nil, nil, nil, NewMockNotifier(t)).Handle(context.Background(), delay("event-1", time.Time{}))
 
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }

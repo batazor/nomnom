@@ -1,6 +1,6 @@
 """Authoritative permission check performed before any protected domain operation."""
 
-from pkg.application import PermissionDeniedError, Subject
+from pkg.authz import PermissionDeniedError, Subject
 
 from .ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 

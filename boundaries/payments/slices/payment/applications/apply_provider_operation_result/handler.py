@@ -6,7 +6,7 @@ result equal to the recorded one is a no-op and a contradicting one is rejected.
 
 from dataclasses import dataclass
 
-from pkg.application import UnitOfWork
+from pkg.unit_of_work import UnitOfWork
 from slices.payment.domains.payment import OperationId
 
 from ..errors import InvalidPaymentRequestError

@@ -4,15 +4,15 @@
 import { fromBinary } from "@bufbuild/protobuf";
 
 import { DeliveryPickedUpSchema } from "../../../../infrastructure/grpc/gen/nomnom/delivery/v1/events_pb.js";
-import type { Subject } from "../../../../pkg/application/subject.ts";
 import {
   type Envelope,
   PermanentMessageError,
-} from "../../../../pkg/infrastructure/messaging/envelope.ts";
+} from "../../../../infrastructure/messaging/envelope.ts";
 import type {
   ErrorClass,
   EventHandler,
-} from "../../../../pkg/infrastructure/messaging/processor.ts";
+} from "../../../../infrastructure/messaging/processor.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { PickupWitnessAccess } from "../../applications/access-control.ts";
 import type { RecordPickupHandler } from "../../applications/record-pickup/record-pickup.ts";
 

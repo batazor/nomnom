@@ -23,11 +23,11 @@ import {
 import {
   type Envelope,
   PermanentMessageError,
-} from "../../../../pkg/infrastructure/messaging/envelope.ts";
+} from "../../../../infrastructure/messaging/envelope.ts";
 import type {
   ErrorClass,
   EventHandler,
-} from "../../../../pkg/infrastructure/messaging/processor.ts";
+} from "../../../../infrastructure/messaging/processor.ts";
 import type {
   RecordWaitTime,
   RecordWaitTimeHandler,

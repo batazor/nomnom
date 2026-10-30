@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/domains/order"
@@ -89,7 +89,7 @@ func TestStartFailureIsUnavailable(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), input())
 
-	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
+	require.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
 
 	result, err := handler.Handle(context.Background(), input())
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestRequiresEvent(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), in)
 
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }
 
 // FR-415: the Delivery Window of OrderPlaced reaches the workflow start, so
@@ -144,6 +144,6 @@ func TestRejectsHalfOfADeliveryWindow(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), in)
 
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 	assert.Zero(t, store.InboxSize())
 }

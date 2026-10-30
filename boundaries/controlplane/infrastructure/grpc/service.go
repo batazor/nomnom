@@ -7,7 +7,7 @@ import (
 	"context"
 
 	controlplanev1 "github.com/batazor/nomnom/boundaries/controlplane/infrastructure/grpc/gen/nomnom/controlplane/v1"
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/archivemarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/createmarket"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/listmarkets"
@@ -18,10 +18,10 @@ import (
 
 // Handlers are the use cases behind the API.
 type Handlers struct {
-	RegisterCell  application.Handler[registercell.Command, registercell.Result]
-	CreateMarket  application.Handler[createmarket.Command, createmarket.Result]
-	ArchiveMarket application.Handler[archivemarket.Command, archivemarket.Result]
-	ListMarkets   application.Handler[listmarkets.Query, []market.Market]
+	RegisterCell  usecase.Handler[registercell.Command, registercell.Result]
+	CreateMarket  usecase.Handler[createmarket.Command, createmarket.Result]
+	ArchiveMarket usecase.Handler[archivemarket.Command, archivemarket.Result]
+	ListMarkets   usecase.Handler[listmarkets.Query, []market.Market]
 }
 
 type Service struct {

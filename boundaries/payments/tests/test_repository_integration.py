@@ -30,7 +30,8 @@ from infrastructure.repository import (
     OutboxMessage,
     outbox_event_id,
 )
-from pkg.application import AggregateRef, ConcurrencyConflictError
+from pkg.outbox import AggregateRef
+from pkg.usecase import ConcurrencyConflictError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,

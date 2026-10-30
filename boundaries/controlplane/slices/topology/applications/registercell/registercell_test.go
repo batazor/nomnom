@@ -8,28 +8,29 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/registercell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell/vo"
 )
 
-var operator = application.Subject{Kind: application.SubjectUser, ID: "kind-operator", Service: "demo-seed"}
+var operator = authz.Subject{Kind: authz.SubjectUser, ID: "kind-operator", Service: "demo-seed"}
 
 // authorizer is a mock of the SpiceDB check: it grants manage_markets to one user.
 type authorizer struct {
 	granted string
 	err     error
-	checks  []application.AccessCheck
+	checks  []authz.AccessCheck
 }
 
-func (a *authorizer) Check(_ context.Context, check application.AccessCheck) error {
+func (a *authorizer) Check(_ context.Context, check authz.AccessCheck) error {
 	a.checks = append(a.checks, check)
 	if a.err != nil {
 		return a.err
 	}
 	if check.Subject.ID != a.granted {
-		return application.ErrPermissionDenied
+		return authz.ErrPermissionDenied
 	}
 	return nil
 }
@@ -103,11 +104,11 @@ func TestRefusesOtherValuesForARegisteredCell(t *testing.T) {
 func TestRequiresManageMarketsBeforeAnyChange(t *testing.T) {
 	repo := &cells{}
 	_, err := registercell.New(&authorizer{granted: "someone-else"}, repo, &routes{}).Handle(context.Background(), command(3010))
-	assert.ErrorIs(t, err, application.ErrPermissionDenied)
+	assert.ErrorIs(t, err, authz.ErrPermissionDenied)
 
-	unavailable := errors.Join(errors.New("spicedb down"), application.ErrDependencyUnavailable)
+	unavailable := errors.Join(errors.New("spicedb down"), usecase.ErrDependencyUnavailable)
 	_, err = registercell.New(&authorizer{err: unavailable}, repo, &routes{}).Handle(context.Background(), command(3010))
-	assert.ErrorIs(t, err, application.ErrPermissionDenied, "fails closed")
+	assert.ErrorIs(t, err, authz.ErrPermissionDenied, "fails closed")
 	assert.Zero(t, repo.adds)
 }
 

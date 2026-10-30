@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
@@ -60,7 +60,7 @@ func TestOrderDetailsReads(t *testing.T) {
 	assert.Empty(t, second.NextCursor)
 
 	_, err = store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: "%%%"})
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }
 
 // ADR 41: the history is filtered by Market in SQL, with the keyset cursor.

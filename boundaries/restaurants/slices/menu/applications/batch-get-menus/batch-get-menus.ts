@@ -1,4 +1,4 @@
-import { batchIds } from "../../../../pkg/application/batch.ts";
+import { batchIds } from "../../../../pkg/usecase/batch.ts";
 import type { MenuView } from "../menu-support.ts";
 
 export type BatchGetMenus = Readonly<{ restaurantIds: readonly string[] }>;

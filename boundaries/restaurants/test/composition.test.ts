@@ -9,6 +9,10 @@ import {
   createRestaurantsContainer,
   type RestaurantsResources,
 } from "../di/restaurants.ts";
+import {
+  connectDatabase,
+  type DatabaseConnection,
+} from "../infrastructure/repository/client.ts";
 import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import {
   type AppConfig,
@@ -18,10 +22,6 @@ import {
   loadSimulatorConfig,
   loadSpiceDbConfig,
 } from "../pkg/config/config.ts";
-import {
-  connectDatabase,
-  type DatabaseConnection,
-} from "../pkg/infrastructure/repository/client.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { databaseUri } from "./support/database.ts";

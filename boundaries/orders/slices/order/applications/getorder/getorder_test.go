@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
@@ -21,9 +22,9 @@ import (
 )
 
 var (
-	customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
-	stranger = application.Subject{Kind: application.SubjectUser, ID: "customer-2"}
-	support  = application.Subject{Kind: application.SubjectService, ID: "support-console"}
+	customer = authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"}
+	stranger = authz.Subject{Kind: authz.SubjectUser, ID: "customer-2"}
+	support  = authz.Subject{Kind: authz.SubjectService, ID: "support-console"}
 )
 
 const window = 5 * time.Minute
@@ -79,26 +80,26 @@ func TestGetOrderAuthorizesBeforeReading(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		subject application.Subject
+		subject authz.Subject
 		orderID order.ID
 		// checked is whether the view permission is checked; checkErr is its result.
 		checked  bool
 		checkErr error
 		wantErr  error
 	}{
-		{name: "stranger and existing order", subject: stranger, orderID: "order-1", checked: true, checkErr: application.ErrPermissionDenied, wantErr: application.ErrPermissionDenied},
-		{name: "stranger and missing order", subject: stranger, orderID: "missing", checked: true, checkErr: application.ErrPermissionDenied, wantErr: application.ErrPermissionDenied},
+		{name: "stranger and existing order", subject: stranger, orderID: "order-1", checked: true, checkErr: authz.ErrPermissionDenied, wantErr: authz.ErrPermissionDenied},
+		{name: "stranger and missing order", subject: stranger, orderID: "missing", checked: true, checkErr: authz.ErrPermissionDenied, wantErr: authz.ErrPermissionDenied},
 		{name: "authorized and missing order", subject: support, orderID: "missing", checked: true, wantErr: order.ErrOrderNotFound},
-		{name: "invalid subject", subject: application.Subject{}, orderID: "order-1", wantErr: application.ErrInvalidInput},
+		{name: "invalid subject", subject: authz.Subject{}, orderID: "order-1", wantErr: usecase.ErrInvalidInput},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.checked {
 				authorizer.EXPECT().
-					Check(mock.Anything, application.AccessCheck{
+					Check(mock.Anything, authz.AccessCheck{
 						Subject:    tt.subject,
 						Permission: getorder.PermissionView,
-						Resource:   application.Resource{Type: getorder.ResourceOrder, ID: string(tt.orderID)},
+						Resource:   authz.Resource{Type: getorder.ResourceOrder, ID: string(tt.orderID)},
 					}).
 					Return(tt.checkErr).
 					Once()
@@ -124,17 +125,17 @@ func TestGetOrderLetsTheCustomerReadTheOwnOrderWithoutSpiceDB(t *testing.T) {
 func TestGetOrderFailsClosed(t *testing.T) {
 	handler, authorizer := setup(t, ordertest.New(t, "order-1"))
 	authorizer.EXPECT().
-		Check(mock.Anything, application.AccessCheck{
+		Check(mock.Anything, authz.AccessCheck{
 			Subject:    support,
 			Permission: getorder.PermissionView,
-			Resource:   application.Resource{Type: getorder.ResourceOrder, ID: "order-1"},
+			Resource:   authz.Resource{Type: getorder.ResourceOrder, ID: "order-1"},
 		}).
 		Return(errors.New("spicedb unavailable")).
 		Once()
 
 	_, err := handler.Handle(context.Background(), getorder.Query{Subject: support, OrderID: "order-1"})
 
-	require.ErrorIs(t, err, application.ErrPermissionDenied)
+	require.ErrorIs(t, err, authz.ErrPermissionDenied)
 }
 
 // AC-504: an Order that may still be cancelled carries the policy window.

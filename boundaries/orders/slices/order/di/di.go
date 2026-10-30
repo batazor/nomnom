@@ -6,14 +6,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	gatewayclient "nomnom/orders/pkg/gateway"
+	gatewayclient "nomnom/orders/infrastructure/gateway"
 	"strings"
 
 	"github.com/google/wire"
 	"github.com/shopspring/decimal"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/placeorder"
@@ -60,7 +61,7 @@ var (
 // Authorizer — permission checks use cases слайса. Связи Order API не пишет:
 // их синхронизирует orders-consumer (ADR 18).
 type Authorizer interface {
-	Check(ctx context.Context, check application.AccessCheck) error
+	Check(ctx context.Context, check authz.AccessCheck) error
 }
 
 // CancellationPolicy — окно отмены, общее для Get Order и Request Order
@@ -116,7 +117,7 @@ func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.I
 }
 
 // NewClock — системные часы use cases.
-func NewClock() application.Clock { return system.Clock{} }
+func NewClock() usecase.Clock { return system.Clock{} }
 
 // NewOrderIDs — генератор UUIDv7 идентификаторов Order.
 func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }

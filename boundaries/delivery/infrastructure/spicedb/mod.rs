@@ -49,7 +49,7 @@ use std::time::Instant;
 
 use checks::CheckResult;
 
-use crate::pkg::application::{AuthorizationError, Subject};
+use crate::pkg::authz::{AuthorizationError, Subject};
 use crate::pkg::config::SpiceDbConfig;
 use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,

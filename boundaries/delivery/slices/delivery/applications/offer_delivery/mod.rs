@@ -6,7 +6,9 @@
 //! Assignment and Offer Delivery To Courier reuse it under their own Unit of
 //! Work.
 
-use crate::pkg::application::{Clock, IdGenerator, Subject, UnitOfWork};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
+use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};

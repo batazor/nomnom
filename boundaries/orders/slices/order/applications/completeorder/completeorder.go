@@ -7,7 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -36,21 +37,21 @@ type Outbox interface {
 }
 
 type Handler struct {
-	uow    application.UnitOfWork
+	uow    unitofwork.UnitOfWork
 	orders order.Repository
 	outbox Outbox
 }
 
-func NewHandler(uow application.UnitOfWork, orders order.Repository, outbox Outbox) Handler {
+func NewHandler(uow unitofwork.UnitOfWork, orders order.Repository, outbox Outbox) Handler {
 	return Handler{uow: uow, orders: orders, outbox: outbox}
 }
 
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	switch {
 	case in.OrderID == "":
-		return Result{}, application.InvalidInput("order_id", "is required")
+		return Result{}, usecase.InvalidInput("order_id", "is required")
 	case in.CompletedAt.IsZero():
-		return Result{}, application.InvalidInput("completed_at", "is required")
+		return Result{}, usecase.InvalidInput("completed_at", "is required")
 	}
 
 	var result Result

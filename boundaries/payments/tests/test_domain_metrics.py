@@ -12,7 +12,7 @@ from psycopg import errors
 
 from infrastructure.observability import DomainMetrics, ObservedOutbox, ObservedUnitOfWork
 from infrastructure.repository import Database
-from pkg.application import AggregateRef
+from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,

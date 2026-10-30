@@ -1,8 +1,9 @@
 //! List Available Delivery Offers: a courier reads its pending, not yet
 //! expired Delivery Offers without changing state.
 
-use crate::pkg::application::{Clock, Subject};
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::usecase::Clock;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
 

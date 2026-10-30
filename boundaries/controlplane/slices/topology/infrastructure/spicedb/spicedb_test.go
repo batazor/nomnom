@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/authz"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/testfixture"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/permission"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/infrastructure/spicedb"
 )
@@ -25,11 +26,11 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func manageMarkets(id string, kind application.SubjectKind) application.AccessCheck {
-	return application.AccessCheck{
-		Subject:    application.Subject{Kind: kind, ID: id, Service: "demo-seed"},
+func manageMarkets(id string, kind authz.SubjectKind) authz.AccessCheck {
+	return authz.AccessCheck{
+		Subject:    authz.Subject{Kind: kind, ID: id, Service: "demo-seed"},
 		Permission: permission.ManageMarkets,
-		Resource:   application.Resource{Type: permission.ResourcePlatform, ID: permission.PlatformID},
+		Resource:   authz.Resource{Type: permission.ResourcePlatform, ID: permission.PlatformID},
 	}
 }
 
@@ -50,9 +51,9 @@ func TestOnlyTheOperatorManagesMarkets(t *testing.T) {
 	require.NoError(t, err)
 	authorizer := spicedb.NewAuthorizer(client, 5*time.Second)
 
-	assert.NoError(t, authorizer.Check(ctx, manageMarkets("test-operator", application.SubjectUser)))
-	assert.ErrorIs(t, authorizer.Check(ctx, manageMarkets("test-stranger", application.SubjectUser)), application.ErrPermissionDenied)
-	assert.ErrorIs(t, authorizer.Check(ctx, manageMarkets("bff", application.SubjectService)), application.ErrPermissionDenied)
+	assert.NoError(t, authorizer.Check(ctx, manageMarkets("test-operator", authz.SubjectUser)))
+	assert.ErrorIs(t, authorizer.Check(ctx, manageMarkets("test-stranger", authz.SubjectUser)), authz.ErrPermissionDenied)
+	assert.ErrorIs(t, authorizer.Check(ctx, manageMarkets("bff", authz.SubjectService)), authz.ErrPermissionDenied)
 }
 
 func TestUnreachableSpiceDBIsUnavailable(t *testing.T) {
@@ -60,6 +61,6 @@ func TestUnreachableSpiceDBIsUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
-	err = spicedb.NewAuthorizer(client, 500*time.Millisecond).Check(context.Background(), manageMarkets("test-operator", application.SubjectUser))
-	assert.ErrorIs(t, err, application.ErrDependencyUnavailable)
+	err = spicedb.NewAuthorizer(client, 500*time.Millisecond).Check(context.Background(), manageMarkets("test-operator", authz.SubjectUser))
+	assert.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
 }

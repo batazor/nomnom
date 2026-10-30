@@ -19,7 +19,7 @@ from enum import StrEnum
 from opentelemetry import metrics, trace
 from opentelemetry.trace import Status, StatusCode
 
-from pkg.application import Handler
+from pkg.usecase import Handler
 
 from .buckets import SECONDS_BUCKETS
 

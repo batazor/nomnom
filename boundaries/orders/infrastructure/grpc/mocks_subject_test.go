@@ -6,7 +6,7 @@ package grpcadapter_test
 
 import (
 	"context"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -48,22 +48,22 @@ func (_m *MockSubjectResolver) EXPECT() *MockSubjectResolver_Expecter {
 }
 
 // Resolve provides a mock function for the type MockSubjectResolver
-func (_mock *MockSubjectResolver) Resolve(ctx context.Context) (application.Subject, error) {
+func (_mock *MockSubjectResolver) Resolve(ctx context.Context) (authz.Subject, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Resolve")
 	}
 
-	var r0 application.Subject
+	var r0 authz.Subject
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) (application.Subject, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (authz.Subject, error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) application.Subject); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) authz.Subject); ok {
 		r0 = returnFunc(ctx)
 	} else {
-		r0 = ret.Get(0).(application.Subject)
+		r0 = ret.Get(0).(authz.Subject)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = returnFunc(ctx)
@@ -97,12 +97,12 @@ func (_c *MockSubjectResolver_Resolve_Call) Run(run func(ctx context.Context)) *
 	return _c
 }
 
-func (_c *MockSubjectResolver_Resolve_Call) Return(subject application.Subject, err error) *MockSubjectResolver_Resolve_Call {
+func (_c *MockSubjectResolver_Resolve_Call) Return(subject authz.Subject, err error) *MockSubjectResolver_Resolve_Call {
 	_c.Call.Return(subject, err)
 	return _c
 }
 
-func (_c *MockSubjectResolver_Resolve_Call) RunAndReturn(run func(ctx context.Context) (application.Subject, error)) *MockSubjectResolver_Resolve_Call {
+func (_c *MockSubjectResolver_Resolve_Call) RunAndReturn(run func(ctx context.Context) (authz.Subject, error)) *MockSubjectResolver_Resolve_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -7,13 +7,13 @@ packages:
   nomnom/orders/pkg/lifecycle:
     interfaces:
       Worker: {}
-  nomnom/orders/pkg/messaging:
+  nomnom/orders/infrastructure/messaging:
     config:
       filename: mocks_schemas_test.go
     interfaces:
       SchemaSubjects:
         configs:
-          - dir: pkg/messaging
+          - dir: infrastructure/messaging
             pkgname: messaging_test
           - dir: slices/order/infrastructure/messaging
             pkgname: messaging_test
@@ -38,7 +38,7 @@ packages:
       pkgname: spicedb_test
     interfaces:
       Permissions: {}
-  nomnom/orders/pkg/gateway/gen/nomnom/payments/v1:
+  nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1:
     config:
       include-auto-generated: true
       dir: slices/fulfillment/infrastructure/neighbours/grpcclient
@@ -46,7 +46,7 @@ packages:
       pkgname: grpcclient_test
     interfaces:
       PaymentsServiceServer: {}
-  nomnom/orders/pkg/gateway/gen/nomnom/delivery/v1:
+  nomnom/orders/infrastructure/gateway/gen/nomnom/delivery/v1:
     config:
       include-auto-generated: true
     interfaces:
@@ -58,7 +58,7 @@ packages:
           - dir: slices/order/infrastructure/estimates
             filename: mocks_delivery_test.go
             pkgname: estimates_test
-  nomnom/orders/pkg/gateway/gen/nomnom/restaurants/v1:
+  nomnom/orders/infrastructure/gateway/gen/nomnom/restaurants/v1:
     config:
       include-auto-generated: true
     interfaces:

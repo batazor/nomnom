@@ -1,4 +1,4 @@
-import { NotFoundError } from "../../../pkg/application/errors.ts";
+import { NotFoundError } from "../../../pkg/usecase/errors.ts";
 import type { Menu, MenuItem, MenuRepository } from "../domains/menu/menu.ts";
 import type { MoneyValue } from "../domains/menu/vo/money.ts";
 

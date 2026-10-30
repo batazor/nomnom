@@ -45,7 +45,7 @@ proto-check:
 
 proto-generate:
 	cd infrastructure/grpc && buf generate --template buf.gen.yaml
-	cd pkg/gateway && buf generate --template buf.gen.yaml
+	cd infrastructure/gateway && buf generate --template buf.gen.yaml
 	cd slices/order/infrastructure/messaging && buf generate --template buf.gen.yaml
 	$(GO) tool mockery
 

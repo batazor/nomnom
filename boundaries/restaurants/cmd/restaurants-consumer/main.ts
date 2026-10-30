@@ -15,7 +15,14 @@ import {
   type ConsumerCradle,
   createConsumerContainer,
 } from "../../di/consumer.ts";
+import {
+  type ConsumerClient,
+  createConsumerClient,
+} from "../../infrastructure/kafka/consumer.ts";
+import { KafkaPublisher } from "../../infrastructure/kafka/publisher.ts";
+import { connectDatabase } from "../../infrastructure/repository/client.ts";
 import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
+import { connectValkey } from "../../infrastructure/valkey/client.ts";
 import {
   database as databaseConfig,
   loadConfig,
@@ -24,13 +31,6 @@ import {
   loadSchemaRegistryConfig,
   loadValkeyConfig,
 } from "../../pkg/config/config.ts";
-import {
-  type ConsumerClient,
-  createConsumerClient,
-} from "../../pkg/infrastructure/kafka/consumer.ts";
-import { KafkaPublisher } from "../../pkg/infrastructure/kafka/publisher.ts";
-import { connectDatabase } from "../../pkg/infrastructure/repository/client.ts";
-import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";

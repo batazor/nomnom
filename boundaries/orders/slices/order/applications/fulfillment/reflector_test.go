@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -215,7 +215,7 @@ func TestFailedTransactionRollsBackWithoutNotification(t *testing.T) {
 
 		_, err := h.reflector(orders).Reflect(context.Background(), pickup("event-1"), recordPickup)
 
-		require.ErrorIs(t, err, application.ErrConcurrencyConflict)
+		require.ErrorIs(t, err, usecase.ErrConcurrencyConflict)
 		after, _ := h.store.Snapshot("order-1")
 		assert.Equal(t, before, after)
 		assert.Zero(t, h.store.InboxSize())
@@ -235,7 +235,7 @@ func TestReflectRejectsInvalidInputAndUnknownOrders(t *testing.T) {
 	}
 	for _, fact := range invalid {
 		_, err := reflector.Reflect(context.Background(), fact, recordPickup)
-		require.ErrorIs(t, err, application.ErrInvalidInput)
+		require.ErrorIs(t, err, usecase.ErrInvalidInput)
 	}
 
 	unknown := pickup("event-1")

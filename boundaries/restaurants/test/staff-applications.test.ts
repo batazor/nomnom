@@ -3,9 +3,9 @@ import test from "node:test";
 
 import {
   AuthorizationUnavailableError,
-  NotFoundError,
   PermissionDeniedError,
-} from "../pkg/application/errors.ts";
+} from "../pkg/authz/errors.ts";
+import { NotFoundError } from "../pkg/usecase/errors.ts";
 import type { StaffRelationshipWriter } from "../slices/restaurant/applications/access-control.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";

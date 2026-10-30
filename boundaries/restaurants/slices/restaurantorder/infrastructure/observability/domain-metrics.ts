@@ -15,14 +15,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { type Counter, type Meter, metrics } from "@opentelemetry/api";
 import type { MongoClient } from "mongodb";
-
+import { DatabaseUnitOfWork } from "../../../../infrastructure/repository/unit-of-work.ts";
 import type {
   AggregateRef,
   Outbox,
   PublishableEvent,
-} from "../../../../pkg/application/outbox.ts";
-import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
-import { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+} from "../../../../pkg/outbox/outbox.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { CancelRestaurantOrderResult } from "../../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
 import type {
   ReceiveOrderRequest,

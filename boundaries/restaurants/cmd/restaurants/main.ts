@@ -4,7 +4,9 @@
 // asynchronously acquired resources and the shutdown order.
 import { createRestaurantsContainer } from "../../di/restaurants.ts";
 import { createSubjectResolver } from "../../infrastructure/grpc/subject.ts";
+import { connectDatabase } from "../../infrastructure/repository/client.ts";
 import { migrateRestaurantsDatabase } from "../../infrastructure/repository/migrate.ts";
+import { connectValkey } from "../../infrastructure/valkey/client.ts";
 import {
   database as databaseConfig,
   loadConfig,
@@ -15,8 +17,6 @@ import {
   loadSpiceDbConfig,
   loadValkeyConfig,
 } from "../../pkg/config/config.ts";
-import { connectDatabase } from "../../pkg/infrastructure/repository/client.ts";
-import { connectValkey } from "../../pkg/infrastructure/valkey/client.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
 import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";

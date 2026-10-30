@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -35,13 +36,13 @@ type InboundFact struct {
 func (f InboundFact) validate() error {
 	switch {
 	case f.Consumer == "":
-		return application.InvalidInput("consumer", "is required")
+		return usecase.InvalidInput("consumer", "is required")
 	case f.EventID == "":
-		return application.InvalidInput("event_id", "is required")
+		return usecase.InvalidInput("event_id", "is required")
 	case f.OrderID == "":
-		return application.InvalidInput("order_id", "is required")
+		return usecase.InvalidInput("order_id", "is required")
 	case f.OccurredAt.IsZero():
-		return application.InvalidInput("occurred_at", "is required")
+		return usecase.InvalidInput("occurred_at", "is required")
 	}
 	return nil
 }
@@ -52,7 +53,7 @@ type Reflection struct {
 	WorkflowNotified bool
 }
 
-// Reflector runs the insert-first Inbox protocol (application.AcceptOnce)
+// Reflector runs the insert-first Inbox protocol (unitofwork.AcceptOnce)
 // shared by the use cases that reflect results of restaurants and delivery:
 //
 //	UoW { Inbox.Accept → load Order → domain method → Save } → commit → Notify
@@ -61,13 +62,13 @@ type Reflection struct {
 // same event_id, so a crash between commit and notification is repaired by
 // ordinary redelivery. A closed workflow is a diagnosable no-op.
 type Reflector struct {
-	uow      application.UnitOfWork
-	inbox    application.Inbox
+	uow      unitofwork.UnitOfWork
+	inbox    unitofwork.Inbox
 	orders   order.Repository
 	notifier Notifier
 }
 
-func NewReflector(uow application.UnitOfWork, inbox application.Inbox, orders order.Repository, notifier Notifier) Reflector {
+func NewReflector(uow unitofwork.UnitOfWork, inbox unitofwork.Inbox, orders order.Repository, notifier Notifier) Reflector {
 	return Reflector{uow: uow, inbox: inbox, orders: orders, notifier: notifier}
 }
 
@@ -92,7 +93,7 @@ func (r Reflector) ReflectWith(ctx context.Context, fact InboundFact, apply func
 	}
 
 	var outcome Outcome
-	accepted, err := application.AcceptOnce(ctx, r.uow, r.inbox, fact.Consumer, fact.EventID, func(ctx context.Context) error {
+	accepted, err := unitofwork.AcceptOnce(ctx, r.uow, r.inbox, fact.Consumer, fact.EventID, func(ctx context.Context) error {
 		current, err := r.orders.Get(ctx, fact.OrderID)
 		if err != nil {
 			return err

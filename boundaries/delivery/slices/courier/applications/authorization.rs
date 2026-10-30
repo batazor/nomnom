@@ -1,4 +1,4 @@
-use crate::pkg::application::{AuthorizationError, Subject};
+use crate::pkg::authz::{AuthorizationError, Subject};
 use crate::slices::courier::domains::courier::CourierId;
 
 /// Permissions checked by the `courier` slice use cases.

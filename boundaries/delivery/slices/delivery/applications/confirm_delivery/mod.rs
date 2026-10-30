@@ -7,7 +7,8 @@
 //! commit the released courier wakes the courier search of its Market
 //! (FR-706).
 
-use crate::pkg::application::{Subject, UnitOfWork};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::delivery::domains::delivery::{
@@ -105,7 +106,7 @@ mod tests {
         RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::pkg::application::UnitOfWorkError;
+    use crate::pkg::unit_of_work::UnitOfWorkError;
     use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;

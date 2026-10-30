@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/failorcancelorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -92,8 +92,8 @@ func TestFailOrCancelOrderValidatesInput(t *testing.T) {
 		in      failorcancelorder.Input
 		wantErr error
 	}{
-		{name: "no order", in: failorcancelorder.Input{Outcome: order.OutcomeFailure, ReasonCode: "x", DecidedAt: decidedAt}, wantErr: application.ErrInvalidInput},
-		{name: "no time", in: failorcancelorder.Input{OrderID: "order-1", Outcome: order.OutcomeFailure, ReasonCode: "x"}, wantErr: application.ErrInvalidInput},
+		{name: "no order", in: failorcancelorder.Input{Outcome: order.OutcomeFailure, ReasonCode: "x", DecidedAt: decidedAt}, wantErr: usecase.ErrInvalidInput},
+		{name: "no time", in: failorcancelorder.Input{OrderID: "order-1", Outcome: order.OutcomeFailure, ReasonCode: "x"}, wantErr: usecase.ErrInvalidInput},
 		{name: "unknown outcome", in: failorcancelorder.Input{OrderID: "order-1", Outcome: "refund", ReasonCode: "x", DecidedAt: decidedAt}, wantErr: order.ErrInvalidCancellationReason},
 		{name: "no reason", in: failorcancelorder.Input{OrderID: "order-1", Outcome: order.OutcomeFailure, DecidedAt: decidedAt}, wantErr: order.ErrInvalidCancellationReason},
 	}

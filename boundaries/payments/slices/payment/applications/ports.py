@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from pkg.application import AggregateRef, ApplicationError, Subject
+from pkg.authz import Subject
+from pkg.outbox import AggregateRef
+from pkg.usecase import ApplicationError
 from slices.payment.domains.payment import (
     InvalidTransitionError,
     Money,

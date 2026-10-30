@@ -11,7 +11,9 @@ import (
 	"context"
 	"fmt"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -40,13 +42,13 @@ type Reader interface {
 // Relationships makes the order relationships in SpiceDB exactly the
 // Subjects in one atomic write and returns its revision.
 type Relationships interface {
-	SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects Subjects) (application.AuthorizationRevision, error)
+	SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects Subjects) (authz.AuthorizationRevision, error)
 }
 
 // Revisions stores the revision with the Order: later permission checks of
 // the Order read at least as fresh as the sync.
 type Revisions interface {
-	RememberRevision(ctx context.Context, orderID order.ID, revision application.AuthorizationRevision) error
+	RememberRevision(ctx context.Context, orderID order.ID, revision authz.AuthorizationRevision) error
 }
 
 type Input struct {
@@ -54,17 +56,17 @@ type Input struct {
 }
 
 type Result struct {
-	Revision application.AuthorizationRevision
+	Revision authz.AuthorizationRevision
 }
 
 type Handler struct {
-	uow           application.UnitOfWork
+	uow           unitofwork.UnitOfWork
 	reader        Reader
 	relationships Relationships
 	revisions     Revisions
 }
 
-func NewHandler(uow application.UnitOfWork, reader Reader, relationships Relationships, revisions Revisions) Handler {
+func NewHandler(uow unitofwork.UnitOfWork, reader Reader, relationships Relationships, revisions Revisions) Handler {
 	return Handler{uow: uow, reader: reader, relationships: relationships, revisions: revisions}
 }
 
@@ -73,7 +75,7 @@ func NewHandler(uow application.UnitOfWork, reader Reader, relationships Relatio
 // event is redelivered and the sync repeats.
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if in.OrderID == "" {
-		return Result{}, application.InvalidInput("order_id", "is required")
+		return Result{}, usecase.InvalidInput("order_id", "is required")
 	}
 	var result Result
 	err := h.uow.Do(ctx, func(ctx context.Context) error {

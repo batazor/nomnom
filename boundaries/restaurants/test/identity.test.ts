@@ -28,7 +28,7 @@ import {
   type SubjectResolver,
 } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
-import type { Subject } from "../pkg/application/subject.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import { loadIdentityConfig } from "../pkg/config/config.ts";
 import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";

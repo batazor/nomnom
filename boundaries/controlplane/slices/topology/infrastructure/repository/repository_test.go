@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/batazor/nomnom/boundaries/controlplane/di/schema"
+	"github.com/batazor/nomnom/boundaries/controlplane/infrastructure/migration"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config/database"
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/migration"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/testfixture"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"

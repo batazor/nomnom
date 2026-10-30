@@ -6,8 +6,8 @@ import {
   type EachMessage,
   KafkaConsumerWorker,
   stringHeaders,
-} from "../pkg/infrastructure/kafka/consumer.ts";
-import type { InboundMessage } from "../pkg/infrastructure/messaging/envelope.ts";
+} from "../infrastructure/kafka/consumer.ts";
+import type { InboundMessage } from "../infrastructure/messaging/envelope.ts";
 import { Lifecycle } from "../pkg/lifecycle/lifecycle.ts";
 
 /** Fake KafkaJS consumer: records calls and lets the test deliver messages. */

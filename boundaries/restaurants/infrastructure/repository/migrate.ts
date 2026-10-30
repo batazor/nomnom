@@ -3,11 +3,11 @@ import type { Db } from "mongodb";
 import {
   type MigrationSet,
   migrate,
-} from "../../pkg/infrastructure/repository/migrate.ts";
+} from "./run-migrations.ts";
 
 /**
  * migrate-mongo migration sets of the `restaurants` database (local ADR 2),
- * applied in this order: `pkg` (shared collections and service-wide
+ * applied in this order: `messaging` (shared collections and service-wide
  * cleanups) first, then every slice its own collections. Each set is a
  * directory of `<NNNN>-<change>` files numbered from 0001 with its own
  * changelog `migrations_changelog_<id>`. The `id` is a stable storage id
@@ -20,7 +20,7 @@ import {
 export const RESTAURANTS_MIGRATION_SETS: readonly MigrationSet[] = [
   {
     id: "messaging",
-    dir: new URL("../../pkg/infrastructure/repository/migrations/", import.meta.url),
+    dir: new URL("./migrations/", import.meta.url),
   },
   {
     id: "restaurants",

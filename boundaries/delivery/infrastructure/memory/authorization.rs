@@ -1,6 +1,6 @@
 use std::sync::{Mutex, PoisonError};
 
-use crate::pkg::application::{AuthorizationError, Subject};
+use crate::pkg::authz::{AuthorizationError, Subject};
 use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };

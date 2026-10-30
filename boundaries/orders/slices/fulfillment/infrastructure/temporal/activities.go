@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/order/applications/completeorder"
 	"nomnom/orders/slices/order/applications/errorkind"
@@ -107,7 +107,7 @@ func (a *Activities) RequestRestaurantOrder(ctx context.Context, in StepInput) (
 		return RestaurantOrderRequested{}, err
 	}
 	if request.Schedule != nil && request.Schedule.PlannedReadyAt.IsZero() {
-		return RestaurantOrderRequested{}, classify(application.InvalidInput("step", "planned_ready_at is required for a scheduled order"))
+		return RestaurantOrderRequested{}, classify(usecase.InvalidInput("step", "planned_ready_at is required for a scheduled order"))
 	}
 	id, err := a.Restaurants.RequestOrder(ctx, request)
 	return RestaurantOrderRequested{RestaurantOrderID: id}, classify(err)
@@ -117,7 +117,7 @@ func (a *Activities) RequestRestaurantOrder(ctx context.Context, in StepInput) (
 // Order to the Kitchen Queue at start_at (FR-224).
 func (a *Activities) QueueRestaurantOrder(ctx context.Context, in StepInput) error {
 	if in.OrderID == "" || in.IdempotencyKey == "" || in.RestaurantOrderID == "" {
-		return classify(application.InvalidInput("step", "order_id, idempotency_key and restaurant_order_id are required"))
+		return classify(usecase.InvalidInput("step", "order_id, idempotency_key and restaurant_order_id are required"))
 	}
 	return classify(a.Restaurants.QueueOrder(ctx, neighbours.QueueRequest{
 		OrderID:           in.OrderID,
@@ -150,7 +150,7 @@ func (a *Activities) ReleaseSlotReservation(ctx context.Context, in StepInput) e
 // passes the planned_ready_at of the first plan, which does not move.
 func (a *Activities) PlanSchedule(ctx context.Context, in StepInput) (Plan, error) {
 	if in.OrderID == "" || in.IdempotencyKey == "" {
-		return Plan{}, classify(application.InvalidInput("step", "order_id and idempotency_key are required"))
+		return Plan{}, classify(usecase.InvalidInput("step", "order_id and idempotency_key are required"))
 	}
 	plan, err := a.Plan.Handle(ctx, planschedule.Input{OrderID: order.ID(in.OrderID), PlannedReadyAt: in.PlannedReadyAt})
 	if err != nil {
@@ -193,7 +193,7 @@ func (a *Activities) CancelDelivery(ctx context.Context, in StepInput) error {
 // decision moment is the workflow time in the input and is required.
 func (a *Activities) RecordPaymentAuthorization(ctx context.Context, in StepInput) error {
 	if in.DecidedAt.IsZero() {
-		return classify(application.InvalidInput("step", "decided_at is required"))
+		return classify(usecase.InvalidInput("step", "decided_at is required"))
 	}
 	_, err := a.RecordPayment.Handle(ctx, recordpaymentauthorization.Input{OrderID: order.ID(in.OrderID), AuthorizedAt: in.DecidedAt})
 	return classify(err)
@@ -204,7 +204,7 @@ func (a *Activities) RecordPaymentAuthorization(ctx context.Context, in StepInpu
 // every attempt, and is required.
 func (a *Activities) CompleteOrder(ctx context.Context, in StepInput) error {
 	if in.DecidedAt.IsZero() {
-		return classify(application.InvalidInput("step", "decided_at is required"))
+		return classify(usecase.InvalidInput("step", "decided_at is required"))
 	}
 	_, err := a.Complete.Handle(ctx, completeorder.Input{OrderID: order.ID(in.OrderID), CompletedAt: in.DecidedAt})
 	return classify(err)
@@ -235,7 +235,7 @@ func (a *Activities) FailOrCancelOrder(ctx context.Context, in FinalizeInput) er
 func request[R any](ctx context.Context, orders GetFulfillmentOrder, in StepInput, build func(getfulfillmentorder.View, string) R) (R, error) {
 	var zero R
 	if in.OrderID == "" || in.IdempotencyKey == "" {
-		return zero, classify(application.InvalidInput("step", "order_id and idempotency_key are required"))
+		return zero, classify(usecase.InvalidInput("step", "order_id and idempotency_key are required"))
 	}
 	current, err := orders.Handle(ctx, getfulfillmentorder.Query{OrderID: order.ID(in.OrderID)})
 	if err != nil {
@@ -264,18 +264,18 @@ type retryability struct {
 	errType      string
 }
 
-// retryabilityByKind covers every application.ErrorKind: a retry cannot fix
+// retryabilityByKind covers every usecase.ErrorKind: a retry cannot fix
 // invalid input, a missing Order or a refusal of the domain; everything else,
 // including transport failures of neighbours, stays retryable.
-var retryabilityByKind = map[application.ErrorKind]retryability{
-	application.KindInvalidInput:  {nonRetryable: true, errType: ErrTypeInvalidInput},
-	application.KindNotFound:      {nonRetryable: true, errType: ErrTypeOrderNotFound},
-	application.KindDomainRule:    {nonRetryable: true, errType: ErrTypeInvalidTransition},
-	application.KindAlreadyExists: {},
-	application.KindConflict:      {},
-	application.KindUnavailable:   {},
-	application.KindPermission:    {},
-	application.KindInternal:      {},
+var retryabilityByKind = map[usecase.ErrorKind]retryability{
+	usecase.KindInvalidInput:  {nonRetryable: true, errType: ErrTypeInvalidInput},
+	usecase.KindNotFound:      {nonRetryable: true, errType: ErrTypeOrderNotFound},
+	usecase.KindDomainRule:    {nonRetryable: true, errType: ErrTypeInvalidTransition},
+	usecase.KindAlreadyExists: {},
+	usecase.KindConflict:      {},
+	usecase.KindUnavailable:   {},
+	usecase.KindPermission:    {},
+	usecase.KindInternal:      {},
 }
 
 func classify(err error) error {

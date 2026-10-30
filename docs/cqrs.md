@@ -57,7 +57,7 @@ Custom `CommandEventMarshaler`: имя — `event_type` envelope (полное �
 ### Реализация в `orders`
 
 - Envelope — Kafka headers (`event_id`, `event_type`, `occurred_at`, `aggregate_*`, `traceparent`), payload — Protobuf. Контракты событий — `events.proto` в модулях publisher'ов (`nomnom.restaurants.v1`, `nomnom.delivery.v1`).
-- Общий transport: [`pkg/messaging`](../boundaries/orders/pkg/messaging) — `EnvelopeMarshaler`, классы ошибок, `NewConsumerRouter` (poison → retry → reject unknown → `EventGroupProcessor`).
+- Общий transport: [`infrastructure/messaging`](../boundaries/orders/infrastructure/messaging) — `EnvelopeMarshaler`, классы ошибок, `NewConsumerRouter` (poison → retry → reject unknown → `EventGroupProcessor`).
 - Slice adapter: [`slices/order/infrastructure/messaging`](../boundaries/orders/slices/order/infrastructure/messaging/README.md).
 - Composition root: `cmd/orders-consumer`, `di/consumer.go`.
 

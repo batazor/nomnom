@@ -6,7 +6,7 @@ mod support;
 use std::time::Duration;
 
 use delivery::infrastructure::spicedb::SpiceDbAuthorization;
-use delivery::pkg::application::{AuthorizationError, Subject};
+use delivery::pkg::authz::{AuthorizationError, Subject};
 use delivery::pkg::config::SpiceDbConfig;
 use delivery::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,

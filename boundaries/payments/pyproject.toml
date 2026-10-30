@@ -86,7 +86,7 @@ layers = ["applications", "domains"]
 [[tool.importlinter.contracts]]
 name = "Domain and application code stay free of frameworks and drivers"
 type = "forbidden"
-source_modules = ["slices", "pkg.application"]
+source_modules = ["slices", "pkg.usecase", "pkg.authz", "pkg.unit_of_work", "pkg.outbox"]
 forbidden_modules = [
     "dependency_injector",
     "grpc",

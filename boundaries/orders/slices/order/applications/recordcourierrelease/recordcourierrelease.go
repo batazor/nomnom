@@ -12,7 +12,8 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
@@ -56,15 +57,15 @@ type Result struct {
 }
 
 type Handler struct {
-	uow         application.UnitOfWork
-	inbox       application.Inbox
+	uow         unitofwork.UnitOfWork
+	inbox       unitofwork.Inbox
 	assignments order.CourierAssignments
 	changes     syncorderrelationships.Changes
 }
 
 func NewHandler(
-	uow application.UnitOfWork,
-	inbox application.Inbox,
+	uow unitofwork.UnitOfWork,
+	inbox unitofwork.Inbox,
 	assignments order.CourierAssignments,
 	changes syncorderrelationships.Changes,
 ) Handler {
@@ -74,20 +75,20 @@ func NewHandler(
 func (in Input) validate() error {
 	switch {
 	case in.EventID == "":
-		return application.InvalidInput("event_id", "is required")
+		return usecase.InvalidInput("event_id", "is required")
 	case in.OrderID == "":
-		return application.InvalidInput("order_id", "is required")
+		return usecase.InvalidInput("order_id", "is required")
 	case in.OccurredAt.IsZero():
-		return application.InvalidInput("occurred_at", "is required")
+		return usecase.InvalidInput("occurred_at", "is required")
 	case in.DeliveryID == "":
-		return application.InvalidInput("delivery_id", "is required")
+		return usecase.InvalidInput("delivery_id", "is required")
 	case !in.DeliveryCancelled && in.CourierID == "":
-		return application.InvalidInput("courier_id", "is required")
+		return usecase.InvalidInput("courier_id", "is required")
 	}
 	return nil
 }
 
-// Handle runs application.AcceptOnce { read assignment under row lock →
+// Handle runs unitofwork.AcceptOnce { read assignment under row lock →
 // remember the release → record RelationshipsChanged when order#delivery goes }.
 // orders-consumer then syncs the relationships (ADR 18).
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
@@ -95,7 +96,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, err
 	}
 	var outcome fulfillment.Outcome
-	accepted, err := application.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, func(ctx context.Context) error {
+	accepted, err := unitofwork.AcceptOnce(ctx, h.uow, h.inbox, Consumer, in.EventID, func(ctx context.Context) error {
 		var err error
 		outcome, err = h.release(ctx, in)
 		return err

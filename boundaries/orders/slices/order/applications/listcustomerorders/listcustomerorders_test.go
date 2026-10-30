@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
@@ -22,9 +23,9 @@ import (
 const window = 5 * time.Minute
 
 var (
-	customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
-	stranger = application.Subject{Kind: application.SubjectUser, ID: "customer-2"}
-	support  = application.Subject{Kind: application.SubjectService, ID: "support-console"}
+	customer = authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"}
+	stranger = authz.Subject{Kind: authz.SubjectUser, ID: "customer-2"}
+	support  = authz.Subject{Kind: authz.SubjectService, ID: "support-console"}
 )
 
 func setup(t *testing.T) (listcustomerorders.Handler, *MockAuthorizer) {
@@ -92,24 +93,24 @@ func TestListOwnOrdersNewestFirstWithPagination(t *testing.T) {
 func TestListOtherCustomerOrdersRequiresPermission(t *testing.T) {
 	handler, authorizer := setup(t)
 	authorizer.EXPECT().
-		Check(mock.Anything, application.AccessCheck{
+		Check(mock.Anything, authz.AccessCheck{
 			Subject:    stranger,
 			Permission: listcustomerorders.PermissionViewOrders,
-			Resource:   application.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"},
+			Resource:   authz.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"},
 		}).
-		Return(application.ErrPermissionDenied).
+		Return(authz.ErrPermissionDenied).
 		Once()
 	authorizer.EXPECT().
-		Check(mock.Anything, application.AccessCheck{
+		Check(mock.Anything, authz.AccessCheck{
 			Subject:    support,
 			Permission: listcustomerorders.PermissionViewOrders,
-			Resource:   application.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"},
+			Resource:   authz.Resource{Type: listcustomerorders.ResourceCustomer, ID: "customer-1"},
 		}).
 		Return(nil).
 		Once()
 
 	_, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: stranger, CustomerID: "customer-1", MarketID: ordertest.Market})
-	require.ErrorIs(t, err, application.ErrPermissionDenied)
+	require.ErrorIs(t, err, authz.ErrPermissionDenied)
 
 	page, err := handler.Handle(context.Background(), listcustomerorders.Query{Subject: support, CustomerID: "customer-1", MarketID: ordertest.Market})
 	require.NoError(t, err)
@@ -132,7 +133,7 @@ func TestListCustomerOrdersValidatesQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := handler.Handle(context.Background(), tt.query)
-			require.ErrorIs(t, err, application.ErrInvalidInput)
+			require.ErrorIs(t, err, usecase.ErrInvalidInput)
 		})
 	}
 }

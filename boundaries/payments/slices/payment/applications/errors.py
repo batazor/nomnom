@@ -1,6 +1,6 @@
 """Typed application errors of the payment slice."""
 
-from pkg.application import ApplicationError
+from pkg.usecase import ApplicationError
 from slices.payment.domains.payment import OperationId, OrderId, PaymentId, PaymentState
 
 

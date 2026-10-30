@@ -8,7 +8,8 @@
 //! The step runs inside the process, not on behalf of a caller, so there is
 //! no subject and no permission check.
 
-use crate::pkg::application::{Clock, UnitOfWork};
+use crate::pkg::unit_of_work::UnitOfWork;
+use crate::pkg::usecase::Clock;
 use crate::slices::delivery::domains::delivery::{
     DeliveryOfferError, DeliveryOfferId, DeliveryOfferRepository,
 };

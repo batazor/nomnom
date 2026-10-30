@@ -5,7 +5,7 @@ import pytest
 from payment_fakes import MARKET, OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
-from pkg.application import PermissionDeniedError
+from pkg.authz import PermissionDeniedError
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
 from slices.payment.applications.ports import PaymentPermission, ProviderOperationOutcome

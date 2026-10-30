@@ -7,7 +7,7 @@ import grpc
 from infrastructure.grpc.errors import application_errors
 from infrastructure.grpc.generated import payments_pb2, service_pb2, service_pb2_grpc
 from infrastructure.grpc.identity import SubjectResolver
-from pkg.application import Handler
+from pkg.usecase import Handler
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentInput,
     AuthorizePaymentResult,

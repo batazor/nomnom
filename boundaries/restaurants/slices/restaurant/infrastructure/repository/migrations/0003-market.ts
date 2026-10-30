@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /** Launch Market of the data created before Markets existed (ADR 41). */
 const LAUNCH_MARKET = "berlin";

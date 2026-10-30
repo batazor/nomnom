@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 	"testing"
 	"time"
@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/slices/order/applications/confirmorder"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierassignment"
@@ -370,14 +370,14 @@ func TestRelationshipsChangedSyncsTheOrderState(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
 	c.relationships.EXPECT().SyncOrderRelationships(mock.Anything, order.ID("order-1"),
 		syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}).
-		Return(application.AuthorizationRevision("zedtoken-1"), nil).Once()
+		Return(authz.AuthorizationRevision("zedtoken-1"), nil).Once()
 
 	c.publish(t, outbound.OrderRelationshipsTopic, "event-1", &ordersv1.OrderRelationshipsChanged{OrderId: "order-1"})
 
 	revision, found, err := c.store.Revision(context.Background(), "order-1")
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, application.AuthorizationRevision("zedtoken-1"), revision)
+	assert.Equal(t, authz.AuthorizationRevision("zedtoken-1"), revision)
 	assert.Equal(t, 0, c.store.InboxSize())
 	c.noPoison(t)
 }

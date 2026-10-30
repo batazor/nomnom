@@ -13,7 +13,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/applications/requestordercancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -144,7 +144,7 @@ func TestCancellationRequestsCountAnswersAndRejectionsNotFailures(t *testing.T) 
 
 	answer(requestordercancellation.Result{Outcome: requestordercancellation.OutcomeRequested}, nil)
 	answer(requestordercancellation.Result{Outcome: requestordercancellation.OutcomeAlreadyCancelled}, nil)
-	answer(requestordercancellation.Result{}, application.FailClosed(errors.New("denied")))
+	answer(requestordercancellation.Result{}, authz.FailClosed(errors.New("denied")))
 	answer(requestordercancellation.Result{}, errors.New("connection reset"))
 
 	assert.Equal(t, map[string]int64{"requested": 1, "already_cancelled": 1, "rejected": 1},

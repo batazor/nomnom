@@ -17,7 +17,7 @@ import {
   type RestaurantsServiceDependencies,
 } from "../../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
 import { BatchGetRestaurantsHandler } from "../../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
 import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
 import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";

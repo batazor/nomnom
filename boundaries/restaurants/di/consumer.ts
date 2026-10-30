@@ -9,8 +9,32 @@
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Valkey } from "iovalkey";
 import type { Db, MongoClient } from "mongodb";
-
-import type { Clock } from "../pkg/application/clock.ts";
+import {
+  type ConsumerClient,
+  KafkaConsumerWorker,
+} from "../infrastructure/kafka/consumer.ts";
+import type {
+  InboundMessage,
+  MessagePublisher,
+} from "../infrastructure/messaging/envelope.ts";
+import { OtelConsumerMetrics } from "../infrastructure/messaging/metrics.ts";
+import {
+  type ConsumerMetrics,
+  type EventHandler,
+  type Inbox,
+  MessageProcessor,
+  type ProcessOutcome,
+} from "../infrastructure/messaging/processor.ts";
+import {
+  HttpSchemaRegistry,
+  type SchemaSubjects,
+} from "../infrastructure/messaging/schema-registry.ts";
+import type { DatabaseConnection } from "../infrastructure/repository/client.ts";
+import { DatabaseInbox } from "../infrastructure/repository/inbox.ts";
+import { DatabaseOutbox } from "../infrastructure/repository/outbox.ts";
+import type { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
+import { CacheMetrics } from "../infrastructure/valkey/read-cache.ts";
+import { CacheRefreshHandler } from "../infrastructure/valkey/refresh.ts";
 import type {
   ConsumerConfig,
   KitchenConfig,
@@ -18,40 +42,11 @@ import type {
   ValkeyConfig,
   WaitTimeConfig,
 } from "../pkg/config/config.ts";
-import {
-  createProcessContainer,
-  type Registrations,
-} from "../pkg/di/container.ts";
-import {
-  type ConsumerClient,
-  KafkaConsumerWorker,
-} from "../pkg/infrastructure/kafka/consumer.ts";
-import type {
-  InboundMessage,
-  MessagePublisher,
-} from "../pkg/infrastructure/messaging/envelope.ts";
-import { OtelConsumerMetrics } from "../pkg/infrastructure/messaging/metrics.ts";
-import {
-  type ConsumerMetrics,
-  type EventHandler,
-  type Inbox,
-  MessageProcessor,
-  type ProcessOutcome,
-} from "../pkg/infrastructure/messaging/processor.ts";
-import {
-  HttpSchemaRegistry,
-  type SchemaSubjects,
-} from "../pkg/infrastructure/messaging/schema-registry.ts";
-import type { DatabaseConnection } from "../pkg/infrastructure/repository/client.ts";
-import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
-import { DatabaseOutbox } from "../pkg/infrastructure/repository/outbox.ts";
-import type { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
-import { CacheMetrics } from "../pkg/infrastructure/valkey/read-cache.ts";
-import { CacheRefreshHandler } from "../pkg/infrastructure/valkey/refresh.ts";
 import { ParallelWorkers, type Worker } from "../pkg/lifecycle/lifecycle.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
+import type { Clock } from "../pkg/usecase/clock.ts";
 import {
   CachedMenuReader,
   menuCacheRefreshes,
@@ -103,6 +98,7 @@ import {
   createRestaurantOrderCollection,
   DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
+import { createProcessContainer, type Registrations } from "./container.ts";
 import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
 
 /** Configuration and resources the composition root hands to the container. */

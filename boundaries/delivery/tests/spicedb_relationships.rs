@@ -25,7 +25,7 @@ use delivery::infrastructure::spicedb::{
     RepositoryRevisions, SpiceDbAuthorization, SpiceDbClient, SpiceDbRelationships, courier_self,
     delivery_courier,
 };
-use delivery::pkg::application::{AuthorizationError, Subject};
+use delivery::pkg::authz::{AuthorizationError, Subject};
 use delivery::pkg::config::database;
 use delivery::pkg::persistence::AuthorizationRevision;
 use delivery::slices::courier::applications::authorization::{

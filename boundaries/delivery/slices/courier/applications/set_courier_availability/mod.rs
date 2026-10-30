@@ -5,7 +5,7 @@
 //! Market (FR-706), also on a repeat: the wake of the first call may have
 //! been lost.
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::slices::courier::domains::courier::{
     CourierError, CourierId, CourierRepository, CourierStatus,
 };

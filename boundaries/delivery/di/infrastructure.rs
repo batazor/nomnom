@@ -13,8 +13,9 @@ use shaku::{Component, Interface, module};
 
 #[cfg(test)]
 use crate::infrastructure::memory::StaticAuthorization;
-use crate::pkg::application::{Clock, IdGenerator, TransactionScope, UnitOfWorkError};
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::unit_of_work::{TransactionScope, UnitOfWorkError};
+use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;

@@ -11,7 +11,7 @@ from pathlib import Path
 from google.protobuf.message import Message
 
 from infrastructure.repository.outbox import PAYMENT_EVENTS_TOPIC, OutboxMessage
-from pkg.application import AggregateRef
+from pkg.outbox import AggregateRef
 from slices.payment.domains.payment import (
     Money,
     PaymentAuthorizationCancelled,

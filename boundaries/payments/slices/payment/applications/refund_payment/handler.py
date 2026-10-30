@@ -6,7 +6,7 @@ keeps the Payment ``captured``.
 
 from dataclasses import dataclass
 
-from pkg.application import Subject
+from pkg.authz import Subject
 from slices.payment.domains.payment import OperationKind
 
 from ..operation_flow import PaymentOperationExecutor, PaymentOperationResult

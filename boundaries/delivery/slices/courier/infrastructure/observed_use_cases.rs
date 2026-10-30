@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::{

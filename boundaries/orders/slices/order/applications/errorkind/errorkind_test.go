@@ -7,7 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
@@ -20,29 +21,29 @@ import (
 var cases = []struct {
 	Name string
 	Err  error
-	Kind application.ErrorKind
+	Kind usecase.ErrorKind
 }{
-	{"invalid input", application.InvalidInput("order_id", "is required"), application.KindInvalidInput},
-	{"invalid value", vo.ErrInvalidQuantity, application.KindInvalidInput},
-	{"order not found", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), application.KindNotFound},
-	{"unknown restaurant", placeorder.ErrUnknownRestaurant, application.KindNotFound},
-	{"order exists", order.ErrOrderAlreadyExists, application.KindAlreadyExists},
-	{"concurrency conflict", application.ErrConcurrencyConflict, application.KindConflict},
-	{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), application.KindDomainRule},
-	{"guard failed", order.GuardFailed{Reason: "occurred_at_required"}, application.KindDomainRule},
-	{"not orderable", order.NotOrderable{}, application.KindDomainRule},
-	{"cancellation not allowed", order.CancellationNotAllowed{}, application.KindDomainRule},
-	{"no items", order.ErrOrderRequiresItems, application.KindDomainRule},
-	{"duplicate item", order.ErrDuplicateMenuItem, application.KindDomainRule},
-	{"cancellation reason", order.ErrInvalidCancellationReason, application.KindDomainRule},
-	{"restaurant closed", placeorder.ErrRestaurantNotAcceptingOrders, application.KindDomainRule},
-	{"cancellation refused", fulfillment.ErrCancellationRefused, application.KindDomainRule},
-	{"permission denied", application.ErrPermissionDenied, application.KindPermission},
-	{"dependency unavailable", application.ErrDependencyUnavailable, application.KindUnavailable},
-	{"workflow not found", fulfillment.ErrWorkflowNotFound, application.KindUnavailable},
-	{"fail-closed unavailable", application.FailClosed(fmt.Errorf("spicedb: %w", application.ErrDependencyUnavailable)), application.KindUnavailable},
-	{"fail-closed other", application.FailClosed(errors.New("boom")), application.KindPermission},
-	{"infrastructure", errors.New("connection reset"), application.KindInternal},
+	{"invalid input", usecase.InvalidInput("order_id", "is required"), usecase.KindInvalidInput},
+	{"invalid value", vo.ErrInvalidQuantity, usecase.KindInvalidInput},
+	{"order not found", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), usecase.KindNotFound},
+	{"unknown restaurant", placeorder.ErrUnknownRestaurant, usecase.KindNotFound},
+	{"order exists", order.ErrOrderAlreadyExists, usecase.KindAlreadyExists},
+	{"concurrency conflict", usecase.ErrConcurrencyConflict, usecase.KindConflict},
+	{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), usecase.KindDomainRule},
+	{"guard failed", order.GuardFailed{Reason: "occurred_at_required"}, usecase.KindDomainRule},
+	{"not orderable", order.NotOrderable{}, usecase.KindDomainRule},
+	{"cancellation not allowed", order.CancellationNotAllowed{}, usecase.KindDomainRule},
+	{"no items", order.ErrOrderRequiresItems, usecase.KindDomainRule},
+	{"duplicate item", order.ErrDuplicateMenuItem, usecase.KindDomainRule},
+	{"cancellation reason", order.ErrInvalidCancellationReason, usecase.KindDomainRule},
+	{"restaurant closed", placeorder.ErrRestaurantNotAcceptingOrders, usecase.KindDomainRule},
+	{"cancellation refused", fulfillment.ErrCancellationRefused, usecase.KindDomainRule},
+	{"permission denied", authz.ErrPermissionDenied, usecase.KindPermission},
+	{"dependency unavailable", usecase.ErrDependencyUnavailable, usecase.KindUnavailable},
+	{"workflow not found", fulfillment.ErrWorkflowNotFound, usecase.KindUnavailable},
+	{"fail-closed unavailable", authz.FailClosed(fmt.Errorf("spicedb: %w", usecase.ErrDependencyUnavailable)), usecase.KindUnavailable},
+	{"fail-closed other", authz.FailClosed(errors.New("boom")), usecase.KindPermission},
+	{"infrastructure", errors.New("connection reset"), usecase.KindInternal},
 }
 
 func TestClassify(t *testing.T) {
@@ -54,11 +55,11 @@ func TestClassify(t *testing.T) {
 }
 
 func TestCasesCoverEveryKind(t *testing.T) {
-	seen := map[application.ErrorKind]bool{}
+	seen := map[usecase.ErrorKind]bool{}
 	for _, tt := range cases {
 		seen[tt.Kind] = true
 	}
-	for _, kind := range application.ErrorKinds() {
+	for _, kind := range usecase.ErrorKinds() {
 		assert.True(t, seen[kind], kind)
 	}
 }

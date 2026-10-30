@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /**
  * Slice `scheduleslot` (change `add-scheduled-orders`): aggregate

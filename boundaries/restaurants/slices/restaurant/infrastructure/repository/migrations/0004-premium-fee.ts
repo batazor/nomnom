@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 const MARKET_ID = { bsonType: "string", pattern: "^[a-z][a-z0-9-]{1,31}$" };
 const WAIT_LEVEL = { enum: ["NORMAL", "ELEVATED"] };

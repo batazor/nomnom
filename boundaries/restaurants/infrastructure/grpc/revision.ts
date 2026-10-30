@@ -1,4 +1,4 @@
-import type { Subject } from "../../pkg/application/subject.ts";
+import type { Subject } from "../../pkg/authz/subject.ts";
 
 /** gRPC metadata carrying the caller's authorization revision (docs/security.md). */
 export const AUTHORIZATION_REVISION_HEADER = "authorization-revision";

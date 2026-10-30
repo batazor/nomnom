@@ -34,7 +34,7 @@ from infrastructure.grpc.service import (
     service_pb2_grpc,
 )
 from infrastructure.repository import Database
-from pkg.application import Subject, SubjectKind
+from pkg.authz import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler

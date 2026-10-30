@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/slices/order/domains/order"
 )
 

@@ -194,7 +194,7 @@ pub(crate) fn build_over_store(
 #[cfg(test)]
 mod tests {
     use crate::infrastructure::memory::StaticAuthorization;
-    use crate::pkg::application::Subject;
+    use crate::pkg::authz::Subject;
     use crate::slices::courier::applications::register_courier;
     use crate::slices::delivery::applications::{create_delivery, get_courier_current_delivery};
 

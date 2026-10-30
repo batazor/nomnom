@@ -41,7 +41,7 @@ from infrastructure.grpc.service import (
     service_pb2_grpc,
 )
 from infrastructure.repository import Database
-from pkg.application import Subject, SubjectKind
+from pkg.authz import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
 from slices.payment.domains.payment import PaymentState
 

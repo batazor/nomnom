@@ -27,9 +27,9 @@ import (
 	"syscall"
 	"time"
 
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/config/database"
-	"nomnom/orders/pkg/messaging"
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"

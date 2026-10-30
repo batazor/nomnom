@@ -3,7 +3,7 @@ package repository
 import (
 	"embed"
 
-	"nomnom/orders/pkg/migration"
+	"nomnom/orders/infrastructure/migration"
 )
 
 //go:embed migrations/*.sql

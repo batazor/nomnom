@@ -1,4 +1,4 @@
-use crate::pkg::application::{AuthorizationError, Subject};
+use crate::pkg::authz::{AuthorizationError, Subject};
 
 /// Authorization port of the `simulator` slice: `platform#operate_simulator`
 /// (FR-604). The SpiceDB adapter lives in `infrastructure/`.

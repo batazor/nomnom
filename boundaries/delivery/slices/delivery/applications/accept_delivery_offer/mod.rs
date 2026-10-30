@@ -9,7 +9,9 @@
 //! `CourierAssignedToDelivery`. After commit, and on a repeat, the Assignment
 //! Workflow of the delivery is woken (FR-707).
 
-use crate::pkg::application::{Clock, Subject, UnitOfWork};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
+use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};

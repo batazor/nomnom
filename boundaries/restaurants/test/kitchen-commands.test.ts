@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  NotFoundError,
-  PermissionDeniedError,
-} from "../pkg/application/errors.ts";
+import { PermissionDeniedError } from "../pkg/authz/errors.ts";
+import { NotFoundError } from "../pkg/usecase/errors.ts";
 import {
   GuardFailedError,
   InvalidRestaurantOrderError,

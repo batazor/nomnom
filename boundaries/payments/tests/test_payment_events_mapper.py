@@ -7,7 +7,7 @@ from typing import Any, override
 from infrastructure.messaging import PaymentEventsMapper
 from infrastructure.messaging.events import events_pb2
 from infrastructure.repository import EVENT_ID_NAMESPACE, PAYMENT_EVENTS_TOPIC, outbox_event_id
-from pkg.application import AggregateRef
+from pkg.outbox import AggregateRef
 from slices.payment.domains.payment import (
     MarketId,
     Money,

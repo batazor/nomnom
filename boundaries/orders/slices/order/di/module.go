@@ -2,8 +2,9 @@ package di
 
 import (
 	"context"
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/getorder"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/applications/orderdetails"
@@ -16,17 +17,17 @@ import (
 
 // Module — собранный слайс order, который получает composition root процесса.
 type Module struct {
-	PlaceOrder               application.Handler[placeorder.Input, placeorder.Result]
-	RequestOrderCancellation application.Handler[requestordercancellation.Input, requestordercancellation.Result]
-	GetOrder                 application.Handler[getorder.Query, orderdetails.View]
-	ListCustomerOrders       application.Handler[listcustomerorders.Query, listcustomerorders.Page]
+	PlaceOrder               usecase.Handler[placeorder.Input, placeorder.Result]
+	RequestOrderCancellation usecase.Handler[requestordercancellation.Input, requestordercancellation.Result]
+	GetOrder                 usecase.Handler[getorder.Query, orderdetails.View]
+	ListCustomerOrders       usecase.Handler[listcustomerorders.Query, listcustomerorders.Page]
 }
 
 // PlacementStore — роль хранилища command use cases API: Unit of Work,
 // repository и Outbox Place Order и Request Order Cancellation, idempotency
 // keys и RelationshipsChanged нового Order.
 type PlacementStore interface {
-	application.UnitOfWork
+	unitofwork.UnitOfWork
 	order.Repository
 	placeorder.Outbox
 	placeorder.IdempotencyKeys
@@ -51,7 +52,7 @@ type Dependencies struct {
 	Catalog    placeorder.Catalog
 	Slots      placeorder.SlotReservations
 	Workflow   Workflow
-	Clock      application.Clock
+	Clock      usecase.Clock
 	IDs        placeorder.IDGenerator
 	Telemetry  *telemetry.UseCases
 	Metrics    *observability.DomainMetrics

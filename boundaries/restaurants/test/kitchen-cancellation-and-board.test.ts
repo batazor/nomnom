@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  NotFoundError,
-  PermissionDeniedError,
-} from "../pkg/application/errors.ts";
+import { PermissionDeniedError } from "../pkg/authz/errors.ts";
+import { NotFoundError } from "../pkg/usecase/errors.ts";
 import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/get-kitchen-queue/get-kitchen-queue.ts";
 import {
   cook,

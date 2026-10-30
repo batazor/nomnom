@@ -12,7 +12,7 @@ import {
   SetMenuItemAvailabilityRequestSchema,
   UpdateMenuItemRequestSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import type { Subject } from "../pkg/application/subject.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import { context, createService, rejectsWith } from "./support/grpc.ts";
 import { createMenuWorld } from "./support/menus.ts";
 import { owner, stranger } from "./support/restaurants.ts";

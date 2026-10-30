@@ -20,7 +20,7 @@ from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
-from pkg.application import Handler
+from pkg.usecase import Handler
 from slices.payment.applications.apply_provider_callback import (
     ApplyProviderCallbackInput,
     ApplyProviderCallbackResult,

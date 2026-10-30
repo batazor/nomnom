@@ -10,8 +10,9 @@ use crate::infrastructure::memory::{
     RecordingRelationships, RelationshipWrite, StaticAuthorization,
 };
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::pkg::application::{Clock, RelationshipWriteError};
+use crate::pkg::authz::RelationshipWriteError;
 use crate::pkg::persistence::AuthorizationRevision;
+use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-
-import type { Clock } from "../../../../pkg/application/clock.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { AcceptOrderHandler } from "../../../restaurantorder/applications/accept-order/accept-order.ts";
 import type { MarkAssembledHandler } from "../../../restaurantorder/applications/mark-assembled/mark-assembled.ts";
 import type { MarkReadyForPickupHandler } from "../../../restaurantorder/applications/mark-ready-for-pickup/mark-ready-for-pickup.ts";

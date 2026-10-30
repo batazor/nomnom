@@ -6,7 +6,7 @@ package customersimulator_test
 
 import (
 	"context"
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -48,7 +48,7 @@ func (_m *MockAuthorizer) EXPECT() *MockAuthorizer_Expecter {
 }
 
 // Check provides a mock function for the type MockAuthorizer
-func (_mock *MockAuthorizer) Check(ctx context.Context, check application.AccessCheck) error {
+func (_mock *MockAuthorizer) Check(ctx context.Context, check authz.AccessCheck) error {
 	ret := _mock.Called(ctx, check)
 
 	if len(ret) == 0 {
@@ -56,7 +56,7 @@ func (_mock *MockAuthorizer) Check(ctx context.Context, check application.Access
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, application.AccessCheck) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, authz.AccessCheck) error); ok {
 		r0 = returnFunc(ctx, check)
 	} else {
 		r0 = ret.Error(0)
@@ -71,20 +71,20 @@ type MockAuthorizer_Check_Call struct {
 
 // Check is a helper method to define mock.On call
 //   - ctx context.Context
-//   - check application.AccessCheck
+//   - check authz.AccessCheck
 func (_e *MockAuthorizer_Expecter) Check(ctx any, check any) *MockAuthorizer_Check_Call {
 	return &MockAuthorizer_Check_Call{Call: _e.mock.On("Check", ctx, check)}
 }
 
-func (_c *MockAuthorizer_Check_Call) Run(run func(ctx context.Context, check application.AccessCheck)) *MockAuthorizer_Check_Call {
+func (_c *MockAuthorizer_Check_Call) Run(run func(ctx context.Context, check authz.AccessCheck)) *MockAuthorizer_Check_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 application.AccessCheck
+		var arg1 authz.AccessCheck
 		if args[1] != nil {
-			arg1 = args[1].(application.AccessCheck)
+			arg1 = args[1].(authz.AccessCheck)
 		}
 		run(
 			arg0,
@@ -99,7 +99,7 @@ func (_c *MockAuthorizer_Check_Call) Return(err error) *MockAuthorizer_Check_Cal
 	return _c
 }
 
-func (_c *MockAuthorizer_Check_Call) RunAndReturn(run func(ctx context.Context, check application.AccessCheck) error) *MockAuthorizer_Check_Call {
+func (_c *MockAuthorizer_Check_Call) RunAndReturn(run func(ctx context.Context, check authz.AccessCheck) error) *MockAuthorizer_Check_Call {
 	_c.Call.Return(run)
 	return _c
 }

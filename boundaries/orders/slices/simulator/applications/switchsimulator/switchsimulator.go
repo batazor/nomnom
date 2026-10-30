@@ -6,18 +6,18 @@ import (
 	"context"
 	"fmt"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 )
 
 const (
-	PermissionOperateSimulator application.Permission   = "operate_simulator"
-	ResourcePlatform           application.ResourceType = "platform"
+	PermissionOperateSimulator authz.Permission   = "operate_simulator"
+	ResourcePlatform           authz.ResourceType = "platform"
 	// PlatformID is the singleton platform object of the schema.
 	PlatformID = "nomnom"
 )
 
 type Authorizer interface {
-	Check(ctx context.Context, check application.AccessCheck) error
+	Check(ctx context.Context, check authz.AccessCheck) error
 }
 
 // State is the persisted switch; a service without a stored state is disabled.
@@ -27,11 +27,11 @@ type State interface {
 }
 
 type GetQuery struct {
-	Subject application.Subject
+	Subject authz.Subject
 }
 
 type SetCommand struct {
-	Subject application.Subject
+	Subject authz.Subject
 	Enabled bool
 }
 
@@ -67,13 +67,13 @@ func (h Handlers) Set(ctx context.Context, command SetCommand) (bool, error) {
 	return command.Enabled, nil
 }
 
-func (h Handlers) authorize(ctx context.Context, subject application.Subject) error {
+func (h Handlers) authorize(ctx context.Context, subject authz.Subject) error {
 	if err := subject.Validate(); err != nil {
 		return err
 	}
-	return application.FailClosed(h.authorizer.Check(ctx, application.AccessCheck{
+	return authz.FailClosed(h.authorizer.Check(ctx, authz.AccessCheck{
 		Subject:    subject,
 		Permission: PermissionOperateSimulator,
-		Resource:   application.Resource{Type: ResourcePlatform, ID: PlatformID},
+		Resource:   authz.Resource{Type: ResourcePlatform, ID: PlatformID},
 	}))
 }

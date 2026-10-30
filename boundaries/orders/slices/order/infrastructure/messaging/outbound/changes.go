@@ -10,7 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/slices/order/domains/order"
 )
 

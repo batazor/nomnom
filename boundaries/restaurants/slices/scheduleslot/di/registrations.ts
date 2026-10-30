@@ -3,11 +3,10 @@
 // SCHEDULED_SLOT__* and the handlers exposed through transport.
 import { type AwilixContainer, asFunction } from "awilix";
 import type { Db } from "mongodb";
-
-import type { Clock } from "../../../pkg/application/clock.ts";
+import type { Registrations } from "../../../di/container.ts";
+import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit-of-work.ts";
 import type { ScheduledSlotConfig } from "../../../pkg/config/config.ts";
-import type { Registrations } from "../../../pkg/di/container.ts";
-import type { DatabaseUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { SlotReservationAccess } from "../applications/access-control.ts";
 import { ConfirmScheduledSlotHandler } from "../applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";

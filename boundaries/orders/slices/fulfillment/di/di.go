@@ -3,7 +3,7 @@
 package di
 
 import (
-	gatewayclient "nomnom/orders/pkg/gateway"
+	gatewayclient "nomnom/orders/infrastructure/gateway"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 
 	"github.com/google/wire"

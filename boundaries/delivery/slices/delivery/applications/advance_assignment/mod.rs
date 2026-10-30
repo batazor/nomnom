@@ -19,7 +19,8 @@
 //! The step runs inside the process, not on behalf of a caller, so there is
 //! no subject and no permission check.
 
-use crate::pkg::application::{Clock, IdGenerator, UnitOfWork};
+use crate::pkg::unit_of_work::UnitOfWork;
+use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{

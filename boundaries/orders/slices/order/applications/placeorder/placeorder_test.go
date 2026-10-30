@@ -10,7 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -21,7 +22,7 @@ import (
 
 var now = time.Date(2026, time.October, 25, 12, 30, 0, 0, time.UTC)
 
-var customer = application.Subject{Kind: application.SubjectUser, ID: "customer-1"}
+var customer = authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"}
 
 type env struct {
 	store   *repositorytest.Store
@@ -125,7 +126,7 @@ func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
 	_, err := e.handler.Handle(context.Background(), input)
 
 	require.ErrorContains(t, err, "no market_id")
-	assert.NotErrorIs(t, err, application.ErrInvalidInput)
+	assert.NotErrorIs(t, err, usecase.ErrInvalidInput)
 	assert.NotErrorIs(t, err, vo.ErrInvalidValue)
 	assert.Empty(t, e.store.OutboxRecords())
 	assert.Empty(t, e.store.RelationshipChanges())
@@ -225,14 +226,14 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 			mutate:  func(in *placeorder.Input) { in.Items[1].MenuItemID = in.Items[0].MenuItemID },
 			wantErr: order.ErrDuplicateMenuItem,
 		},
-		{name: "no idempotency key", mutate: func(in *placeorder.Input) { in.IdempotencyKey = "" }, wantErr: application.ErrInvalidInput},
-		{name: "no restaurant", mutate: func(in *placeorder.Input) { in.RestaurantID = "" }, wantErr: application.ErrInvalidInput},
+		{name: "no idempotency key", mutate: func(in *placeorder.Input) { in.IdempotencyKey = "" }, wantErr: usecase.ErrInvalidInput},
+		{name: "no restaurant", mutate: func(in *placeorder.Input) { in.RestaurantID = "" }, wantErr: usecase.ErrInvalidInput},
 		{
 			name: "service subject",
 			mutate: func(in *placeorder.Input) {
-				in.Subject = application.Subject{Kind: application.SubjectService, ID: "bff"}
+				in.Subject = authz.Subject{Kind: authz.SubjectService, ID: "bff"}
 			},
-			wantErr: application.ErrPermissionDenied,
+			wantErr: authz.ErrPermissionDenied,
 		},
 	}
 	for _, tt := range tests {
@@ -385,7 +386,7 @@ func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
 
 	_, err := e.handlerWithKeys(keys).Handle(context.Background(), validInput())
 
-	require.ErrorIs(t, err, application.ErrConcurrencyConflict)
+	require.ErrorIs(t, err, usecase.ErrConcurrencyConflict)
 }
 
 func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
@@ -492,7 +493,7 @@ func TestPlaceOrderRefusesUnknownPriority(t *testing.T) {
 
 	_, err := e.handler.Handle(context.Background(), input)
 
-	require.ErrorIs(t, err, application.ErrInvalidInput)
+	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 	assertNothingPlaced(t, e)
 }
 

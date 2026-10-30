@@ -11,7 +11,7 @@ import {
   type SpiceDbClient,
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import type { Subject } from "../pkg/application/subject.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import type { RestaurantAccessControl } from "../slices/restaurant/applications/access-control.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";

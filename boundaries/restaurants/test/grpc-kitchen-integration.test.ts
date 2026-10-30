@@ -4,17 +4,17 @@ import { after, before, describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
-import type { Subject } from "../pkg/application/subject.ts";
 import {
   connectDatabase,
   type DatabaseConnection,
-} from "../pkg/infrastructure/repository/client.ts";
+} from "../infrastructure/repository/client.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import {
   DatabaseOutbox,
   OUTBOX_COLLECTION,
-} from "../pkg/infrastructure/repository/outbox.ts";
-import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+} from "../infrastructure/repository/outbox.ts";
+import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import { PoolCookAssigner } from "../slices/cook/applications/assign-cook/assign-cook.ts";
 import { Cook } from "../slices/cook/domains/cook/cook.ts";
 import { DatabaseCookRepository } from "../slices/cook/infrastructure/repository/cooks.ts";

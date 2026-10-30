@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { v1 } from "@authzed/authzed-node";
+import {
+  connectDatabase,
+  type DatabaseConnection,
+} from "../infrastructure/repository/client.ts";
 import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
+import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
 import {
   createSpiceDbClient,
   type SpiceDbClient,
 } from "../infrastructure/spicedb/client.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import {
-  connectDatabase,
-  type DatabaseConnection,
-} from "../pkg/infrastructure/repository/client.ts";
-import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";

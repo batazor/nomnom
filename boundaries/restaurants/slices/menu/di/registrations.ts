@@ -4,15 +4,14 @@
 import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Valkey } from "iovalkey";
 import type { Db } from "mongodb";
-
-import type { Clock } from "../../../pkg/application/clock.ts";
-import type { IdGenerator } from "../../../pkg/application/id-generator.ts";
-import type { Outbox } from "../../../pkg/application/outbox.ts";
+import type { Registrations } from "../../../di/container.ts";
+import type { OutboxEventMapper } from "../../../infrastructure/repository/outbox.ts";
+import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit-of-work.ts";
+import type { CacheMetrics } from "../../../infrastructure/valkey/read-cache.ts";
 import type { ValkeyConfig } from "../../../pkg/config/config.ts";
-import type { Registrations } from "../../../pkg/di/container.ts";
-import type { OutboxEventMapper } from "../../../pkg/infrastructure/repository/outbox.ts";
-import type { DatabaseUnitOfWork } from "../../../pkg/infrastructure/repository/unit-of-work.ts";
-import type { CacheMetrics } from "../../../pkg/infrastructure/valkey/read-cache.ts";
+import type { Outbox } from "../../../pkg/outbox/outbox.ts";
+import type { Clock } from "../../../pkg/usecase/clock.ts";
+import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { MenuAccessControl } from "../applications/access-control.ts";
 import { AddMenuItemHandler } from "../applications/add-menu-item/add-menu-item.ts";

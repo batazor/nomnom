@@ -13,19 +13,19 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
-import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
-import type { Subject } from "../pkg/application/subject.ts";
-import { outboxEventMapperByAggregate } from "../pkg/infrastructure/outbox/integration-event.ts";
+import { outboxEventMapperByAggregate } from "../infrastructure/outbox/integration-event.ts";
 import {
   connectDatabase,
   type DatabaseConnection,
-} from "../pkg/infrastructure/repository/client.ts";
+} from "../infrastructure/repository/client.ts";
+import { migrateRestaurantsDatabase } from "../infrastructure/repository/migrate.ts";
 import {
   DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxDocument,
-} from "../pkg/infrastructure/repository/outbox.ts";
-import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+} from "../infrastructure/repository/outbox.ts";
+import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { startTracing, type Tracing } from "../pkg/telemetry/tracing.ts";
 import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";

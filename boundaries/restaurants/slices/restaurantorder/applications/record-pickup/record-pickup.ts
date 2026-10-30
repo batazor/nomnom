@@ -1,7 +1,7 @@
-import { NotFoundError } from "../../../../pkg/application/errors.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
-import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
+import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import { MarketId } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   AlreadyInStateError,

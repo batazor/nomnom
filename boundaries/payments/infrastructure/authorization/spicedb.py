@@ -28,7 +28,7 @@ from authzed.api.v1 import (
 from grpcutil import bearer_token_credentials
 from opentelemetry import metrics
 
-from pkg.application import AuthorizationUnavailableError, Subject, SubjectKind
+from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
 from pkg.telemetry import SECONDS_BUCKETS
 from pkg.telemetry.rpc import ClientTelemetryInterceptor, split_target

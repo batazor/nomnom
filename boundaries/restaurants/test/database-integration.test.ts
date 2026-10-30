@@ -10,31 +10,31 @@ import { promisify } from "node:util";
 
 import { type Db, MongoServerError } from "mongodb";
 import {
+  connectDatabase,
+  type DatabaseConnection,
+} from "../infrastructure/repository/client.ts";
+import {
   migrateRestaurantsDatabase,
   RESTAURANTS_MIGRATION_SETS,
 } from "../infrastructure/repository/migrate.ts";
-import {
-  AlreadyExistsError,
-  ConcurrencyConflictError,
-} from "../pkg/application/errors.ts";
-import {
-  connectDatabase,
-  type DatabaseConnection,
-} from "../pkg/infrastructure/repository/client.ts";
-import {
-  MIGRATIONS_LOCK_COLLECTION,
-  type MigrationSet,
-  migrate,
-  migrationsChangelogCollection,
-} from "../pkg/infrastructure/repository/migrate.ts";
-import { up as dropOutboxRelay } from "../pkg/infrastructure/repository/migrations/0003-outbox-drop-polling-relay.ts";
+import { up as dropOutboxRelay } from "../infrastructure/repository/migrations/0003-outbox-drop-polling-relay.ts";
 import {
   DatabaseOutbox,
   OUTBOX_COLLECTION,
   type OutboxEventMapper,
   outboxEventId,
-} from "../pkg/infrastructure/repository/outbox.ts";
-import { DatabaseUnitOfWork } from "../pkg/infrastructure/repository/unit-of-work.ts";
+} from "../infrastructure/repository/outbox.ts";
+import {
+  MIGRATIONS_LOCK_COLLECTION,
+  type MigrationSet,
+  migrate,
+  migrationsChangelogCollection,
+} from "../infrastructure/repository/run-migrations.ts";
+import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
+import {
+  AlreadyExistsError,
+  ConcurrencyConflictError,
+} from "../pkg/usecase/errors.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
@@ -213,7 +213,7 @@ describe("startup migration", () => {
     // Separate processes: migrate-mongo's configuration is process-wide, so
     // runs within one process are queued and never meet at the lock.
     const script = `
-      import { connectDatabase } from ${JSON.stringify(import.meta.resolve("../pkg/infrastructure/repository/client.ts"))};
+      import { connectDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/repository/client.ts"))};
       import { migrateRestaurantsDatabase } from ${JSON.stringify(import.meta.resolve("../infrastructure/repository/migrate.ts"))};
       const database = await connectDatabase({
         uri: process.env.MONGODB_URI,

@@ -6,8 +6,8 @@ package observability
 import (
 	"errors"
 
-	"nomnom/orders/pkg/application"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
@@ -62,17 +62,17 @@ func rejected(errorType string) telemetry.Failure {
 	return telemetry.Failure{Outcome: telemetry.OutcomeRejected, ErrorType: errorType}
 }
 
-// failureByKind reports every application.ErrorKind: refusals by the rules of
+// failureByKind reports every usecase.ErrorKind: refusals by the rules of
 // a use case are rejected, technical failures are errors.
-var failureByKind = map[application.ErrorKind]telemetry.Failure{
-	application.KindInvalidInput:  rejected(ErrorTypeInvalidInput),
-	application.KindNotFound:      rejected(ErrorTypeNotFound),
-	application.KindAlreadyExists: rejected(ErrorTypeAlreadyExists),
-	application.KindDomainRule:    rejected(ErrorTypeDomainRule),
-	application.KindPermission:    rejected(ErrorTypePermissionDenied),
-	application.KindConflict:      {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeConcurrencyConflict},
-	application.KindUnavailable:   {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeDependencyUnavailable},
-	application.KindInternal:      {Outcome: telemetry.OutcomeError, ErrorType: telemetry.ErrorTypeInternal},
+var failureByKind = map[usecase.ErrorKind]telemetry.Failure{
+	usecase.KindInvalidInput:  rejected(ErrorTypeInvalidInput),
+	usecase.KindNotFound:      rejected(ErrorTypeNotFound),
+	usecase.KindAlreadyExists: rejected(ErrorTypeAlreadyExists),
+	usecase.KindDomainRule:    rejected(ErrorTypeDomainRule),
+	usecase.KindPermission:    rejected(ErrorTypePermissionDenied),
+	usecase.KindConflict:      {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeConcurrencyConflict},
+	usecase.KindUnavailable:   {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeDependencyUnavailable},
+	usecase.KindInternal:      {Outcome: telemetry.OutcomeError, ErrorType: telemetry.ErrorTypeInternal},
 }
 
 // Classify reports a use case error by its kind (errorkind.Classify). A domain

@@ -8,7 +8,8 @@ use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMete
 use super::*;
 use crate::infrastructure::memory::{ManualClock, SequentialIdGenerator, StaticAuthorization};
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::pkg::application::{ScopedUnitOfWork, Subject};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::create_delivery;
 use crate::slices::delivery::domains::delivery::{

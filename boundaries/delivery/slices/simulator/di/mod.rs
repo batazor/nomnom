@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use shaku::{Component, HasComponent, Interface, module};
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
 use crate::slices::simulator::applications::error::SimulatorApplicationError;
 use crate::slices::simulator::applications::work::SimulatorWork;

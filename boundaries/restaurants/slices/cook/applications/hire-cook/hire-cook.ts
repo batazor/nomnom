@@ -1,7 +1,7 @@
-import { NotFoundError } from "../../../../pkg/application/errors.ts";
-import type { IdGenerator } from "../../../../pkg/application/id-generator.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
+import type { IdGenerator } from "../../../../pkg/usecase/id-generator.ts";
 import { Cook, type CookRepository } from "../../domains/cook/cook.ts";
 import type { CookPoolAccess } from "../access-control.ts";
 import { type CookView, toCookView } from "../cook-view.ts";

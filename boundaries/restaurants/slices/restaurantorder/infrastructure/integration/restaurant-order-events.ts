@@ -17,8 +17,8 @@ import {
   allowlistMapper,
   type EventAllowlist,
   protobufIntegrationEvents,
-} from "../../../../pkg/infrastructure/outbox/integration-event.ts";
-import type { OutboxEventMapper } from "../../../../pkg/infrastructure/repository/outbox.ts";
+} from "../../../../infrastructure/outbox/integration-event.ts";
+import type { OutboxEventMapper } from "../../../../infrastructure/repository/outbox.ts";
 import type { RestaurantOrderEvent } from "../../domains/restaurantorder/restaurantorder.ts";
 
 export const RESTAURANT_ORDER_EVENTS_TOPIC =

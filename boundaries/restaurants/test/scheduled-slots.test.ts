@@ -8,10 +8,8 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import {
-  NotFoundError,
-  PermissionDeniedError,
-} from "../pkg/application/errors.ts";
+import { PermissionDeniedError } from "../pkg/authz/errors.ts";
+import { NotFoundError } from "../pkg/usecase/errors.ts";
 import { InvalidScheduledOrderSettingsError } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { ReserveScheduledSlotHandler } from "../slices/scheduleslot/applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
 import {

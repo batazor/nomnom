@@ -11,12 +11,12 @@ import {
   RestaurantWaitLevelChangedSchema,
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 
-import { connectValkey } from "../pkg/infrastructure/valkey/client.ts";
+import { connectValkey } from "../infrastructure/valkey/client.ts";
 import {
   CacheMetrics,
   ReadCache,
-} from "../pkg/infrastructure/valkey/read-cache.ts";
-import { CacheRefreshHandler } from "../pkg/infrastructure/valkey/refresh.ts";
+} from "../infrastructure/valkey/read-cache.ts";
+import { CacheRefreshHandler } from "../infrastructure/valkey/refresh.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import type { MenuView } from "../slices/menu/applications/menu-support.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";

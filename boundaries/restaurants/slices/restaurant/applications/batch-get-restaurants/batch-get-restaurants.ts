@@ -1,5 +1,5 @@
-import { batchIds } from "../../../../pkg/application/batch.ts";
-import type { Clock } from "../../../../pkg/application/clock.ts";
+import { batchIds } from "../../../../pkg/usecase/batch.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import {
   type AcceptingCatalogRestaurantView,
   acceptanceAt,

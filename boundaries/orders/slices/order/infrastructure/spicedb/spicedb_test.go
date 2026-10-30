@@ -13,18 +13,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/testfixture"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/syncorderrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
-var customerCheck = application.AccessCheck{
-	Subject:    application.Subject{Kind: application.SubjectUser, ID: "customer-1"},
+var customerCheck = authz.AccessCheck{
+	Subject:    authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"},
 	Permission: "view",
-	Resource:   application.Resource{Type: "order", ID: "order-1"},
+	Resource:   authz.Resource{Type: "order", ID: "order-1"},
 }
 
 // customerCheckRequest is the CheckPermission request of customerCheck for an
@@ -57,7 +58,7 @@ func TestCheckDeniesWithoutPermission(t *testing.T) {
 		})).
 			Return(&v1.CheckPermissionResponse{Permissionship: p}, nil).Once()
 		a := spicedb.NewAuthorizer(permissions, nil, time.Second)
-		require.ErrorIs(t, a.Check(context.Background(), customerCheck), application.ErrPermissionDenied)
+		require.ErrorIs(t, a.Check(context.Background(), customerCheck), authz.ErrPermissionDenied)
 	}
 }
 
@@ -73,12 +74,12 @@ func TestCheckFailsClosedOnError(t *testing.T) {
 	err := a.Check(context.Background(), customerCheck)
 
 	require.ErrorIs(t, err, spicedb.ErrUnavailable)
-	require.ErrorIs(t, application.FailClosed(err), application.ErrPermissionDenied)
+	require.ErrorIs(t, authz.FailClosed(err), authz.ErrPermissionDenied)
 }
 
-type revisions map[string]application.AuthorizationRevision
+type revisions map[string]authz.AuthorizationRevision
 
-func (r revisions) Revision(_ context.Context, id string) (application.AuthorizationRevision, bool, error) {
+func (r revisions) Revision(_ context.Context, id string) (authz.AuthorizationRevision, bool, error) {
 	revision, ok := r[id]
 	return revision, ok, nil
 }
@@ -114,7 +115,7 @@ func TestSyncFailsAsUnavailable(t *testing.T) {
 	_, err := a.SyncOrderRelationships(context.Background(), "order-1", syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"})
 
 	require.ErrorIs(t, err, spicedb.ErrUnavailable)
-	require.ErrorIs(t, err, application.ErrDependencyUnavailable)
+	require.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
 }
 
 // The relationship sync and the freshness of checks by the stored ZedToken
@@ -163,10 +164,10 @@ func TestAgainstSpiceDB(t *testing.T) {
 		}
 	}
 	check := func(userID string) error {
-		return a.Check(ctx, application.AccessCheck{
-			Subject:    application.Subject{Kind: application.SubjectUser, ID: userID},
+		return a.Check(ctx, authz.AccessCheck{
+			Subject:    authz.Subject{Kind: authz.SubjectUser, ID: userID},
 			Permission: "view",
-			Resource:   application.Resource{Type: "order", ID: orderID},
+			Resource:   authz.Resource{Type: "order", ID: orderID},
 		})
 	}
 
@@ -196,7 +197,7 @@ func TestAgainstSpiceDB(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"customer@user:" + customerID, "restaurant@restaurant:restaurant-2", "delivery@delivery:" + deliveryB,
 	}, relationships())
-	require.ErrorIs(t, check(courierA), application.ErrPermissionDenied)
+	require.ErrorIs(t, check(courierA), authz.ErrPermissionDenied)
 	require.NoError(t, check(courierB))
 
 	// AC-535: a cancelled Delivery unlinks the Order.

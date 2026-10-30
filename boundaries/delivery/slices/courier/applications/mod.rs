@@ -8,7 +8,7 @@ pub mod retire_courier;
 pub mod set_courier_availability;
 pub mod update_courier_location;
 
-use crate::pkg::application::required_identifier;
+use crate::pkg::usecase::required_identifier;
 use crate::slices::courier::domains::courier::{CourierId, MarketId};
 
 use error::{CourierApplicationError, InvalidCourierRequest};

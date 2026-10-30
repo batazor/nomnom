@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/sdk/mocks"
 	sdktemporal "go.temporal.io/sdk/temporal"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
@@ -154,7 +154,7 @@ func TestClientRequestsCancellationByUpdate(t *testing.T) {
 	request := fulfillment.CancellationRequest{
 		OrderID:     orderID,
 		RequestID:   "cancel-1",
-		RequestedBy: application.Subject{Kind: application.SubjectUser, ID: "customer-1"},
+		RequestedBy: authz.Subject{Kind: authz.SubjectUser, ID: "customer-1"},
 		RequestedAt: requestedAt,
 		Reason:      "changed mind",
 	}

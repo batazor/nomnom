@@ -8,7 +8,8 @@ import (
 	"errors"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -32,11 +33,11 @@ type Result struct {
 }
 
 type Handler struct {
-	uow    application.UnitOfWork
+	uow    unitofwork.UnitOfWork
 	orders order.Repository
 }
 
-func NewHandler(uow application.UnitOfWork, orders order.Repository) Handler {
+func NewHandler(uow unitofwork.UnitOfWork, orders order.Repository) Handler {
 	return Handler{uow: uow, orders: orders}
 }
 
@@ -46,9 +47,9 @@ func NewHandler(uow application.UnitOfWork, orders order.Repository) Handler {
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	switch {
 	case in.OrderID == "":
-		return Result{}, application.InvalidInput("order_id", "is required")
+		return Result{}, usecase.InvalidInput("order_id", "is required")
 	case in.AuthorizedAt.IsZero():
-		return Result{}, application.InvalidInput("authorized_at", "is required")
+		return Result{}, usecase.InvalidInput("authorized_at", "is required")
 	}
 
 	var result Result

@@ -5,7 +5,7 @@ import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 
 import { RestaurantOrderState } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import type { Subject } from "../pkg/application/subject.ts";
+import type { Subject } from "../pkg/authz/subject.ts";
 import { context, createWorld, rejectsWith } from "./support/grpc.ts";
 import {
   cook,

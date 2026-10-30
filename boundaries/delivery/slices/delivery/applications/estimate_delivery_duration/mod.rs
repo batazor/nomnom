@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::domains::delivery::{

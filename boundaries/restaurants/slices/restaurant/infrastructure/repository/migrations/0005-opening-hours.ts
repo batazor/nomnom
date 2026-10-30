@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /** Time zone of the launch Market: every restaurant stored before is in `berlin`. */
 const LAUNCH_MARKET = "berlin";

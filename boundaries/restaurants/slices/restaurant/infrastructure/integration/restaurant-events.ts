@@ -13,8 +13,8 @@ import {
   allowlistMapper,
   type EventAllowlist,
   protobufIntegrationEvents,
-} from "../../../../pkg/infrastructure/outbox/integration-event.ts";
-import type { OutboxEventMapper } from "../../../../pkg/infrastructure/repository/outbox.ts";
+} from "../../../../infrastructure/outbox/integration-event.ts";
+import type { OutboxEventMapper } from "../../../../infrastructure/repository/outbox.ts";
 import { WAIT_TIME_AGGREGATE_TYPE } from "../../applications/record-wait-time/record-wait-time.ts";
 import type { RestaurantEvent } from "../../domains/restaurant/events.ts";
 import type { WaitLevelChanged } from "../../domains/restaurant/wait-time.ts";

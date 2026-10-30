@@ -4,7 +4,9 @@
 //! After commit, and on a repeat, the Assignment Workflow of the delivery is
 //! woken and offers it to the next courier (FR-311, FR-707).
 
-use crate::pkg::application::{Clock, Subject, UnitOfWork};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
+use crate::pkg::usecase::Clock;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, OfferState,
 };

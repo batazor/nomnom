@@ -13,7 +13,7 @@ import {
 import {
   HttpSchemaRegistry,
   UnknownSchemaError,
-} from "../pkg/infrastructure/messaging/schema-registry.ts";
+} from "../infrastructure/messaging/schema-registry.ts";
 
 /** Kafka and Confluent Schema Registry of ops/kind/manifests/messaging (kafka.yaml, schema-registry.yaml). */
 const KAFKA_IMAGE = "apache/kafka:4.3.1";

@@ -3,7 +3,7 @@
 //! `Delivery` model, so it belongs to the `delivery` slice; the courier's right
 //! is checked by the `courier` slice authorization port as before.
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::{

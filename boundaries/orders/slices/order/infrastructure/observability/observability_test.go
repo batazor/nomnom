@@ -7,8 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
@@ -20,16 +21,16 @@ func TestClassifySeparatesRejectionsFromFailures(t *testing.T) {
 		err  error
 		want telemetry.Failure
 	}{
-		"invalid input":        {application.InvalidInput("items", "required"), rejected("invalid_input")},
-		"permission denied":    {application.FailClosed(errors.New("spicedb unavailable")), rejected("permission_denied")},
+		"invalid input":        {usecase.InvalidInput("items", "required"), rejected("invalid_input")},
+		"permission denied":    {authz.FailClosed(errors.New("spicedb unavailable")), rejected("permission_denied")},
 		"order not found":      {fmt.Errorf("load: %w", order.ErrOrderNotFound), rejected("not_found")},
 		"closed restaurant":    {placeorder.ErrRestaurantNotAcceptingOrders, rejected("domain_rule")},
 		"already exists":       {order.ErrOrderAlreadyExists, rejected("already_exists")},
 		"invalid transition":   {fmt.Errorf("apply: %w", order.InvalidTransition{}), rejected("invalid_transition")},
 		"guard failed":         {order.GuardFailed{Reason: "paid"}, rejected("guard_failed")},
 		"cancellation refused": {fulfillment.ErrCancellationRefused, rejected("cancellation_refused")},
-		"spicedb unavailable":  {application.FailClosed(fmt.Errorf("check: %w", application.ErrDependencyUnavailable)), failed("dependency_unavailable")},
-		"concurrency conflict": {application.ErrConcurrencyConflict, failed("concurrency_conflict")},
+		"spicedb unavailable":  {authz.FailClosed(fmt.Errorf("check: %w", usecase.ErrDependencyUnavailable)), failed("dependency_unavailable")},
+		"concurrency conflict": {usecase.ErrConcurrencyConflict, failed("concurrency_conflict")},
 		"unknown":              {errors.New("connection reset"), failed("internal")},
 	}
 	for name, tc := range cases {

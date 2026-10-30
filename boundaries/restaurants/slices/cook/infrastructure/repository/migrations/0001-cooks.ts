@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-import { ensureCollection } from "../../../../../pkg/infrastructure/repository/migrate.ts";
+import { ensureCollection } from "../../../../../infrastructure/repository/run-migrations.ts";
 
 /** Slice `cook`: aggregate `Cook` of the Cook Pool (local ADR 2). */
 export async function up(db: Db): Promise<void> {

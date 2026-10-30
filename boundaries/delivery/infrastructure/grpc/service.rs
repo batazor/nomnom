@@ -9,7 +9,7 @@ use tonic::{Request, Response, Status};
 
 use super::tracing::GrpcTraceLayer;
 use crate::di::ServiceModule;
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
 use crate::slices::courier::applications::{
     register_courier, retire_courier, set_courier_availability, update_courier_location,

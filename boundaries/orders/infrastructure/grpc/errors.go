@@ -12,7 +12,7 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
@@ -29,17 +29,17 @@ type transport struct {
 	message string
 }
 
-// transportByKind is the API error table of the README by application.ErrorKind.
+// transportByKind is the API error table of the README by usecase.ErrorKind.
 // It covers every kind; errorkind.Classify decides the kind.
-var transportByKind = map[application.ErrorKind]transport{
-	application.KindInvalidInput:  {code: codes.InvalidArgument, reason: "INVALID_ARGUMENT"},
-	application.KindNotFound:      {code: codes.NotFound, reason: "ORDER_NOT_FOUND"},
-	application.KindAlreadyExists: {code: codes.AlreadyExists, reason: "ORDER_ALREADY_EXISTS"},
-	application.KindConflict:      {code: codes.Aborted, reason: "CONCURRENCY_CONFLICT"},
-	application.KindDomainRule:    {code: codes.FailedPrecondition, reason: "ORDER_STATE_CONFLICT"},
-	application.KindUnavailable:   {code: codes.Unavailable, reason: "DEPENDENCY_UNAVAILABLE", message: "dependency unavailable"},
-	application.KindPermission:    {code: codes.PermissionDenied, reason: "OPERATION_NOT_ALLOWED"},
-	application.KindInternal:      {code: codes.Internal, reason: "INTERNAL_ERROR", message: "internal error"},
+var transportByKind = map[usecase.ErrorKind]transport{
+	usecase.KindInvalidInput:  {code: codes.InvalidArgument, reason: "INVALID_ARGUMENT"},
+	usecase.KindNotFound:      {code: codes.NotFound, reason: "ORDER_NOT_FOUND"},
+	usecase.KindAlreadyExists: {code: codes.AlreadyExists, reason: "ORDER_ALREADY_EXISTS"},
+	usecase.KindConflict:      {code: codes.Aborted, reason: "CONCURRENCY_CONFLICT"},
+	usecase.KindDomainRule:    {code: codes.FailedPrecondition, reason: "ORDER_STATE_CONFLICT"},
+	usecase.KindUnavailable:   {code: codes.Unavailable, reason: "DEPENDENCY_UNAVAILABLE", message: "dependency unavailable"},
+	usecase.KindPermission:    {code: codes.PermissionDenied, reason: "OPERATION_NOT_ALLOWED"},
+	usecase.KindInternal:      {code: codes.Internal, reason: "INTERNAL_ERROR", message: "internal error"},
 }
 
 // transportError maps an error to its API answer: authentication of the
@@ -52,7 +52,7 @@ func transportError(err error) error {
 	}
 	answer, ok := transportByKind[errorkind.Classify(err)]
 	if !ok {
-		answer = transportByKind[application.KindInternal]
+		answer = transportByKind[usecase.KindInternal]
 	}
 	var metadata map[string]string
 	var details []protoadapt.MessageV1
@@ -71,7 +71,7 @@ func transportError(err error) error {
 		details = append(details, slotUnavailableDetail(slotUnavailable))
 	case errors.Is(err, placeorder.ErrScheduledOrdersUnavailable):
 		answer.reason = "SCHEDULED_ORDERS_UNAVAILABLE"
-	case errors.Is(err, application.ErrInvalidInput):
+	case errors.Is(err, usecase.ErrInvalidInput):
 	case errors.As(err, &notOrderable):
 		answer.reason = "ORDER_NOT_ORDERABLE"
 		metadata = notOrderableMetadata(notOrderable)

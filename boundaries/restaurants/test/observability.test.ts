@@ -39,23 +39,22 @@ import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurant
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
+import {
+  type ConsumerClient,
+  type EachMessage,
+  KafkaConsumerWorker,
+} from "../infrastructure/kafka/consumer.ts";
+import { DatabaseCommandTelemetry } from "../infrastructure/repository/command-telemetry.ts";
+import {
+  DatabaseUnitOfWork,
+  UOW_DURATION_BUCKETS,
+} from "../infrastructure/repository/unit-of-work.ts";
 import { checkPermissionRequest } from "../infrastructure/spicedb/access-control.ts";
 import {
   AUTHZ_DURATION_BUCKETS,
   ObservedPermissionsClient,
 } from "../infrastructure/spicedb/check-telemetry.ts";
-import { NotFoundError } from "../pkg/application/errors.ts";
-import type { Outbox } from "../pkg/application/outbox.ts";
-import {
-  type ConsumerClient,
-  type EachMessage,
-  KafkaConsumerWorker,
-} from "../pkg/infrastructure/kafka/consumer.ts";
-import { DatabaseCommandTelemetry } from "../pkg/infrastructure/repository/command-telemetry.ts";
-import {
-  DatabaseUnitOfWork,
-  UOW_DURATION_BUCKETS,
-} from "../pkg/infrastructure/repository/unit-of-work.ts";
+import type { Outbox } from "../pkg/outbox/outbox.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../pkg/telemetry/resource.ts";
 import { RPC_DURATION_BUCKETS } from "../pkg/telemetry/rpc.ts";
@@ -72,6 +71,7 @@ import {
   USECASE_DURATION_BUCKETS,
   UseCaseTelemetry,
 } from "../pkg/telemetry/usecase.ts";
+import { NotFoundError } from "../pkg/usecase/errors.ts";
 import { createTestDatabase } from "./support/database.ts";
 import {
   createInfrastructure,

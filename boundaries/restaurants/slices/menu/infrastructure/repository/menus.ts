@@ -1,11 +1,10 @@
 import type { Db } from "mongodb";
-
-import { AlreadyExistsError } from "../../../../pkg/application/errors.ts";
-import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../../infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
-} from "../../../../pkg/infrastructure/repository/versioned-collection.ts";
+} from "../../../../infrastructure/repository/versioned-collection.ts";
+import { AlreadyExistsError } from "../../../../pkg/usecase/errors.ts";
 import type { MenuBatchReader } from "../../applications/batch-get-menus/batch-get-menus.ts";
 import type { MenuReader } from "../../applications/get-menu/get-menu.ts";
 import type { MenuView } from "../../applications/menu-support.ts";

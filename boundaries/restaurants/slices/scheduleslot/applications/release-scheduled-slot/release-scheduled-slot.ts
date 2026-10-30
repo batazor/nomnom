@@ -1,8 +1,8 @@
-import type { Clock } from "../../../../pkg/application/clock.ts";
-import { ConcurrencyConflictError } from "../../../../pkg/application/errors.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
-import type { UnitOfWork } from "../../../../pkg/application/unit-of-work.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
+import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
 import type { ScheduleSlotRepository } from "../../domains/scheduleslot/scheduleslot.ts";
 import type { SlotReservationAccess } from "../access-control.ts";
 import { RESERVE_ATTEMPTS } from "../reserve-scheduled-slot/reserve-scheduled-slot.ts";

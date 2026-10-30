@@ -32,6 +32,11 @@ Vertical Slice Architecture остаётся верхнеуровневой ор
         <usecase>/
           README.md
       infrastructure/
+      di/
+  infrastructure/
+    <adapter>/
+  di/
+  cmd/
   pkg/
     <shared-package>/
 ```
@@ -46,9 +51,11 @@ Vertical Slice Architecture остаётся верхнеуровневой ор
 
 `applications/` содержит отдельный package/module на каждый use case. В каждом каталоге обязателен `README.md`: он фиксирует actor, намерение, результат, владельца данных и существенные взаимодействия сценария. Mermaid sequence diagram добавляется только для нетривиальной оркестрации, асинхронного обмена или взаимодействия нескольких владельцев; локальный линейный сценарий описывается текстом. Package содержит command/query, handler, прикладные входные и выходные модели, координацию загрузки агрегатов, вызова доменного поведения и сохранения результата, а также необходимые конкретному use case порты. Исполняемые артефакты создаются вместе с реализацией SDD change; каталог с README не требует пустого handler scaffold. Handler управляет выполнением сценария, но не присваивает себе правила допустимого изменения доменного состояния.
 
-`pkg/` содержит только shared packages bounded context, которые переиспользуются несколькими слайсами или entrypoints. Use cases, доменная модель и код единственного entrypoint в `pkg/` не размещаются.
+`pkg/` содержит только shared libraries bounded context, которые переиспользуются несколькими слайсами или entrypoints: контракт use case (`usecase`), identity и authorization (`authz`), локальная транзакция (`unitofwork`, `unit_of_work`, `unit-of-work`), конфигурация, lifecycle, telemetry. Имя пакета называет его ответственность, а не архитектурный слой: `pkg/application`, `pkg/infrastructure` и `pkg/di` не создаются. Use cases, доменная модель, адаптеры и код единственного entrypoint в `pkg/` не размещаются.
 
 `infrastructure/` содержит реализации репозиториев, работу с БД и моделями хранения, адаптеры внешних API, транспортные обработчики и адаптеры обмена сообщениями. Здесь транспортные DTO и модели хранения преобразуются в прикладные и доменные типы. Инфраструктура реализует контракты внутренних частей слайса.
+
+`<boundary>/infrastructure/` содержит адаптеры всего контекста, которые используют несколько слайсов: gRPC API, Kafka и messaging, клиент internal gateway, миграции и общие части хранилища. `pkg/` не импортирует их. Прикладной слой и домены существуют только внутри слайсов; каталогов `application/` и `domains/` в корне bounded context нет.
 
 ### Направление зависимостей
 
@@ -152,9 +159,9 @@ Mapping пишется явным кодом рядом с adapter'ом или u
 
 | Контекст | Проверка | Запуск |
 | --- | --- | --- |
-| `orders` (Go) | depguard в `.golangci.yml`: `domains` — только stdlib, `decimal` и домены; `vo` — только stdlib и `decimal`; `applications` — только домены, use cases, `pkg/application`, `pkg/telemetry`; `pkg` не знает слайсов и процессов; `infrastructure` не импортирует `di` и `cmd`; generated code — только в adapters, composition root и пакете-владельце | `make lint`, `make check` |
-| `restaurants` (TypeScript) | dependency-cruiser в `.dependency-cruiser.cjs` (парсер swc: у TypeScript 7 нет compiler API): те же правила; `domains` — только `decimal.js`, Node built-ins и домены; `applications` — домены, use cases и `pkg/application`; неразрешённый импорт — ошибка, чтобы зависимость не выпала из проверки | `npm run architecture`, `npm run check` |
-| `payments` (Python) | import-linter в `pyproject.toml`: слои процесса и слайса, запрет фреймворков и драйверов в `slices` и `pkg.application` | `make imports`, `make check` |
+| `orders` (Go) | depguard в `.golangci.yml`: `domains` — только stdlib, `decimal` и домены; `vo` — только stdlib и `decimal`; `applications` — только домены, use cases, `pkg/usecase`, `pkg/authz`, `pkg/unitofwork`, `pkg/telemetry`; `pkg` не знает слайсов и процессов; `infrastructure` не импортирует `di` и `cmd`; generated code — только в adapters, composition root и пакете-владельце | `make lint`, `make check` |
+| `restaurants` (TypeScript) | dependency-cruiser в `.dependency-cruiser.cjs` (парсер swc: у TypeScript 7 нет compiler API): те же правила; `domains` — только `decimal.js`, Node built-ins и домены; `applications` — домены, use cases и `pkg/usecase`, `pkg/authz`, `pkg/unit-of-work`, `pkg/outbox`; неразрешённый импорт — ошибка, чтобы зависимость не выпала из проверки | `npm run architecture`, `npm run check` |
+| `payments` (Python) | import-linter в `pyproject.toml`: слои процесса и слайса, запрет фреймворков и драйверов в `slices`, `pkg.usecase`, `pkg.authz`, `pkg.unit_of_work` и `pkg.outbox` | `make imports`, `make check` |
 | `delivery` (Rust) | `tests/slice_boundaries.rs`: направление `delivery → courier` между слайсами | `cargo test`, `make check` |
 | `ui` | `scripts/check-boundaries.mjs`: браузерный код вызывает только публичный GraphQL API | `npm run lint` |
 

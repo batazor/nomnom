@@ -7,9 +7,9 @@ import { DeliveryPickedUpSchema } from "../infrastructure/grpc/gen/nomnom/delive
 import type {
   InboundMessage,
   IntegrationMessage,
-} from "../pkg/infrastructure/messaging/envelope.ts";
-import { MessageProcessor } from "../pkg/infrastructure/messaging/processor.ts";
-import { DatabaseInbox } from "../pkg/infrastructure/repository/inbox.ts";
+} from "../infrastructure/messaging/envelope.ts";
+import { MessageProcessor } from "../infrastructure/messaging/processor.ts";
+import { DatabaseInbox } from "../infrastructure/repository/inbox.ts";
 import { RecordPickupHandler } from "../slices/restaurantorder/applications/record-pickup/record-pickup.ts";
 import { RestaurantOrderState } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import {

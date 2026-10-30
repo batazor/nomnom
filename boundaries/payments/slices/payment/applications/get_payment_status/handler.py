@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
-from pkg.application import Subject
+from pkg.authz import Subject
 from slices.payment.domains.payment import MarketId, OrderId, PaymentId, PaymentState
 
 from ..access import require_permission

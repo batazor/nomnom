@@ -2,7 +2,7 @@
 //! Simulator (`platform#operate_simulator`, FR-604). Состояние сохраняется в
 //! хранилище сервиса и переживает рестарт.
 
-use crate::pkg::application::Subject;
+use crate::pkg::authz::Subject;
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
 use super::authorization::SimulatorAuthorization;

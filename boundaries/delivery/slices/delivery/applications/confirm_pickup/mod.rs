@@ -4,7 +4,9 @@
 //! to the Outbox in the same Unit of Work. After commit the Pickup ends the
 //! Assignment Workflow of the delivery (FR-704).
 
-use crate::pkg::application::{Clock, Subject, UnitOfWork};
+use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
+use crate::pkg::usecase::Clock;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };

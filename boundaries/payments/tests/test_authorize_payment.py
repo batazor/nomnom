@@ -5,7 +5,8 @@ import pytest
 from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
-from pkg.application import AggregateRef, AuthorizationUnavailableError, PermissionDeniedError
+from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
+from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,

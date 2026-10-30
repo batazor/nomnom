@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -27,11 +27,11 @@ type Input struct {
 func (in Input) validate() error {
 	switch {
 	case in.EventID == "":
-		return application.InvalidInput("event_id", "is required")
+		return usecase.InvalidInput("event_id", "is required")
 	case in.OrderID == "":
-		return application.InvalidInput("order_id", "is required")
+		return usecase.InvalidInput("order_id", "is required")
 	case in.OccurredAt.IsZero():
-		return application.InvalidInput("occurred_at", "is required")
+		return usecase.InvalidInput("occurred_at", "is required")
 	}
 	return nil
 }

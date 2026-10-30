@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -64,7 +64,7 @@ func NewHandler(orders Orders, preparation Preparation, delivery DeliveryDuratio
 // (order.ErrNotScheduled).
 func (h Handler) Handle(ctx context.Context, in Input) (order.SchedulePlan, error) {
 	if in.OrderID == "" {
-		return order.SchedulePlan{}, application.InvalidInput("order_id", "is required")
+		return order.SchedulePlan{}, usecase.InvalidInput("order_id", "is required")
 	}
 	current, err := h.orders.Get(ctx, in.OrderID)
 	if err != nil {

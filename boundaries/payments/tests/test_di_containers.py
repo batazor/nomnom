@@ -47,7 +47,7 @@ from infrastructure.repository import (
     migrate,
 )
 from infrastructure.repository.migrate import _LOCK_KEY
-from pkg.application import Subject, SubjectKind
+from pkg.authz import Subject, SubjectKind
 from pkg.config import database
 from pkg.lifecycle import HttpWorker, WorkerGroup
 from slices.payment.applications.create_payment import CreatePaymentInput

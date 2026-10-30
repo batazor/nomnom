@@ -8,7 +8,8 @@ import (
 	"context"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -35,8 +36,8 @@ type Handler struct {
 }
 
 func NewHandler(
-	uow application.UnitOfWork,
-	inbox application.Inbox,
+	uow unitofwork.UnitOfWork,
+	inbox unitofwork.Inbox,
 	orders order.Repository,
 	workflow fulfillment.Notifier,
 ) Handler {
@@ -45,7 +46,7 @@ func NewHandler(
 
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if in.ExpectedReadyAt.IsZero() {
-		return Result{}, application.InvalidInput("expected_ready_at", "is required")
+		return Result{}, usecase.InvalidInput("expected_ready_at", "is required")
 	}
 	fact := fulfillment.InboundFact{
 		Consumer:        Consumer,

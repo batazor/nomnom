@@ -1,5 +1,5 @@
-import type { Clock } from "../../../../pkg/application/clock.ts";
-import { NotFoundError } from "../../../../pkg/application/errors.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
+import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import type {
   DeliveryWindows,

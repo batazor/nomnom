@@ -39,7 +39,9 @@ linters:
             - "!$test"
           allow:
             - $gostd
-            - nomnom/orders/pkg/application
+            - nomnom/orders/pkg/authz
+            - nomnom/orders/pkg/unitofwork
+            - nomnom/orders/pkg/usecase
             - nomnom/orders/pkg/telemetry
             - nomnom/orders/slices/order/domains
             - nomnom/orders/slices/fulfillment/domains
@@ -97,10 +99,9 @@ linters:
         generated-code:
           files:
             - "**/orders/pkg/**"
-            - "!**/orders/pkg/gateway/**"
             - "!$test"
           deny:
-            - pkg: nomnom/orders/pkg/gateway/gen
+            - pkg: nomnom/orders/infrastructure/gateway/gen
               desc: generated code импортируют только adapters и composition root (ADR 7)
             - pkg: nomnom/orders/infrastructure/grpc/gen
               desc: generated code импортируют только adapters и composition root (ADR 7)

@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"nomnom/orders/pkg/application"
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -30,8 +30,8 @@ type Handler struct {
 }
 
 func NewHandler(
-	uow application.UnitOfWork,
-	inbox application.Inbox,
+	uow unitofwork.UnitOfWork,
+	inbox unitofwork.Inbox,
 	orders order.Repository,
 	workflow fulfillment.Notifier,
 ) Handler {

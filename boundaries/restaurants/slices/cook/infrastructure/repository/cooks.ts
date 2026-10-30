@@ -1,10 +1,10 @@
 import type { Db } from "mongodb";
 
-import type { DatabaseUnitOfWork } from "../../../../pkg/infrastructure/repository/unit-of-work.ts";
+import type { DatabaseUnitOfWork } from "../../../../infrastructure/repository/unit-of-work.ts";
 import {
   VersionedCollection,
   type VersionedDocument,
-} from "../../../../pkg/infrastructure/repository/versioned-collection.ts";
+} from "../../../../infrastructure/repository/versioned-collection.ts";
 import {
   Cook,
   type CookRepository,

@@ -26,12 +26,13 @@ module.exports = {
     {
       name: "applications-without-adapters",
       comment:
-        "Use cases depend only on domains, use cases and pkg/application.",
+        "Use cases depend only on domains, use cases and the pkg use case contracts.",
       severity: "error",
       from: { path: "^slices/[^/]+/applications/" },
       to: {
         dependencyTypesNot: ["core"],
-        pathNot: "^(slices/[^/]+/(domains|applications)/|pkg/application/)",
+        pathNot:
+          "^(slices/[^/]+/(domains|applications)/|pkg/(usecase|authz|unit-of-work|outbox)/)",
       },
     },
     {
@@ -46,7 +47,7 @@ module.exports = {
       comment: "Adapters do not import the composition root.",
       severity: "error",
       from: { path: "^(infrastructure|slices/[^/]+/infrastructure)/" },
-      to: { path: "^(di|cmd|pkg/di|slices/[^/]+/di)/" },
+      to: { path: "^(di|cmd|slices/[^/]+/di)/" },
     },
     {
       name: "generated-code-in-adapters",

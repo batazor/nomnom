@@ -7,14 +7,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"nomnom/orders/pkg/application"
-	"nomnom/orders/pkg/messaging"
+	"nomnom/orders/infrastructure/messaging"
+	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// AC-635: the consumer table classifies every application.ErrorKind.
+// AC-635: the consumer table classifies every usecase.ErrorKind.
 func TestClassTableCoversEveryKind(t *testing.T) {
-	for _, kind := range application.ErrorKinds() {
+	for _, kind := range usecase.ErrorKinds() {
 		_, ok := classByKind[kind]
 		assert.True(t, ok, kind)
 	}
@@ -26,13 +27,13 @@ func TestClassifyApplicationErrors(t *testing.T) {
 		err  error
 		want messaging.Class
 	}{
-		{"invalid input", application.InvalidInput("order_id", "is required"), messaging.ClassPermanent},
+		{"invalid input", usecase.InvalidInput("order_id", "is required"), messaging.ClassPermanent},
 		{"unknown order", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), messaging.ClassPermanent},
-		{"permission denied", application.ErrPermissionDenied, messaging.ClassPermanent},
+		{"permission denied", authz.ErrPermissionDenied, messaging.ClassPermanent},
 		{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), messaging.ClassBusiness},
 		{"order exists", order.ErrOrderAlreadyExists, messaging.ClassBusiness},
-		{"concurrency conflict", application.ErrConcurrencyConflict, messaging.ClassTransient},
-		{"dependency unavailable", application.ErrDependencyUnavailable, messaging.ClassTransient},
+		{"concurrency conflict", usecase.ErrConcurrencyConflict, messaging.ClassTransient},
+		{"dependency unavailable", usecase.ErrDependencyUnavailable, messaging.ClassTransient},
 		{"infrastructure", errors.New("connection reset"), messaging.ClassTransient},
 	}
 	for _, tt := range tests {

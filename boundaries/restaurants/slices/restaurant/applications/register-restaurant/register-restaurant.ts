@@ -1,7 +1,7 @@
-import type { Clock } from "../../../../pkg/application/clock.ts";
-import type { IdGenerator } from "../../../../pkg/application/id-generator.ts";
-import { requirePermission } from "../../../../pkg/application/require-permission.ts";
-import type { Subject } from "../../../../pkg/application/subject.ts";
+import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
+import type { Subject } from "../../../../pkg/authz/subject.ts";
+import type { Clock } from "../../../../pkg/usecase/clock.ts";
+import type { IdGenerator } from "../../../../pkg/usecase/id-generator.ts";
 import {
   Restaurant,
   type RestaurantRepository,

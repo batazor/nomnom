@@ -52,11 +52,11 @@ from infrastructure.repository import (
     DatabaseUnitOfWork,
 )
 from infrastructure.repository.transactions import TransactionMetrics
-from pkg.application import Handler
-from pkg.application.clock import SystemClock
 from pkg.config import ProviderSettings, SpiceDBSettings
 from pkg.lifecycle import HttpWorker, WorkerGroup
 from pkg.telemetry.usecase import UseCase, UseCases
+from pkg.usecase import Handler
+from pkg.usecase.clock import SystemClock
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler

@@ -18,7 +18,7 @@ use delivery::infrastructure::memory::{
     StaticAuthorization, StaticCourierLocator,
 };
 use delivery::infrastructure::repository::Store;
-use delivery::pkg::application::Subject;
+use delivery::pkg::authz::Subject;
 use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus,

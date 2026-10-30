@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/batazor/nomnom/boundaries/controlplane/pkg/application"
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/usecase"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/errorkind"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/applications/publishroutes"
 	"github.com/batazor/nomnom/boundaries/controlplane/slices/topology/domains/cell"
@@ -24,15 +24,15 @@ type transport struct {
 	message string
 }
 
-// transportByKind is the API error table of the README by application.ErrorKind.
-var transportByKind = map[application.ErrorKind]transport{
-	application.KindInvalidInput:  {code: codes.InvalidArgument, reason: "INVALID_ARGUMENT"},
-	application.KindAlreadyExists: {code: codes.AlreadyExists, reason: "ALREADY_EXISTS"},
-	application.KindNotFound:      {code: codes.NotFound, reason: "NOT_FOUND"},
-	application.KindDomainRule:    {code: codes.FailedPrecondition, reason: "FAILED_PRECONDITION"},
-	application.KindUnavailable:   {code: codes.Unavailable, reason: "DEPENDENCY_UNAVAILABLE", message: "dependency unavailable"},
-	application.KindPermission:    {code: codes.PermissionDenied, reason: "OPERATION_NOT_ALLOWED"},
-	application.KindInternal:      {code: codes.Internal, reason: "INTERNAL_ERROR", message: "internal error"},
+// transportByKind is the API error table of the README by usecase.ErrorKind.
+var transportByKind = map[usecase.ErrorKind]transport{
+	usecase.KindInvalidInput:  {code: codes.InvalidArgument, reason: "INVALID_ARGUMENT"},
+	usecase.KindAlreadyExists: {code: codes.AlreadyExists, reason: "ALREADY_EXISTS"},
+	usecase.KindNotFound:      {code: codes.NotFound, reason: "NOT_FOUND"},
+	usecase.KindDomainRule:    {code: codes.FailedPrecondition, reason: "FAILED_PRECONDITION"},
+	usecase.KindUnavailable:   {code: codes.Unavailable, reason: "DEPENDENCY_UNAVAILABLE", message: "dependency unavailable"},
+	usecase.KindPermission:    {code: codes.PermissionDenied, reason: "OPERATION_NOT_ALLOWED"},
+	usecase.KindInternal:      {code: codes.Internal, reason: "INTERNAL_ERROR", message: "internal error"},
 }
 
 // transportError maps an error to its API answer: authentication of the
@@ -43,7 +43,7 @@ func transportError(err error) error {
 	}
 	answer, ok := transportByKind[errorkind.Classify(err)]
 	if !ok {
-		answer = transportByKind[application.KindInternal]
+		answer = transportByKind[usecase.KindInternal]
 	}
 	switch {
 	case errors.Is(err, cell.ErrAlreadyRegistered):

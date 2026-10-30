@@ -2,7 +2,8 @@
 //! out of the Courier Pool for good (FR-619). The courier stays in the history
 //! of its deliveries; a courier on line stays with `OnLine`.
 
-use crate::pkg::application::{Clock, Subject};
+use crate::pkg::authz::Subject;
+use crate::pkg::usecase::Clock;
 use crate::slices::courier::domains::courier::{CourierError, CourierId, CourierRepository};
 
 use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};

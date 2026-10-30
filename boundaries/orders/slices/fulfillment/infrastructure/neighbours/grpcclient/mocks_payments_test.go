@@ -6,7 +6,7 @@ package grpcclient_test
 
 import (
 	"context"
-	"nomnom/orders/pkg/gateway/gen/nomnom/payments/v1"
+	"nomnom/orders/infrastructure/gateway/gen/nomnom/payments/v1"
 
 	mock "github.com/stretchr/testify/mock"
 )
