@@ -3801,6 +3801,82 @@
         "kind": "Panel",
         "spec": {
           "id": 56,
+          "title": "Order flow",
+          "description": "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. Панель плагина `netsage-sankey-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!=\"record_fact\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!=\"record_fact\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", nomnom_fsm_aggregate_type=\"order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!=\"record_fact\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
+                        "format": "table",
+                        "instant": true,
+                        "legendFormat": "",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "organize",
+                  "spec": {
+                    "options": {
+                      "excludeByName": {
+                        "Time": true
+                      },
+                      "indexByName": {
+                        "Value": 2,
+                        "nomnom_fsm_from_state": 0,
+                        "nomnom_fsm_to_state": 1
+                      },
+                      "renameByName": {
+                        "nomnom_fsm_from_state": "from",
+                        "nomnom_fsm_to_state": "to"
+                      }
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "netsage-sankey-panel",
+            "version": "",
+            "spec": {
+              "options": {
+                "monochrome": false,
+                "valueField": "Value"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-57": {
+        "kind": "Panel",
+        "spec": {
+          "id": 57,
           "title": "Funnel: orders reaching the stage",
           "description": "Сколько заказов прошли каждый этап. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
           "links": [],
@@ -4020,10 +4096,10 @@
           }
         }
       },
-      "panel-57": {
+      "panel-58": {
         "kind": "Panel",
         "spec": {
-          "id": 57,
+          "id": 58,
           "title": "Funnel: % of placed",
           "description": "Доля оформленных заказов, прошедших этап; последняя полоса — конверсия до завершения. Счётчики за выбранный диапазон: заказ, оформленный до него, может дойти до этапа внутри него, а заказ в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
           "links": [],
@@ -4244,10 +4320,10 @@
           }
         }
       },
-      "panel-58": {
+      "panel-59": {
         "kind": "Panel",
         "spec": {
-          "id": 58,
+          "id": 59,
           "title": "Lost: state before cancellation",
           "description": "Из какого состояния заказ ушёл в `cancelled`: `rejected` и `delivery_failed` — итог соседа, остальное — отмена или таймаут на этом шаге.",
           "links": [],
@@ -4273,103 +4349,6 @@
                       }
                     },
                     "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "bargauge",
-            "version": "",
-            "spec": {
-              "options": {
-                "displayMode": "basic",
-                "valueMode": "text",
-                "namePlacement": "auto",
-                "showUnfilled": true,
-                "sizing": "auto",
-                "minVizWidth": 8,
-                "minVizHeight": 16,
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "reduceOptions": {
-                  "values": false,
-                  "calcs": [
-                    "lastNotNull"
-                  ]
-                },
-                "maxVizHeight": 300,
-                "orientation": "horizontal"
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "short",
-                  "min": 0
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-59": {
-        "kind": "Panel",
-        "spec": {
-          "id": 59,
-          "title": "Lost: reason",
-          "description": "Причины отрицательного итога за выбранный диапазон.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_reason) ((max_over_time(nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "cancelled: {{nomnom_reason}}",
-                        "range": false
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_reason) ((max_over_time(nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
-                        "instant": true,
-                        "legendFormat": "failed: {{nomnom_reason}}",
-                        "range": false
-                      }
-                    },
-                    "refId": "B",
                     "hidden": false
                   }
                 }
@@ -4485,6 +4464,103 @@
         "kind": "Panel",
         "spec": {
           "id": 60,
+          "title": "Lost: reason",
+          "description": "Причины отрицательного итога за выбранный диапазон.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_reason) ((max_over_time(nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_cancelled_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
+                        "instant": true,
+                        "legendFormat": "cancelled: {{nomnom_reason}}",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_reason) ((max_over_time(nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]) - (nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"} offset $__range or 0 * max_over_time(nomnom_orders_failed_total{job=~\"nomnom/(orders|orders-worker|orders-consumer)\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(orders|orders-worker|orders-consumer)\", deployment_environment_name=~\"$environment\"}[$__range]))",
+                        "instant": true,
+                        "legendFormat": "failed: {{nomnom_reason}}",
+                        "range": false
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "",
+            "spec": {
+              "options": {
+                "displayMode": "basic",
+                "valueMode": "text",
+                "namePlacement": "auto",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizWidth": 8,
+                "minVizHeight": 16,
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "reduceOptions": {
+                  "values": false,
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                },
+                "maxVizHeight": 300,
+                "orientation": "horizontal"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "min": 0
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-61": {
+        "kind": "Panel",
+        "spec": {
+          "id": 61,
           "title": "Workflows started",
           "description": "Клиентский StartWorkflowExecution (`$service`).",
           "links": [],
@@ -4545,10 +4621,10 @@
           }
         }
       },
-      "panel-61": {
+      "panel-62": {
         "kind": "Panel",
         "spec": {
-          "id": 61,
+          "id": 62,
           "title": "Workflows completed / failed",
           "description": "Метрики: `temporal_workflow_completed_total`, `temporal_workflow_failed_total`.",
           "links": [],
@@ -4629,10 +4705,10 @@
           }
         }
       },
-      "panel-62": {
+      "panel-63": {
         "kind": "Panel",
         "spec": {
-          "id": 62,
+          "id": 63,
           "title": "Workflow end-to-end latency p95",
           "description": "Метрики: `temporal_workflow_endtoend_latency_seconds`.",
           "links": [],
@@ -4693,10 +4769,10 @@
           }
         }
       },
-      "panel-63": {
+      "panel-64": {
         "kind": "Panel",
         "spec": {
-          "id": 63,
+          "id": 64,
           "title": "Oldest running fulfillment",
           "description": "Возраст старейшего выполняющегося workflow: polling Visibility, SDK метрики не даёт.",
           "links": [],
@@ -4725,10 +4801,10 @@
           }
         }
       },
-      "panel-64": {
+      "panel-65": {
         "kind": "Panel",
         "spec": {
-          "id": 64,
+          "id": 65,
           "title": "Activities executed / failed attempts",
           "description": "Каждая неуспешная попытка, кроме последней, ведёт к retry по Retry Policy.",
           "links": [],
@@ -4828,10 +4904,10 @@
           }
         }
       },
-      "panel-65": {
+      "panel-66": {
         "kind": "Panel",
         "spec": {
-          "id": 65,
+          "id": 66,
           "title": "Activity latency p95",
           "description": "Метрики: `temporal_activity_execution_latency_seconds`.",
           "links": [],
@@ -4892,10 +4968,10 @@
           }
         }
       },
-      "panel-66": {
+      "panel-67": {
         "kind": "Panel",
         "spec": {
-          "id": 66,
+          "id": 67,
           "title": "Worker task slots",
           "description": "Метрики: `temporal_worker_task_slots_used`, `temporal_worker_task_slots_available`.",
           "links": [],
@@ -4976,10 +5052,10 @@
           }
         }
       },
-      "panel-67": {
+      "panel-68": {
         "kind": "Panel",
         "spec": {
-          "id": 67,
+          "id": 68,
           "title": "Compensations",
           "description": "Метрики: `nomnom_orders_compensations_total`.",
           "links": [],
@@ -5008,10 +5084,10 @@
           }
         }
       },
-      "panel-68": {
+      "panel-69": {
         "kind": "Panel",
         "spec": {
-          "id": 68,
+          "id": 69,
           "title": "Checks by result",
           "description": "Метрики: `nomnom_authz_checks_total`.",
           "links": [],
@@ -5031,38 +5107,6 @@
               "options": {
                 "mode": "markdown",
                 "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_result) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
-              },
-              "fieldConfig": {
-                "defaults": {},
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-69": {
-        "kind": "Panel",
-        "spec": {
-          "id": 69,
-          "title": "Denied by permission",
-          "description": "DENIED — решение политики, не сбой SpiceDB.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "text",
-            "version": "",
-            "spec": {
-              "options": {
-                "mode": "markdown",
-                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -5160,6 +5204,38 @@
         "kind": "Panel",
         "spec": {
           "id": 70,
+          "title": "Denied by permission",
+          "description": "DENIED — решение политики, не сбой SpiceDB.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "**TODO** — панель станет живой, когда метрики получат статус «есть» в [инвентаре](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md).\n\n| Метрика | Статус для `orders`, `orders-worker`, `orders-consumer` |\n| --- | --- |\n| [`nomnom_authz_checks_total`](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md#authz) | ожидается |\n\nЦелевой PromQL:\n\n```promql\nsum by (nomnom_authz_resource_type, nomnom_authz_permission) (rate(nomnom_authz_checks_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_authz_result=\"denied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})\n```\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-71": {
+        "kind": "Panel",
+        "spec": {
+          "id": 71,
           "title": "Errors and timeouts",
           "description": "Технические сбои проверки; fail-closed превращает их в отказ клиенту.",
           "links": [],
@@ -5188,10 +5264,10 @@
           }
         }
       },
-      "panel-71": {
+      "panel-72": {
         "kind": "Panel",
         "spec": {
-          "id": 71,
+          "id": 72,
           "title": "Check latency",
           "description": "Метрики: `nomnom_authz_check_duration_seconds`.",
           "links": [],
@@ -6308,6 +6384,19 @@
                           "name": "panel-59"
                         }
                       }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-60"
+                        }
+                      }
                     }
                   ]
                 }
@@ -6332,19 +6421,6 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-60"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 0,
-                        "width": 8,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
                           "name": "panel-61"
                         }
                       }
@@ -6352,7 +6428,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 8,
                         "y": 0,
                         "width": 8,
                         "height": 8,
@@ -6365,8 +6441,8 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 0,
-                        "y": 8,
+                        "x": 16,
+                        "y": 0,
                         "width": 8,
                         "height": 8,
                         "element": {
@@ -6378,7 +6454,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 8,
+                        "x": 0,
                         "y": 8,
                         "width": 8,
                         "height": 8,
@@ -6391,7 +6467,7 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 16,
+                        "x": 8,
                         "y": 8,
                         "width": 8,
                         "height": 8,
@@ -6404,13 +6480,26 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
+                        "x": 16,
+                        "y": 8,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-66"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
                         "x": 0,
                         "y": 16,
                         "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-66"
+                          "name": "panel-67"
                         }
                       }
                     },
@@ -6423,7 +6512,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-67"
+                          "name": "panel-68"
                         }
                       }
                     }
@@ -6475,7 +6564,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-68"
+                          "name": "panel-69"
                         }
                       }
                     },
@@ -6488,7 +6577,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-69"
+                          "name": "panel-70"
                         }
                       }
                     },
@@ -6501,7 +6590,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-70"
+                          "name": "panel-71"
                         }
                       }
                     },
@@ -6514,7 +6603,7 @@
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-71"
+                          "name": "panel-72"
                         }
                       }
                     }

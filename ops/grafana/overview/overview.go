@@ -111,6 +111,9 @@ type Panel struct {
 	Bars bool
 	// Max — верх шкалы Bars; 0 — по данным.
 	Max float64
+	// Sankey — потоки между состояниями (sankey.go): запрос даёт по строке на пару
+	// узлов, два label и значение. Требует плагин netsage-sankey-panel в Grafana.
+	Sankey bool
 	// Traces — TraceQL-условия spans серий по индексу Queries: data link точки
 	// ведёт в Tempo на spans этой серии. "" — у запроса нет ссылки.
 	Traces []string
@@ -310,9 +313,12 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		ref := string(rune('A' + i))
 		query := prometheus.NewQueryV2Builder().
 			Datasource(dashboard.NewDashboardv2DataQueryKindDatasourceBuilder().Name("${metrics}")).
-			Expr(q.Expr).LegendFormat(q.Legend).Range(!p.Bars)
-		if p.Bars {
+			Expr(q.Expr).LegendFormat(q.Legend).Range(!p.Bars && !p.Sankey)
+		if p.Bars || p.Sankey {
 			query.Instant(true)
+		}
+		if p.Sankey {
+			query.Format(prometheus.PromQueryFormatTable)
 		}
 		if inventory.ExemplarsEnabled && strings.Contains(q.Expr, "histogram_quantile") {
 			query.Exemplar(true)
@@ -322,6 +328,10 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 			g.checkTrace(p.Title, q, traces[i])
 			viz.OverrideByQuery(ref, []dashboard.DynamicConfigValue{{Id: "links", Value: seriesLinks(sc, traces[i])}})
 		}
+	}
+	if p.Sankey {
+		group.Transformation(sankeyColumns())
+		return b.Description(description).Data(group).Visualization(sankeyVisualization{}), summary
 	}
 	b = b.Description(description).Data(group)
 	if p.Bars {

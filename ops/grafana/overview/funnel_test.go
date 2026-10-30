@@ -48,8 +48,17 @@ func TestOrderFunnelIsOnlyInOrdersAndUsesBars(t *testing.T) {
 		}
 	}
 	for _, p := range orderFunnel(Scope{Services: []string{inventory.Orders}, AllServices: true}) {
-		if !p.Bars {
-			t.Errorf("%s: воронка не на полосах", p.Title)
+		if !p.Bars && !p.Sankey {
+			t.Errorf("%s: воронка не на полосах и не Sankey", p.Title)
 		}
+	}
+}
+
+// Sankey не строится с петлями, а record_fact — единственный переход без смены состояния.
+func TestOrderFlowHasNoLoops(t *testing.T) {
+	flow := orderFlow(Scope{Services: []string{inventory.Orders}, AllServices: true})
+
+	if !strings.Contains(flow, `nomnom_fsm_trigger!="record_fact"`) {
+		t.Errorf("поток с петлями: %s", flow)
 	}
 }

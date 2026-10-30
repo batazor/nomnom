@@ -24,6 +24,13 @@ func stageReached(sc Scope, stage int) string {
 	))
 }
 
+// orderFlow — переходы Order по парам состояний. Запись данных без смены состояния
+// (record_fact) исключена: поток не имеет петель, иначе Sankey не построится.
+func orderFlow(sc Scope) string {
+	return Sum("nomnom_fsm_from_state, nomnom_fsm_to_state", sc.Grown("$__range", fsmTransitions,
+		`nomnom_fsm_aggregate_type="order"`, `nomnom_fsm_result="applied"`, `nomnom_fsm_trigger!="record_fact"`)) + " > 0"
+}
+
 func orderFunnel(sc Scope) []Panel {
 	placed := Sum("", sc.Grown("$__range", "nomnom_orders_placed_total"))
 	counts := []Query{{placed, "placed"}}
@@ -37,6 +44,9 @@ func orderFunnel(sc Scope) []Panel {
 	cancelled := Sum("nomnom_fsm_from_state", sc.Grown("$__range", fsmTransitions,
 		`nomnom_fsm_aggregate_type="order"`, `nomnom_fsm_result="applied"`, `nomnom_fsm_to_state="cancelled"`))
 	return []Panel{
+		{Title: "Order flow", Unit: "short", Sankey: true, Queries: []Query{{orderFlow(sc), ""}},
+			Description: "Потоки заказов между состояниями за выбранный диапазон: толщина — число заказов. " +
+				"Панель плагина `netsage-sankey-panel`: без него в stack Grafana покажет, что плагина нет. " + window},
 		{Title: "Funnel: orders reaching the stage", Unit: "short", Bars: true, Queries: counts,
 			Description: "Сколько заказов прошли каждый этап. " + window},
 		{Title: "Funnel: % of placed", Unit: "percent", Bars: true, Max: 100, Queries: shares,
