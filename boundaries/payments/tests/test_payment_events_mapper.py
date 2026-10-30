@@ -2,6 +2,7 @@
 
 import unittest
 import uuid
+from datetime import UTC, datetime
 from typing import Any, override
 
 from infrastructure.repository import EVENT_ID_NAMESPACE, PAYMENT_EVENTS_TOPIC, outbox_event_id
@@ -15,9 +16,12 @@ from slices.payment.domains.payment import (
     PaymentAuthorizationCancelled,
     PaymentAuthorized,
     PaymentCaptured,
+    PaymentCreated,
     PaymentFailed,
     PaymentId,
     PaymentOperationDeclined,
+    PaymentOperationRequested,
+    PaymentOperationSucceeded,
     PaymentRefunded,
 )
 from slices.payment.infrastructure.messaging import PaymentEventsMapper
@@ -27,6 +31,7 @@ AGGREGATE = AggregateRef("Payment", "payment-1", 3)
 PAYMENT = PaymentId("payment-1")
 ORDER = OrderId("order-1")
 MARKET = MarketId("berlin")
+NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 AMOUNT = Money.parse("25.50", "EUR")
 
 
@@ -37,7 +42,10 @@ class PaymentEventsMapperTest(unittest.TestCase):
 
     def test_amount_events_map_to_their_contracts(self) -> None:
         cases = [
-            (PaymentAuthorized(PAYMENT, ORDER, MARKET, AMOUNT), events_pb2.PaymentAuthorized),
+            (
+                PaymentAuthorized(PAYMENT, ORDER, MARKET, AMOUNT, "auth-ref"),
+                events_pb2.PaymentAuthorized,
+            ),
             (PaymentCaptured(PAYMENT, ORDER, MARKET, AMOUNT), events_pb2.PaymentCaptured),
             (
                 PaymentAuthorizationCancelled(PAYMENT, ORDER, MARKET, AMOUNT),
@@ -72,9 +80,28 @@ class PaymentEventsMapperTest(unittest.TestCase):
 
     def test_operation_declined_is_not_published(self) -> None:
         event = PaymentOperationDeclined(
-            OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "insufficient_funds"
+            OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "insufficient_funds", NOW
         )
         self.assertIsNone(self.mapper.map(AGGREGATE, event))
+
+    def test_stream_only_facts_are_not_published(self) -> None:
+        events = (
+            PaymentCreated(PAYMENT, ORDER, MARKET, AMOUNT),
+            PaymentOperationRequested(
+                OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "key-1", AMOUNT, NOW
+            ),
+            PaymentOperationSucceeded(
+                OperationId("op-1"), PAYMENT, OperationKind.CAPTURE, "ref-1", NOW
+            ),
+        )
+        for event in events:
+            with self.subTest(event=type(event).__name__):
+                self.assertIsNone(self.mapper.map(AGGREGATE, event))
+
+    def test_authorized_contract_has_no_provider_reference(self) -> None:
+        self.assertNotIn(
+            "provider_reference", events_pb2.PaymentAuthorized.DESCRIPTOR.fields_by_name
+        )
 
     def test_unknown_event_is_not_published(self) -> None:
         unknown: Any = object()

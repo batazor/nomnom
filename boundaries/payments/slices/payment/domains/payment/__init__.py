@@ -1,14 +1,24 @@
 """Pure payments domain model."""
 
-from .completion import complete_operation
+from .decider import (
+    CompleteOperation,
+    CreatePayment,
+    PaymentCommand,
+    RequestOperation,
+    decide,
+    evolve,
+)
 from .events import (
     PaymentAuthorizationCancelled,
     PaymentAuthorized,
     PaymentCaptured,
+    PaymentCreated,
     PaymentDomainEvent,
     PaymentEvent,
     PaymentFailed,
     PaymentOperationDeclined,
+    PaymentOperationRequested,
+    PaymentOperationSucceeded,
     PaymentRefunded,
 )
 from .fsm import (
@@ -21,9 +31,11 @@ from .fsm import (
     TransitionResult,
 )
 from .ids import OperationId, OperationKind, OrderId, PaymentId
+from .model import PaymentModel
 from .operation import (
     InvalidOperationTransitionError,
     OperationAlreadyCompletedError,
+    OperationAlreadyPendingError,
     OperationMismatchError,
     OperationOutcome,
     OperationState,
@@ -36,13 +48,11 @@ from .operation_kinds import (
     UnknownOperationKindError,
     rules_of,
 )
-from .payment import Payment
+from .payment import Payment, crosses_snapshot_boundary
 from .permissions import PaymentPermission
 from .repository import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,
-    OperationAlreadyPendingError,
-    PaymentOperationRepository,
     PaymentRepository,
 )
 from .specifications import (
@@ -60,6 +70,8 @@ __all__ = [
     "OPERATION_KINDS",
     "TERMINAL_STATES",
     "AlreadyInStateError",
+    "CompleteOperation",
+    "CreatePayment",
     "CurrencyMismatchError",
     "DuplicateIdempotencyKeyError",
     "DuplicatePaymentError",
@@ -86,13 +98,17 @@ __all__ = [
     "PaymentCapturable",
     "PaymentCaptureContext",
     "PaymentCaptured",
+    "PaymentCommand",
+    "PaymentCreated",
     "PaymentDomainEvent",
     "PaymentEvent",
     "PaymentFailed",
     "PaymentId",
+    "PaymentModel",
     "PaymentOperation",
     "PaymentOperationDeclined",
-    "PaymentOperationRepository",
+    "PaymentOperationRequested",
+    "PaymentOperationSucceeded",
     "PaymentPermission",
     "PaymentPolicyReason",
     "PaymentRefundContext",
@@ -101,9 +117,12 @@ __all__ = [
     "PaymentRepository",
     "PaymentState",
     "PaymentTrigger",
+    "RequestOperation",
     "SpecificationResult",
     "TransitionResult",
     "UnknownOperationKindError",
-    "complete_operation",
+    "crosses_snapshot_boundary",
+    "decide",
+    "evolve",
     "rules_of",
 ]

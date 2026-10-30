@@ -3,9 +3,9 @@
 Authorize, Capture, Cancel Authorization and Refund follow one sequence::
 
     check permission
-    UoW#1 { find operation by idempotency key | check Payment and record pending operation }
+    UoW#1 { find operation by idempotency key | Payment records the pending operation }
     provider call with the same idempotency key       (outside of any transaction)
-    UoW#2 { complete operation + Payment + Outbox }
+    UoW#2 { Payment completes the operation + Outbox }
 
 A completed operation is returned as recorded without a provider call. A pending one
 repeats the provider call with the same key, which the provider deduplicates.
@@ -21,11 +21,9 @@ from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     InvalidTransitionError,
     OperationAlreadyPendingError,
-    OperationId,
     OperationKind,
     PaymentId,
     PaymentOperation,
-    PaymentOperationRepository,
     PaymentRepository,
     PaymentState,
     rules_of,
@@ -37,7 +35,6 @@ from ..errors import (
     InvalidPaymentRequestError,
     OperationInProgressError,
     PaymentNotFoundError,
-    PaymentOperationNotFoundError,
     PaymentStateConflictError,
 )
 from ..operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperationResult
@@ -47,7 +44,6 @@ from ..ports import (
     PaymentProviderGateway,
     PaymentResource,
     PaymentTransitionObserver,
-    PendingOperationQuery,
     ProviderOperationRequest,
     ProviderOperationStatus,
 )
@@ -90,8 +86,6 @@ class PaymentOperationExecutor:
         self,
         uow: UnitOfWork,
         payments: PaymentRepository,
-        operations: PaymentOperationRepository,
-        pending: PendingOperationQuery,
         provider: PaymentProviderGateway,
         permissions: PaymentPermissionChecker,
         clock: Clock,
@@ -101,8 +95,6 @@ class PaymentOperationExecutor:
     ) -> None:
         self._uow = uow
         self._payments = payments
-        self._operations = operations
-        self._pending = pending
         self._provider = provider
         self._permissions = permissions
         self._clock = clock
@@ -167,27 +159,27 @@ class PaymentOperationExecutor:
             payment = self._payments.get(payment_id)
             if payment is None:
                 raise PaymentNotFoundError(payment_id)
-            existing = self._operations.get_by_idempotency_key(key)
+            existing = payment.model.operation_by_key(key)
             if existing is not None:
                 if not existing.is_for(payment_id, kind):
                     raise IdempotencyKeyConflictError(key)
                 return _Reservation(existing, payment.state, payment.provider_reference)
+            owner = self._payments.get_by_idempotency_key(key)
+            # A key of this Payment missing from the loaded state means the state is stale:
+            # saving conflicts on the stream and the Unit of Work retries with fresh state.
+            if owner is not None and owner.id != payment_id:
+                raise IdempotencyKeyConflictError(key)
             try:
-                payment.ensure_can(rules_of(kind).trigger)
+                operation = payment.request_operation(operation_id, kind, key, requested_at)
             except InvalidTransitionError as error:
                 self._transitions.rejected(error)
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
             except AlreadyInStateError as error:
                 raise PaymentStateConflictError(payment.id, payment.state, kind.value) from error
-            if self._pending.pending_operation_id(payment_id) is not None:
-                raise OperationInProgressError(payment_id)
-            operation = PaymentOperation(
-                operation_id, payment_id, kind, key, payment.amount, requested_at
-            )
-            self._operations.add(operation)
-            return _Reservation(
-                self._stored(operation.id), payment.state, payment.provider_reference
-            )
+            except OperationAlreadyPendingError as error:
+                raise OperationInProgressError(payment_id) from error
+            self._payments.save(payment)
+            return _Reservation(operation, payment.state, payment.provider_reference)
 
         try:
             return self._uow.run(reserve)
@@ -195,11 +187,7 @@ class PaymentOperationExecutor:
             pass
         except OperationAlreadyPendingError as error:
             raise OperationInProgressError(payment_id) from error
-        # A concurrent request recorded the same key first: continue with its operation.
+        # A concurrent request of another Payment recorded the key first: the next attempt
+        # sees it. Requests of this Payment conflict on its stream and the Unit of Work
+        # retries them.
         return self._uow.run(reserve)
-
-    def _stored(self, operation_id: OperationId) -> PaymentOperation:
-        operation = self._operations.get(operation_id)
-        if operation is None:
-            raise PaymentOperationNotFoundError(operation_id)
-        return operation

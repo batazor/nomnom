@@ -7,7 +7,7 @@ from typing import cast, override
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader, NumberDataPoint
-from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
+from payment_fakes import MARKET, NOW, ORCHESTRATOR, PaymentsTestKit
 from psycopg import errors
 
 from infrastructure.repository import Database
@@ -47,7 +47,7 @@ CAPTURES = "nomnom.payments.captures"
 REFUNDS = "nomnom.payments.refunds"
 AGGREGATE = AggregateRef("Payment", "payment-0", 2)
 AUTHORIZED = PaymentAuthorized(
-    PaymentId("payment-0"), OrderId("order-1"), MARKET, Money.parse("1", "EUR")
+    PaymentId("payment-0"), OrderId("order-1"), MARKET, Money.parse("1", "EUR"), "auth-ref"
 )
 
 
@@ -85,15 +85,12 @@ class DomainMetricsTest(unittest.TestCase):
         return PaymentOperationExecutor(
             uow=self.uow,
             payments=self.kit.payments,
-            operations=self.kit.operations,
-            pending=self.kit.pending,
             provider=self.kit.provider,
             permissions=self.kit.permissions,
             clock=self.kit.clock,
             operation_ids=self.kit.ids,
             applier=ProviderResultApplier(
                 self.kit.payments,
-                self.kit.operations,
                 self.outbox,
                 self.kit.clock,
                 self.kit.transitions,
@@ -175,13 +172,14 @@ class DomainMetricsTest(unittest.TestCase):
             PaymentFailed(payment, order, MARKET, "card_declined"),
             PaymentAuthorizationCancelled(payment, order, MARKET, Money.parse("1", "EUR")),
             PaymentOperationDeclined(
-                OperationId("op-1"), payment, OperationKind.CANCEL_AUTHORIZATION, "x"
+                OperationId("op-1"), payment, OperationKind.CANCEL_AUTHORIZATION, "x", NOW
             ),
             PaymentOperationDeclined(
                 OperationId("op-2"),
                 payment,
                 cast(OperationKind, "x"),  # ty: ignore[disjoint-cast] - deliberately unknown kind
                 "x",
+                NOW,
             ),
             cast(PaymentFailed, object()),
         ]

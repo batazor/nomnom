@@ -1,11 +1,11 @@
 """Rules of every Operation Kind: the single place that says what each kind does.
 
 Each financial Payment Operation kind has one explicit rule: the permission it requires,
-the Payment trigger it performs, the Payment action on success and the Payment effect
-on decline. A kind without a rule is an error, never the action of another kind.
+the Payment trigger it performs, the Payment fact on success and the Payment facts on
+decline. A kind without a rule is an error, never the action of another kind.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import override
 
@@ -14,11 +14,12 @@ from .events import (
     PaymentAuthorized,
     PaymentCaptured,
     PaymentEvent,
+    PaymentFailed,
     PaymentRefunded,
 )
-from .fsm import PaymentTrigger
+from .fsm import PaymentTrigger, TransitionInput, transition
 from .ids import OperationKind
-from .payment import Payment
+from .model import PaymentModel
 from .permissions import PaymentPermission
 
 
@@ -33,47 +34,62 @@ class UnknownOperationKindError(Exception):
         return f"no rule for payment operation kind {self.kind}"
 
 
-def _authorize(payment: Payment, provider_reference: str | None) -> None:
-    payment.authorize(provider_reference or "")
+def _authorize(payment: PaymentModel, provider_reference: str | None) -> PaymentEvent:
+    reference = provider_reference or ""
+    transition(
+        payment.state,
+        PaymentTrigger.AUTHORIZE,
+        TransitionInput(provider_reference=reference),
+    )
+    return PaymentAuthorized(
+        payment.id, payment.order_id, payment.market_id, payment.amount, reference.strip()
+    )
 
 
-def _capture(payment: Payment, _provider_reference: str | None) -> None:
-    payment.capture()
+def _capture(payment: PaymentModel, _provider_reference: str | None) -> PaymentEvent:
+    transition(payment.state, PaymentTrigger.CAPTURE)
+    return PaymentCaptured(payment.id, payment.order_id, payment.market_id, payment.amount)
 
 
-def _cancel_authorization(payment: Payment, _provider_reference: str | None) -> None:
-    payment.cancel_authorization()
+def _cancel_authorization(payment: PaymentModel, _provider_reference: str | None) -> PaymentEvent:
+    transition(payment.state, PaymentTrigger.CANCEL_AUTHORIZATION)
+    return PaymentAuthorizationCancelled(
+        payment.id, payment.order_id, payment.market_id, payment.amount
+    )
 
 
-def _refund(payment: Payment, _provider_reference: str | None) -> None:
-    payment.refund()
+def _refund(payment: PaymentModel, _provider_reference: str | None) -> PaymentEvent:
+    transition(payment.state, PaymentTrigger.REFUND)
+    return PaymentRefunded(payment.id, payment.order_id, payment.market_id, payment.amount)
 
 
-def _fail_payment(payment: Payment, reason: str) -> None:
+def _fail_payment(payment: PaymentModel, reason: str) -> Sequence[PaymentEvent]:
     # Several payment attempts per Order are not modelled: a declined Authorization
     # ends the Payment.
-    payment.fail(reason)
+    transition(payment.state, PaymentTrigger.FAIL)
+    return (PaymentFailed(payment.id, payment.order_id, payment.market_id, reason),)
 
 
-def _keep_payment(_payment: Payment, _reason: str) -> None:
+def _keep_payment(_payment: PaymentModel, _reason: str) -> Sequence[PaymentEvent]:
     # The caller decides what to do next, for example release the Authorization
     # after a declined Capture.
-    return None
+    return ()
 
 
 @dataclass(frozen=True)
 class OperationKindRules:
     """What an Operation Kind requires and does to its Payment.
 
-    ``on_success`` performs the Payment transition of a successful operation, which
-    records ``success_event``; ``on_decline`` applies the Payment effect of a decline.
+    ``on_success`` decides the Payment fact of a successful operation, ``success_event``;
+    ``on_decline`` decides the Payment facts of a decline. Both raise the state machine
+    errors and change nothing.
     """
 
     permission: PaymentPermission
     trigger: PaymentTrigger
-    on_success: Callable[[Payment, str | None], None]
+    on_success: Callable[[PaymentModel, str | None], PaymentEvent]
     success_event: type[PaymentEvent]
-    on_decline: Callable[[Payment, str], None]
+    on_decline: Callable[[PaymentModel, str], Sequence[PaymentEvent]]
 
 
 OPERATION_KINDS: Mapping[OperationKind, OperationKindRules] = {

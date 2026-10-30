@@ -9,6 +9,7 @@ from .database import (
     DEFAULT_DATABASE_MAX_CONNS,
 )
 from .duration import parse_duration
+from .event_store import EVENT_STORE_SNAPSHOT_EVERY_ENV, EventStoreSettings
 from .identity import (
     IDENTITY_AUDIENCE_ENV,
     IDENTITY_ISSUER_ENV,
@@ -68,6 +69,7 @@ __all__ = [
     "DEFAULT_SPICEDB_TIMEOUT",
     "DEFAULT_TELEMETRY_FLUSH_TIMEOUT",
     "DRAIN_TIMEOUT_ENV",
+    "EVENT_STORE_SNAPSHOT_EVERY_ENV",
     "IDENTITY_AUDIENCE_ENV",
     "IDENTITY_ISSUER_ENV",
     "IDENTITY_JWKS_FILE_ENV",
@@ -88,6 +90,7 @@ __all__ = [
     "SPICEDB_PRESHARED_KEY_ENV",
     "SPICEDB_TIMEOUT_ENV",
     "TELEMETRY_FLUSH_TIMEOUT_ENV",
+    "EventStoreSettings",
     "IdentitySettings",
     "ManagementSettings",
     "ProviderSettings",
@@ -113,6 +116,7 @@ class Settings:
     spicedb: SpiceDBSettings
     provider: ProviderSettings
     database: database.Config
+    event_store: EventStoreSettings
 
 
 def load_settings() -> Settings:
@@ -132,6 +136,7 @@ def load_settings() -> Settings:
         spicedb=SpiceDBSettings(),
         provider=ProviderSettings(),
         database=database.Config(),
+        event_store=EventStoreSettings(),
     )
     if settings.management.port == settings.server.port:
         raise ValueError(

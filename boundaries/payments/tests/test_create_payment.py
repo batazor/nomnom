@@ -5,6 +5,7 @@ import pytest
 from payment_fakes import (
     MARKET,
     ORCHESTRATOR,
+    SNAPSHOT_EVERY,
     PaymentsTestKit,
 )
 
@@ -151,7 +152,7 @@ class RacingPaymentRepository(DatabasePaymentRepository):
     """Another request stores its Payment between the lookup and the insert."""
 
     def __init__(self, database: Database, winner: Payment) -> None:
-        super().__init__(database)
+        super().__init__(database, SNAPSHOT_EVERY)
         self._winner: Payment | None = winner
 
     @override

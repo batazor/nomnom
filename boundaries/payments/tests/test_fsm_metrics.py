@@ -74,14 +74,12 @@ class FsmMetricsTest(unittest.TestCase):
         return PaymentOperationExecutor(
             uow=self.uow,
             payments=self.kit.payments,
-            operations=self.kit.operations,
-            pending=self.kit.pending,
             provider=self.kit.provider,
             permissions=self.kit.permissions,
             clock=self.kit.clock,
             operation_ids=self.kit.ids,
             applier=ProviderResultApplier(
-                self.kit.payments, self.kit.operations, self.kit.outbox, self.kit.clock, self.fsm
+                self.kit.payments, self.kit.outbox, self.kit.clock, self.fsm
             ),
             transitions=self.fsm,
         )

@@ -1,0 +1,12 @@
+# Метрики раздела event_store инвентаря ops/grafana/inventory. Проверка: make semconv-check.
+groups:
+  - id: metric.nomnom.payments.event_store.replayed_events
+    type: metric
+    metric_name: nomnom.payments.event_store.replayed_events
+    stability: development
+    brief: "Stream events applied on loading a Payment."
+    instrument: histogram
+    unit: "{event}"
+    attributes:
+      - ref: nomnom.event_store.from_snapshot
+        requirement_level: required

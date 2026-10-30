@@ -56,7 +56,9 @@ class StatementTelemetryTest(unittest.TestCase):
     @override
     def setUp(self) -> None:
         with self.database.connection() as conn:
-            conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
+            conn.execute(
+                "TRUNCATE payment_events, payment_snapshots, payments, payment_operations, payments_outbox, inbox"
+            )
         self.spans = InMemorySpanExporter()
         self.tracer_provider = TracerProvider()
         self.tracer_provider.add_span_processor(SimpleSpanProcessor(self.spans))
@@ -66,7 +68,7 @@ class StatementTelemetryTest(unittest.TestCase):
         )
         self.observed = create_database(database.Config(DATABASE__URI=self.uri), telemetry)
         self.addCleanup(self.observed.close)
-        self.payments = DatabasePaymentRepository(self.observed)
+        self.payments = DatabasePaymentRepository(self.observed, 5)
 
     def durations(self) -> list[dict[str, str]]:
         """Attributes of the ``db.client.operation.duration`` points recorded since setUp."""
@@ -95,11 +97,19 @@ class StatementTelemetryTest(unittest.TestCase):
             self.payments.get(payment.id)
 
         client = [s for s in self.spans.get_finished_spans() if s.kind is SpanKind.CLIENT]
-        self.assertEqual([s.name for s in client], ["INSERT payments", "SELECT payments"])
-        for span in client:
+        statements = [
+            ("INSERT", "payment_events"),
+            ("INSERT", "payments"),
+            ("SELECT", "payment_snapshots"),
+            ("SELECT", "payment_events"),
+        ]
+        self.assertEqual(
+            [s.name for s in client], [f"{operation} {table}" for operation, table in statements]
+        )
+        for span, (_, table) in zip(client, statements, strict=True):
             attributes = dict(span.attributes or {})
             self.assertEqual(attributes["db.system.name"], "postgresql")
-            self.assertEqual(attributes["db.collection.name"], "payments")
+            self.assertEqual(attributes["db.collection.name"], table)
             self.assertNotIn("db.query.text", attributes)
             self.assertNotIn("db.statement", attributes)
         self.assertCountEqual(
@@ -107,14 +117,10 @@ class StatementTelemetryTest(unittest.TestCase):
             [
                 {
                     "db.system.name": "postgresql",
-                    "db.operation.name": "INSERT",
-                    "db.collection.name": "payments",
-                },
-                {
-                    "db.system.name": "postgresql",
-                    "db.operation.name": "SELECT",
-                    "db.collection.name": "payments",
-                },
+                    "db.operation.name": operation,
+                    "db.collection.name": table,
+                }
+                for operation, table in statements
             ],
         )
 
@@ -122,14 +128,15 @@ class StatementTelemetryTest(unittest.TestCase):
         self.payments.get(PaymentId("missing"))
 
         self.assertEqual(self.spans.get_finished_spans(), ())
-        self.assertEqual(
+        self.assertCountEqual(
             self.durations(),
             [
                 {
                     "db.system.name": "postgresql",
                     "db.operation.name": "SELECT",
-                    "db.collection.name": "payments",
+                    "db.collection.name": table,
                 }
+                for table in ("payment_snapshots", "payment_events")
             ],
         )
 

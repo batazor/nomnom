@@ -8,7 +8,28 @@ from pydantic import ValidationError
 from pkg.config import load_settings
 
 # DATABASE__URI обязателен: без него load_settings падает.
-REQUIRED_ENV = {"DATABASE__URI": "postgresql://payments@localhost/payments"}
+REQUIRED_ENV = {
+    "DATABASE__URI": "postgresql://payments@localhost/payments",
+    "EVENT_STORE__SNAPSHOT_EVERY": "5",
+}
+
+
+class EventStoreSettingsTest(unittest.TestCase):
+    def test_snapshot_every_is_required_and_positive(self) -> None:
+        for value in (None, "", "abc", "0", "-1"):
+            environment = {"DATABASE__URI": REQUIRED_ENV["DATABASE__URI"]}
+            if value is not None:
+                environment["EVENT_STORE__SNAPSHOT_EVERY"] = value
+            with (
+                self.subTest(value=value),
+                patch.dict(os.environ, environment, clear=True),
+                self.assertRaisesRegex(ValidationError, "EVENT_STORE__SNAPSHOT_EVERY"),
+            ):
+                load_settings()
+
+    def test_snapshot_every_is_loaded(self) -> None:
+        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
+            self.assertEqual(load_settings().event_store.snapshot_every, 5)
 
 
 class ConfigTest(unittest.TestCase):
@@ -92,7 +113,7 @@ class ConfigTest(unittest.TestCase):
         ):
             with (
                 self.subTest(uri=value),
-                patch.dict(os.environ, {"DATABASE__URI": value}, clear=True),
+                patch.dict(os.environ, {**REQUIRED_ENV, "DATABASE__URI": value}, clear=True),
                 self.assertRaisesRegex(ValidationError, "DATABASE__URI must be a PostgreSQL"),
             ):
                 load_settings()
@@ -104,7 +125,7 @@ class ConfigTest(unittest.TestCase):
         ):
             with (
                 self.subTest(uri=value),
-                patch.dict(os.environ, {"DATABASE__URI": value}, clear=True),
+                patch.dict(os.environ, {**REQUIRED_ENV, "DATABASE__URI": value}, clear=True),
             ):
                 self.assertEqual(load_settings().database.uri, value)
 

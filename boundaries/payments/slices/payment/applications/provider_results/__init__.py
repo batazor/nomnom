@@ -16,15 +16,12 @@ from slices.payment.domains.payment import (
     Payment,
     PaymentDomainEvent,
     PaymentOperation,
-    PaymentOperationRepository,
     PaymentRepository,
     PaymentState,
-    complete_operation,
 )
 
 from ..errors import (
     InvalidPaymentRequestError,
-    PaymentNotFoundError,
     PaymentOperationNotFoundError,
     PaymentStateConflictError,
     ProviderResultConflictError,
@@ -56,13 +53,11 @@ class ProviderResultApplier:
     def __init__(
         self,
         payments: PaymentRepository,
-        operations: PaymentOperationRepository,
         outbox: PaymentOutbox,
         clock: Clock,
         transitions: PaymentTransitionObserver,
     ) -> None:
         self._payments = payments
-        self._operations = operations
         self._outbox = outbox
         self._clock = clock
         self._transitions = transitions
@@ -78,17 +73,14 @@ class ProviderResultApplier:
             InvalidPaymentRequestError: The outcome is not final or the Provider result
                 is rejected by the Payment guard.
             PaymentOperationNotFoundError: The operation is unknown.
-            PaymentNotFoundError: The Payment of the operation is missing.
             ProviderResultConflictError: The result contradicts the recorded one.
             PaymentStateConflictError: The Payment state does not allow the result.
         """
         domain_outcome = to_domain_outcome(outcome)
-        operation = self._operations.get(operation_id)
-        if operation is None:
+        payment = self._payments.get_by_operation(operation_id)
+        operation = None if payment is None else payment.model.operation(operation_id)
+        if payment is None or operation is None:
             raise PaymentOperationNotFoundError(operation_id)
-        payment = self._payments.get(operation.payment_id)
-        if payment is None:
-            raise PaymentNotFoundError(operation.payment_id)
         if operation.is_completed:
             received = (
                 OperationState.SUCCEEDED if domain_outcome.succeeded else OperationState.DECLINED
@@ -100,11 +92,11 @@ class ProviderResultApplier:
             return AppliedProviderResult(operation, payment.state, applied=False)
 
         events = self._complete(payment, operation, domain_outcome, self._clock.now())
-        self._operations.save(operation)
         version = self._payments.save(payment)
         self._outbox.add(AggregateRef(PAYMENT_AGGREGATE, payment.id, version), events)
         self._transitions.applied(payment.pull_transitions())
-        return AppliedProviderResult(operation, payment.state, applied=True)
+        completed = next(op for op in payment.operations if op.id == operation_id)
+        return AppliedProviderResult(completed, payment.state, applied=True)
 
     def _complete(
         self,
@@ -114,7 +106,7 @@ class ProviderResultApplier:
         completed_at: datetime,
     ) -> list[PaymentDomainEvent]:
         try:
-            return complete_operation(payment, operation, outcome, completed_at)
+            return payment.complete_operation(operation.id, outcome, completed_at)
         except InvalidTransitionError as error:
             self._transitions.rejected(error)
             raise PaymentStateConflictError(

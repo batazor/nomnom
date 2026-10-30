@@ -70,14 +70,14 @@ ALTER TABLE payment_operations DROP COLUMN version;
 
 ```python
 # domains/payment/decider.py
-def decide(state: PaymentModel | None, command: PaymentCommand) -> list[PaymentStreamEvent]: ...
-def evolve(state: PaymentModel | None, event: PaymentStreamEvent) -> PaymentModel: ...
+def decide(state: PaymentModel | None, command: PaymentCommand) -> list[PaymentDomainEvent]: ...
+def evolve(state: PaymentModel | None, event: PaymentDomainEvent) -> PaymentModel: ...
 ```
 
 - `PaymentModel` — неизменяемое состояние: поля `Payment` и операции. `PaymentState` уже занято листовым состоянием FSM, поэтому имя другое.
 - `decide` проверяет правила через `transition` и `rules_of`, а `evolve` только применяет факт и не бросает бизнес-ошибок.
-- `Payment` хранит модель и версию. Его команды (`request_operation`, `complete_operation`) вызывают `decide`, затем `evolve`, и накапливают новые события и transitions. Методы `authorize`, `capture`, `cancel_authorization`, `refund` и `fail` становятся внутренними действиями правил `OPERATION_KINDS`.
-- `Payment.from_history(snapshot, events)` собирает состояние без накопления событий и transitions.
+- `Payment` хранит модель и версию. Его команды (`request_operation`, `complete_operation`) вызывают `decide`, затем `evolve`, и накапливают новые события и transitions. Методы `authorize`, `capture`, `cancel_authorization`, `refund` и `fail` удалены: эти действия стали чистыми функциями правил `OPERATION_KINDS`, которые возвращают факты. Transition выводится из факта при его применении.
+- `Payment.from_history(snapshot, version, events)` собирает состояние без накопления событий и transitions.
 - `PaymentOperation` становится неизменяемым представлением операции внутри `PaymentModel` и теряет `version` и `pull_events`.
 
 ### Порты
@@ -120,6 +120,8 @@ UPSERT payments, payment_operations из состояния агрегата
 | Create Payment для одного `Order` | `payment_id` разные, поэтому конфликт на `payments_order_id_key`: `DuplicatePaymentError`, поток второго не создаётся |
 | Один ключ у двух разных `Payment` | `payment_operations_idempotency_key_key`: `DuplicateIdempotencyKeyError`, затем `IdempotencyKeyConflictError` при повторном резервировании |
 
+Поиск ключа через проекцию может вернуть тот же `Payment`, если его состояние устарело: тогда `_reserve` продолжает, запись конфликтует на потоке, а UoW повторяет работу на свежем состоянии. Конфликт ключа — только когда им владеет другой `Payment`.
+
 ## Загрузка
 
 ```text
@@ -155,7 +157,7 @@ def crosses_snapshot_boundary(old: int, new: int, every: int) -> bool:
 
 ## Telemetry
 
-Гистограмма `nomnom_payments_event_store_replayed_events` с атрибутом `from_snapshot` (`true` или `false`) и инвентарём в `ops/grafana/inventory`. `payment_id` в атрибуты не попадает (ADR 9). Метрика пишется и при чтении вне UoW, поэтому она не идёт через `CommitScope`.
+Гистограмма `nomnom_payments_event_store_replayed_events` с атрибутом `nomnom.event_store.from_snapshot` (`true` или `false`), записью в `ops/semconv/model/event_store.yaml` и инвентарём в `ops/grafana/inventory`. `payment_id` в атрибуты не попадает (ADR 9). Метрика пишется и при чтении вне UoW, поэтому она не идёт через `CommitScope`.
 
 ## Тесты
 

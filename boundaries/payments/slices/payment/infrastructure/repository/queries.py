@@ -14,22 +14,6 @@ from slices.payment.domains.payment import (
 )
 
 
-class DatabasePendingOperationQuery:
-    """Pending operation lookup over ``payment_operations`` (partial unique index)."""
-
-    def __init__(self, database: Database) -> None:
-        self._db = database
-
-    def pending_operation_id(self, payment_id: PaymentId) -> OperationId | None:
-        """Return the id of the pending operation of the Payment, or ``None``."""
-        with self._db.connection() as conn:
-            row = conn.execute(
-                "SELECT id FROM payment_operations WHERE payment_id = %s AND state = 'pending'",
-                (payment_id,),
-            ).fetchone()
-        return None if row is None else OperationId(row[0])
-
-
 class DatabasePaymentStatusReader:
     """Payment status read model over ``payments`` without provider data."""
 

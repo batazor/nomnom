@@ -15,6 +15,8 @@ env:
   PROVIDER__KIND: fake
   # Тестовый секрет подписи webhooks kind; в других окружениях приходит из Secret.
   PROVIDER__WEBHOOK_SECRET: kind-provider-webhook-secret
+  # Обычный заказ даёт 7-10 событий: значение 5 заставляет снапшоты реально работать.
+  EVENT_STORE__SNAPSHOT_EVERY: "5"
 
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
 # публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.

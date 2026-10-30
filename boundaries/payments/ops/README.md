@@ -91,7 +91,10 @@ helm upgrade --install payments ops/helm --set image.tag=local
 ```yaml
 env:
   PROVIDER__KIND: fake
+  EVENT_STORE__SNAPSHOT_EVERY: "5"
 ```
+
+`EVENT_STORE__SNAPSHOT_EVERY` обязателен: снапшот `Payment` пишется, когда commit проходит кратное ему значение ([локальный ADR 2](../docs/adr/0002-event-sourcing-for-payment.md)).
 
 OpenTelemetry ([ADR 9](../../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md))
 задаётся блоком `telemetry`, а не `env`:
@@ -213,7 +216,7 @@ helm template payments ops/helm \
 | `database.connectTimeout` | `5s` | `connect_timeout` libpq (`DATABASE__CONNECT_TIMEOUT`). |
 | `database.acquireTimeout` | `5s` | Ожидание соединения пула (`DATABASE__ACQUIRE_TIMEOUT`). |
 
-Роль базы должна владеть схемой: создаёт таблицы `payments_outbox` (и publication `payments_outbox`) и `inbox` (набор `messaging`), `payments` и `payment_operations` (набор `payments`), служебные таблицы yoyo-migrations каждого набора, названные по его storage id (контракт схемы, не зависит от раскладки кода) — `_yoyo_migration_messaging`, `_yoyo_log_messaging`, `_yoyo_version_messaging`, `_yoyo_migration_payments`, `_yoyo_log_payments`, `_yoyo_version_payments` — и общую `yoyo_lock` (yoyo держит в ней строку только на время обновления своей внутренней схемы). Пример для kind:
+Роль базы должна владеть схемой: создаёт таблицы `payments_outbox` (и publication `payments_outbox`) и `inbox` (набор `messaging`), `payment_events`, `payment_snapshots`, `payments` и `payment_operations` (набор `payments`), служебные таблицы yoyo-migrations каждого набора, названные по его storage id (контракт схемы, не зависит от раскладки кода) — `_yoyo_migration_messaging`, `_yoyo_log_messaging`, `_yoyo_version_messaging`, `_yoyo_migration_payments`, `_yoyo_log_payments`, `_yoyo_version_payments` — и общую `yoyo_lock` (yoyo держит в ней строку только на время обновления своей внутренней схемы). Пример для kind:
 
 ```bash
 helm upgrade --install payments ops/helm \

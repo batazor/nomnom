@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 143; пар «метрика × сервис» со статусом «есть»: 149.
+Метрик в инвентаре: 144; пар «метрика × сервис» со статусом «есть»: 149.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -256,6 +256,16 @@ Gauges kitchen queue — projection/polling Kitchen Board, не выводятс
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `nomnom_payments_provider_request_duration_seconds` | Provider gateway adapter | histogram | `nomnom_payment_operation`, `nomnom_outcome` | `payments`: ожидается | `operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат. |
+
+<a id="event_store"></a>
+
+## Event store
+
+Загрузка агрегатов из потоков событий (локальный ADR 2 payments): показывает, работают ли снапшоты.
+
+| Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
+| --- | --- | --- | --- | --- | --- |
+| `nomnom_payments_event_store_replayed_events` | Payment repository adapter | histogram | `nomnom_event_store_from_snapshot` | `payments`: ожидается | Событий, применённых при загрузке `Payment`; `from_snapshot`: true | false. |
 
 <a id="domain"></a>
 

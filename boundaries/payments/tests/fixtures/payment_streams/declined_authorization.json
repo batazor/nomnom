@@ -1,0 +1,61 @@
+{
+  "state": "failed",
+  "provider_reference": null,
+  "operations": [
+    [
+      "op-authorize",
+      "declined"
+    ]
+  ],
+  "events": [
+    {
+      "event_type": "PaymentCreated",
+      "schema_version": 1,
+      "payload": {
+        "payment_id": "payment-g",
+        "order_id": "order-g",
+        "market_id": "berlin",
+        "amount": {
+          "amount": "25.00",
+          "currency": "EUR"
+        }
+      }
+    },
+    {
+      "event_type": "PaymentOperationRequested",
+      "schema_version": 1,
+      "payload": {
+        "operation_id": "op-authorize",
+        "payment_id": "payment-g",
+        "kind": "authorize",
+        "idempotency_key": "k-a",
+        "amount": {
+          "amount": "25.00",
+          "currency": "EUR"
+        },
+        "requested_at": "2026-10-25T10:00:00+00:00"
+      }
+    },
+    {
+      "event_type": "PaymentOperationDeclined",
+      "schema_version": 1,
+      "payload": {
+        "operation_id": "op-authorize",
+        "payment_id": "payment-g",
+        "kind": "authorize",
+        "reason": "card_declined",
+        "completed_at": "2026-10-25T10:01:00+00:00"
+      }
+    },
+    {
+      "event_type": "PaymentFailed",
+      "schema_version": 1,
+      "payload": {
+        "payment_id": "payment-g",
+        "order_id": "order-g",
+        "market_id": "berlin",
+        "reason": "card_declined"
+      }
+    }
+  ]
+}

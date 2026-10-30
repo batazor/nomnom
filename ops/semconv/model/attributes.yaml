@@ -65,6 +65,11 @@ groups:
         stability: development
         brief: "FSM transition result."
         examples: ["applied", "rejected"]
+      - id: nomnom.event_store.from_snapshot
+        type: boolean
+        stability: development
+        brief: "Whether the load of an aggregate started from a snapshot."
+        examples: [true]
       - id: nomnom.fsm.terminal
         type: boolean
         stability: development

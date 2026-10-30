@@ -1,12 +1,12 @@
 import unittest
+from datetime import UTC, datetime
 from typing import Any
 
 from slices.payment.domains.payment.events import (
     PaymentAuthorizationCancelled,
     PaymentAuthorized,
-    PaymentCaptured,
+    PaymentDomainEvent,
     PaymentFailed,
-    PaymentRefunded,
 )
 from slices.payment.domains.payment.fsm import (
     PARENT,
@@ -24,11 +24,14 @@ from slices.payment.domains.payment.fsm import (
     lineage,
     transition,
 )
-from slices.payment.domains.payment.ids import OrderId, PaymentId
+from slices.payment.domains.payment.ids import OperationId, OperationKind, OrderId, PaymentId
+from slices.payment.domains.payment.model import PaymentModel
+from slices.payment.domains.payment.operation import OperationOutcome
 from slices.payment.domains.payment.payment import Payment
 from slices.payment.domains.payment.vo.market import InvalidMarketIdError, MarketId
 from slices.payment.domains.payment.vo.money import CurrencyMismatchError, InvalidMoneyError, Money
 
+NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 _S = PaymentState
 _T = PaymentTrigger
 _C = PaymentCompoundState
@@ -134,89 +137,106 @@ class PaymentStateMachineTest(unittest.TestCase):
         self.assertFalse(is_in(_S.CAPTURED, _C.CLOSED))
 
 
+def run_operation(
+    payment: Payment,
+    kind: OperationKind,
+    outcome: OperationOutcome,
+    operation_id: str | None = None,
+) -> list[PaymentDomainEvent]:
+    target = OperationId(operation_id or f"op-{kind.value}")
+    payment.request_operation(target, kind, f"key-{target}", NOW)
+    payment.pull_events()
+    return payment.complete_operation(target, outcome, NOW)
+
+
 class PaymentDomainTest(unittest.TestCase):
     def test_payment_lifecycle_is_strict(self) -> None:
         payment = self.payment()
+        payment.pull_events()
 
-        authorized = payment.authorize(" provider-1 ")
-        self.assertEqual(authorized.to_state, PaymentState.AUTHORIZED)
+        run_operation(payment, OperationKind.AUTHORIZE, OperationOutcome.success(" provider-1 "))
+        self.assertEqual(payment.state, PaymentState.AUTHORIZED)
         self.assertEqual(payment.provider_reference, "provider-1")
+        self.assertEqual(
+            [t.to_state for t in payment.pull_transitions()], [PaymentState.AUTHORIZED]
+        )
 
         with self.assertRaises(AlreadyInStateError) as duplicate:
-            payment.authorize("provider-1")
+            payment.request_operation(OperationId("op-2"), OperationKind.AUTHORIZE, "key-2", NOW)
         self.assertEqual(duplicate.exception.state, PaymentState.AUTHORIZED)
 
-        self.assertEqual(payment.capture().to_state, PaymentState.CAPTURED)
-        self.assertEqual(payment.refund().to_state, PaymentState.REFUNDED)
-        payment_id, order_id, amount = PaymentId("payment-1"), OrderId("order-1"), payment.amount
-        market_id = MarketId("berlin")
-        self.assertEqual(
-            payment.pull_events(),
-            [
-                PaymentAuthorized(payment_id, order_id, market_id, amount),
-                PaymentCaptured(payment_id, order_id, market_id, amount),
-                PaymentRefunded(payment_id, order_id, market_id, amount),
-            ],
-        )
+        run_operation(payment, OperationKind.CAPTURE, OperationOutcome.success())
+        self.assertEqual(payment.state, PaymentState.CAPTURED)
+        run_operation(payment, OperationKind.REFUND, OperationOutcome.success())
+        self.assertEqual(payment.state, PaymentState.REFUNDED)
         self.assertEqual(payment.pull_events(), [])
 
         with self.assertRaises(AlreadyInStateError):
-            payment.refund()
+            payment.request_operation(OperationId("op-3"), OperationKind.REFUND, "key-3", NOW)
         self.assertEqual(payment.pull_events(), [])
 
     def test_authorization_guard_requires_provider_reference(self) -> None:
         payment = self.payment()
+        operation = payment.request_operation(
+            OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW
+        )
         with self.assertRaises(GuardFailedError) as raised:
-            payment.authorize("  ")
+            payment.complete_operation(operation.id, OperationOutcome.success("  "), NOW)
         self.assertEqual(raised.exception.reason, "provider_reference_required")
         self.assertEqual(payment.state, PaymentState.PENDING)
 
     def test_cancelling_authorization_returns_payment_to_pending(self) -> None:
         payment = self.payment()
-        payment.authorize("provider-1")
+        run_operation(payment, OperationKind.AUTHORIZE, OperationOutcome.success("provider-1"))
 
-        result = payment.cancel_authorization()
+        events = run_operation(
+            payment, OperationKind.CANCEL_AUTHORIZATION, OperationOutcome.success()
+        )
 
-        self.assertEqual(result.to_state, PaymentState.PENDING)
+        self.assertEqual(payment.state, PaymentState.PENDING)
         self.assertIsNone(payment.provider_reference)
         self.assertEqual(
-            payment.pull_events()[-1],
+            events[-1],
             PaymentAuthorizationCancelled(
                 payment.id, payment.order_id, payment.market_id, payment.amount
             ),
         )
         with self.assertRaises(AlreadyInStateError):
-            payment.cancel_authorization()
+            payment.request_operation(
+                OperationId("op-2"), OperationKind.CANCEL_AUTHORIZATION, "key-2", NOW
+            )
 
     def test_invalid_transition_does_not_change_state(self) -> None:
         payment = self.payment()
         with self.assertRaises(InvalidTransitionError) as raised:
-            payment.capture()
+            payment.request_operation(OperationId("op-1"), OperationKind.CAPTURE, "key-1", NOW)
         self.assertEqual(raised.exception.from_state, PaymentState.PENDING)
         self.assertEqual(raised.exception.trigger, PaymentTrigger.CAPTURE)
         self.assertEqual(payment.state, PaymentState.PENDING)
+        self.assertEqual(payment.operations, ())
 
-    def test_ensure_can_checks_table_without_changing_state(self) -> None:
+    def test_declined_authorization_records_reason(self) -> None:
         payment = self.payment()
 
-        payment.ensure_can(PaymentTrigger.AUTHORIZE)
-        with self.assertRaises(InvalidTransitionError):
-            payment.ensure_can(PaymentTrigger.CAPTURE)
-        with self.assertRaises(AlreadyInStateError):
-            payment.ensure_can(PaymentTrigger.CANCEL_AUTHORIZATION)
-        self.assertEqual(payment.state, PaymentState.PENDING)
-        self.assertEqual(payment.pull_events(), [])
-
-    def test_fail_records_reason(self) -> None:
-        payment = self.payment()
-
-        self.assertEqual(payment.fail(" card_declined ").to_state, PaymentState.FAILED)
-        self.assertEqual(
-            payment.pull_events(),
-            [PaymentFailed(payment.id, payment.order_id, payment.market_id, "card_declined")],
+        events = run_operation(
+            payment, OperationKind.AUTHORIZE, OperationOutcome.declined(" card_declined ")
         )
+
+        self.assertEqual(payment.state, PaymentState.FAILED)
+        self.assertEqual(
+            events[-1],
+            PaymentFailed(payment.id, payment.order_id, payment.market_id, "card_declined"),
+        )
+
+    def test_successful_state_requires_provider_reference(self) -> None:
         with self.assertRaises(ValueError):
-            self.payment().fail(" ")
+            PaymentModel(
+                PaymentId("payment-1"),
+                OrderId("order-1"),
+                MarketId("berlin"),
+                Money.parse("10.00", "EUR"),
+                state=PaymentState.AUTHORIZED,
+            )
 
     def test_money_is_exact_positive_and_single_currency(self) -> None:
         first = Money.parse("0.10", "EUR")
@@ -250,10 +270,14 @@ class PaymentDomainTest(unittest.TestCase):
     def test_market_is_kept_from_creation(self) -> None:
         payment = self.payment()
 
-        payment.authorize("provider-1")
+        events = run_operation(
+            payment, OperationKind.AUTHORIZE, OperationOutcome.success("provider-1")
+        )
 
         self.assertEqual(payment.market_id, MarketId("berlin"))
-        self.assertEqual(payment.pull_events()[0].market_id, MarketId("berlin"))
+        authorized = events[-1]
+        assert isinstance(authorized, PaymentAuthorized)
+        self.assertEqual(authorized.market_id, MarketId("berlin"))
 
     @staticmethod
     def payment() -> Payment:

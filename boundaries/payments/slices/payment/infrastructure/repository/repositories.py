@@ -1,14 +1,13 @@
-"""PostgreSQL adapters of the payment repositories, Outbox and provider message Inbox.
+"""PostgreSQL adapters of the payment repository, Outbox and provider message Inbox.
 
-Inserts run in a savepoint so that a mapped unique violation leaves the surrounding
-Unit of Work usable. ``save`` updates only the loaded ``version``; zero affected rows
-means a concurrent modification.
+A write runs in a savepoint so that a mapped unique violation rolls its events back and
+leaves the surrounding Unit of Work usable.
 """
 
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Any
 
+import psycopg
 from psycopg import errors
 
 from infrastructure.repository.database import Database
@@ -18,19 +17,34 @@ from pkg.usecase import ConcurrencyConflictError
 from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,
-    MarketId,
-    Money,
     OperationAlreadyPendingError,
     OperationId,
-    OperationKind,
-    OperationState,
     OrderId,
     Payment,
     PaymentDomainEvent,
     PaymentId,
-    PaymentOperation,
-    PaymentState,
+    PaymentModel,
+    PaymentOperationRequested,
+    crosses_snapshot_boundary,
 )
+
+from .event_codec import (
+    SNAPSHOT_SCHEMA_VERSION,
+    UnreadableStoredDataError,
+    decode_event,
+    decode_snapshot,
+    encode_event,
+    encode_snapshot,
+)
+from .event_store import (
+    STREAM_VERSION_UNIQUE,
+    StoredSnapshot,
+    append_events,
+    read_events,
+    read_snapshot,
+    write_snapshot,
+)
+from .replay_metrics import ReplayMetrics
 
 PAYMENT_ORDER_UNIQUE = "payments_order_id_key"
 OPERATION_KEY_UNIQUE = "payment_operations_idempotency_key_key"
@@ -42,7 +56,7 @@ OUTBOX_RETENTION = timedelta(hours=1)
 _PAYMENT_COLUMNS = "id, order_id, market_id, amount, currency, state, provider_reference, version"
 _OPERATION_COLUMNS = (
     "id, payment_id, kind, idempotency_key, amount, currency, requested_at, state, "
-    "provider_reference, decline_reason, completed_at, version"
+    "provider_reference, decline_reason, completed_at"
 )
 
 
@@ -51,190 +65,187 @@ def _constraint(error: errors.UniqueViolation) -> str | None:
 
 
 class DatabasePaymentRepository:
-    """Payment aggregates in the ``payments`` table with optimistic locking by ``version``."""
+    """Payment aggregates in their streams (local ADR 2).
 
-    def __init__(self, database: Database) -> None:
+    ``payment_events`` is the source of truth; ``payments`` and ``payment_operations`` are
+    projections written in the savepoint of the events and used to find a Payment by Order,
+    operation or idempotency key. ``save`` passing a multiple of ``snapshot_every`` also
+    writes the snapshot.
+    """
+
+    def __init__(
+        self,
+        database: Database,
+        snapshot_every: int,
+        replay_metrics: ReplayMetrics | None = None,
+    ) -> None:
         self._db = database
+        self._snapshot_every = snapshot_every
+        self._replay_metrics = replay_metrics or ReplayMetrics()
 
     def get(self, payment_id: PaymentId) -> Payment | None:
-        """Return the Payment, or ``None`` when it does not exist."""
-        return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE id = %s", payment_id)  # noqa: S608 - only fixed column/condition constants are interpolated
+        """Return the Payment from its snapshot and stream, or ``None`` without a stream.
+
+        Raises:
+            UnreadableStoredDataError: A stored event or a snapshot of the current schema
+                cannot be read, or the versions of the stream have a gap.
+        """
+        with self._db.connection() as conn:
+            # Сначала снапшот: поток только дописывается, более позднее чтение хвоста ничего
+            # не пропустит.
+            snapshot = _usable_snapshot(read_snapshot(conn, payment_id))
+            after = 0 if snapshot is None else snapshot.version
+            rows = read_events(conn, payment_id, after)
+        if snapshot is None and not rows:
+            return None
+        for offset, row in enumerate(rows, start=1):
+            if row.version != after + offset:
+                raise UnreadableStoredDataError(f"stream {payment_id} has a gap at {row.version}")
+        events = [decode_event(r.event_type, r.schema_version, r.payload) for r in rows]
+        self._replay_metrics.loaded(len(events), from_snapshot=snapshot is not None)
+        model = None if snapshot is None else decode_snapshot(snapshot.state)
+        try:
+            return Payment.from_history(model, after, events)
+        except ValueError as error:
+            raise UnreadableStoredDataError(f"stream {payment_id}: {error}") from error
 
     def get_by_order(self, order_id: OrderId) -> Payment | None:
         """Return the only Payment of the Order, or ``None``."""
-        return self._one(f"SELECT {_PAYMENT_COLUMNS} FROM payments WHERE order_id = %s", order_id)  # noqa: S608 - only fixed column/condition constants are interpolated
+        return self._get_through("SELECT id FROM payments WHERE order_id = %s", order_id)
+
+    def get_by_operation(self, operation_id: OperationId) -> Payment | None:
+        """Return the Payment holding the operation, or ``None``."""
+        return self._get_through(
+            "SELECT payment_id FROM payment_operations WHERE id = %s", operation_id
+        )
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Payment | None:
+        """Return the Payment holding the operation with the key, or ``None``."""
+        return self._get_through(
+            "SELECT payment_id FROM payment_operations WHERE idempotency_key = %s", idempotency_key
+        )
 
     def add(self, payment: Payment) -> int:
-        """Insert a new Payment at version 1 and return that version.
+        """Persist a new Payment and return its version.
 
         Raises:
             DuplicatePaymentError: the Order already has a Payment.
         """
-        with self._db.connection() as conn:
-            try:
-                with conn.transaction():
-                    conn.execute(
-                        f"INSERT INTO payments ({_PAYMENT_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
-                        (
-                            payment.id,
-                            payment.order_id,
-                            payment.market_id.value,
-                            payment.amount.amount,
-                            payment.amount.currency,
-                            payment.state.value,
-                            payment.provider_reference,
-                        ),
-                    )
-            except errors.UniqueViolation as error:
-                if _constraint(error) == PAYMENT_ORDER_UNIQUE:
-                    raise DuplicatePaymentError(payment.order_id) from error
-                raise
-        return 1
+        return self.save(payment)
 
     def save(self, payment: Payment) -> int:
-        """Persist the Payment state if its loaded version is current; return the new version.
+        """Append the new events with the projections and return the committed version.
 
         Raises:
-            ConcurrencyConflictError: the Payment was modified concurrently.
+            ConcurrencyConflictError: the stream has moved on since the Payment was loaded.
+            DuplicatePaymentError: the Order already has another Payment.
+            DuplicateIdempotencyKeyError: another Payment uses an operation key.
+            OperationAlreadyPendingError: the projection already has a pending operation.
         """
-        with self._db.connection() as conn:
-            row = conn.execute(
-                "UPDATE payments SET state = %s, provider_reference = %s, version = version + 1 "
-                "WHERE id = %s AND version = %s RETURNING version",
-                (payment.state.value, payment.provider_reference, payment.id, payment.version),
-            ).fetchone()
-        if row is None:
-            raise ConcurrencyConflictError("Payment", payment.id)
-        return int(row[0])
-
-    def _one(self, query: str, value: str) -> Payment | None:
-        with self._db.connection() as conn:
-            row = conn.execute(query, (value,)).fetchone()
-        if row is None:
-            return None
-        payment_id, order_id, market_id, amount, currency, state, reference, version = row
-        return Payment.restore(
-            PaymentId(payment_id),
-            OrderId(order_id),
-            MarketId(market_id),
-            Money(amount, currency),
-            PaymentState(state),
-            reference,
-            int(version),
-        )
-
-
-class DatabasePaymentOperationRepository:
-    """Payment Operations in the ``payment_operations`` table with optimistic locking."""
-
-    def __init__(self, database: Database) -> None:
-        self._db = database
-
-    def get(self, operation_id: OperationId) -> PaymentOperation | None:
-        """Return the Payment Operation, or ``None``."""
-        return self._first("id = %s", operation_id)
-
-    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
-        """Return the Payment Operation registered under the key, or ``None``."""
-        return self._first("idempotency_key = %s", idempotency_key)
-
-    def add(self, operation: PaymentOperation) -> None:
-        """Insert a new pending Payment Operation at version 1.
-
-        Raises:
-            DuplicateIdempotencyKeyError: the idempotency key is already used.
-            OperationAlreadyPendingError: the Payment already has a pending operation.
-        """
+        events = payment.uncommitted_events
+        if not events:
+            return payment.version
+        version = payment.version + len(events)
         with self._db.connection() as conn:
             try:
                 with conn.transaction():
-                    conn.execute(
-                        f"INSERT INTO payment_operations ({_OPERATION_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)",
-                        (
-                            operation.id,
-                            operation.payment_id,
-                            operation.kind.value,
-                            operation.idempotency_key,
-                            operation.amount.amount,
-                            operation.amount.currency,
-                            operation.requested_at,
-                            operation.state.value,
-                            operation.provider_reference,
-                            operation.decline_reason,
-                            operation.completed_at,
-                        ),
+                    append_events(
+                        conn, payment.id, payment.version, [encode_event(e) for e in events]
                     )
+                    project_payment(conn, payment.model, version)
+                    if crosses_snapshot_boundary(payment.version, version, self._snapshot_every):
+                        write_snapshot(
+                            conn,
+                            payment.id,
+                            version,
+                            SNAPSHOT_SCHEMA_VERSION,
+                            encode_snapshot(payment.model),
+                        )
             except errors.UniqueViolation as error:
-                constraint = _constraint(error)
-                if constraint == OPERATION_KEY_UNIQUE:
-                    raise DuplicateIdempotencyKeyError(operation.idempotency_key) from error
-                if constraint == OPERATION_PENDING_UNIQUE:
-                    raise OperationAlreadyPendingError(operation.payment_id) from error
-                raise
+                raise _mapped(error, payment) from error
+        payment.mark_committed(version)
+        return version
 
-    def save(self, operation: PaymentOperation) -> int:
-        """Persist the operation result if its loaded version is current; return the new version.
-
-        Raises:
-            ConcurrencyConflictError: the operation was modified concurrently.
-        """
+    def _get_through(self, query: str, value: str) -> Payment | None:
         with self._db.connection() as conn:
-            row = conn.execute(
-                "UPDATE payment_operations SET state = %s, provider_reference = %s, "
-                "decline_reason = %s, completed_at = %s, version = version + 1 "
-                "WHERE id = %s AND version = %s RETURNING version",
+            row = conn.execute(query, (value,)).fetchone()
+        return None if row is None else self.get(PaymentId(row[0]))
+
+
+def _usable_snapshot(snapshot: StoredSnapshot | None) -> StoredSnapshot | None:
+    # Другая версия схемы — состояние собирается из всего потока, следующая граница
+    # перезапишет снапшот. Это пересборка производных данных, источник истины тот же.
+    if snapshot is None or snapshot.schema_version != SNAPSHOT_SCHEMA_VERSION:
+        return None
+    return snapshot
+
+
+def _mapped(error: errors.UniqueViolation, payment: Payment) -> Exception:
+    constraint = _constraint(error)
+    if constraint == STREAM_VERSION_UNIQUE:
+        return ConcurrencyConflictError("Payment", payment.id)
+    if constraint == PAYMENT_ORDER_UNIQUE:
+        return DuplicatePaymentError(payment.order_id)
+    if constraint == OPERATION_KEY_UNIQUE:
+        key = _uncommitted_key(payment)
+        return DuplicateIdempotencyKeyError(key)
+    if constraint == OPERATION_PENDING_UNIQUE:
+        return OperationAlreadyPendingError(payment.id)
+    return error
+
+
+def _uncommitted_key(payment: Payment) -> str:
+    return next(
+        event.idempotency_key
+        for event in payment.uncommitted_events
+        if isinstance(event, PaymentOperationRequested)
+    )
+
+
+def project_payment(conn: psycopg.Connection, payment: PaymentModel, version: int) -> None:
+    """Write the projections of the Payment state at ``version`` on the connection."""
+    conn.execute(
+        f"INSERT INTO payments ({_PAYMENT_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, "
+        "provider_reference = EXCLUDED.provider_reference, version = EXCLUDED.version",
+        (
+            payment.id,
+            payment.order_id,
+            payment.market_id.value,
+            payment.amount.amount,
+            payment.amount.currency,
+            payment.state.value,
+            payment.provider_reference,
+            version,
+        ),
+    )
+    if not payment.operations:
+        return
+    with conn.cursor() as cursor:
+        cursor.executemany(
+            f"INSERT INTO payment_operations ({_OPERATION_COLUMNS}) "  # noqa: S608 - only fixed column/condition constants are interpolated
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, "
+            "provider_reference = EXCLUDED.provider_reference, "
+            "decline_reason = EXCLUDED.decline_reason, completed_at = EXCLUDED.completed_at",
+            [
                 (
+                    operation.id,
+                    operation.payment_id,
+                    operation.kind.value,
+                    operation.idempotency_key,
+                    operation.amount.amount,
+                    operation.amount.currency,
+                    operation.requested_at,
                     operation.state.value,
                     operation.provider_reference,
                     operation.decline_reason,
                     operation.completed_at,
-                    operation.id,
-                    operation.version,
-                ),
-            ).fetchone()
-        if row is None:
-            raise ConcurrencyConflictError("PaymentOperation", operation.id)
-        return int(row[0])
-
-    def _first(self, condition: str, value: str) -> PaymentOperation | None:
-        with self._db.connection() as conn:
-            row = conn.execute(
-                f"SELECT {_OPERATION_COLUMNS} FROM payment_operations WHERE {condition} LIMIT 1",  # noqa: S608 - only fixed column/condition constants are interpolated
-                (value,),
-            ).fetchone()
-        return None if row is None else _operation(row)
-
-
-def _operation(row: tuple[Any, ...]) -> PaymentOperation:
-    (
-        operation_id,
-        payment_id,
-        kind,
-        key,
-        amount,
-        currency,
-        requested_at,
-        state,
-        reference,
-        reason,
-        completed_at,
-        version,
-    ) = row
-    return PaymentOperation.restore(
-        OperationId(operation_id),
-        PaymentId(payment_id),
-        OperationKind(kind),
-        key,
-        Money(amount, currency),
-        requested_at,
-        OperationState(state),
-        reference,
-        reason,
-        completed_at,
-        int(version),
-    )
+                )
+                for operation in payment.operations
+            ],
+        )
 
 
 class DatabasePaymentOutbox:

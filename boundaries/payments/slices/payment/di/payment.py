@@ -49,11 +49,9 @@ from slices.payment.infrastructure.provider import (
     FakePaymentProvider,
 )
 from slices.payment.infrastructure.repository import (
-    DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
     DatabasePaymentStatusReader,
-    DatabasePendingOperationQuery,
     DatabaseProviderMessageInbox,
 )
 
@@ -114,6 +112,7 @@ class PaymentContainer(containers.DeclarativeContainer):
     spicedb = providers.Dependency()
     spicedb_settings = providers.Dependency()
     provider_settings = providers.Dependency()
+    event_store_settings = providers.Dependency()
 
     # Ports of the application layer.
     permissions = providers.Singleton(create_permission_checker, spicedb_settings, spicedb)
@@ -137,9 +136,10 @@ class PaymentContainer(containers.DeclarativeContainer):
         domain_metrics,
         fsm_metrics,
     )
-    payments = providers.Singleton(DatabasePaymentRepository, database)
-    operations = providers.Singleton(DatabasePaymentOperationRepository, database)
-    pending = providers.Singleton(DatabasePendingOperationQuery, database)
+    # Streams of Payment: the source of truth with synchronous projections (local ADR 2).
+    payments = providers.Singleton(
+        DatabasePaymentRepository, database, event_store_settings.provided.snapshot_every
+    )
     statuses = providers.Singleton(DatabasePaymentStatusReader, database)
     outbox = providers.Singleton(
         ObservedOutbox,
@@ -148,17 +148,13 @@ class PaymentContainer(containers.DeclarativeContainer):
     )
     inbox = providers.Singleton(DatabaseProviderMessageInbox, database)
     # One applier of final Provider results for synchronous answers and callbacks.
-    applier = providers.Singleton(
-        ProviderResultApplier, payments, operations, outbox, clock, fsm_metrics
-    )
+    applier = providers.Singleton(ProviderResultApplier, payments, outbox, clock, fsm_metrics)
 
     # Use cases: one local transaction per Unit of Work.
     executor = providers.Singleton(
         PaymentOperationExecutor,
         uow=uow,
         payments=payments,
-        operations=operations,
-        pending=pending,
         provider=payment_provider,
         permissions=permissions,
         clock=clock,

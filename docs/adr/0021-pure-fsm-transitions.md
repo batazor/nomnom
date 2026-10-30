@@ -68,7 +68,7 @@ FSM строгая: повторный trigger в целевом состоян�
 
 Domain method выполняет method-specific validation, вызывает FSM, обновляет state и возвращает domain result. Infrastructure actions внутри метода и перехода запрещены.
 
-Значимые domain events записываются как данные в памяти агрегата. Aggregate предоставляет явный механизм забора событий наподобие `PullEvents()`. Application решает, какие domain events публикуются, infrastructure маппит их в integration events и сохраняет Outbox вместе с aggregate state ([ADR 25](0025-integration-event-publication.md)). FSM не создаёт event автоматически на каждый переход.
+Значимые domain events записываются как данные в памяти агрегата (`Payment` дополнительно сохраняет их в свой поток: [локальный ADR 2 `payments`](../../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md)). Aggregate предоставляет явный механизм забора событий наподобие `PullEvents()`. Application решает, какие domain events публикуются, infrastructure маппит их в integration events и сохраняет Outbox вместе с aggregate state ([ADR 25](0025-integration-event-publication.md)). FSM не создаёт event автоматически на каждый переход.
 
 ### Эффекты и integrations
 

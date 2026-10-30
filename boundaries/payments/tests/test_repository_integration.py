@@ -1,4 +1,6 @@
-"""Integration with a real PostgreSQL: migrations, repositories, Unit of Work, Outbox, Inbox.
+"""Integration with a real PostgreSQL: migrations, Unit of Work, Outbox, Inbox, history.
+
+The Payment streams are covered by ``test_payment_event_store_integration``.
 
 PostgreSQL runs in testcontainers (``tests/conftest.py``). Tables are truncated before
 every test.
@@ -24,7 +26,6 @@ from infrastructure.repository import (
     outbox_event_id,
 )
 from pkg.outbox import AggregateRef
-from pkg.usecase import ConcurrencyConflictError
 from slices.payment.applications.authorize_payment import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -37,25 +38,22 @@ from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,
     Money,
-    OperationAlreadyPendingError,
     OperationId,
     OperationKind,
+    OperationOutcome,
     OperationState,
     OrderId,
     Payment,
     PaymentAuthorized,
     PaymentDomainEvent,
     PaymentId,
-    PaymentOperation,
     PaymentState,
 )
 from slices.payment.infrastructure.observability import FsmMetrics
 from slices.payment.infrastructure.repository import (
     DatabasePaymentOperationHistory,
-    DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
-    DatabasePendingOperationQuery,
     DatabaseProviderMessageInbox,
 )
 
@@ -74,6 +72,7 @@ class _AuthorizedOnly:
 
 
 AMOUNT = Money.parse("25.00", "EUR")
+SNAPSHOT_EVERY = 5
 
 
 class _Clock:
@@ -102,11 +101,12 @@ class RepositoryIntegrationTest(unittest.TestCase):
     @override
     def setUp(self) -> None:
         with self.database.connection() as conn:
-            conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
+            conn.execute(
+                "TRUNCATE payment_events, payment_snapshots, payments, payment_operations, "
+                "payments_outbox, inbox"
+            )
         self.uow = DatabaseUnitOfWork(self.database)
-        self.payments = DatabasePaymentRepository(self.database)
-        self.operations = DatabasePaymentOperationRepository(self.database)
-        self.pending = DatabasePendingOperationQuery(self.database)
+        self.payments = DatabasePaymentRepository(self.database, SNAPSHOT_EVERY)
         self.history = DatabasePaymentOperationHistory(self.database)
         self.outbox = DatabasePaymentOutbox(self.database, _AuthorizedOnly())
         self.inbox = DatabaseProviderMessageInbox(self.database)
@@ -118,17 +118,10 @@ class RepositoryIntegrationTest(unittest.TestCase):
         assert stored is not None
         return stored
 
-    def _operation(
-        self, operation_id: str, key: str, payment_id: str = "payment-1", minutes: int = 0
-    ) -> PaymentOperation:
-        return PaymentOperation(
-            OperationId(operation_id),
-            PaymentId(payment_id),
-            OperationKind.AUTHORIZE,
-            key,
-            AMOUNT,
-            NOW + timedelta(minutes=minutes),
-        )
+    def _authorized_events(self, payment: Payment) -> list[PaymentDomainEvent]:
+        operation = OperationId(f"op-{payment.version}")
+        payment.request_operation(operation, OperationKind.AUTHORIZE, f"key-{operation}", NOW)
+        return payment.complete_operation(operation, OperationOutcome.success("auth-ref"), NOW)
 
     def _outbox_rows(self) -> list[tuple[Any, ...]]:
         with self.database.connection() as conn:
@@ -153,51 +146,28 @@ class RepositoryIntegrationTest(unittest.TestCase):
         with self.assertRaises(DuplicatePaymentError):
             self.payments.add(Payment(PaymentId("payment-2"), OrderId("order-1"), MARKET, AMOUNT))
 
-    def test_save_with_stale_version_is_concurrency_conflict(self) -> None:
-        first = self._payment()
-        second = self.payments.get(first.id)
-        assert second is not None
-        first.authorize("auth-ref")
-        self.assertEqual(self.payments.save(first), 2)
-        second.authorize("other-ref")
-        with self.assertRaises(ConcurrencyConflictError):
-            self.payments.save(second)
-        stored = self.payments.get(first.id)
-        assert stored is not None
-        self.assertEqual(
-            (stored.state, stored.provider_reference), (PaymentState.AUTHORIZED, "auth-ref")
-        )
-
-    def test_operation_uniqueness_maps_to_domain_errors(self) -> None:
-        self._payment()
-        self._payment("payment-2", "order-2")
-        self.operations.add(self._operation("operation-1", "key-1"))
-        with self.assertRaises(DuplicateIdempotencyKeyError):
-            self.operations.add(self._operation("operation-2", "key-1", "payment-2"))
-        with self.assertRaises(OperationAlreadyPendingError):
-            self.operations.add(self._operation("operation-3", "key-3"))
-
     def test_completed_operation_frees_pending_slot_and_history_is_ordered(self) -> None:
-        self._payment()
-        first = self._operation("operation-1", "key-1", minutes=1)
-        self.operations.add(first)
-        pending_id = self.pending.pending_operation_id(PaymentId("payment-1"))
-        self.assertEqual(pending_id, OperationId("operation-1"))
-        loaded = self.operations.get(OperationId("operation-1"))
-        assert loaded is not None
-        loaded.decline("insufficient funds", NOW + timedelta(minutes=2))
-        self.assertEqual(self.operations.save(loaded), 2)
-        with self.assertRaises(ConcurrencyConflictError):
-            self.operations.save(loaded)
-        self.assertIsNone(self.pending.pending_operation_id(PaymentId("payment-1")))
-        self.operations.add(self._operation("operation-0", "key-0", minutes=0))
+        payment = self._payment()
+        first = OperationId("operation-1")
+        payment.request_operation(
+            first, OperationKind.AUTHORIZE, "key-1", NOW + timedelta(minutes=1)
+        )
+        self.payments.save(payment)
+        payment.complete_operation(
+            first, OperationOutcome.declined("insufficient funds"), NOW + timedelta(minutes=2)
+        )
+        self.payments.save(payment)
+
+        stored = self.payments.get(payment.id)
+        assert stored is not None
+        self.assertEqual(stored.state, PaymentState.FAILED)
 
         history = self.history.list_for_payment(PaymentId("payment-1"))
         assert history is not None
         self.assertIsNone(self.history.list_for_payment(PaymentId("missing")))
-        self.assertEqual([op.operation_id for op in history], ["operation-0", "operation-1"])
-        self.assertEqual(history[1].decline_reason, "insufficient funds")
-        declined = self.operations.get_by_idempotency_key("key-1")
+        self.assertEqual([op.operation_id for op in history], ["operation-1"])
+        self.assertEqual(history[0].decline_reason, "insufficient funds")
+        declined = stored.model.operation_by_key("key-1")
         assert declined is not None
         self.assertEqual(declined.state, OperationState.DECLINED)
         self.assertEqual(declined.decline_reason, "insufficient funds")
@@ -207,7 +177,6 @@ class RepositoryIntegrationTest(unittest.TestCase):
         def work() -> None:
             payment = Payment(PaymentId("payment-1"), OrderId("order-1"), MARKET, AMOUNT)
             self.payments.add(payment)
-            self.operations.add(self._operation("operation-1", "key-1"))
             self.outbox.add(AggregateRef("Payment", payment.id, 1), [])
             self.inbox.register("message-1")
             raise RuntimeError("boom")
@@ -215,18 +184,22 @@ class RepositoryIntegrationTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.uow.run(work)
         self.assertIsNone(self.payments.get(PaymentId("payment-1")))
-        self.assertIsNone(self.operations.get(OperationId("operation-1")))
         self.assertTrue(self.inbox.register("message-1"))
 
     def test_mapped_violation_keeps_unit_of_work_usable(self) -> None:
         self._payment()
-        self.operations.add(self._operation("operation-1", "key-1"))
+        other = self._payment("payment-2", "order-2")
+        other.request_operation(OperationId("op-1"), OperationKind.AUTHORIZE, "key-1", NOW)
+        self.payments.save(other)
 
         def work() -> str:
+            payment = self.payments.get(PaymentId("payment-1"))
+            assert payment is not None
+            payment.request_operation(OperationId("op-2"), OperationKind.AUTHORIZE, "key-1", NOW)
             with contextlib.suppress(DuplicateIdempotencyKeyError):
-                self.operations.add(self._operation("operation-2", "key-1"))
+                self.payments.save(payment)
             # Nested run joins the same transaction.
-            return self.uow.run(lambda: str(self.operations.get(OperationId("operation-1"))))
+            return self.uow.run(lambda: str(self.payments.get_by_idempotency_key("key-1")))
 
         self.assertNotEqual(self.uow.run(work), "None")
 
@@ -234,14 +207,12 @@ class RepositoryIntegrationTest(unittest.TestCase):
         payment = self._payment()
 
         def work() -> None:
-            payment.authorize("auth-ref")
-            payment.capture()
-            events = payment.pull_events()
+            events = self._authorized_events(payment)
             version = self.payments.save(payment)
             self.outbox.add(AggregateRef("Payment", payment.id, version), events)
 
         self.uow.run(work)
-        aggregate = AggregateRef("Payment", "payment-1", 2)
+        aggregate = AggregateRef("Payment", "payment-1", 4)
         self.assertEqual(
             self._outbox_rows(),
             [
@@ -249,7 +220,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
                     outbox_event_id(aggregate, AUTHORIZED_TYPE),
                     "Payment",
                     "payment-1",
-                    2,
+                    4,
                     AUTHORIZED_TYPE,
                     PAYMENT_EVENTS_TOPIC,
                     b"authorized:payment-1",
@@ -259,23 +230,20 @@ class RepositoryIntegrationTest(unittest.TestCase):
         )
         expected = uuid.uuid5(
             uuid.UUID("8f1d3c2a-5b7e-4a90-9c61-2e4f7b8d0a13"),
-            f"Payment:payment-1:2:{AUTHORIZED_TYPE}",
+            f"Payment:payment-1:4:{AUTHORIZED_TYPE}",
         )
         self.assertEqual(outbox_event_id(aggregate, AUTHORIZED_TYPE), expected)
 
     def test_default_mapper_writes_nothing(self) -> None:
         payment = self._payment()
-        payment.authorize("auth-ref")
+        events = self._authorized_events(payment)
         outbox = DatabasePaymentOutbox(self.database, NoPublishedContracts())
-        self.uow.run(
-            lambda: outbox.add(AggregateRef("Payment", payment.id, 2), payment.pull_events())
-        )
+        self.uow.run(lambda: outbox.add(AggregateRef("Payment", payment.id, 2), events))
         self.assertEqual(self._outbox_rows(), [])
 
     def test_duplicate_event_id_rolls_back(self) -> None:
         payment = self._payment()
-        payment.authorize("auth-ref")
-        events = payment.pull_events()
+        events = self._authorized_events(payment)
         ref = AggregateRef("Payment", payment.id, 2)
         self.uow.run(lambda: self.outbox.add(ref, events))
         with self.assertRaises(psycopg.errors.UniqueViolation):
@@ -316,8 +284,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
 
     def test_outbox_row_fills_every_contract_column(self) -> None:
         payment = self._payment()
-        payment.authorize("auth-ref")
-        events = payment.pull_events()
+        events = self._authorized_events(payment)
         traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
         span = trace.NonRecordingSpan(
             trace.SpanContext(
@@ -348,8 +315,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
                 "now() - interval '59 minutes')",
                 (uuid.uuid4(), uuid.uuid4()),
             )
-        payment.authorize("auth-ref")
-        events = payment.pull_events()
+        events = self._authorized_events(payment)
         self.uow.run(lambda: self.outbox.add(AggregateRef("Payment", payment.id, 2), events))
         self.assertEqual([row[2] for row in self._outbox_rows()], ["recent", "payment-1"])
 
@@ -363,8 +329,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
                 "now() - interval '2 hours')",
                 (uuid.uuid4(),),
             )
-        payment.authorize("auth-ref")
-        events = payment.pull_events()
+        events = self._authorized_events(payment)
 
         def work() -> None:
             self.outbox.add(AggregateRef("Payment", payment.id, 2), events)
@@ -384,15 +349,11 @@ class RepositoryIntegrationTest(unittest.TestCase):
         executor = PaymentOperationExecutor(
             uow=self.uow,
             payments=self.payments,
-            operations=self.operations,
-            pending=self.pending,
             provider=provider,
             permissions=FakePermissions(),
             clock=_Clock(),
             operation_ids=_Ids(),
-            applier=ProviderResultApplier(
-                self.payments, self.operations, self.outbox, _Clock(), FsmMetrics()
-            ),
+            applier=ProviderResultApplier(self.payments, self.outbox, _Clock(), FsmMetrics()),
             transitions=FsmMetrics(),
         )
         handler = AuthorizePaymentHandler(executor)
@@ -407,7 +368,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
         self.assertEqual(len(provider.requests), 1)
         stored = self.payments.get(payment.id)
         assert stored is not None
-        self.assertEqual((stored.state, stored.version), (PaymentState.AUTHORIZED, 2))
+        self.assertEqual((stored.state, stored.version), (PaymentState.AUTHORIZED, 4))
         rows = self._outbox_rows()
         self.assertEqual([row[4] for row in rows], [AUTHORIZED_TYPE])
 

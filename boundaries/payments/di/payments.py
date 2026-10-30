@@ -53,6 +53,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
         spicedb=spicedb,
         spicedb_settings=config.spicedb,
         provider_settings=config.payment_provider,
+        event_store_settings=config.event_store,
     )
 
     # Workers.

@@ -66,13 +66,17 @@ class AuthorizePaymentTest(unittest.TestCase):
         self.assertEqual(request.amount, Money.parse("25.00", "EUR"))
         self.assertEqual(request.operation_id, result.operation_id)
         self.assertEqual(
-            self.kit.outbox_aggregates()[0], AggregateRef("Payment", self.payment_id, 2)
+            self.kit.outbox_aggregates()[0], AggregateRef("Payment", self.payment_id, 4)
         )
         self.assertEqual(
             self.kit.published(),
             [
                 PaymentAuthorized(
-                    self.payment_id, OrderId("order-1"), MARKET, Money.parse("25.00", "EUR")
+                    self.payment_id,
+                    OrderId("order-1"),
+                    MARKET,
+                    Money.parse("25.00", "EUR"),
+                    self.kit.payment(self.payment_id).provider_reference or "",
                 )
             ],
         )
@@ -92,7 +96,11 @@ class AuthorizePaymentTest(unittest.TestCase):
             self.kit.published(),
             [
                 PaymentOperationDeclined(
-                    result.operation_id, self.payment_id, OperationKind.AUTHORIZE, "card_declined"
+                    result.operation_id,
+                    self.payment_id,
+                    OperationKind.AUTHORIZE,
+                    "card_declined",
+                    self.kit.clock.now(),
                 ),
                 PaymentFailed(self.payment_id, OrderId("order-1"), MARKET, "card_declined"),
             ],
@@ -115,7 +123,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         self.assertEqual(second.status, OperationStatus.SUCCEEDED)
         self.assertEqual(len(self.kit.provider.requests), 1)
         self.assertEqual(len(self.kit.published()), 1)
-        self.assertEqual(self.kit.payment(self.payment_id).version, 2)
+        self.assertEqual(self.kit.payment(self.payment_id).version, 4)
 
     def test_ac_408_repeat_after_unknown_result_completes_same_operation(self) -> None:
         self.kit.provider.lost_responses = 1
@@ -216,7 +224,7 @@ class AuthorizePaymentTest(unittest.TestCase):
 
     def test_concurrent_request_with_same_key_reuses_its_operation(self) -> None:
         self.kit.given_operation(self.payment_id, OperationKind.AUTHORIZE, KEY, operation_id="op-x")
-        self.kit.operations.stale_lookups = True
+        self.kit.payments.stale_events = 1
 
         result = self.handler.handle(self.authorize())
 
@@ -227,7 +235,7 @@ class AuthorizePaymentTest(unittest.TestCase):
 
     def test_concurrent_operation_with_other_key_is_in_progress(self) -> None:
         self.kit.given_operation(self.payment_id, OperationKind.AUTHORIZE, "other-key")
-        self.kit.operations.stale_lookups = True
+        self.kit.payments.stale_events = 1
 
         with self.assertRaises(OperationInProgressError):
             self.handler.handle(self.authorize())

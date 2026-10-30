@@ -4,17 +4,17 @@ Adapters are named ``Database<Port>`` after the application or domain port they 
 over ``Database``, the pool of the payments database; names do not carry the storage
 technology.
 
-``migrations/*.sql`` owns ``payments`` and ``payment_operations``; the migrations touch
-only these tables.
+``migrations/*.sql`` owns ``payment_events``, ``payment_snapshots`` and the projections
+``payments`` and ``payment_operations``; the migrations touch only these tables.
 """
 
+from .event_codec import UnreadableStoredDataError
 from .queries import (
     DatabasePaymentOperationHistory,
     DatabasePaymentStatusReader,
-    DatabasePendingOperationQuery,
 )
+from .replay_metrics import ReplayMetrics
 from .repositories import (
-    DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
     DatabaseProviderMessageInbox,
@@ -22,10 +22,10 @@ from .repositories import (
 
 __all__ = [
     "DatabasePaymentOperationHistory",
-    "DatabasePaymentOperationRepository",
     "DatabasePaymentOutbox",
     "DatabasePaymentRepository",
     "DatabasePaymentStatusReader",
-    "DatabasePendingOperationQuery",
     "DatabaseProviderMessageInbox",
+    "ReplayMetrics",
+    "UnreadableStoredDataError",
 ]

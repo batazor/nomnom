@@ -43,22 +43,32 @@ from slices.payment.domains.payment import (
     OperationId,
     OperationKind,
     OperationState,
+    OrderId,
     Payment,
+    PaymentAuthorized,
+    PaymentCaptured,
+    PaymentCreated,
     PaymentDomainEvent,
+    PaymentFailed,
     PaymentId,
     PaymentOperation,
+    PaymentOperationDeclined,
+    PaymentOperationRequested,
+    PaymentOperationSucceeded,
+    PaymentRefunded,
     PaymentState,
 )
 from slices.payment.infrastructure.observability import FsmMetrics
 from slices.payment.infrastructure.repository import (
     DatabasePaymentOperationHistory,
-    DatabasePaymentOperationRepository,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
     DatabasePaymentStatusReader,
-    DatabasePendingOperationQuery,
     DatabaseProviderMessageInbox,
 )
+from slices.payment.infrastructure.repository.event_codec import decode_event, encode_event
+from slices.payment.infrastructure.repository.event_store import append_events, read_events
+from slices.payment.infrastructure.repository.repositories import project_payment
 
 T = TypeVar("T")
 
@@ -67,16 +77,24 @@ OPERATOR = Subject(SubjectKind.USER, "operator-1")
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 # Market of the test Orders (the launch Market of ADR 41).
 MARKET = MarketId("berlin")
+# Снапшот почти на каждый commit: все сценарии use cases проходят и через него.
+SNAPSHOT_EVERY = 2
+# EVENT_STORE__SNAPSHOT_EVERY обязателен: без него load_settings падает.
+REQUIRED_EVENT_STORE_ENV = {"EVENT_STORE__SNAPSHOT_EVERY": "5"}
+# Only facts with a contract reach the Outbox of the real mapper.
+_UNPUBLISHED = (PaymentCreated, PaymentOperationRequested, PaymentOperationSucceeded)
 
 
 class PickledEventsMapper:
-    """Outbox mapper of the test kit: every Domain Event is stored, pickled as its payload.
+    """Outbox mapper of the test kit: every published Domain Event is pickled as its payload.
 
     ``event_type`` is the event ``repr`` so that distinct events of one aggregate version
     get distinct event ids.
     """
 
-    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage:
+    def map(self, aggregate: AggregateRef, event: PaymentDomainEvent) -> OutboxMessage | None:
+        if isinstance(event, _UNPUBLISHED):
+            return None
         return OutboxMessage(repr(event), PAYMENT_EVENTS_TOPIC, pickle.dumps(event))
 
 
@@ -118,39 +136,26 @@ class CountingUnitOfWork:
         return result
 
 
-class StaleOperationRepository(DatabasePaymentOperationRepository):
-    """Simulates a concurrent transaction committed after this one read the data.
+class StalePaymentRepository(DatabasePaymentRepository):
+    """Simulates a concurrent transaction committed after this one read the stream.
 
-    While ``stale_lookups`` is set, idempotency key lookups miss existing operations
-    until the next ``add``.
+    While ``stale_events`` is set, the next ``get`` returns the Payment without that many
+    latest events, as if they were committed right after the read.
     """
 
-    def __init__(self, database: Database) -> None:
-        super().__init__(database)
-        self.stale_lookups = False
+    def __init__(self, database: Database, snapshot_every: int) -> None:
+        super().__init__(database, snapshot_every)
+        self.stale_events = 0
 
     @override
-    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
-        return None if self.stale_lookups else super().get_by_idempotency_key(idempotency_key)
-
-    @override
-    def add(self, operation: PaymentOperation) -> None:
-        self.stale_lookups = False
-        super().add(operation)
-
-
-class StalePendingOperationQuery(DatabasePendingOperationQuery):
-    """Pending lookup that misses while the operation repository reads stale data."""
-
-    def __init__(self, database: Database, operations: StaleOperationRepository) -> None:
-        super().__init__(database)
-        self._operations = operations
-
-    @override
-    def pending_operation_id(self, payment_id: PaymentId) -> OperationId | None:
-        if self._operations.stale_lookups:
-            return None
-        return super().pending_operation_id(payment_id)
+    def get(self, payment_id: PaymentId) -> Payment | None:
+        stale, self.stale_events = self.stale_events, 0
+        if not stale:
+            return super().get(payment_id)
+        with self._db.connection() as conn:
+            rows = read_events(conn, payment_id, 0)
+        events = [decode_event(r.event_type, r.schema_version, r.payload) for r in rows]
+        return Payment.from_history(None, 0, events[:-stale])
 
 
 class FakePaymentProvider:
@@ -234,11 +239,12 @@ class PaymentsTestKit:
     def __init__(self, database: Database) -> None:
         self.database = database
         with database.connection() as conn:
-            conn.execute("TRUNCATE payments, payment_operations, payments_outbox, inbox")
+            conn.execute(
+                "TRUNCATE payment_events, payment_snapshots, payments, payment_operations, "
+                "payments_outbox, inbox"
+            )
         self.uow = CountingUnitOfWork(DatabaseUnitOfWork(database))
-        self.payments = DatabasePaymentRepository(database)
-        self.operations = StaleOperationRepository(database)
-        self.pending = StalePendingOperationQuery(database, self.operations)
+        self.payments = StalePaymentRepository(database, SNAPSHOT_EVERY)
         self.history = DatabasePaymentOperationHistory(database)
         self.statuses = DatabasePaymentStatusReader(database)
         self.outbox = FailingOutbox(DatabasePaymentOutbox(database, PickledEventsMapper()))
@@ -253,8 +259,6 @@ class PaymentsTestKit:
         return PaymentOperationExecutor(
             uow=self.uow,
             payments=self.payments,
-            operations=self.operations,
-            pending=self.pending,
             provider=self.provider,
             permissions=self.permissions,
             clock=self.clock,
@@ -264,9 +268,7 @@ class PaymentsTestKit:
         )
 
     def applier(self) -> ProviderResultApplier:
-        return ProviderResultApplier(
-            self.payments, self.operations, self.outbox, self.clock, self.transitions
-        )
+        return ProviderResultApplier(self.payments, self.outbox, self.clock, self.transitions)
 
     def given_payment(
         self,
@@ -276,23 +278,21 @@ class PaymentsTestKit:
         amount: str = "25.00",
         market_id: MarketId = MARKET,
     ) -> PaymentId:
-        reference = "auth-ref" if state in _STATES_WITH_REFERENCE else None
+        target = PaymentId(payment_id)
+        order = OrderId(order_id)
         money = Money.parse(amount, "EUR")
-        with self.database.connection() as conn:
-            conn.execute(
-                "INSERT INTO payments (id, order_id, market_id, amount, currency, state, "
-                "provider_reference, version) VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
-                (
-                    payment_id,
-                    order_id,
-                    market_id.value,
-                    money.amount,
-                    money.currency,
-                    state.value,
-                    reference,
-                ),
-            )
-        return PaymentId(payment_id)
+        fact = (target, order, market_id, money)
+        events: list[PaymentDomainEvent] = [PaymentCreated(*fact)]
+        if state in {PaymentState.AUTHORIZED, PaymentState.CAPTURED, PaymentState.REFUNDED}:
+            events.append(PaymentAuthorized(*fact, "auth-ref"))
+        if state in {PaymentState.CAPTURED, PaymentState.REFUNDED}:
+            events.append(PaymentCaptured(*fact))
+        if state is PaymentState.REFUNDED:
+            events.append(PaymentRefunded(*fact))
+        if state is PaymentState.FAILED:
+            events.append(PaymentFailed(target, order, market_id, "failed"))
+        self._given_events(target, 0, events)
+        return target
 
     def given_operation(
         self,
@@ -305,27 +305,29 @@ class PaymentsTestKit:
     ) -> OperationId:
         payment = self.payment(payment_id)
         now = self.clock.now()
-        completed = state is not OperationState.PENDING
-        with self.database.connection() as conn:
-            conn.execute(
-                "INSERT INTO payment_operations (id, payment_id, kind, idempotency_key, amount, "
-                "currency, requested_at, state, provider_reference, decline_reason, "
-                "completed_at, version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)",
-                (
-                    operation_id,
-                    payment_id,
-                    kind.value,
-                    idempotency_key,
-                    payment.amount.amount,
-                    payment.amount.currency,
-                    now,
-                    state.value,
-                    "op-ref" if state is OperationState.SUCCEEDED else None,
-                    decline_reason,
-                    now if completed else None,
-                ),
+        target = OperationId(operation_id)
+        events: list[PaymentDomainEvent] = [
+            PaymentOperationRequested(
+                target, payment_id, kind, idempotency_key, payment.amount, now
             )
-        return OperationId(operation_id)
+        ]
+        if state is OperationState.SUCCEEDED:
+            events.append(PaymentOperationSucceeded(target, payment_id, kind, "op-ref", now))
+        if state is OperationState.DECLINED:
+            events.append(
+                PaymentOperationDeclined(target, payment_id, kind, decline_reason or "", now)
+            )
+        self._given_events(payment_id, payment.version, events)
+        return target
+
+    def _given_events(
+        self, payment_id: PaymentId, after_version: int, events: Sequence[PaymentDomainEvent]
+    ) -> None:
+        with self.database.connection() as conn:
+            append_events(conn, payment_id, after_version, [encode_event(e) for e in events])
+        payment = self.payment(payment_id)
+        with self.database.connection() as conn:
+            project_payment(conn, payment.model, payment.version)
 
     def payment(self, payment_id: PaymentId) -> Payment:
         payment = self.payments.get(payment_id)
@@ -341,7 +343,9 @@ class PaymentsTestKit:
         return [PaymentId(row[0]) for row in rows]
 
     def operation(self, operation_id: OperationId) -> PaymentOperation:
-        operation = self.operations.get(operation_id)
+        payment = self.payments.get_by_operation(operation_id)
+        assert payment is not None, operation_id
+        operation = payment.model.operation(operation_id)
         assert operation is not None, operation_id
         return operation
 
@@ -374,19 +378,19 @@ class PaymentsTestKit:
 
     def snapshot(self) -> dict[str, list[tuple[Any, ...]]]:
         """Every row of every payments table, for asserting that a query changed nothing."""
-        tables = ("payments", "payment_operations", "payments_outbox", "inbox")
+        tables = (
+            "payment_events",
+            "payment_snapshots",
+            "payments",
+            "payment_operations",
+            "payments_outbox",
+            "inbox",
+        )
         with self.database.connection() as conn:
             return {
                 table: conn.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()  # noqa: S608 - fixed table names
                 for table in tables
             }
-
-    def with_payment_version(self, payment_id: PaymentId, version: int) -> None:
-        with self.database.connection() as conn:
-            conn.execute("UPDATE payments SET version = %s WHERE id = %s", (version, payment_id))
-
-
-_STATES_WITH_REFERENCE = {PaymentState.AUTHORIZED, PaymentState.CAPTURED, PaymentState.REFUNDED}
 
 
 def unreachable_database() -> Database:
@@ -403,7 +407,11 @@ def payments_container(environment: Mapping[str, str] | None = None) -> Payments
     The database is an unreachable pool (closed by ``close_container``) and both workers
     listen on ephemeral loopback ports.
     """
-    env = {"DATABASE__URI": UNREACHABLE_DATABASE_URI, **(environment or {})}
+    env = {
+        "DATABASE__URI": UNREACHABLE_DATABASE_URI,
+        **REQUIRED_EVENT_STORE_ENV,
+        **(environment or {}),
+    }
     with patch.dict(os.environ, env, clear=True):
         settings = load_settings()
     container = PaymentsContainer()

@@ -4,7 +4,7 @@ Date: 2026-10-25
 
 ## Status
 
-Accepted
+Accepted; модель хранения `Payment` уточнена [2. Event Sourcing для Payment](0002-event-sourcing-for-payment.md)
 
 ## Context
 
@@ -15,12 +15,13 @@ Accepted
 Хранить данные `payments` в PostgreSQL; драйвер — psycopg 3 с пулом `psycopg_pool`, синхронный, как handlers.
 
 - Unit of Work — одна транзакция PostgreSQL на соединении, которое repositories получают через context variable; вложенный вызов присоединяется.
-- Инварианты закреплены ограничениями схемы: `UNIQUE (order_id)`, `UNIQUE (idempotency_key)`, частичный уникальный индекс `(payment_id) WHERE state = 'pending'`; нарушения отображаются в доменные ошибки, insert выполняется в savepoint.
-- Optimistic concurrency — `UPDATE … WHERE id = ? AND version = ?`.
+- Источник истины `Payment` — поток `payment_events`, а `payments` и `payment_operations` — его синхронные проекции ([ADR 2](0002-event-sourcing-for-payment.md)).
+- Инварианты между потоками закреплены ограничениями проекций: `UNIQUE (order_id)`, `UNIQUE (idempotency_key)`, частичный уникальный индекс `(payment_id) WHERE state = 'pending'`; нарушения отображаются в доменные ошибки, запись выполняется в savepoint.
+- Optimistic concurrency — `PRIMARY KEY (payment_id, version)` потока ([ADR 2](0002-event-sourcing-for-payment.md)).
 - Суммы — `NUMERIC` без потери масштаба.
 - `payments_outbox` и `inbox` (`PRIMARY KEY (consumer, event_id)`) живут в той же базе и пишутся в той же транзакции. Детерминированный `event_id` и отбор публикуемых событий mapper'ом — по [ADR 31](../../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md); поля записи, publication `payments_outbox` и удаление записей старше часа в транзакции очередной записи — по [ADR 37](../../../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md).
 - Схема — forward-only SQL-миграции в репозитории, вшитые в образ; процесс `payments` применяет их сам при старте библиотекой yoyo-migrations (backend psycopg 3) под session advisory lock PostgreSQL (lock-строка yoyo не переживает убитый процесс), до открытия портов (отдельного шага миграций нет).
-- Миграции разделены на наборы по хранимым данным: общие таблицы (`payments_outbox`, `inbox`) — набор `messaging` (`infrastructure/repository/migrations`, рядом с их кодом `outbox.py` и `repositories.py`), таблицы slice — набор этого slice (`payments`: `slices/payment/infrastructure/repository/migrations`, таблицы `payments`, `payment_operations`). Технология хранения — деталь реализации: каталоги, пакеты и идентификаторы кода по ней не называются. Миграции slice меняют только его таблицы, внешних ключей между slices нет. У каждого набора своя нумерация и свои таблицы yoyo (`_yoyo_migration_<storage_id>`, `_yoyo_log_<storage_id>`, `_yoyo_version_<storage_id>`): журнал и версия внутренней схемы yoyo не делятся между migration tables. Storage id набора — часть контракта схемы БД, а не кода: явный литерал, не выводится из имён пакетов, каталогов и slices и не меняется при перемещении или переименовании кода; таблицы yoyo строятся только из него, его смена требует миграции. Процесс применяет явный упорядоченный список наборов из DI (`messaging` первым) одним runner'ом под одним advisory lock; автопоиска наборов нет, набор без миграций — ошибка старта.
+- Миграции разделены на наборы по хранимым данным: общие таблицы (`payments_outbox`, `inbox`) — набор `messaging` (`infrastructure/repository/migrations`, рядом с их кодом `outbox.py` и `repositories.py`), таблицы slice — набор этого slice (`payments`: `slices/payment/infrastructure/repository/migrations`, таблицы `payment_events`, `payment_snapshots`, `payments`, `payment_operations`). Технология хранения — деталь реализации: каталоги, пакеты и идентификаторы кода по ней не называются. Миграции slice меняют только его таблицы, внешних ключей между slices нет. У каждого набора своя нумерация и свои таблицы yoyo (`_yoyo_migration_<storage_id>`, `_yoyo_log_<storage_id>`, `_yoyo_version_<storage_id>`): журнал и версия внутренней схемы yoyo не делятся между migration tables. Storage id набора — часть контракта схемы БД, а не кода: явный литерал, не выводится из имён пакетов, каталогов и slices и не меняется при перемещении или переименовании кода; таблицы yoyo строятся только из него, его смена требует миграции. Процесс применяет явный упорядоченный список наборов из DI (`messaging` первым) одним runner'ом под одним advisory lock; автопоиска наборов нет, набор без миграций — ошибка старта.
 - `DATABASE__URI` обязателен и задаётся только connection URI PostgreSQL (`postgresql://` или `postgres://`), форма libpq `key=value` не принимается: пустое или не-URI значение, как и недоступная база, завершают процесс на старте.
 
 ## Consequences

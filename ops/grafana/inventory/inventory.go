@@ -136,6 +136,7 @@ var Sections = []Section{
 	{"kitchen", "Kitchen", "Gauges kitchen queue — projection/polling Kitchen Board, не выводятся из counters. Consumer lag ≠ Kitchen Queue Size."},
 	{"authz", "Authorization (SpiceDB)", "Декоратор порта авторизации (ADR 18). `denied` — бизнес-результат, `error`/`timeout` — технический сбой. Без subject/resource ID."},
 	{"provider", "Payment provider", "Клиентский адаптер платёжного провайдера; провайдер не выбран."},
+	{"event_store", "Event store", "Загрузка агрегатов из потоков событий (локальный ADR 2 payments): показывает, работают ли снапшоты."},
 	{"domain", "Domain metrics", "Бизнес-счётчики увеличиваются в точке идемпотентно подтверждённого перехода (docs/observability.md). Финансовые значения и ID не labels. Gauge «currently in state» требует projection/polling и из counters не выводится."},
 	{"pods", "Pods (Kubernetes)", "Alloy: cAdvisor kubelet через API server proxy и kube-state-metrics (только pods прикладных неймспейсов), `job=\"infra/kubernetes\"`. Метрики Prometheus, без `target_info`: сервис выбирается `namespace` и префиксом `pod`. Row Pods в overview каждого сервиса и в Platform / Overview."},
 	{"spicedb", "SpiceDB (сервер)", "Alloy scrape `:9090` pod SpiceDB, `job=\"infra/spicedb\"`. Серверная сторона; клиентская — row Authorization сервисов. Platform / Overview."},
@@ -250,6 +251,9 @@ var Metrics = []Metric{
 	// authz
 	{Name: "nomnom_authz_checks_total", Section: "authz", Type: Counter, Source: "Authorization port decorator", Labels: []string{"nomnom_authz_permission", "nomnom_authz_resource_type", "nomnom_authz_result"}, Status: expected(contextServices...), Note: "`result`: allowed | denied | error | timeout."},
 	{Name: "nomnom_authz_check_duration_seconds", Section: "authz", Type: Histogram, Source: "Authorization port decorator", Labels: []string{"nomnom_authz_permission", "nomnom_authz_resource_type", "nomnom_authz_result"}, Status: expected(contextServices...)},
+
+	// event_store
+	{Name: "nomnom_payments_event_store_replayed_events", Section: "event_store", Type: Histogram, Source: "Payment repository adapter", Labels: []string{"nomnom_event_store_from_snapshot"}, Status: expected(Payments), Note: "Событий, применённых при загрузке `Payment`; `from_snapshot`: true | false."},
 
 	// provider
 	{Name: "nomnom_payments_provider_request_duration_seconds", Section: "provider", Type: Histogram, Source: "Provider gateway adapter", Labels: []string{"nomnom_payment_operation", "nomnom_outcome"}, Status: expected(Payments), Note: "`operation`: authorize | capture | refund | cancel; `outcome`: success | declined | error | timeout. `declined` — бизнес-результат."},

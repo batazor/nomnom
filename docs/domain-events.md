@@ -8,7 +8,7 @@
 
 | Термин | Что это | Чем не является |
 | --- | --- | --- |
-| Domain Event | Внутренний бизнес-факт bounded context в domain types. Создаётся aggregate, накапливается в памяти и забирается через `PullEvents()` или аналог. | Kafka message, Protobuf, DTO, команда другому slice |
+| Domain Event | Внутренний бизнес-факт bounded context в domain types. Создаётся aggregate, накапливается в памяти и забирается через `PullEvents()` или аналог. У `Payment` Domain Events ещё и сохраняются в его поток, источник истины ([локальный ADR 2 `payments`](../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md)). | Kafka message, Protobuf, DTO, команда другому slice |
 | Integration Event | Публичное Protobuf-сообщение о факте для других контекстов, например `nomnom.orders.v1.OrderCancelled`. Контракт принадлежит bounded context, маппинг реализует infrastructure. Это и есть Transport DTO исходящего события. | Сериализованный Domain Event или aggregate |
 | Event Envelope | Метаданные Integration Event: identity, тип, ссылка на aggregate, время, trace и causation. Заполняется infrastructure. | Часть Domain Event |
 | Outbox Record | Сериализованный Integration Event вместе с Event Envelope и техническим состоянием публикации в Outbox контекста. | Domain Event, сохранённый «на потом» |
@@ -76,6 +76,8 @@ err := h.uow.Do(ctx, func(ctx context.Context) error {
 ### Порядок
 
 Aggregate отдаёт события в порядке их записи. Outbox Records одной UoW вставляются в этом порядке и получают одну `aggregate_version` — версию, зафиксированную этим commit. Между UoW порядок задаёт возрастающая `aggregate_version`. Publisher сохраняет порядок вставки для одного partition key ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md#publisher-и-ordering)).
+
+У `Payment` `aggregate_version` — версия потока после commit: она растёт, но не обязательно на 1, потому что события операций версии занимают, а не публикуются.
 
 Consumer, проверяющий `aggregate_version` ([ADR 11](adr/0011-transactional-inbox-and-idempotent-event-processing.md#ordering)), учитывает, что несколько событий одного commit имеют одинаковую версию: событие с равной версией не считается устаревшим только по этому признаку.
 

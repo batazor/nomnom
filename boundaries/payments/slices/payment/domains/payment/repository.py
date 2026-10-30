@@ -1,7 +1,7 @@
-"""Repository contracts of the payment aggregate and its operations.
+"""Repository contract of the payment aggregate.
 
-Implementations live in infrastructure. ``save`` uses optimistic concurrency on the
-loaded ``version`` and raises the application concurrency conflict when it changed.
+Implementations live in infrastructure. ``save`` appends events after the loaded ``version``
+and raises the application concurrency conflict when the stream has moved on.
 Inside an active Unit of Work every method participates in that transaction.
 """
 
@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Protocol, override
 
 from .ids import OperationId, OrderId, PaymentId
-from .operation import PaymentOperation
 from .payment import Payment
 
 
@@ -35,19 +34,12 @@ class DuplicateIdempotencyKeyError(Exception):
         return "payment operation with this idempotency key already exists"
 
 
-@dataclass(eq=True)
-class OperationAlreadyPendingError(Exception):
-    """The Payment already has an operation without a final result."""
-
-    payment_id: PaymentId
-
-    @override
-    def __str__(self) -> str:
-        return f"payment {self.payment_id} already has a pending operation"
-
-
 class PaymentRepository(Protocol):
-    """Storage of Payment aggregates; at most one Payment per Order."""
+    """Storage of Payment aggregates; at most one Payment per Order.
+
+    Idempotency keys are unique across Payments. Lookups by Order, operation and key
+    find the Payment through the projections and load it from its stream.
+    """
 
     def get(self, payment_id: PaymentId) -> Payment | None:
         """Return the Payment, or ``None`` when it does not exist."""
@@ -57,37 +49,22 @@ class PaymentRepository(Protocol):
         """Return the only Payment of the Order, or ``None`` when it was not created."""
         ...
 
+    def get_by_operation(self, operation_id: OperationId) -> Payment | None:
+        """Return the Payment holding the operation, or ``None`` for an unknown operation."""
+        ...
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Payment | None:
+        """Return the Payment holding the operation with the key, or ``None``."""
+        ...
+
     def add(self, payment: Payment) -> int:
         """Persist a new Payment and return its version; raises ``DuplicatePaymentError``."""
         ...
 
     def save(self, payment: Payment) -> int:
-        """Persist changes of a loaded Payment and return the committed version."""
-        ...
+        """Append the new events of a loaded Payment and return the committed version.
 
-
-class PaymentOperationRepository(Protocol):
-    """Storage of Payment Operations; idempotency keys are unique across Payments.
-
-    Lookups are by identity or by the unique idempotency key only. The pending-operation
-    check of commands and the operation history are application query ports.
-    """
-
-    def get(self, operation_id: OperationId) -> PaymentOperation | None:
-        """Return the operation, or ``None`` when it does not exist."""
-        ...
-
-    def get_by_idempotency_key(self, idempotency_key: str) -> PaymentOperation | None:
-        """Return the operation recorded for the idempotency key, or ``None``."""
-        ...
-
-    def add(self, operation: PaymentOperation) -> None:
-        """Persist a new pending operation.
-
-        Raises ``DuplicateIdempotencyKeyError`` or ``OperationAlreadyPendingError``.
+        Raises ``DuplicateIdempotencyKeyError`` when an operation key is already used by
+        another Payment.
         """
-        ...
-
-    def save(self, operation: PaymentOperation) -> int:
-        """Persist changes of a loaded operation and return the committed version."""
         ...

@@ -64,7 +64,10 @@ VALID_NBF = 1_700_000_000
 VALID_EXP = 4_102_444_800
 
 # DATABASE__URI обязателен: без него load_settings падает.
-REQUIRED_ENV = {"DATABASE__URI": "postgresql://payments@localhost/payments"}
+REQUIRED_ENV = {
+    "DATABASE__URI": "postgresql://payments@localhost/payments",
+    "EVENT_STORE__SNAPSHOT_EVERY": "5",
+}
 
 
 class _AbortedError(Exception):

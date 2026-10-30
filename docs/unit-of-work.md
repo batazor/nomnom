@@ -450,9 +450,9 @@ UoW всех четырёх boundaries реализован поверх их х
 
 | Slice | UoW | Состав транзакции |
 | --- | --- | --- |
-| `authorize_payment`, `capture_payment`, `cancel_authorization`, `refund_payment` | Да, вокруг provider call | Operation record (pending) → provider → operation result + `Payment` + Outbox |
-| `apply_provider_callback` | Да | Webhook dedup + operation/`Payment` + Outbox |
-| `apply_provider_operation_result` | Да | Operation record + `Payment` + Outbox |
+| `authorize_payment`, `capture_payment`, `cancel_authorization`, `refund_payment` | Да, вокруг provider call | Событие запроса операции → provider → события результата + проекции + снапшот по границе + Outbox |
+| `apply_provider_callback` | Да | Webhook dedup + события `Payment` с проекциями + Outbox |
+| `apply_provider_operation_result` | Да | События `Payment` с проекциями + Outbox |
 | `create_payment` | Если idempotency key хранится отдельно от `Payment` | `Payment` + idempotency |
 | `get_payment_status`, `list_payment_operations` | Нет | Queries |
 

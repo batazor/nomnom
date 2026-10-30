@@ -39,7 +39,10 @@ MANAGE = (
 VIEW = (PaymentPermission.VIEW, PaymentPermission.VIEW_OPERATIONS)
 
 # DATABASE__URI обязателен: без него load_settings падает.
-REQUIRED_ENV = {"DATABASE__URI": "postgresql://payments@localhost/payments"}
+REQUIRED_ENV = {
+    "DATABASE__URI": "postgresql://payments@localhost/payments",
+    "EVENT_STORE__SNAPSHOT_EVERY": "5",
+}
 
 
 class _RpcFailure(grpc.RpcError):

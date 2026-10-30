@@ -63,7 +63,11 @@ class CapturePaymentTest(unittest.TestCase):
             self.kit.published(),
             [
                 PaymentOperationDeclined(
-                    result.operation_id, payment_id, OperationKind.CAPTURE, "authorization_expired"
+                    result.operation_id,
+                    payment_id,
+                    OperationKind.CAPTURE,
+                    "authorization_expired",
+                    self.kit.clock.now(),
                 )
             ],
         )

@@ -119,7 +119,6 @@ class PaymentsContainerTest(unittest.TestCase):
         for name, fake in {
             "uow": kit.uow,
             "payments": kit.payments,
-            "operations": kit.operations,
             "outbox": kit.outbox,
             "payment_provider": kit.provider,
             "permissions": kit.permissions,
@@ -150,7 +149,6 @@ class PaymentsContainerTest(unittest.TestCase):
         for name, fake in {
             "uow": kit.uow,
             "payments": kit.payments,
-            "operations": kit.operations,
             "outbox": kit.outbox,
             "inbox": kit.inbox,
             "clock": kit.clock,
@@ -299,7 +297,7 @@ class StartupMigrationTest(unittest.TestCase):
                 "VALUES ('payment-old', 'order-old', 25, 'EUR', 'pending', 1)"
             )
 
-        migrate(settings, MIGRATIONS)
+        migrate(settings, [messaging, _PaymentsBeforeEvents(payments.storage_id, payments.package)])
 
         with psycopg.connect(uri) as conn:
             market = conn.execute("SELECT market_id FROM payments WHERE id = 'payment-old'")
@@ -321,6 +319,24 @@ class StartupMigrationTest(unittest.TestCase):
                         "'pending', 1)",
                         (market_id,),
                     )
+
+    def test_ac_1044_payments_without_a_stream_stop_the_migration(self) -> None:
+        uri = self._empty_database()
+        settings = database.Config(DATABASE__URI=uri)
+        messaging, payments = MIGRATIONS
+        migrate(settings, [messaging, _PaymentsBeforeEvents(payments.storage_id, payments.package)])
+        with psycopg.connect(uri) as conn:
+            conn.execute(
+                "INSERT INTO payments (id, order_id, market_id, amount, currency, state, version) "
+                "VALUES ('payment-old', 'order-old', 'berlin', 25, 'EUR', 'pending', 1)"
+            )
+
+        with self.assertRaisesRegex(psycopg.errors.RaiseException, "payments must be empty"):
+            migrate(settings, MIGRATIONS)
+
+        with psycopg.connect(uri) as conn:
+            table = conn.execute("SELECT to_regclass('payment_events')").fetchone()
+        self.assertEqual(table, (None,))
 
     def test_migration_gives_up_on_a_locked_table(self) -> None:
         uri = self._empty_database()
@@ -364,6 +380,15 @@ def _applied(conn: psycopg.Connection) -> dict[str, list[tuple[object, ...]]]:
         ).fetchall()
         for migration_set in MIGRATIONS
     }
+
+
+class _PaymentsBeforeEvents(MigrationSet):
+    """The payments set as deployed before Event Sourcing (local ADR 2)."""
+
+    @override
+    def migrations(self) -> MigrationList:
+        applied = super().migrations()
+        return MigrationList([m for m in applied if not m.id.startswith("00003")])
 
 
 class _PaymentsBeforeMarkets(MigrationSet):
@@ -430,7 +455,10 @@ class EntrypointResourceOrderTest(unittest.TestCase):
 
     def run_payments(self, container: PaymentsContainer) -> tuple[int, str]:
         stdout = io.StringIO()
-        env = {"DATABASE__URI": "postgresql://payments@127.0.0.1:1/x"}
+        env = {
+            "DATABASE__URI": "postgresql://payments@127.0.0.1:1/x",
+            "EVENT_STORE__SNAPSHOT_EVERY": "5",
+        }
         with (
             patch.dict(os.environ, env, clear=True),
             patch.object(payments_main, "PaymentsContainer", lambda: container),

@@ -74,7 +74,11 @@ class FakeProviderTest(unittest.TestCase):
 
     def test_rejects_unknown_kind(self) -> None:
         with (
-            patch.dict(os.environ, {"PROVIDER__KIND": "stripe"}, clear=True),
+            patch.dict(
+                os.environ,
+                {"PROVIDER__KIND": "stripe", "EVENT_STORE__SNAPSHOT_EVERY": "5"},
+                clear=True,
+            ),
             self.assertRaises(ValidationError),
         ):
             load_settings()

@@ -470,7 +470,7 @@ stateDiagram-v2
 
 ## Payment
 
-Statechart aggregate `Payment` в `payments`; реализация — `boundaries/payments/slices/payment/domains/payment/fsm.py`. Инварианты и use cases описаны в [README payments](../boundaries/payments/README.md); здесь — только модель переходов. Состояния `Payment Operation` (`pending → succeeded | declined`) — отдельная таблица entity и в эту FSM не входят.
+Statechart aggregate `Payment` в `payments`; реализация — `boundaries/payments/slices/payment/domains/payment/fsm.py`. `decide` (`decider.py`) проверяет ею команды, а `evolve` применяет записанные факты без проверки: поток воспроизводится и после смены таблицы ([локальный ADR 2](../boundaries/payments/docs/adr/0002-event-sourcing-for-payment.md)). Инварианты и use cases описаны в [README payments](../boundaries/payments/README.md); здесь — только модель переходов. Состояния `Payment Operation` (`pending → succeeded | declined`) — отдельная таблица entity и в эту FSM не входят.
 
 Compound states:
 

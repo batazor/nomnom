@@ -33,5 +33,13 @@ _Avoid_: Cancellation, reversal
 _Avoid_: Payment ID, order ID
 
 **Payment Operation**:
-Одна логическая попытка Authorization, Capture, Cancel Authorization или Refund с idempotency key и стабильным результатом.
+Одна логическая попытка Authorization, Capture, Cancel Authorization или Refund с idempotency key и стабильным результатом; часть агрегата Payment.
 _Avoid_: Transaction, attempt
+
+**Payment Event Stream**:
+Неизменяемая последовательность событий одного Payment, источник истины его состояния ([ADR 2](docs/adr/0002-event-sourcing-for-payment.md)).
+_Avoid_: Audit log, journal
+
+**Payment Snapshot**:
+Сохранённое состояние Payment на версии потока; производные данные, ускоряющие загрузку.
+_Avoid_: Checkpoint, backup
