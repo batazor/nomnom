@@ -137,7 +137,7 @@ func failureOtherShare(sc Scope, window string) string {
 func deliveryAlerts(sc Scope) []Alert {
 	failed := Sum("", "increase("+sc.Sel("nomnom_delivery_failed_total")+"[1h])")
 	return []Alert{{
-		Slug: "delivery-failure-other", Title: "Delivery: failures outside the reason catalog", Severity: Warning,
+		Slug: "delivery-failure-other", Runbook: "delivery-failures", Title: "Delivery: failures outside the reason catalog", Severity: Warning,
 		For: "30m", Op: ">", Threshold: 0.2, DashboardID: UID("delivery"),
 		Summary: "Больше 20% провалов доставки за час — с причиной other (при 10+ провалах): каталог причин устарел, разберите detail в логах delivery.failure_reported.",
 		Value:   "(" + failureOtherShare(sc, "1h") + ") and on () (" + failed + " >= 10)",

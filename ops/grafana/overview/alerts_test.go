@@ -2,6 +2,7 @@ package overview
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -64,6 +65,22 @@ func TestAlertArtifactsHaveNoDatasourceUID(t *testing.T) {
 			uid, _, _ := strings.Cut(chunk, `"`)
 			if uid != MetricsDatasource && uid != "__expr__" {
 				t.Errorf("%s: datasourceUid %q", g.Name, uid)
+			}
+		}
+	}
+}
+
+// Каждый alert ссылается на существующий раздел docs/runbooks.md.
+func TestAlertRunbooksExist(t *testing.T) {
+	doc, err := os.ReadFile("../../../docs/runbooks.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range allAlertGroups(t) {
+		for _, r := range g.Rules {
+			anchor := strings.TrimPrefix(r.Annotations["runbook_url"], runbookURL)
+			if anchor == "" || !strings.Contains(string(doc), "\n## "+anchor+"\n") {
+				t.Errorf("%s: нет раздела %q в docs/runbooks.md", r.Title, anchor)
 			}
 		}
 	}

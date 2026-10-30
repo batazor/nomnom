@@ -16,6 +16,9 @@ import (
 // окружения в репозитории не хранится, push-скрипт подставляет UID Prometheus data source.
 const MetricsDatasource = "${metrics}"
 
+// runbookURL — раздел docs/runbooks.md в репозитории; якорь — заголовок раздела.
+const runbookURL = "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#"
+
 // AlertFolder — folder alert rules и dashboards в Grafana.
 const AlertFolder = "nomnom"
 
@@ -32,7 +35,9 @@ const (
 // держится For. Пороги — стартовые значения тестового окружения; burn rate
 // alerts по SLO — slo.go (ADR 40).
 type Alert struct {
-	Slug        string
+	Slug string
+	// Runbook — заголовок раздела docs/runbooks.md.
+	Runbook     string
 	Title       string
 	Summary     string
 	Value       string
@@ -76,6 +81,9 @@ func buildGroup(name string, sc Scope, alerts []Alert) (AlertGroup, error) {
 		if !slugPattern.MatchString(a.Slug) || len(uid) > 40 {
 			return AlertGroup{}, fmt.Errorf("alert %q: uid %q должен быть [a-z0-9-] и не длиннее 40", a.Title, uid)
 		}
+		if a.Runbook == "" {
+			return AlertGroup{}, fmt.Errorf("alert %q: нет runbook", a.Title)
+		}
 		ready, missing := g.check(a.Title, Query{Expr: a.Value}, sc)
 		slices.Sort(missing)
 		missing = slices.Compact(missing)
@@ -92,7 +100,7 @@ func buildGroup(name string, sc Scope, alerts []Alert) (AlertGroup, error) {
 			NoDataState(alerting.RuleNoDataStateOK).
 			ExecErrState(alerting.RuleExecErrStateError).
 			Labels(map[string]string{"severity": string(a.Severity), "nomnom_dashboard": a.DashboardID}).
-			Annotations(map[string]string{"summary": a.Summary, "dashboard_url": "/d/" + a.DashboardID}).
+			Annotations(map[string]string{"summary": a.Summary, "dashboard_url": "/d/" + a.DashboardID, "runbook_url": runbookURL + a.Runbook}).
 			Queries([]cog.Builder[alerting.Query]{
 				alerting.NewQueryBuilder("A").DatasourceUid(MetricsDatasource).RelativeTimeRange(600, 0).
 					Model(prometheus.NewDataqueryBuilder().RefId("A").Expr(a.Value).Instant()),

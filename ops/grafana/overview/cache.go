@@ -33,7 +33,7 @@ func cachePanels(sc Scope) []Panel {
 // cacheAlerts — правило доли bypass; порог стартовый для тестового окружения.
 func cacheAlerts(o Options, sc Scope, dash string) []Alert {
 	return []Alert{{
-		Slug: o.Context + "-cache-bypass", Title: o.Title + ": cache bypassed", Severity: Warning, For: "10m", Op: ">", Threshold: 0.5, DashboardID: dash,
+		Slug: o.Context + "-cache-bypass", Runbook: "cache-bypass", Title: o.Title + ": cache bypassed", Severity: Warning, For: "10m", Op: ">", Threshold: 0.5, DashboardID: dash,
 		Summary: "Больше половины чтений кеша 10 минут идут мимо Valkey: он недоступен или медленнее VALKEY__COMMAND_TIMEOUT. Ответы корректны, но нагрузка на базу растёт; проверить row Valkey в Platform / Overview и pod Valkey.",
 		Value:   Max("", cacheBypassShare(sc, "job")),
 	}}

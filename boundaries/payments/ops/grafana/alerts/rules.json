@@ -5,6 +5,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-payments-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-availability",
         "summary": "Больше 5% входящих gRPC-вызовов завершаются техническими кодами (UNAVAILABLE, INTERNAL, DEADLINE_EXCEEDED…)."
       },
       "condition": "C",
@@ -53,6 +54,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-payments-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-latency",
         "summary": "p95 входящих gRPC-вызовов дольше 1 s."
       },
       "condition": "C",
@@ -101,6 +103,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-payments-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-availability",
         "summary": "Error budget SLO Availability 99.9% расходуется в 14.4 раз быстрее допустимого за 1h и 5m."
       },
       "condition": "C",
@@ -149,6 +152,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-payments-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-availability",
         "summary": "Error budget SLO Availability 99.9% расходуется в 6 раз быстрее допустимого за 6h и 30m."
       },
       "condition": "C",
@@ -197,6 +201,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-payments-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-latency",
         "summary": "Error budget SLO Latency ≤ 0.25s 95% расходуется в 14.4 раз быстрее допустимого за 1h и 5m."
       },
       "condition": "C",
@@ -245,6 +250,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-payments-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-latency",
         "summary": "Error budget SLO Latency ≤ 0.25s 95% расходуется в 6 раз быстрее допустимого за 6h и 30m."
       },
       "condition": "C",

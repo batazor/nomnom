@@ -119,8 +119,9 @@ func (o Options) sloAlerts(sc Scope, dash string) []Alert {
 		}{{fastBurn, "fast"}, {slowBurn, "slow"}} {
 			rate := func(w string) string { return "(" + s.bad(sc, w, "job") + ") / " + budget(s.target) }
 			alerts = append(alerts, Alert{
-				Slug:  o.Context + "-slo-" + slug + "-" + b.kind,
-				Title: fmt.Sprintf("%s: %s SLO burn rate %s", o.Title, s.name, b.Long),
+				Slug:    o.Context + "-slo-" + slug + "-" + b.kind,
+				Runbook: "service-" + slug,
+				Title:   fmt.Sprintf("%s: %s SLO burn rate %s", o.Title, s.name, b.Long),
 				Summary: fmt.Sprintf("Error budget SLO %s %s расходуется в %g раз быстрее допустимого за %s и %s.",
 					s.name, percent(s.target), b.Threshold, b.Long, b.Short),
 				Value: rate(b.Long) + " and " + rate(b.Short) + fmt.Sprintf(" > %g", b.Threshold),

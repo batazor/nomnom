@@ -5,6 +5,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#spicedb",
         "summary": "Больше 5% запросов к SpiceDB не OK: клиенты fail-closed, пользователи получают отказ в доступе."
       },
       "condition": "C",
@@ -53,6 +54,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#spicedb",
         "summary": "p95 запросов к SpiceDB дольше 250 ms: проверки доступа тормозят все use cases."
       },
       "condition": "C",
@@ -101,6 +103,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#postgres",
         "summary": "Экспортер не подключается к базе владельца: база недоступна или нет прав."
       },
       "condition": "C",
@@ -149,6 +152,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#postgres",
         "summary": "В базе владельца случились deadlocks."
       },
       "condition": "C",
@@ -197,6 +201,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#cdc",
         "summary": "Задача коннектора Debezium в FAILED: Outbox контекста не доставляется в Kafka (ADR 37). GET /connectors/<name>/status, после исправления — restart задачи."
       },
       "condition": "C",
@@ -245,6 +250,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#cdc",
         "summary": "Задача коннектора Debezium дольше 15 минут не RUNNING (paused, unassigned, restarting): события Outbox ждут."
       },
       "condition": "C",
@@ -293,6 +299,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#cdc",
         "summary": "Коннектор обрабатывает записи Outbox больше чем через минуту после commit: подписки и интеграция видят изменения с задержкой."
       },
       "condition": "C",
@@ -341,6 +348,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#cdc",
         "summary": "Слот Debezium не читается: Outbox владельца не доставляется, WAL копится на диске."
       },
       "condition": "C",
@@ -389,6 +397,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#cdc",
         "summary": "Слот Debezium держит больше 1 GiB WAL: коннектор отстаёт или остановлен, диск базы заполняется."
       },
       "condition": "C",
@@ -437,6 +446,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#pods",
         "summary": "Контейнер в CrashLoopBackOff или ImagePullBackOff."
       },
       "condition": "C",
@@ -485,6 +495,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#pods",
         "summary": "Контейнер перезапускался больше 2 раз за окно оценки."
       },
       "condition": "C",
@@ -533,6 +544,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#pods",
         "summary": "Pod не проходит readinessProbe и выведен из Service."
       },
       "condition": "C",
@@ -581,6 +593,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#certificates",
         "summary": "До NotAfter сертификата меньше 14 дней: cert-manager его не продлил."
       },
       "condition": "C",
@@ -629,6 +642,7 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#certificates",
         "summary": "Certificate не Ready: сертификат не выпущен, просрочен или issuer его не выпускает."
       },
       "condition": "C",

@@ -58,21 +58,21 @@ func poolAlerts(o Options, sc Scope, dash string) []Alert {
 	title := o.Title + ": " + string(o.Database) + " pool "
 	pool := "job, db_client_connection_pool_name"
 	alerts := []Alert{
-		{Slug: slug("saturation"), Title: title + "saturated", Severity: Warning, For: "10m", Op: ">", Threshold: 0.9, DashboardID: dash,
+		{Slug: slug("saturation"), Runbook: "connection-pool", Title: title + "saturated", Severity: Warning, For: "10m", Op: ">", Threshold: 0.9, DashboardID: dash,
 			Summary: "Пул процесса занят больше чем на 90% (used / max) 10 минут: новые операции ждут соединения. Проверить use time и долгие операции, затем " + poolLimit(o.Database) + " процесса в Helm values.",
 			Value:   Max(pool, poolSaturation(sc))},
-		{Slug: slug("queued"), Title: title + "checkouts queued", Severity: Warning, For: "10m", Op: ">", Threshold: 0, DashboardID: dash,
+		{Slug: slug("queued"), Runbook: "connection-pool", Title: title + "checkouts queued", Severity: Warning, For: "10m", Op: ">", Threshold: 0, DashboardID: dash,
 			Summary: "Checkouts ждут соединения пула 10 минут подряд: пул мал для нагрузки или соединения долго не возвращаются.",
 			Value:   Max(pool, sc.Gauge("db_client_connection_pending_requests"))},
-		{Slug: slug("wait"), Title: title + "wait p95", Severity: Warning, For: "10m", Op: ">", Threshold: 0.1, DashboardID: dash,
+		{Slug: slug("wait"), Runbook: "connection-pool", Title: title + "wait p95", Severity: Warning, For: "10m", Op: ">", Threshold: 0.1, DashboardID: dash,
 			Summary: "p95 ожидания соединения пула дольше 100 ms: латентность операций растёт из-за очереди пула, не из-за БД.",
 			Value:   sc.Quantile("0.95", pool, "db_client_connection_wait_time_seconds")},
-		{Slug: slug("timeouts"), Title: title + "checkout timeouts", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
+		{Slug: slug("timeouts"), Runbook: "connection-pool", Title: title + "checkout timeouts", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
 			Summary: "Операции не получили соединение пула за wait timeout и завершились ошибкой (UNAVAILABLE клиентам).",
 			Value:   Sum(pool, sc.Increase("db_client_connection_timeouts_total"))},
 	}
 	if o.Database == MongoDB {
-		alerts = append(alerts, Alert{Slug: slug("cleared"), Title: title + "cleared", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
+		alerts = append(alerts, Alert{Slug: slug("cleared"), Runbook: "connection-pool", Title: title + "cleared", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: dash,
 			Summary: "Драйвер MongoDB очистил пул сервера: failover, сетевой сбой или рестарт узла replica set. Операции на закрытых соединениях повторяются (retryable reads/writes); повторяющиеся очистки — проверить узлы replica set.",
 			Value:   Sum(pool, sc.Increase("nomnom_db_client_connection_pool_clears_total"))})
 	}
