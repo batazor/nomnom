@@ -27,10 +27,10 @@
 - **WHEN** `CancelRestaurantOrder` вызывается для Restaurant Order в состоянии Ready
 - **THEN** ответ содержит `cancelled = false` и `rejection_reason = already_ready`
 
-### Requirement: delivery создаёт, перепланирует и отменяет доставку
+### Requirement: delivery создаёт и отменяет доставку
 **ID:** FR-429
 
-`delivery` SHALL предоставлять `CreateDelivery`, `ReplanDelivery` и `CancelDelivery`, адресуемые `order_id`. Cancel Delivery SHALL переводить `Waiting` или `Assigned` в `Cancelled` с освобождением курьера и публикацией `DeliveryCancelled`; после Pickup отмена MUST отклоняться бизнес-причиной.
+`delivery` SHALL предоставлять `CreateDelivery` и `CancelDelivery`, адресуемые `order_id`. Перепланирования доставки по запросу `orders` нет: поиском курьера владеет Assignment Workflow `delivery`. Cancel Delivery SHALL переводить `Waiting` или `Assigned` в `Cancelled` с освобождением курьера и публикацией `DeliveryCancelled`; после Pickup отмена MUST отклоняться бизнес-причиной.
 
 #### Scenario: Отмена назначенной доставки
 **ID:** AC-455

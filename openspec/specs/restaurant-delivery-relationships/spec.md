@@ -19,7 +19,7 @@ Register Restaurant SHALL выполнять `TOUCH restaurant#owner` до со�
 ### Requirement: delivery записывает relationships курьера
 **ID:** FR-444
 
-Register Courier SHALL выполнять `TOUCH courier#self@user`. `delivery#courier` SHALL соответствовать активному назначению: `courier_id` задан и `Delivery` assigned или picked up. Assignment MUST выполнять `TOUCH`, а Reassign Courier, Replan Delivery, Cancel Delivery, Confirm Delivery и Report Delivery Failure — `DELETE` до сохранения с записью revision. `Delivery.courier_id` закрытой доставки MUST сохраняться как факт и MUST NOT давать доступ.
+Register Courier SHALL выполнять `TOUCH courier#self@user`. `delivery#courier` SHALL соответствовать активному назначению: `courier_id` задан и `Delivery` assigned или picked up. Assignment MUST выполнять `TOUCH`, а Reassign Courier, Cancel Delivery, Confirm Delivery и Report Delivery Failure — `DELETE` до сохранения с записью revision. `Delivery.courier_id` закрытой доставки MUST сохраняться как факт и MUST NOT давать доступ.
 
 #### Scenario: Курьер теряет доступ после переназначения
 **ID:** AC-477

@@ -109,20 +109,6 @@ Workflow SHALL инициировать запрос Order Acceptance и durable
 - **WHEN** Temporal timer достигает продуктового timeout без accepted или rejected
 - **THEN** workflow начинает предусмотренную policy компенсацию
 
-### Requirement: Назначение курьера допускает replan и решение оператора
-
-После создания Delivery workflow SHALL ждать Courier Assignment. При timeout он SHALL выполнить retry, replan или Order Cancellation согласно бизнес-политике; при предусмотренной эскалации SHALL ждать подтверждённое решение оператора вместе с бизнес-таймером.
-
-#### Scenario: Курьер назначен
-**ID:** AC-002
-
-- **WHEN** `orders` получает событие Courier Assignment
-- **THEN** Inbox и application handler доставляют сигнал текущему workflow, который продолжает процесс без самостоятельного выбора Courier
-
-#### Scenario: Автоматическое назначение исчерпано
-- **WHEN** business policy требует вмешательства после неуспешных попыток назначения
-- **THEN** workflow durable-ждёт `OperatorDecision` до решения или заданного бизнес-таймера
-
 ### Requirement: Входящее событие проходит Inbox и несёт event_id
 
 События `restaurants`, `delivery` и `payments` SHALL поступать по пути `Kafka → orders consumer → Inbox → application handler → Signal/Update`. Соседние контексты MUST NOT вызывать Temporal напрямую. Каждый Signal SHALL содержать исходный `event_id`.
@@ -139,7 +125,7 @@ Workflow SHALL инициировать запрос Order Acceptance и durable
 
 #### Scenario: Отрицательное событие вне ожидаемого Workflow Stage
 - **WHEN** незавершённый workflow получает `RestaurantOrderRejected`, `PreparationFailed`, `DeliveryFailed` или `PaymentFailed` в stage, которая не ждёт этот факт
-- **THEN** workflow не игнорирует событие молча, а запускает предусмотренную Saga либо переходит в эскалацию с диагностикой
+- **THEN** workflow не игнорирует событие молча, а запускает предусмотренную Saga с диагностикой
 
 ### Requirement: Signal называется по Integration Event
 
@@ -307,17 +293,6 @@ Order Fulfillment Workflow SHALL выполнять AuthorizePayment, затем
 - **WHEN** до deadline Preparation приходит `PreparationDelayed` с более поздним ожидаемым временем
 - **THEN** компенсация по исходному deadline не запускается
 
-### Requirement: Assignment допускает replan и решение оператора
-**ID:** FR-417
-
-При истечении deadline Assignment workflow SHALL вызвать ReplanDelivery, пока число replan не превысит Policy, затем SHALL перейти в stage `waiting_operator` и ждать `OperatorDecision` до deadline оператора.
-
-#### Scenario: Оператор отменяет заказ
-**ID:** AC-437
-
-- **WHEN** после исчерпания replan приходит `OperatorDecision` с решением cancel
-- **THEN** workflow компенсирует выполненные шаги и завершает Order как cancellation с кодом `operator_decision`
-
 ### Requirement: Saga компенсирует по журналу шагов
 **ID:** FR-418
 
@@ -386,23 +361,6 @@ Client-адаптер SHALL стартовать workflow с Workflow ID `order:
 - **WHEN** `Start` вызывается для `Order`, чей workflow уже завершён
 - **THEN** адаптер не создаёт новый run и возвращает успех
 
-### Requirement: Решения процесса принимает доменная модель
-**ID:** FR-483
-
-Правила Order Fulfillment — следующий шаг маршрута, реакция на факты соседей, сроки, replan и эскалация, допустимость Cancellation Request и план компенсации — SHALL реализовываться доменной моделью слайса `fulfillment`, которая MUST NOT зависеть от Temporal SDK, часов и случайности. Temporal workflow SHALL только переводить Signals и Updates в вызовы модели и исполнять её решения.
-
-#### Scenario: Replan проверяется без Temporal
-**ID:** AC-546
-
-- **WHEN** unit-тест модели применяет к процессу с `MaxReplans = 2` три истечения срока назначения курьера
-- **THEN** модель дважды возвращает шаг `ReplanDelivery`, а на третий раз переводит процесс в ожидание решения оператора
-
-#### Scenario: Компенсация по журналу шагов
-**ID:** AC-547
-
-- **WHEN** процесс с подтверждёнными Authorization и запросом в ресторан получает отказ ресторана
-- **THEN** модель возвращает план компенсации из отмены Authorization и закрытия заказа как отказа, без отмены доставки, которая не создавалась
-
 ### Requirement: Внешние имена процесса не меняются при выделении слайса
 **ID:** FR-484
 
@@ -441,3 +399,37 @@ Workflow SHALL запрашивать Restaurant Order (`RequestRestaurantOrder`
 
 - **WHEN** Activity `RecordPaymentAuthorization` повторяется после того, как факт уже записан
 - **THEN** шаг завершается успешно, второй факт не записан, маршрут переходит к `RequestRestaurantOrder`
+
+### Requirement: Ожидание назначения курьера без срока
+**ID:** FR-709
+
+После создания Delivery workflow SHALL ждать Courier Assignment без бизнес-таймера. Поиском курьера владеет `delivery`: workflow MUST NOT перепланировать доставку, MUST NOT отменять Order по сроку назначения и MUST NOT ждать решения оператора.
+
+#### Scenario: Курьер назначен
+**ID:** AC-002
+
+- **WHEN** `orders` получает событие Courier Assignment
+- **THEN** Inbox и application handler доставляют сигнал текущему workflow, который продолжает процесс без самостоятельного выбора Courier
+
+#### Scenario: Курьера долго нет
+**ID:** AC-968
+
+- **WHEN** после Create Delivery курьер не назначен дольше любого прежнего срока назначения
+- **THEN** workflow остаётся в ожидании Courier Assignment, не вызывает Activities `delivery` и не меняет Order
+
+### Requirement: Решения процесса без replan принимает доменная модель
+**ID:** FR-710
+
+Правила Order Fulfillment — следующий шаг маршрута, реакция на факты соседей, сроки, допустимость Cancellation Request и план компенсации — SHALL реализовываться доменной моделью слайса `fulfillment`, которая MUST NOT зависеть от Temporal SDK, часов и случайности. Temporal workflow SHALL только переводить Signals и Updates в вызовы модели и исполнять её решения.
+
+#### Scenario: Ожидание курьера проверяется без Temporal
+**ID:** AC-969
+
+- **WHEN** unit-тест модели создаёт Delivery и сдвигает время на сутки без Courier Assignment
+- **THEN** модель не возвращает ни шага, ни deadline, а stage остаётся ожиданием курьера
+
+#### Scenario: Компенсация по журналу шагов
+**ID:** AC-547
+
+- **WHEN** процесс с подтверждёнными Authorization и запросом в ресторан получает отказ ресторана
+- **THEN** модель возвращает план компенсации из отмены Authorization и закрытия заказа как отказа, без отмены доставки, которая не создавалась
