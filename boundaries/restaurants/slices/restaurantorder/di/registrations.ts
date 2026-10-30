@@ -10,6 +10,11 @@ import type { OutboxEventMapper } from "../../../infrastructure/repository/outbo
 import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit-of-work.ts";
 import type { KitchenConfig } from "../../../pkg/config/config.ts";
 import type { Outbox } from "../../../pkg/outbox/outbox.ts";
+import {
+  command,
+  query,
+  type UseCase,
+} from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { MenuRepository } from "../../menu/domains/menu/menu.ts";
@@ -139,6 +144,22 @@ export interface RestaurantOrderCradle {
   readonly listScheduledOrders: ListScheduledOrdersHandler;
   readonly listActiveRestaurantOrders: ListActiveRestaurantOrdersHandler;
 }
+
+/** Use cases of the slice with their telemetry names, by cradle key. */
+export const RESTAURANT_ORDER_USE_CASES = {
+  receiveOrderRequest: command("receive_order_request"),
+  cancelRestaurantOrder: command("cancel_restaurant_order"),
+  queueRestaurantOrder: command("queue_restaurant_order"),
+  recordPickup: command("record_pickup"),
+  listScheduledOrders: query("list_scheduled_orders"),
+  acceptRestaurantOrder: command("accept_order"),
+  rejectRestaurantOrder: command("reject_order"),
+  startPreparation: command("start_preparation"),
+  markRestaurantOrderAssembled: command("mark_assembled"),
+  markRestaurantOrderReady: command("mark_ready_for_pickup"),
+  reportPreparationDelay: command("report_preparation_delay"),
+  reportPreparationFailure: command("report_preparation_failure"),
+} as const satisfies Partial<Record<keyof RestaurantOrderCradle, UseCase>>;
 
 type Cradle = RestaurantOrderDependencies & RestaurantOrderCradle;
 

@@ -53,11 +53,13 @@ import type { Clock } from "../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../pkg/usecase/id-generator.ts";
 import type { CookPoolAccess } from "../slices/cook/applications/access-control/access-control.ts";
 import {
+  COOK_USE_CASES,
   type CookCradle,
   registerCook,
 } from "../slices/cook/di/registrations.ts";
 import type { MenuAccessControl } from "../slices/menu/applications/access-control/access-control.ts";
 import {
+  MENU_USE_CASES,
   type MenuCradle,
   registerMenu,
 } from "../slices/menu/di/registrations.ts";
@@ -68,12 +70,14 @@ import type {
   StaffRelationshipWriter,
 } from "../slices/restaurant/applications/access-control/access-control.ts";
 import {
+  RESTAURANT_USE_CASES,
   type RestaurantCradle,
   registerRestaurant,
 } from "../slices/restaurant/di/registrations.ts";
 import { RESTAURANT_AGGREGATE_TYPE } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
 import {
   type KitchenAccess,
+  RESTAURANT_ORDER_USE_CASES,
   type RestaurantOrderCradle,
   registerRestaurantOrder,
 } from "../slices/restaurantorder/di/registrations.ts";
@@ -90,15 +94,17 @@ import {
 import type { SlotReservationAccess } from "../slices/scheduleslot/applications/access-control/access-control.ts";
 import {
   registerScheduleSlot,
+  SCHEDULE_SLOT_USE_CASES,
   type ScheduleSlotCradle,
 } from "../slices/scheduleslot/di/registrations.ts";
 import type { SimulatorAccess } from "../slices/simulator/applications/access-control/access-control.ts";
 import {
   registerSimulator,
+  SIMULATOR_USE_CASES,
   type SimulatorCradle,
 } from "../slices/simulator/di/registrations.ts";
 import { createProcessContainer, type Registrations } from "./container.ts";
-import { instrumentUseCases, RESTAURANTS_USE_CASES } from "./usecases.ts";
+import { instrumentUseCases } from "./usecases.ts";
 
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;
@@ -141,7 +147,7 @@ export interface InfrastructureCradle {
   readonly random: () => number;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */
   readonly logger: Logger;
-  /** Span and duration of every use case listed in di/usecases.ts. */
+  /** Span and duration of every use case its slice lists in its di. */
   readonly useCaseTelemetry: UseCaseTelemetry;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
   readonly unitOfWork: DatabaseUnitOfWork;
@@ -184,6 +190,16 @@ export type RestaurantsCradle = InfrastructureCradle &
   ScheduleSlotCradle &
   SimulatorCradle &
   ProcessCradle;
+
+/** Use cases of `cmd/restaurants` by cradle key: the lists of its slices. */
+export const RESTAURANTS_USE_CASES = {
+  ...RESTAURANT_USE_CASES,
+  ...MENU_USE_CASES,
+  ...RESTAURANT_ORDER_USE_CASES,
+  ...SCHEDULE_SLOT_USE_CASES,
+  ...COOK_USE_CASES,
+  ...SIMULATOR_USE_CASES,
+};
 
 export const createRestaurantsContainer = (
   resources: RestaurantsResources,

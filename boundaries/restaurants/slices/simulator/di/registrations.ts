@@ -6,6 +6,11 @@ import type { Db } from "mongodb";
 import type { Registrations } from "../../../di/container.ts";
 import type { SimulatorConfig } from "../../../pkg/config/config.ts";
 import type { Logger } from "../../../pkg/telemetry/logger.ts";
+import {
+  command,
+  query,
+  type UseCase,
+} from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { RestaurantOrderCradle } from "../../restaurantorder/di/registrations.ts";
@@ -37,6 +42,12 @@ export interface SimulatorCradle {
   readonly setSimulatorEnabled: SetSimulatorEnabledHandler;
   readonly kitchenSimulator: KitchenSimulator;
 }
+
+/** Use cases of the slice with their telemetry names, by cradle key. */
+export const SIMULATOR_USE_CASES = {
+  getSimulator: query("get_simulator"),
+  setSimulatorEnabled: command("set_simulator_enabled"),
+} as const satisfies Partial<Record<keyof SimulatorCradle, UseCase>>;
 
 type Cradle = SimulatorDependencies &
   SimulatorCradle &
@@ -73,7 +84,7 @@ export const registerSimulator = (container: AwilixContainer<Cradle>): void => {
         }),
     ).singleton(),
     // Kitchen commands are resolved from the cradle, so they are the
-    // instrumented use cases of di/usecases.ts.
+    // instrumented use cases of the process.
     kitchenSimulator: asFunction(
       (cradle: Cradle) =>
         new KitchenSimulator({

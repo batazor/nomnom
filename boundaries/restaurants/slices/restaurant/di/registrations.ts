@@ -19,6 +19,11 @@ import type {
 } from "../../../pkg/config/config.ts";
 import type { Outbox } from "../../../pkg/outbox/outbox.ts";
 import type { Logger } from "../../../pkg/telemetry/logger.ts";
+import {
+  command,
+  query,
+  type UseCase,
+} from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type {
@@ -113,6 +118,27 @@ export interface RestaurantCradle {
   readonly closeRestaurant: CloseRestaurantHandler;
   readonly relationshipReconciler: RelationshipReconciler;
 }
+
+/** Use cases of the slice with their telemetry names, by cradle key. */
+export const RESTAURANT_USE_CASES = {
+  getRestaurant: query("get_restaurant"),
+  batchGetRestaurants: query("batch_get_restaurants"),
+  listRestaurants: query("list_restaurants"),
+  listOwnedRestaurants: query("list_owned_restaurants"),
+  registerRestaurant: command("register_restaurant"),
+  updateRestaurant: command("update_restaurant"),
+  setOpeningHours: command("set_opening_hours"),
+  setScheduledOrderSettings: command("set_scheduled_order_settings"),
+  assignStaff: command("assign_staff"),
+  revokeStaff: command("revoke_staff"),
+  openRestaurant: command("open_restaurant"),
+  closeRestaurant: command("close_restaurant"),
+} as const satisfies Partial<Record<keyof RestaurantCradle, UseCase>>;
+
+/** Use cases of the slice in `cmd/restaurants-consumer`, by cradle key. */
+export const RESTAURANT_CONSUMER_USE_CASES = {
+  recordWaitTime: command("record_wait_time"),
+} as const;
 
 type Cradle = RestaurantDependencies & RestaurantCradle;
 

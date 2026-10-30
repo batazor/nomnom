@@ -6,6 +6,11 @@ import type { Db } from "mongodb";
 import type { Registrations } from "../../../di/container.ts";
 import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit-of-work.ts";
 import type { ScheduledSlotConfig } from "../../../pkg/config/config.ts";
+import {
+  command,
+  query,
+  type UseCase,
+} from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { SlotReservationAccess } from "../applications/access-control/access-control.ts";
@@ -39,6 +44,14 @@ export interface ScheduleSlotCradle {
   readonly confirmScheduledSlot: ConfirmScheduledSlotHandler;
   readonly releaseScheduledSlot: ReleaseScheduledSlotHandler;
 }
+
+/** Use cases of the slice with their telemetry names, by cradle key. */
+export const SCHEDULE_SLOT_USE_CASES = {
+  listScheduledSlots: query("list_scheduled_slots"),
+  reserveScheduledSlot: command("reserve_scheduled_slot"),
+  confirmScheduledSlot: command("confirm_scheduled_slot"),
+  releaseScheduledSlot: command("release_scheduled_slot"),
+} as const satisfies Partial<Record<keyof ScheduleSlotCradle, UseCase>>;
 
 type Cradle = ScheduleSlotDependencies & ScheduleSlotCradle;
 

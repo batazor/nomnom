@@ -57,6 +57,7 @@ import {
   DatabaseMenuReader,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { RecordWaitTimeHandler } from "../slices/restaurant/applications/record-wait-time/record-wait-time.ts";
+import { RESTAURANT_CONSUMER_USE_CASES } from "../slices/restaurant/di/registrations.ts";
 import { WaitTimePolicy } from "../slices/restaurant/domains/restaurant/wait-time.ts";
 import {
   CachedRestaurantCatalog,
@@ -86,7 +87,7 @@ import {
   DatabaseRestaurantOrderRepository,
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import { createProcessContainer, type Registrations } from "./container.ts";
-import { CONSUMER_USE_CASES, instrumentUseCases } from "./usecases.ts";
+import { instrumentUseCases } from "./usecases.ts";
 
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{
@@ -125,7 +126,7 @@ export interface ConsumerCradle {
   readonly schemas: SchemaSubjects;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */
   readonly logger: Logger;
-  /** Span and duration of every use case listed in di/usecases.ts. */
+  /** Span and duration of every use case its slice lists in its di. */
   readonly useCaseTelemetry: UseCaseTelemetry;
   readonly clock: Clock;
   readonly domainMetrics: RestaurantOrderDomainMetrics;
@@ -312,7 +313,7 @@ export const createConsumerContainer = (
     ).singleton(),
   };
   container.register(registrations);
-  instrumentUseCases(container, CONSUMER_USE_CASES);
+  instrumentUseCases(container, RESTAURANT_CONSUMER_USE_CASES);
   return container;
 };
 

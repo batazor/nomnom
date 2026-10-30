@@ -8,6 +8,11 @@ import { type AwilixContainer, asFunction } from "awilix";
 import type { Db } from "mongodb";
 import type { Registrations } from "../../../di/container.ts";
 import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit-of-work.ts";
+import {
+  command,
+  query,
+  type UseCase,
+} from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { CookAssigner } from "../../restaurantorder/applications/start-preparation/start-preparation.ts";
@@ -55,6 +60,15 @@ export interface CookCradle {
   readonly retireCook: RetireCookHandler;
   readonly getCookPool: GetCookPoolHandler;
 }
+
+/** Use cases of the slice with their telemetry names, by cradle key. */
+export const COOK_USE_CASES = {
+  hireCook: command("hire_cook"),
+  putCookOnLine: command("put_cook_on_line"),
+  takeCookOffLine: command("take_cook_off_line"),
+  retireCook: command("retire_cook"),
+  getCookPool: query("get_cook_pool"),
+} as const satisfies Partial<Record<keyof CookCradle, UseCase>>;
 
 type Cradle = CookDependencies & CookCradle;
 

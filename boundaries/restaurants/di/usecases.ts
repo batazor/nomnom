@@ -1,67 +1,12 @@
 // Use case telemetry of the composition roots (docs/observability.md, "Use
 // cases"): after the slices registered their handlers, the process replaces
-// each listed registration with the same handler decorated by
-// UseCaseTelemetry (pkg/telemetry/usecase.ts). Slices and use cases stay
-// unaware of OpenTelemetry. Names are the stable snake_case names of the
-// application folders.
+// each registration its slices list with the same handler decorated by
+// UseCaseTelemetry (pkg/telemetry/usecase.ts). Slices own the lists in their
+// di; use cases stay unaware of OpenTelemetry. Names are the stable snake_case
+// names of the application folders.
 import { type AwilixContainer, asFunction } from "awilix";
 
-import {
-  command,
-  query,
-  type UseCase,
-  type UseCaseTelemetry,
-} from "../pkg/telemetry/usecase.ts";
-
-/** Use cases of `cmd/restaurants` by cradle key. */
-export const RESTAURANTS_USE_CASES = {
-  getRestaurant: query("get_restaurant"),
-  batchGetRestaurants: query("batch_get_restaurants"),
-  listRestaurants: query("list_restaurants"),
-  listOwnedRestaurants: query("list_owned_restaurants"),
-  registerRestaurant: command("register_restaurant"),
-  updateRestaurant: command("update_restaurant"),
-  setOpeningHours: command("set_opening_hours"),
-  setScheduledOrderSettings: command("set_scheduled_order_settings"),
-  assignStaff: command("assign_staff"),
-  revokeStaff: command("revoke_staff"),
-  openRestaurant: command("open_restaurant"),
-  closeRestaurant: command("close_restaurant"),
-  getMenu: query("get_menu"),
-  batchGetMenus: query("batch_get_menus"),
-  createMenu: command("create_menu"),
-  addMenuItem: command("add_menu_item"),
-  updateMenuItem: command("update_menu_item"),
-  setMenuItemAvailability: command("set_menu_item_availability"),
-  receiveOrderRequest: command("receive_order_request"),
-  cancelRestaurantOrder: command("cancel_restaurant_order"),
-  queueRestaurantOrder: command("queue_restaurant_order"),
-  recordPickup: command("record_pickup"),
-  listScheduledSlots: query("list_scheduled_slots"),
-  reserveScheduledSlot: command("reserve_scheduled_slot"),
-  confirmScheduledSlot: command("confirm_scheduled_slot"),
-  releaseScheduledSlot: command("release_scheduled_slot"),
-  listScheduledOrders: query("list_scheduled_orders"),
-  acceptRestaurantOrder: command("accept_order"),
-  rejectRestaurantOrder: command("reject_order"),
-  startPreparation: command("start_preparation"),
-  markRestaurantOrderAssembled: command("mark_assembled"),
-  markRestaurantOrderReady: command("mark_ready_for_pickup"),
-  reportPreparationDelay: command("report_preparation_delay"),
-  reportPreparationFailure: command("report_preparation_failure"),
-  hireCook: command("hire_cook"),
-  putCookOnLine: command("put_cook_on_line"),
-  takeCookOffLine: command("take_cook_off_line"),
-  retireCook: command("retire_cook"),
-  getCookPool: query("get_cook_pool"),
-  getSimulator: query("get_simulator"),
-  setSimulatorEnabled: command("set_simulator_enabled"),
-} as const;
-
-/** Use cases of `cmd/restaurants-consumer` by cradle key. */
-export const CONSUMER_USE_CASES = {
-  recordWaitTime: command("record_wait_time"),
-} as const;
+import type { UseCase, UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
 
 type Executable = { execute(input: never): Promise<unknown> };
 

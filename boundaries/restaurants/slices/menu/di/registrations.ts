@@ -10,6 +10,11 @@ import type { DatabaseUnitOfWork } from "../../../infrastructure/repository/unit
 import type { CacheMetrics } from "../../../infrastructure/valkey/read-cache.ts";
 import type { ValkeyConfig } from "../../../pkg/config/config.ts";
 import type { Outbox } from "../../../pkg/outbox/outbox.ts";
+import {
+  command,
+  query,
+  type UseCase,
+} from "../../../pkg/telemetry/usecase.ts";
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
@@ -62,6 +67,16 @@ export interface MenuCradle {
   readonly updateMenuItem: UpdateMenuItemHandler;
   readonly setMenuItemAvailability: SetMenuItemAvailabilityHandler;
 }
+
+/** Use cases of the slice with their telemetry names, by cradle key. */
+export const MENU_USE_CASES = {
+  getMenu: query("get_menu"),
+  batchGetMenus: query("batch_get_menus"),
+  createMenu: command("create_menu"),
+  addMenuItem: command("add_menu_item"),
+  updateMenuItem: command("update_menu_item"),
+  setMenuItemAvailability: command("set_menu_item_availability"),
+} as const satisfies Partial<Record<keyof MenuCradle, UseCase>>;
 
 export const registerMenu = (
   container: AwilixContainer<MenuDependencies & MenuCradle>,
