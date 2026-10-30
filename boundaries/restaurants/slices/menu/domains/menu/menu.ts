@@ -1,4 +1,8 @@
 import { MarketId } from "../../../restaurant/domains/restaurant/vo/market-id.ts";
+import {
+  Money,
+  type MoneyValue,
+} from "../../../restaurant/domains/restaurant/vo/money.ts";
 import { InvalidMenuError, InvalidMenuReason } from "./errors.ts";
 import type {
   MenuCreated,
@@ -8,7 +12,6 @@ import type {
   MenuItemAvailabilityChanged,
   MenuItemUpdated,
 } from "./events.ts";
-import { Money, type MoneyValue } from "./vo/money.ts";
 
 export * from "./availability.ts";
 export * from "./errors.ts";

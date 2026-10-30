@@ -36,7 +36,6 @@ import {
   ConcurrencyConflictError,
 } from "../pkg/usecase/errors.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
-import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   createMenuCollection,
   DatabaseMenuReader,
@@ -44,6 +43,7 @@ import {
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { up as menusMarket } from "../slices/menu/infrastructure/repository/migrations/0002-market.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { Money } from "../slices/restaurant/domains/restaurant/vo/money.ts";
 import { up as restaurantsMarket } from "../slices/restaurant/infrastructure/repository/migrations/0003-market.ts";
 import {
   createRestaurantCollection,

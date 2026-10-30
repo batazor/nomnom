@@ -146,6 +146,7 @@ export const createWorld = async (
     setOpeningHours: world.setOpeningHours,
     setScheduledOrderSettings: world.setScheduledOrderSettings,
     queueRestaurantOrder: world.queue,
+    recordPickup: notComposed,
     listScheduledSlots: world.listScheduledSlots,
     reserveScheduledSlot: world.reserveScheduledSlot,
     confirmScheduledSlot: world.confirmScheduledSlot,

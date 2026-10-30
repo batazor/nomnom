@@ -12,6 +12,7 @@ import {
   SIMULATED_REJECTION_REASON,
 } from "../slices/simulator/applications/simulate-kitchen/simulate-kitchen.ts";
 import { chooseKitchenAction } from "../slices/simulator/domains/simulator/simulator.ts";
+import { BoardPendingKitchenOrders } from "../slices/simulator/infrastructure/pending-kitchen-orders.ts";
 import { DatabaseSimulatorState } from "../slices/simulator/infrastructure/repository/simulator-state.ts";
 import { RepositoryRestaurantOwners } from "../slices/simulator/infrastructure/restaurant-owners.ts";
 import { createTestDatabase } from "./support/database.ts";
@@ -146,7 +147,7 @@ const createSimulatorWorld = async (random: () => number) => {
   const logged: Record<string, unknown>[] = [];
   const simulator = new KitchenSimulator({
     state,
-    orders: world.board,
+    orders: new BoardPendingKitchenOrders(world.board),
     owners: new RepositoryRestaurantOwners(world.restaurants),
     commands: {
       accept: world.accept,
@@ -173,6 +174,26 @@ const createSimulatorWorld = async (random: () => number) => {
   return { ...world, state, simulator, logged, givenOwnedKitchen, stateOf };
 };
 
+// AC-993: orders outside SIMULATED_STATES do not reach the Simulator.
+test("the Simulator reads only orders in the simulated states", async () => {
+  const world = await createSimulatorWorld(sequence(0));
+  const kitchen = await world.givenOwnedKitchen("Berlin Pho");
+  const received = await world.givenReceivedOrder(
+    kitchen.restaurantId,
+    kitchen.phoId,
+  );
+  await world.givenOrderIn("READY", kitchen.restaurantId, kitchen.phoId);
+
+  const pending = await new BoardPendingKitchenOrders(
+    world.board,
+  ).listPendingKitchenOrders();
+
+  assert.deepEqual(
+    pending.map((order) => [order.restaurantOrderId, order.state]),
+    [[received.restaurantOrderId, "RECEIVED"]],
+  );
+});
+
 test("ADR 41 the Simulator keeps the Market of every order and names none itself", async () => {
   // Delays of both orders, then two accept outcomes with their step delays.
   const world = await createSimulatorWorld(
@@ -195,10 +216,11 @@ test("ADR 41 the Simulator keeps the Market of every order and names none itself
   );
 
   assert.deepEqual(
-    (await world.board.listPendingKitchenOrders()).map((order) => [
-      order.restaurantOrderId,
-      order.marketId,
-    ]),
+    (
+      await new BoardPendingKitchenOrders(
+        world.board,
+      ).listPendingKitchenOrders()
+    ).map((order) => [order.restaurantOrderId, order.marketId]),
     [
       [berlinOrder.restaurantOrderId, "berlin"],
       [hamburgOrder.restaurantOrderId, "hamburg"],

@@ -1,10 +1,10 @@
 import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
+import type { MoneyValue } from "../../../restaurant/domains/restaurant/vo/money.ts";
 import type {
   Menu,
   MenuItem,
   MenuRepository,
 } from "../../domains/menu/menu.ts";
-import type { MoneyValue } from "../../domains/menu/vo/money.ts";
 
 export type MenuItemView = Readonly<{
   menuItemId: string;

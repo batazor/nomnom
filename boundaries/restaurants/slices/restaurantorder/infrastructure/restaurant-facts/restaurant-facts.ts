@@ -1,7 +1,6 @@
 // Read adapters of the facts `restaurantorder` takes from the `restaurant` and
 // `menu` slices. They read the same collections through the owning slices'
 // repositories, so they join the active Unit of Work like any other read.
-import type { CookRestaurants } from "../../../cook/applications/cook-workload/cook-workload.ts";
 import type { MenuRepository } from "../../../menu/domains/menu/menu.ts";
 import type {
   MarketId,
@@ -13,10 +12,12 @@ import type {
 } from "../../applications/accept-order/accept-order.ts";
 import type { RestaurantMarkets } from "../../applications/receive-order-request/receive-order-request.ts";
 
-/** Existence and Market of a restaurant, read from the Restaurant aggregate. */
-export class RepositoryRestaurantExistence
-  implements CookRestaurants, RestaurantMarkets
-{
+/**
+ * Existence and Market of a restaurant, read from the Restaurant aggregate.
+ * `exists` serves the `CookRestaurants` port of the `cook` slice, which depends
+ * on this slice and not the other way round.
+ */
+export class RepositoryRestaurantExistence implements RestaurantMarkets {
   readonly #restaurants: Pick<RestaurantRepository, "get">;
 
   constructor(restaurants: Pick<RestaurantRepository, "get">) {

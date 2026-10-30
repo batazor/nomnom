@@ -4,8 +4,11 @@ import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { IdGenerator } from "../../../../pkg/usecase/id-generator.ts";
+import {
+  Money,
+  type MoneyValue,
+} from "../../../restaurant/domains/restaurant/vo/money.ts";
 import type { MenuRepository } from "../../domains/menu/menu.ts";
-import { Money, type MoneyValue } from "../../domains/menu/vo/money.ts";
 import type { MenuAccessControl } from "../access-control/access-control.ts";
 import {
   loadMenu,

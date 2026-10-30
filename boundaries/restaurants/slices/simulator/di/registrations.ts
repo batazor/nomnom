@@ -14,6 +14,7 @@ import { GetSimulatorHandler } from "../applications/get-simulator/get-simulator
 import { SetSimulatorEnabledHandler } from "../applications/set-simulator-enabled/set-simulator-enabled.ts";
 import { KitchenSimulator } from "../applications/simulate-kitchen/simulate-kitchen.ts";
 import type { SimulatorStateRepository } from "../domains/simulator/simulator.ts";
+import { BoardPendingKitchenOrders } from "../infrastructure/pending-kitchen-orders.ts";
 import { DatabaseSimulatorState } from "../infrastructure/repository/simulator-state.ts";
 import { RepositoryRestaurantOwners } from "../infrastructure/restaurant-owners.ts";
 
@@ -77,7 +78,7 @@ export const registerSimulator = (container: AwilixContainer<Cradle>): void => {
       (cradle: Cradle) =>
         new KitchenSimulator({
           state: cradle.simulatorState,
-          orders: cradle.kitchenBoard,
+          orders: new BoardPendingKitchenOrders(cradle.kitchenBoard),
           owners: new RepositoryRestaurantOwners(cradle.restaurants),
           commands: {
             accept: cradle.acceptRestaurantOrder,

@@ -30,7 +30,6 @@ import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { startTracing, type Tracing } from "../pkg/telemetry/tracing.ts";
 import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
-import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   MENU_AGGREGATE_TYPE,
   menuEventMapper,
@@ -42,6 +41,7 @@ import {
 import { CloseRestaurantHandler } from "../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
 import { OpenRestaurantHandler } from "../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { Money } from "../slices/restaurant/domains/restaurant/vo/money.ts";
 import {
   RESTAURANT_AGGREGATE_TYPE,
   RESTAURANT_EVENTS_TOPIC,

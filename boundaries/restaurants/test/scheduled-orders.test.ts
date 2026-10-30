@@ -15,6 +15,7 @@ import {
   InvalidRestaurantOrderReason,
 } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { KitchenSimulator } from "../slices/simulator/applications/simulate-kitchen/simulate-kitchen.ts";
+import { BoardPendingKitchenOrders } from "../slices/simulator/infrastructure/pending-kitchen-orders.ts";
 import {
   context,
   createWorld,
@@ -511,7 +512,7 @@ test("the Simulator accepts a scheduled order without a time of its own", async 
       isEnabled: async () => true,
       setEnabled: async () => {},
     },
-    orders: world.board,
+    orders: new BoardPendingKitchenOrders(world.board),
     owners: { ownerOf: async () => cook.id },
     commands: {
       accept: world.accept,

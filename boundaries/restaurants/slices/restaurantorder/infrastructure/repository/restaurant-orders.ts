@@ -5,17 +5,15 @@ import {
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
 import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
-import type { CookWorkload } from "../../../cook/applications/cook-workload/cook-workload.ts";
-import type {
-  PendingKitchenOrder,
-  PendingKitchenOrdersReader,
-} from "../../../simulator/applications/simulate-kitchen/simulate-kitchen.ts";
-import { SIMULATED_STATES } from "../../../simulator/domains/simulator/simulator.ts";
 import type {
   KitchenQueueEntry,
   KitchenQueueReader,
 } from "../../applications/get-kitchen-queue/get-kitchen-queue.ts";
 import type { RestaurantOrderReader } from "../../applications/get-restaurant-order/get-restaurant-order.ts";
+import type {
+  KitchenOrderInState,
+  KitchenOrdersInStatesReader,
+} from "../../applications/kitchen-board/kitchen-board.ts";
 import type {
   ActivePreparation,
   ActivePreparationsReader,
@@ -229,8 +227,7 @@ export class DatabaseKitchenBoard
     ReadyOrdersReader,
     ActiveRestaurantOrdersReader,
     ScheduledOrdersReader,
-    PendingKitchenOrdersReader,
-    CookWorkload,
+    KitchenOrdersInStatesReader,
     StartedOrders
 {
   readonly #collection: VersionedCollection<RestaurantOrderDocument>;
@@ -388,7 +385,11 @@ export class DatabaseKitchenBoard
     }));
   }
 
-  /** Cook Pool (FR-617): cooks holding an order in Active Preparation. */
+  /**
+   * Cook Pool (FR-617): cooks holding an order in Active Preparation. With
+   * `queuedOrders` it serves the `CookWorkload` port of the `cook` slice,
+   * which depends on this slice and not the other way round.
+   */
   async activeAssignments(
     restaurantId: string,
   ): Promise<ReadonlyMap<string, string>> {
@@ -419,19 +420,21 @@ export class DatabaseKitchenBoard
   }
 
   /**
-   * Demo Simulator (FR-605): orders of every restaurant waiting for the
-   * kitchen, via the `(state, receivedAt)` index.
+   * Demo Simulator (FR-605): orders of every restaurant in the given states,
+   * via the `(state, receivedAt)` index.
    */
-  async listPendingKitchenOrders(): Promise<readonly PendingKitchenOrder[]> {
+  async listKitchenOrdersInStates<State extends RestaurantOrderState>(
+    states: readonly State[],
+  ): Promise<readonly KitchenOrderInState<State>[]> {
     const documents = await this.#collection.find(
-      { state: { $in: [...SIMULATED_STATES] } },
+      { state: { $in: [...states] } },
       { sort: { state: 1, "timeline.receivedAt": 1, _id: 1 } },
     );
     return documents.map((document) => ({
       restaurantOrderId: document._id,
       restaurantId: document.restaurantId,
       marketId: document.marketId,
-      state: document.state as PendingKitchenOrder["state"],
+      state: document.state as State,
       expectedReadyAt: document.timeline.expectedReadyAt,
       scheduled: document.schedule !== undefined,
     }));

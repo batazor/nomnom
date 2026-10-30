@@ -10,7 +10,7 @@ import {
   InvalidMoneyError,
   InvalidMoneyReason,
   Money,
-} from "../slices/menu/domains/menu/vo/money.ts";
+} from "../slices/restaurant/domains/restaurant/vo/money.ts";
 
 const at = new Date(Date.UTC(2026, 9, 25, 9));
 

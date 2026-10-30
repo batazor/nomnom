@@ -1,4 +1,3 @@
-import type { MoneyValue } from "../../../menu/domains/menu/vo/money.ts";
 import {
   OpeningHours,
   type OpeningInterval,
@@ -6,6 +5,7 @@ import {
   type ScheduledOrderSettingsValue,
   TimeZone,
 } from "../../domains/restaurant/restaurant.ts";
+import type { MoneyValue } from "../../domains/restaurant/vo/money.ts";
 
 /** Public representation of a restaurant returned by commands and queries. */
 export type RestaurantView = Readonly<{

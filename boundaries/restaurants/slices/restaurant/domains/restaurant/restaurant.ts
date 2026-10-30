@@ -1,7 +1,7 @@
-import { Money, type MoneyValue } from "../../../menu/domains/menu/vo/money.ts";
 import { InvalidRestaurantError, InvalidRestaurantReason } from "./errors.ts";
 import type { RestaurantEvent } from "./events.ts";
 import { MarketId } from "./vo/market-id.ts";
+import { Money, type MoneyValue } from "./vo/money.ts";
 import {
   OpeningHours,
   type OpeningInterval,

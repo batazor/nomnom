@@ -19,12 +19,12 @@ import { PoolCookAssigner } from "../slices/cook/applications/assign-cook/assign
 import { Cook } from "../slices/cook/domains/cook/cook.ts";
 import { DatabaseCookRepository } from "../slices/cook/infrastructure/repository/cooks.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
-import { Money } from "../slices/menu/domains/menu/vo/money.ts";
 import {
   createMenuCollection,
   DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { Money } from "../slices/restaurant/domains/restaurant/vo/money.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantRepository,

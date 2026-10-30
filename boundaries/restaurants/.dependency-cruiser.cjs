@@ -1,8 +1,29 @@
 // Layer import rules of ADR 6: `npm run architecture`. TypeScript 7 has no
 // compiler API for dependency-cruiser, so sources are parsed by swc.
+
+/** The acyclic graph of slices: each slice with the neighbours it may import. */
+const SLICE_DEPENDENCIES = {
+  restaurant: [],
+  menu: ["restaurant"],
+  scheduleslot: ["restaurant"],
+  restaurantorder: ["restaurant", "menu"],
+  cook: ["restaurantorder"],
+  simulator: ["restaurantorder", "restaurant"],
+};
+
 /** @type {import("dependency-cruiser").IConfiguration} */
 module.exports = {
   forbidden: [
+    ...Object.entries(SLICE_DEPENDENCIES).map(([slice, neighbours]) => ({
+      name: `slice-${slice}-dependencies`,
+      comment: "A slice imports only the neighbours of the acyclic graph (ADR 6).",
+      severity: "error",
+      from: { path: `^slices/${slice}/` },
+      to: {
+        path: "^slices/",
+        pathNot: `^slices/(${[slice, ...neighbours].join("|")})/`,
+      },
+    })),
     {
       name: "domains-depend-on-domains",
       comment: "Domains depend only on domains, decimal.js and Node built-ins.",
