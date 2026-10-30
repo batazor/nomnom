@@ -196,7 +196,7 @@ func TestOrderTransitionsMigrationMapsFacts(t *testing.T) {
 	_, err = conn.Exec(ctx, `INSERT INTO order_facts (order_id, fact, occurred_at) VALUES ('order-1', 'courier_assigned', now())`)
 	require.NoError(t, err)
 
-	require.NoError(t, migration.Apply(ctx, cfg, repository.Migrations))
+	require.NoError(t, migration.Apply(ctx, cfg, migrationsBefore(t, "00014_drop_order_facts.up.sql")))
 
 	rows, err := conn.Query(ctx, `SELECT trigger FROM order_transitions WHERE order_id = 'order-1'`)
 	require.NoError(t, err)
@@ -207,6 +207,15 @@ func TestOrderTransitionsMigrationMapsFacts(t *testing.T) {
 	var journal int
 	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM order_facts`).Scan(&journal))
 	assert.Equal(t, len(mapped)+1, journal)
+
+	require.NoError(t, migration.Apply(ctx, cfg, repository.Migrations))
+
+	var dropped *string
+	require.NoError(t, conn.QueryRow(ctx, `SELECT to_regclass('order_facts')::text`).Scan(&dropped))
+	assert.Nil(t, dropped)
+	var history int
+	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM order_transitions`).Scan(&history))
+	assert.Equal(t, len(want), history)
 }
 
 // migrationsBefore is the order migration set without first and every later file.
