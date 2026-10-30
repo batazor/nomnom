@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"nomnom/orders/slices/order/applications/lookup/getfulfillmentorder"
+	"nomnom/orders/slices/order/applications/getfulfillmentorder"
 )
 
 // Priority is the Premium Priority of the Order the kitchen starts it by.

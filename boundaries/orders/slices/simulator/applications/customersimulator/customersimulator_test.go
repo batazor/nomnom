@@ -12,7 +12,7 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placement/placeorder"
+	"nomnom/orders/slices/order/applications/placeorder"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"

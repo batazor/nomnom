@@ -15,9 +15,9 @@ import (
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
-	"nomnom/orders/slices/order/applications/lookup/getorder"
-	"nomnom/orders/slices/order/applications/lookup/orderdetails"
-	"nomnom/orders/slices/order/applications/placement/placeorder"
+	"nomnom/orders/slices/order/applications/getorder"
+	"nomnom/orders/slices/order/applications/orderdetails"
+	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 )
 

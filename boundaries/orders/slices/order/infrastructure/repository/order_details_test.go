@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/lookup/listcustomerorders"
-	"nomnom/orders/slices/order/applications/lookup/orderdetails"
+	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"

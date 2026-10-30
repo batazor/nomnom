@@ -11,7 +11,7 @@ import (
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placement/placeorder"
+	"nomnom/orders/slices/order/applications/placeorder"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )

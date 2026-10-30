@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/placement/planschedule"
+	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/estimates"
 
