@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/listcustomerorders"
 	"nomnom/orders/slices/order/domains/order"
@@ -125,7 +126,7 @@ func TestCatchUpProjectsStaleOrders(t *testing.T) {
 		require.NoError(t, store.Add(ctx, ordertest.New(t, id)))
 	}
 	exec(t, store, `DELETE FROM order_details WHERE order_id = $1`, missing)
-	exec(t, store, `UPDATE order_details SET projection_version = projection_version + 1000, details = '{}' WHERE order_id = $1`, outdated)
+	exec(t, store, `UPDATE order_details SET projection_version = projection_version - 1, details = '{}' WHERE order_id = $1`, outdated)
 	exec(t, store, `UPDATE orders SET state = 'confirmed', version = version + 1 WHERE id = $1`, drifted)
 	before := projectedAt(t, store, current)
 
@@ -149,9 +150,24 @@ func TestCatchUpProjectsStaleOrders(t *testing.T) {
 	assert.Zero(t, again, "nothing is stale after catch-up")
 }
 
-// A held projection lock is reported at once; the stale rows stay for the next
-// pass, which runs after the lock is released.
-func TestCatchUpDoesNotWaitForAHeldLock(t *testing.T) {
+// A row of a newer projection_version belongs to the next release: a process of
+// this one, restarted during a rollout, leaves it alone.
+func TestCatchUpKeepsANewerProjectionVersion(t *testing.T) {
+	store := repositorytest.Open(t)
+	ctx := context.Background()
+	id := uniqueID("newer")
+	require.NoError(t, store.Add(ctx, ordertest.New(t, id)))
+	exec(t, store, `UPDATE order_details SET projection_version = projection_version + 1 WHERE order_id = $1`, id)
+
+	projected, err := store.CatchUpOrderDetails(ctx)
+
+	require.NoError(t, err)
+	assert.Zero(t, projected)
+}
+
+// A pass waits for the holder of the lock and then does what is left; waiting
+// ends with its context.
+func TestCatchUpWaitsForTheLockHolder(t *testing.T) {
 	store := repositorytest.Open(t)
 	ctx := context.Background()
 	id := uniqueID("locked")
@@ -164,15 +180,47 @@ func TestCatchUpDoesNotWaitForAHeldLock(t *testing.T) {
 	_, err = holder.Exec(ctx, `SELECT pg_advisory_lock($1)`, projectionLock)
 	require.NoError(t, err)
 
-	_, err = store.CatchUpOrderDetails(ctx)
+	cancelled, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	_, err = store.CatchUpOrderDetails(cancelled)
+	require.Error(t, err)
 
-	require.ErrorIs(t, err, repository.ErrCatchUpInProgress)
-	_, err = store.OrderDetails(ctx, id)
-	require.ErrorIs(t, err, order.ErrOrderNotFound)
+	type result struct {
+		projected int
+		err       error
+	}
+	done := make(chan result, 1)
+	go func() {
+		projected, err := store.CatchUpOrderDetails(ctx)
+		done <- result{projected, err}
+	}()
+	select {
+	case <-done:
+		t.Fatal("the pass did not wait for the lock")
+	case <-time.After(100 * time.Millisecond):
+	}
 
 	_, err = holder.Exec(ctx, `SELECT pg_advisory_unlock($1)`, projectionLock)
 	require.NoError(t, err)
-	projected, err := store.CatchUpOrderDetails(ctx)
+	finished := <-done
+	require.NoError(t, finished.err)
+	assert.Equal(t, 1, finished.projected)
+}
+
+// The lock lives outside the pool, so the smallest valid pool still projects.
+func TestCatchUpWorksOnAPoolOfOneConnection(t *testing.T) {
+	store := repositorytest.Open(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	id := uniqueID("single")
+	require.NoError(t, store.Add(ctx, ordertest.New(t, id)))
+	exec(t, store, `DELETE FROM order_details WHERE order_id = $1`, id)
+	single, err := repository.Open(ctx, database.Config{DSN: store.Pool().Config().ConnString(), MaxConns: 1})
+	require.NoError(t, err)
+	defer single.Close()
+
+	projected, err := single.CatchUpOrderDetails(ctx)
+
 	require.NoError(t, err)
 	assert.Equal(t, 1, projected)
 }

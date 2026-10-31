@@ -59,6 +59,9 @@ func (a *App) Start(ctx context.Context) error {
 	return nil
 }
 
+// Warmed закрывается, когда проекция догнана: только после этого pod становится ready.
+func (a *App) Warmed() <-chan struct{} { return a.catchUp.CaughtUp() }
+
 // Run обслуживает входящие запросы и тики Simulator до вызова Shutdown и один
 // раз догоняет проекцию; ошибка прохода завершает процесс.
 func (a *App) Run() error {

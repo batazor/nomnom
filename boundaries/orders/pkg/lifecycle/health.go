@@ -11,6 +11,7 @@ import (
 
 const (
 	reasonInitializing = "initializing"
+	reasonWarming      = "warming"
 	reasonShuttingDown = "shutting_down"
 )
 
@@ -18,14 +19,17 @@ const (
 // и никогда не обращаются к зависимостям.
 type Health struct {
 	started      atomic.Bool
+	warming      atomic.Bool
 	shuttingDown atomic.Bool
 }
 
 func (h *Health) markStarted()      { h.started.Store(true) }
+func (h *Health) markWarming()      { h.warming.Store(true) }
+func (h *Health) markWarmed()       { h.warming.Store(false) }
 func (h *Health) markShuttingDown() { h.shuttingDown.Store(true) }
 
 // Ready сообщает, может ли экземпляр принимать новую работу.
-func (h *Health) Ready() bool { return h.started.Load() && !h.shuttingDown.Load() }
+func (h *Health) Ready() bool { return h.started.Load() && !h.warming.Load() && !h.shuttingDown.Load() }
 
 // Handler обслуживает /health/startup, /health/live и /health/ready.
 func (h *Health) Handler() http.Handler {
@@ -41,6 +45,8 @@ func (h *Health) Handler() http.Handler {
 		switch {
 		case h.shuttingDown.Load():
 			write(w, false, reasonShuttingDown)
+		case h.warming.Load():
+			write(w, false, reasonWarming)
 		default:
 			write(w, h.started.Load(), reasonInitializing)
 		}

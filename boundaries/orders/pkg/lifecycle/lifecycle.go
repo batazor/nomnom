@@ -37,6 +37,12 @@ type Worker interface {
 	Shutdown(ctx context.Context) error
 }
 
+// Warming — необязательное расширение Worker: экземпляр уже работает и проходит
+// startupProbe, но новую работу получает только после закрытия канала Warmed.
+type Warming interface {
+	Warmed() <-chan struct{}
+}
+
 type Runtime struct {
 	cfg    Config
 	health Health
@@ -48,7 +54,7 @@ func New(cfg Config) *Runtime {
 
 func (r *Runtime) Health() *Health { return &r.health }
 
-// Run выполняет lifecycle процесса: технический порт → Start → ready →
+// Run выполняет lifecycle процесса: технический порт → Start → (прогрев) → ready →
 // SIGTERM/SIGINT или отмена ctx → not ready → readiness delay → Shutdown → exit.
 // nil означает штатный shutdown; любая ошибка — non-zero exit.
 func (r *Runtime) Run(ctx context.Context, worker Worker) error {
@@ -64,6 +70,16 @@ func (r *Runtime) Run(ctx context.Context, worker Worker) error {
 
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("start: %w", err)
+	}
+	if warming, ok := worker.(Warming); ok {
+		r.health.markWarming()
+		go func() {
+			select {
+			case <-warming.Warmed():
+				r.health.markWarmed()
+			case <-ctx.Done():
+			}
+		}()
 	}
 	runErr := make(chan error, 1)
 	go func() { runErr <- worker.Run() }()

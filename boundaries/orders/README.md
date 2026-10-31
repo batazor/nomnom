@@ -456,7 +456,7 @@ Delivery Window запланированного заказа (FR-681) — nulla
 (миграция `00010_delivery_window`, CHECK: обе NULL — ASAP-заказ, иначе `start < end`; значения существующим строкам не подставляются)
 и `delivery_window` документа `order_details` (projection version 3).
 Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, процесс
-API в фоне после старта догоняет устаревшие строки (catch-up), догон по требованию — `orders-admin projections catch-up order-details`, исправление дефекта проектора поднимает `projection_version` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
+API после старта в фоне догоняет устаревшие строки (catch-up) и становится ready только после этого, догон по требованию — `orders-admin projections catch-up order-details`, исправление дефекта проектора поднимает `projection_version` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
 
 Операторская команда `cmd/orders-admin` входит в образ и запускается разово в pod `orders-consumer`
 (`kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin …`): `dlq list|redrive|discard`

@@ -52,6 +52,37 @@ func TestRunMarksReadyAndShutsDownGracefully(t *testing.T) {
 	require.NoError(t, <-result)
 }
 
+type warmingWorker struct {
+	*MockWorker
+	warmed chan struct{}
+}
+
+func (w warmingWorker) Warmed() <-chan struct{} { return w.warmed }
+
+func TestRunBecomesReadyOnlyAfterWarming(t *testing.T) {
+	rt := New(testConfig())
+	worker := NewMockWorker(t)
+	runExit := make(chan error, 1)
+	worker.EXPECT().Start(mock.Anything).Return(nil).Once()
+	worker.EXPECT().Run().RunAndReturn(func() error { return <-runExit }).Once()
+	worker.EXPECT().Shutdown(mock.Anything).RunAndReturn(func(context.Context) error {
+		runExit <- nil
+		return nil
+	}).Once()
+	warmed := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	result := runAsync(rt, ctx, warmingWorker{MockWorker: worker, warmed: warmed})
+
+	require.Eventually(t, rt.health.started.Load, time.Second, time.Millisecond)
+	assert.False(t, rt.Health().Ready(), "started but still warming")
+
+	close(warmed)
+	require.Eventually(t, rt.Health().Ready, time.Second, time.Millisecond)
+
+	cancel()
+	require.NoError(t, <-result)
+}
+
 func TestRunWaitsReadinessDelayBeforeShutdown(t *testing.T) {
 	cfg := testConfig()
 	cfg.ReadinessDelay = 150 * time.Millisecond

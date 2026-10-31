@@ -22,7 +22,8 @@ import (
 
 // OrderDetailsProjectionVersion is the shape of order_details.details and the
 // rules that fill it. A change of the document or a fixed projection defect
-// increments it: catch-up projects every row of another version again.
+// increments it, it never goes down: catch-up projects every row of an older
+// version again.
 const OrderDetailsProjectionVersion = 6
 
 // projectionBatch bounds the Orders selected at once by catch-up; each Order is
@@ -319,33 +320,27 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	return placedAt, id, err
 }
 
-// ErrCatchUpInProgress means another process holds the projection lock and is
-// catching up now.
-var ErrCatchUpInProgress = errors.New("order details catch-up is already running")
-
 // CatchUpOrderDetails projects the stale Orders again from the order tables:
-// Orders without a row, with a row of another projection_version or of another
-// Order version. It goes in batches by order id, each Order in its own
-// transaction under a share lock of its row, so a concurrent change waits and
-// is never overwritten, and an interrupted pass leaves only stale rows for the
-// next one. The advisory lock is not waited for: a held lock is
-// ErrCatchUpInProgress. It returns the number of Orders projected.
+// Orders without a row, with a row of an older projection_version or of another
+// Order version. A newer projection_version is left alone: a process of the
+// previous release, restarted during a rollout, must not undo the new one. It
+// goes in batches by order id, each Order in its own transaction under a share
+// lock of its row, so a concurrent change waits and is never overwritten, and
+// an interrupted pass leaves only stale rows for the next one.
+//
+// Passes serialize on an advisory lock on a connection of their own, outside
+// the pool: the projecting transactions never wait for the connection that holds
+// it, and closing it releases the lock on any exit. A process that waited takes
+// over what a failed holder left. It returns the number of Orders projected.
 func (s *Store) CatchUpOrderDetails(ctx context.Context) (int, error) {
-	conn, err := s.pool.Acquire(ctx)
+	lock, err := pgx.ConnectConfig(ctx, s.pool.Config().ConnConfig)
 	if err != nil {
-		return 0, fmt.Errorf("acquire connection for the projection lock: %w", err)
+		return 0, fmt.Errorf("connect for the projection lock: %w", err)
 	}
-	defer conn.Release()
-	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", projectionLockKey).Scan(&locked); err != nil {
+	defer func() { _ = lock.Close(context.WithoutCancel(ctx)) }()
+	if _, err := lock.Exec(ctx, "SELECT pg_advisory_lock($1)", projectionLockKey); err != nil {
 		return 0, fmt.Errorf("projection lock: %w", err)
 	}
-	if !locked {
-		return 0, ErrCatchUpInProgress
-	}
-	defer func() {
-		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", projectionLockKey)
-	}()
 
 	projected := 0
 	after := ""
@@ -379,7 +374,7 @@ func (s *Store) staleOrders(ctx context.Context, after string) ([]order.ID, erro
 		Where(sq.Gt{"o.id": after}).
 		Where(sq.Or{
 			sq.Eq{"d.order_id": nil},
-			sq.NotEq{"d.projection_version": OrderDetailsProjectionVersion},
+			sq.Lt{"d.projection_version": OrderDetailsProjectionVersion},
 			sq.Expr("d.order_version <> o.version"),
 		}).
 		OrderBy("o.id").Limit(projectionBatch))
