@@ -15,11 +15,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from opentelemetry import metrics, trace
 from opentelemetry.trace import Status, StatusCode
-
-from pkg.usecase import Handler
 
 from .buckets import SECONDS_BUCKETS
 
@@ -31,6 +30,16 @@ OUTCOME = "nomnom.outcome"
 ERROR_TYPE = "error.type"
 
 ERROR_TYPE_INTERNAL = "internal"
+
+
+class Handler[In, Out](Protocol):
+    """One application use case: a Command or Query in, its result out.
+
+    Positional-only, so the parameter name of a handler (``command``/``query``) is free.
+    """
+
+    def handle(self, request: In, /) -> Out:
+        """Run the use case; typed application errors are raised, not returned."""
 
 
 class Kind(StrEnum):

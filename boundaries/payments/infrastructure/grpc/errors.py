@@ -7,8 +7,8 @@ from typing import NoReturn
 import grpc
 
 from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
-from pkg.usecase import ConcurrencyConflictError
 from slices.payment.applications.errors import (
+    ConcurrencyConflictError,
     IdempotencyKeyConflictError,
     InvalidPaymentRequestError,
     OperationInProgressError,

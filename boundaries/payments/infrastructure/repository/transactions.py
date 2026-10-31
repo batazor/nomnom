@@ -12,7 +12,7 @@ import psycopg
 from opentelemetry import metrics
 
 from pkg.telemetry import SECONDS_BUCKETS
-from pkg.usecase import ConcurrencyConflictError
+from slices.payment.applications.errors import ConcurrencyConflictError
 
 INSTRUMENTATION = "nomnom.payments.uow"
 

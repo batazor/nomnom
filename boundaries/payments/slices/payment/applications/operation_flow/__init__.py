@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from pkg.authz import Subject
 from pkg.unit_of_work import UnitOfWork
-from pkg.usecase import Clock
+from slices.payment.applications.ports import Clock
 from slices.payment.domains.payment import (
     AlreadyInStateError,
     DuplicateIdempotencyKeyError,

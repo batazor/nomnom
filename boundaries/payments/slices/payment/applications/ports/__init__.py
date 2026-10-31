@@ -2,12 +2,13 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
 from pkg.authz import Subject
 from pkg.outbox import AggregateRef
-from pkg.usecase import ApplicationError
+from slices.payment.applications.errors import ApplicationError
 from slices.payment.domains.payment import (
     InvalidTransitionError,
     Money,
@@ -37,6 +38,14 @@ __all__ = [
     "ProviderUnavailableError",
     "SubjectSealer",
 ]
+
+
+class Clock(Protocol):
+    """Source of the current instant for use cases; replaced by a fixed clock in tests."""
+
+    def now(self) -> datetime:
+        """Return the current timezone-aware instant."""
+        ...
 
 
 @dataclass(frozen=True)

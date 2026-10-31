@@ -14,9 +14,7 @@ from infrastructure.grpc.servicer import PaymentsHandlers
 from infrastructure.repository import DatabaseUnitOfWork
 from infrastructure.repository.transactions import TransactionMetrics
 from pkg.config import ProviderSettings, SpiceDBSettings
-from pkg.telemetry.usecase import UseCase, UseCases
-from pkg.usecase import Handler
-from pkg.usecase.clock import SystemClock
+from pkg.telemetry.usecase import Handler, UseCase, UseCases
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
 from slices.payment.applications.authorize import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
@@ -34,6 +32,7 @@ from slices.payment.infrastructure.authorization import (
     SpiceDBPermissionChecker,
     create_spicedb_client,
 )
+from slices.payment.infrastructure.clock import SystemClock
 from slices.payment.infrastructure.ids import UuidIdentifiers
 from slices.payment.infrastructure.messaging import PaymentEventsMapper
 from slices.payment.infrastructure.observability import (

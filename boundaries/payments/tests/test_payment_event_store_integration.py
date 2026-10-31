@@ -16,12 +16,12 @@ from payment_fakes import MARKET, NOW, ORCHESTRATOR, REQUESTER, PaymentsTestKit
 from psycopg.types.json import Jsonb
 
 from infrastructure.repository import Database
-from pkg.usecase import ConcurrencyConflictError
 from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
 from slices.payment.applications.errors import (
+    ConcurrencyConflictError,
     IdempotencyKeyConflictError,
     OperationInProgressError,
     PaymentStateConflictError,

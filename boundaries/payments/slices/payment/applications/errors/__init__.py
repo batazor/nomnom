@@ -1,7 +1,19 @@
 """Typed application errors of the payment slice."""
 
-from pkg.usecase import ApplicationError
 from slices.payment.domains.payment import OperationId, OrderId, PaymentId, PaymentState
+
+
+class ApplicationError(Exception):
+    """Base class of typed application errors mapped to transport codes by adapters."""
+
+
+class ConcurrencyConflictError(ApplicationError):
+    """The aggregate version changed since it was loaded."""
+
+    def __init__(self, aggregate_type: str, aggregate_id: str) -> None:
+        super().__init__(f"concurrent modification of {aggregate_type} {aggregate_id}")
+        self.aggregate_type = aggregate_type
+        self.aggregate_id = aggregate_id
 
 
 class InvalidPaymentRequestError(ApplicationError):

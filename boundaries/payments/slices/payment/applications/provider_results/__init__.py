@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pkg.outbox import AggregateRef
-from pkg.usecase import Clock
+from slices.payment.applications.ports import Clock
 from slices.payment.domains.payment import (
     AlreadyInStateError,
     GuardFailedError,

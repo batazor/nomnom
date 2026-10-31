@@ -16,7 +16,7 @@ from psycopg import errors
 from infrastructure.repository import Database, DatabaseUnitOfWork
 from infrastructure.repository.database import MAX_ATTEMPTS
 from infrastructure.repository.transactions import TransactionMetrics
-from pkg.usecase import ConcurrencyConflictError
+from slices.payment.applications.errors import ConcurrencyConflictError
 
 TRANSACTIONS = "nomnom.uow.transactions"
 DURATION = "nomnom.uow.duration"

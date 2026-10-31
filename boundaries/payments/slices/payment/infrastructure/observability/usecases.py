@@ -6,8 +6,8 @@ by the Provider is a successful call (``DECLINED`` result), not a rejection.
 
 from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
 from pkg.telemetry.usecase import Failure, Outcome, UseCase
-from pkg.usecase import ConcurrencyConflictError
 from slices.payment.applications.errors import (
+    ConcurrencyConflictError,
     IdempotencyKeyConflictError,
     InvalidPaymentRequestError,
     OperationInProgressError,
