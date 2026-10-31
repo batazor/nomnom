@@ -6,11 +6,11 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
-use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
 use crate::slices::courier::domains::courier::{CourierId, CourierName, CourierStatus, MarketId};
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
 
 use super::error::DeliveryApplicationError;

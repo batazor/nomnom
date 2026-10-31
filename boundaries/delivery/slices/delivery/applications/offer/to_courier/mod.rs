@@ -8,9 +8,9 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
-use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
+use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
 
 use super::super::assignment_process::{AssignmentProcess, WakeReason};

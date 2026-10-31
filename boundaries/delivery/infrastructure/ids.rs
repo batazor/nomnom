@@ -6,7 +6,7 @@
 
 use uuid::Uuid;
 
-use crate::pkg::usecase::IdGenerator;
+use crate::slices::delivery::applications::IdGenerator;
 
 /// UUIDv7 в каноническом текстовом виде; упорядочен по времени создания.
 #[derive(Clone, Copy, Debug, Default)]

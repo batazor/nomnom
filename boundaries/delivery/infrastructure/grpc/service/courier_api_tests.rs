@@ -12,7 +12,6 @@ use crate::infrastructure::memory::{
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::authz::RelationshipWriteError;
 use crate::pkg::persistence::AuthorizationRevision;
-use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::authorization::{CourierPermission, CourierResource};
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
 use crate::slices::courier::domains::courier::{CourierId, CourierRepository};

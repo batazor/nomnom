@@ -9,7 +9,7 @@
 //! no subject and no permission check.
 
 use crate::pkg::unit_of_work::UnitOfWork;
-use crate::pkg::usecase::Clock;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::domains::delivery::{
     DeliveryOfferError, DeliveryOfferId, DeliveryOfferRepository,
 };

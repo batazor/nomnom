@@ -9,8 +9,8 @@ use super::{DeliveryId, DomainEvent};
 use crate::slices::courier::domains::courier::CourierId;
 
 pub use acceptance::*;
-use machine::{open_at, past_deadline, valid_expiry};
 pub use machine::{OfferState, OfferTransitionResult, OfferTrigger, applied_offer_transition};
+use machine::{open_at, past_deadline, valid_expiry};
 use transitions::offer_transition;
 #[cfg(test)]
 use transitions::{ALL_OFFER_STATES, ALL_OFFER_TRIGGERS};

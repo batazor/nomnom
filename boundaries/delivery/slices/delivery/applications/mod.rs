@@ -16,7 +16,6 @@ pub mod tracking;
 #[cfg(test)]
 mod test_support;
 
-use crate::pkg::usecase::{Clock, required_identifier};
 use crate::slices::courier::domains::courier::{CourierId, MarketId};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -24,6 +23,24 @@ use crate::slices::delivery::domains::delivery::{
 };
 
 use error::{DeliveryApplicationError, InvalidDeliveryRequest};
+
+/// Source of the current time for application code; domain code receives
+/// the value explicitly.
+pub trait Clock {
+    fn now_epoch_seconds(&self) -> i64;
+}
+
+/// Generates identifiers of new aggregates before a transaction starts.
+pub trait IdGenerator {
+    fn next_id(&self) -> String;
+}
+
+/// Input validation of a required identifier: surrounding whitespace is
+/// removed and an empty value is rejected.
+fn required_identifier(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
 
 fn identifier(value: &str, field: &'static str) -> Result<String, DeliveryApplicationError> {
     required_identifier(value)

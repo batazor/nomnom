@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
-use crate::pkg::usecase::{Clock, IdGenerator};
+use crate::slices::courier::applications::Clock as CourierClock;
+use crate::slices::delivery::applications::{Clock as DeliveryClock, IdGenerator};
 
 /// Clock whose time is set explicitly by the test.
 #[derive(Debug)]
@@ -25,7 +26,13 @@ impl ManualClock {
     }
 }
 
-impl Clock for ManualClock {
+impl CourierClock for ManualClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        self.now.load(Ordering::SeqCst)
+    }
+}
+
+impl DeliveryClock for ManualClock {
     fn now_epoch_seconds(&self) -> i64 {
         self.now.load(Ordering::SeqCst)
     }

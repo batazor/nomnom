@@ -11,9 +11,9 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
-use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository,

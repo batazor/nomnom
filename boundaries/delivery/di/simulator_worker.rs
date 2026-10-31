@@ -46,10 +46,10 @@ use tokio::sync::watch;
 use crate::pkg::authz::Subject;
 use crate::pkg::lifecycle::Worker;
 use crate::pkg::persistence::RepositoryError;
-use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::update_location;
 use crate::slices::courier::domains::courier::{CourierId, Location};
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     execution::deliver, execution::pick_up, execution::report_failure, offer::accept, offer::reject,

@@ -15,7 +15,7 @@ use shaku::{Component, Interface, module};
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::pkg::persistence::RepositoryError;
 use crate::pkg::unit_of_work::{TransactionScope, UnitOfWorkError};
-use crate::pkg::usecase::{Clock, IdGenerator};
+use crate::slices::courier::applications::Clock as CourierClock;
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
@@ -38,6 +38,7 @@ use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessag
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
+use crate::slices::delivery::applications::{Clock as DeliveryClock, IdGenerator};
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
 };
@@ -231,21 +232,34 @@ pub trait ProcessLocator: CourierLocator + Send + Sync {}
 
 impl<T: CourierLocator + Send + Sync> ProcessLocator for T {}
 
-pub trait ProcessClock: Clock + Interface {}
+pub trait ProcessClock: CourierClock + DeliveryClock + Interface {}
 
-impl<T: Clock + Interface> ProcessClock for T {}
+impl<T: CourierClock + DeliveryClock + Interface> ProcessClock for T {}
 
 #[derive(Component)]
 #[shaku(interface = ProcessClock)]
 pub struct SystemClock;
 
-impl Clock for SystemClock {
-    fn now_epoch_seconds(&self) -> i64 {
+impl SystemClock {
+    #[must_use]
+    pub fn now_epoch_seconds(&self) -> i64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |elapsed| {
                 i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
             })
+    }
+}
+
+impl CourierClock for SystemClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        Self::now_epoch_seconds(self)
+    }
+}
+
+impl DeliveryClock for SystemClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        Self::now_epoch_seconds(self)
     }
 }
 
@@ -284,7 +298,7 @@ impl CourierPorts for LocalCourierPorts {
         &*self.publisher
     }
 
-    fn clock(&self) -> &dyn Clock {
+    fn clock(&self) -> &dyn CourierClock {
         &*self.clock
     }
 
@@ -487,7 +501,7 @@ impl DeliveryPorts for LocalDeliveryPorts {
         &*self.locator
     }
 
-    fn clock(&self) -> &dyn Clock {
+    fn clock(&self) -> &dyn DeliveryClock {
         &*self.clock
     }
 

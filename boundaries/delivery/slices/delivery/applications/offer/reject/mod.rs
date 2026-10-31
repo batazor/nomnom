@@ -6,7 +6,7 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
-use crate::pkg::usecase::Clock;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, OfferState,
 };

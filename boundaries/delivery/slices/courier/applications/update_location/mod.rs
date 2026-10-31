@@ -9,7 +9,7 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
-use crate::pkg::usecase::Clock;
+use crate::slices::courier::applications::Clock;
 use crate::slices::courier::domains::courier::{
     CourierId, CourierRepository, CourierStatus, Location,
 };

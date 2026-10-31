@@ -7,7 +7,7 @@ use std::sync::Arc;
 use shaku::{Component, HasComponent, Interface, module};
 
 use crate::pkg::authz::Subject;
-use crate::pkg::usecase::Clock;
+use crate::slices::courier::applications::Clock;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::applications::error::CourierApplicationError;

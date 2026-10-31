@@ -3,7 +3,7 @@
 //! of its deliveries; a courier on line stays with `OnLine`.
 
 use crate::pkg::authz::Subject;
-use crate::pkg::usecase::Clock;
+use crate::slices::courier::applications::Clock;
 use crate::slices::courier::domains::courier::{CourierError, CourierId, CourierRepository};
 
 use super::authorization::{CourierAuthorization, CourierPermission, CourierResource};

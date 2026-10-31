@@ -20,9 +20,9 @@
 //! no subject and no permission check.
 
 use crate::pkg::unit_of_work::UnitOfWork;
-use crate::pkg::usecase::{Clock, IdGenerator};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
+use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, OfferState, State,
 };

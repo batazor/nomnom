@@ -3,8 +3,8 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
-use crate::pkg::usecase::Clock;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::domains::delivery::{DeliveryId, DeliveryOfferId, OrderId};
 
 use super::super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
