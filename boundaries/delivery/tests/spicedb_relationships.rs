@@ -41,8 +41,8 @@ use delivery::slices::delivery::applications::authorization::{
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::applications::{
-    assignment::reassign_courier, execution::cancel, execution::confirm_delivery,
-    execution::confirm_pickup, execution::report_failure, offer::accept,
+    assignment::reassign_courier, execution::cancel, execution::deliver, execution::pick_up,
+    execution::report_failure, offer::accept,
 };
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -343,7 +343,7 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
 }
 
 fn pick_up(world: &Assigned) {
-    confirm_pickup::Handler {
+    pick_up::Handler {
         authorization: &StaticAuthorization::allow_all(),
         unit_of_work: &*world.store,
         deliveries: &*world.store,
@@ -353,7 +353,7 @@ fn pick_up(world: &Assigned) {
     }
     .execute(
         &user(&world.courier),
-        confirm_pickup::Input {
+        pick_up::Input {
             delivery_id: world.delivery.clone(),
             courier_id: world.courier.clone(),
             expected_delivered_at_epoch_seconds: None,
@@ -370,7 +370,7 @@ fn delivered_courier_loses_act_as_courier() {
     pick_up(&world);
     acts_as_courier(&world, &client, true);
 
-    confirm_delivery::Handler {
+    deliver::Handler {
         authorization: &StaticAuthorization::allow_all(),
         unit_of_work: &*world.store,
         deliveries: &*world.store,
@@ -381,7 +381,7 @@ fn delivered_courier_loses_act_as_courier() {
     }
     .execute(
         &user(&world.courier),
-        confirm_delivery::Input {
+        deliver::Input {
             delivery_id: world.delivery.clone(),
             courier_id: world.courier.clone(),
         },

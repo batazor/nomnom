@@ -20,7 +20,7 @@ use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
     assignment::advance, assignment::create, assignment::find_courier,
     assignment::reassign_courier, duration::estimate, duration::record, execution::cancel,
-    execution::confirm_delivery, execution::confirm_pickup, execution::get_courier_current,
+    execution::deliver, execution::get_courier_current, execution::pick_up,
     execution::report_failure, get_courier_pool, offer::accept, offer::expire,
     offer::list_available, offer::offer_delivery, offer::reject, offer::to_courier,
     tracking::get_by_order,
@@ -223,16 +223,16 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn confirm_pickup(
         &self,
         subject: &Subject,
-        input: confirm_pickup::Input,
-    ) -> Result<confirm_pickup::Output, DeliveryApplicationError> {
+        input: pick_up::Input,
+    ) -> Result<pick_up::Output, DeliveryApplicationError> {
         self.observe(CONFIRM_PICKUP, || self.inner.confirm_pickup(subject, input))
     }
 
     fn confirm_delivery(
         &self,
         subject: &Subject,
-        input: confirm_delivery::Input,
-    ) -> Result<confirm_delivery::Output, DeliveryApplicationError> {
+        input: deliver::Input,
+    ) -> Result<deliver::Output, DeliveryApplicationError> {
         self.observe(CONFIRM_DELIVERY, || {
             self.inner.confirm_delivery(subject, input)
         })

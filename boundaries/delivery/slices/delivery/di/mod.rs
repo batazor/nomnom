@@ -36,9 +36,9 @@ use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::applications::tracking::get_by_order::{self, OrderDeliveryReadModel};
 use crate::slices::delivery::applications::{
     assignment::advance, assignment::create, assignment::find_courier,
-    assignment::reassign_courier, execution::cancel, execution::confirm_delivery,
-    execution::confirm_pickup, execution::report_failure, offer::accept, offer::expire,
-    offer::offer_delivery, offer::reject, offer::to_courier,
+    assignment::reassign_courier, execution::cancel, execution::deliver, execution::pick_up,
+    execution::report_failure, offer::accept, offer::expire, offer::offer_delivery, offer::reject,
+    offer::to_courier,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryOfferRepository, DeliveryRepository, VirtualCity,
@@ -204,14 +204,14 @@ pub trait DeliveryUseCases: Interface {
     fn confirm_pickup(
         &self,
         subject: &Subject,
-        input: confirm_pickup::Input,
-    ) -> Result<confirm_pickup::Output, DeliveryApplicationError>;
+        input: pick_up::Input,
+    ) -> Result<pick_up::Output, DeliveryApplicationError>;
 
     fn confirm_delivery(
         &self,
         subject: &Subject,
-        input: confirm_delivery::Input,
-    ) -> Result<confirm_delivery::Output, DeliveryApplicationError>;
+        input: deliver::Input,
+    ) -> Result<deliver::Output, DeliveryApplicationError>;
 
     fn report_delivery_failure(
         &self,
@@ -454,9 +454,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn confirm_pickup(
         &self,
         subject: &Subject,
-        input: confirm_pickup::Input,
-    ) -> Result<confirm_pickup::Output, DeliveryApplicationError> {
-        confirm_pickup::Handler {
+        input: pick_up::Input,
+    ) -> Result<pick_up::Output, DeliveryApplicationError> {
+        pick_up::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
@@ -470,9 +470,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn confirm_delivery(
         &self,
         subject: &Subject,
-        input: confirm_delivery::Input,
-    ) -> Result<confirm_delivery::Output, DeliveryApplicationError> {
-        confirm_delivery::Handler {
+        input: deliver::Input,
+    ) -> Result<deliver::Output, DeliveryApplicationError> {
+        deliver::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),

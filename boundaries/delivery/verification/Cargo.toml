@@ -1,6 +1,6 @@
-# Input of Charon and Aeneas: the pure core of the Delivery Offer (ADR 19).
+# Input of Charon and Aeneas: the pure core of Delivery and Delivery Offer.
 [package]
-name = "offer_machine"
+name = "delivery_core"
 version = "0.0.0"
 edition = "2024"
 publish = false

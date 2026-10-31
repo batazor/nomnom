@@ -87,6 +87,25 @@ fn leads_to(from: OfferState, trigger: OfferTrigger, to: OfferState) -> bool {
     }
 }
 
+/// Whether an offer may expire after `offered_at`: its deadline comes later.
+#[must_use]
+pub fn valid_expiry(offered_at_epoch_seconds: i64, expires_at_epoch_seconds: i64) -> bool {
+    expires_at_epoch_seconds > offered_at_epoch_seconds
+}
+
+/// Whether `now` is past the deadline; the deadline itself is inclusive for
+/// accept and reject.
+#[must_use]
+pub fn past_deadline(now_epoch_seconds: i64, expires_at_epoch_seconds: i64) -> bool {
+    now_epoch_seconds > expires_at_epoch_seconds
+}
+
+/// Whether the offer can still be answered: pending and not past its deadline.
+#[must_use]
+pub fn open_at(state: OfferState, now_epoch_seconds: i64, expires_at_epoch_seconds: i64) -> bool {
+    state == OfferState::Pending && !past_deadline(now_epoch_seconds, expires_at_epoch_seconds)
+}
+
 /// The allowed transition of the table from `from` to `to`, if exactly one
 /// trigger leads there: how a stored state change reads as a transition.
 #[must_use]

@@ -16,7 +16,7 @@ use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    assignment::advance, execution::confirm_pickup, offer::accept, offer::list_available,
+    assignment::advance, execution::pick_up, offer::accept, offer::list_available,
 };
 
 struct StaticSubjectResolver;
@@ -352,7 +352,7 @@ async fn cancel_after_pickup_is_a_business_rejection() {
     deliveries
         .confirm_pickup(
             &Subject::User("courier-1".to_owned()),
-            confirm_pickup::Input {
+            pick_up::Input {
                 delivery_id: delivery_id.clone(),
                 courier_id: "courier-1".to_owned(),
                 expected_delivered_at_epoch_seconds: None,

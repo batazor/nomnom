@@ -1,4 +1,4 @@
-name = "offer_machine"
+name = "delivery_core"
 defaultTargets = ["Proofs"]
 packagesDir = ".aeneas/backends/lean/.lake/packages"
 
@@ -7,7 +7,7 @@ name = "aeneas"
 path = ".aeneas/backends/lean"
 
 [[lean_lib]]
-name = "OfferMachine"
+name = "DeliveryCore"
 
 [[lean_lib]]
 name = "Proofs"

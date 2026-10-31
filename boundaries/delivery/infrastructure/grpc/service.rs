@@ -15,8 +15,8 @@ use crate::slices::courier::applications::{register, retire, set_availability, u
 use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::{CourierStatus as DomainCourierStatus, Location};
 use crate::slices::delivery::applications::{
-    assignment::create, duration::estimate, execution::cancel, execution::confirm_delivery,
-    execution::confirm_pickup, execution::get_courier_current, execution::report_failure,
+    assignment::create, duration::estimate, execution::cancel, execution::deliver,
+    execution::get_courier_current, execution::pick_up, execution::report_failure,
     get_courier_pool, offer::accept, offer::list_available, offer::reject, offer::to_courier,
     tracking::get_by_order,
 };
@@ -454,7 +454,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .confirm_pickup(
                 &subject,
-                confirm_pickup::Input {
+                pick_up::Input {
                     delivery_id: request.delivery_id,
                     courier_id: request.courier_id,
                     expected_delivered_at_epoch_seconds: request
@@ -480,7 +480,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .confirm_delivery(
                 &subject,
-                confirm_delivery::Input {
+                deliver::Input {
                     delivery_id: request.delivery_id,
                     courier_id: request.courier_id,
                 },

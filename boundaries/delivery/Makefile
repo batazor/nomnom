@@ -27,8 +27,8 @@ AENEAS_HOME ?= $(HOME)/.cache/nomnom-aeneas/aeneas
 AENEAS_OPAM_SWITCH ?= nomnom-aeneas
 
 verify-lean:
-	cd verification && PATH="$(AENEAS_HOME)/charon/bin:$$PATH" charon cargo --preset=aeneas --dest-file offer_machine.llbc
-	cd verification && "$(AENEAS_HOME)/bin/aeneas" -backend lean -dest lean offer_machine.llbc
+	cd verification && PATH="$(AENEAS_HOME)/charon/bin:$$PATH" charon cargo --preset=aeneas --dest-file delivery_core.llbc
+	cd verification && "$(AENEAS_HOME)/bin/aeneas" -backend lean -dest lean delivery_core.llbc
 	ln -sfn "$(AENEAS_HOME)" verification/lean/.aeneas
 	cd verification/lean && lake build
 

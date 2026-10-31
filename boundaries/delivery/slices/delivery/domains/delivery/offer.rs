@@ -9,6 +9,7 @@ use super::{DeliveryId, DomainEvent};
 use crate::slices::courier::domains::courier::CourierId;
 
 pub use acceptance::*;
+use machine::{open_at, past_deadline, valid_expiry};
 pub use machine::{OfferState, OfferTransitionResult, OfferTrigger, applied_offer_transition};
 use transitions::offer_transition;
 #[cfg(test)]
@@ -139,7 +140,7 @@ impl DeliveryOffer {
         expires_at_epoch_seconds: i64,
         state: OfferState,
     ) -> Result<Self, DeliveryOfferError> {
-        if expires_at_epoch_seconds <= offered_at_epoch_seconds {
+        if !valid_expiry(offered_at_epoch_seconds, expires_at_epoch_seconds) {
             return Err(DeliveryOfferError::InvalidExpiry);
         }
         Ok(Self {
@@ -170,7 +171,7 @@ impl DeliveryOffer {
     /// Pending and not past its deadline; the deadline itself is inclusive.
     #[must_use]
     pub fn is_open_at(&self, now_epoch_seconds: i64) -> bool {
-        self.state == OfferState::Pending && now_epoch_seconds <= self.expires_at_epoch_seconds
+        open_at(self.state, now_epoch_seconds, self.expires_at_epoch_seconds)
     }
 
     pub fn accept(
@@ -208,7 +209,7 @@ impl DeliveryOffer {
     ) -> Result<OfferTransitionResult, DeliveryOfferError> {
         self.ensure_addressed_to(courier_id)?;
         let result = offer_transition(self.state, OfferTrigger::Reject)?;
-        if now_epoch_seconds > self.expires_at_epoch_seconds {
+        if past_deadline(now_epoch_seconds, self.expires_at_epoch_seconds) {
             return Err(DeliveryOfferError::Expired);
         }
         self.state = result.to;
@@ -230,7 +231,7 @@ impl DeliveryOffer {
         now_epoch_seconds: i64,
     ) -> Result<OfferTransitionResult, DeliveryOfferError> {
         let result = offer_transition(self.state, OfferTrigger::Expire)?;
-        if now_epoch_seconds <= self.expires_at_epoch_seconds {
+        if !past_deadline(now_epoch_seconds, self.expires_at_epoch_seconds) {
             return Err(DeliveryOfferError::NotYetExpired);
         }
         self.state = result.to;

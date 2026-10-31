@@ -52,8 +52,7 @@ use crate::slices::courier::applications::update_location;
 use crate::slices::courier::domains::courier::{CourierId, Location};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    execution::confirm_delivery, execution::confirm_pickup, execution::report_failure,
-    offer::accept, offer::reject,
+    execution::deliver, execution::pick_up, execution::report_failure, offer::accept, offer::reject,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureCode, DeliveryId, DeliveryOfferId, VirtualCity,
@@ -248,7 +247,7 @@ impl CourierActions for UseCaseCourierActions {
             .deliveries()
             .confirm_pickup(
                 &courier_subject(courier),
-                confirm_pickup::Input {
+                pick_up::Input {
                     delivery_id: delivery.as_str().to_owned(),
                     courier_id: courier.as_str().to_owned(),
                     expected_delivered_at_epoch_seconds: Some(expected_delivered_at_epoch_seconds),
@@ -266,7 +265,7 @@ impl CourierActions for UseCaseCourierActions {
             .deliveries()
             .confirm_delivery(
                 &courier_subject(courier),
-                confirm_delivery::Input {
+                deliver::Input {
                     delivery_id: delivery.as_str().to_owned(),
                     courier_id: courier.as_str().to_owned(),
                 },

@@ -1,6 +1,8 @@
 //! `DeliveryOfferAcceptable`: whether a courier may accept an offer at the
 //! moment of acceptance.
 
+use super::machine::past_deadline;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeliveryOfferReason {
     Expired,
@@ -33,7 +35,7 @@ pub struct DeliveryOfferContext {
 #[must_use]
 pub fn delivery_offer_acceptable(context: DeliveryOfferContext) -> DeliveryOfferResult {
     let mut reasons = Vec::new();
-    if context.now_epoch_seconds > context.expires_at_epoch_seconds {
+    if past_deadline(context.now_epoch_seconds, context.expires_at_epoch_seconds) {
         reasons.push(DeliveryOfferReason::Expired);
     }
     if context.distance_to_pickup_meters > context.maximum_distance_meters {

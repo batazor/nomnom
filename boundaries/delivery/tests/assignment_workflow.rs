@@ -28,7 +28,7 @@ use delivery::slices::delivery::applications::assignment_process::AssignmentProc
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
-use delivery::slices::delivery::applications::{execution::confirm_pickup, offer::accept};
+use delivery::slices::delivery::applications::{execution::pick_up, offer::accept};
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferRepository, DeliveryRepository, OfferState,
     OrderId, State,
@@ -236,7 +236,7 @@ async fn workflow_searches_a_courier_until_pickup() {
 
     // AC-960: Pickup ends the workflow.
     tokio::task::block_in_place(|| {
-        confirm_pickup::Handler {
+        pick_up::Handler {
             authorization: &authorization,
             unit_of_work: &*store,
             deliveries: &*store,
@@ -246,7 +246,7 @@ async fn workflow_searches_a_courier_until_pickup() {
         }
         .execute(
             &Subject::User(third.as_str().to_owned()),
-            confirm_pickup::Input {
+            pick_up::Input {
                 delivery_id: delivery_id.as_str().to_owned(),
                 courier_id: third.as_str().to_owned(),
                 expected_delivered_at_epoch_seconds: None,

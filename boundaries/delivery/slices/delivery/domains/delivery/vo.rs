@@ -1,4 +1,5 @@
 use super::DeliveryValidationError;
+use super::fsm::in_future;
 
 fn normalize(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -18,7 +19,7 @@ impl ExpectedTime {
         epoch_seconds: i64,
         now_epoch_seconds: i64,
     ) -> Result<Self, DeliveryValidationError> {
-        if epoch_seconds <= now_epoch_seconds {
+        if !in_future(epoch_seconds, now_epoch_seconds) {
             return Err(DeliveryValidationError::ExpectedTimeNotInFuture { field });
         }
         Ok(Self(epoch_seconds))

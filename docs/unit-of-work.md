@@ -464,8 +464,8 @@ UoW всех четырёх boundaries реализован поверх их х
 | `reassign_courier` | Да | Завершение текущего назначения + `Delivery` + освобождение курьера + [Outbox] |
 | `delivery/advance` | Да | Шаг Assignment Workflow: [истечение просроченного pending offer] + выбор кандидата + `Delivery` с прочитанной версией + offer + Outbox |
 | `delivery/expire` | Да | `Delivery Offer` (`expired`) + Outbox |
-| `confirm_pickup` | Да | `Delivery` + Outbox |
-| `confirm_delivery`, `delivery/report_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md)) |
+| `delivery/pick_up` | Да | `Delivery` + Outbox |
+| `delivery/deliver`, `delivery/report_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md)) |
 | `delivery/cancel` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |
 | `delivery/create`, `offer_delivery` | Если публикуют событие или хранят idempotency key отдельно | Запись + [idempotency] + [Outbox] |
 | `courier/register`, `courier/set_availability`, `delivery/reject`, `find_courier` | Нет по умолчанию | Одиночное изменение |

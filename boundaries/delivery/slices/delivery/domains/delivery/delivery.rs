@@ -1,4 +1,4 @@
-use super::fsm::{ensure_allowed, transition};
+use super::fsm::{ensure_allowed, requires_courier, transition};
 use super::{
     CompoundState, DeliveryCancellationReason, DeliveryError, DeliveryFailureReason, DeliveryId,
     DeliveryTracking, DeliveryValidationError, DomainEvent, ExpectedTime, OrderId, State,
@@ -91,14 +91,13 @@ impl Delivery {
         state: State,
         failure_reason: Option<DeliveryFailureReason>,
     ) -> Result<Self, DeliveryValidationError> {
-        if state == State::Waiting && courier_id.is_some() {
-            return Err(DeliveryValidationError::WaitingStateMustNotHaveCourier);
-        }
-        if state == State::Cancelled && courier_id.is_some() {
-            return Err(DeliveryValidationError::CancelledStateMustNotHaveCourier);
-        }
-        if !matches!(state, State::Waiting | State::Cancelled) && courier_id.is_none() {
-            return Err(DeliveryValidationError::AssignedStateRequiresCourier);
+        match (requires_courier(state), courier_id.is_some()) {
+            (true, false) => return Err(DeliveryValidationError::AssignedStateRequiresCourier),
+            (false, true) if state == State::Cancelled => {
+                return Err(DeliveryValidationError::CancelledStateMustNotHaveCourier);
+            }
+            (false, true) => return Err(DeliveryValidationError::WaitingStateMustNotHaveCourier),
+            (true, true) | (false, false) => {}
         }
         if state == State::Failed && failure_reason.is_none() {
             return Err(DeliveryValidationError::FailedStateRequiresReason);

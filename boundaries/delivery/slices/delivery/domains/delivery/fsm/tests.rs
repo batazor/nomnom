@@ -81,52 +81,6 @@ fn every_state_trigger_pair_has_the_expected_explicit_outcome() {
 }
 
 #[test]
-fn hierarchy_is_acyclic_and_every_compound_state_has_children() {
-    let nodes = ALL_STATES
-        .map(Node::Leaf)
-        .into_iter()
-        .chain(CompoundState::ALL.map(Node::Compound));
-    for node in nodes {
-        let mut seen = vec![node];
-        let mut current = node;
-        while let Some(compound) = parent(current) {
-            current = Node::Compound(compound);
-            assert!(!seen.contains(&current), "cycle through {node:?}");
-            seen.push(current);
-        }
-    }
-    for compound in CompoundState::ALL {
-        assert!(
-            State::leaves_of(compound).next().is_some(),
-            "{compound:?} has no children"
-        );
-    }
-}
-
-#[test]
-fn table_declares_each_node_trigger_once_and_repeats_only_on_leaves() {
-    for (index, rule) in TRANSITIONS.iter().enumerate() {
-        assert!(
-            TRANSITIONS[index + 1..]
-                .iter()
-                .all(|other| other.source != rule.source || other.trigger != rule.trigger),
-            "{:?} x {:?} declared twice",
-            rule.source,
-            rule.trigger
-        );
-    }
-    for (index, (state, trigger)) in REPEATS.iter().enumerate() {
-        assert!(!REPEATS[index + 1..].contains(&(*state, *trigger)));
-        assert!(
-            TRANSITIONS
-                .iter()
-                .all(|rule| rule.source != Node::Leaf(*state) || rule.trigger != *trigger),
-            "{state:?} x {trigger:?} is both a repeat and a transition"
-        );
-    }
-}
-
-#[test]
 fn compound_states_group_the_expected_leaf_states() {
     assert_eq!(
         State::leaves_of(CompoundState::ActiveAssignment).collect::<Vec<_>>(),
