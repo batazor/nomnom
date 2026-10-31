@@ -414,7 +414,7 @@ class _PaymentsBeforeSubjectKeys(MigrationSet):
     @override
     def migrations(self) -> MigrationList:
         applied = super().migrations()
-        return MigrationList([m for m in applied if not m.id.startswith("00004")])
+        return MigrationList([m for m in applied if m.id[:5] < "00004"])
 
 
 class _PaymentsBeforeMarkets(MigrationSet):
@@ -484,7 +484,8 @@ class EntrypointResourceOrderTest(unittest.TestCase):
         env = {
             "DATABASE__URI": "postgresql://payments@127.0.0.1:1/x",
             "EVENT_STORE__SNAPSHOT_EVERY": "5",
-            "EVENT_STORE__SUBJECT_KEK": "k" * 32,
+            "EVENT_STORE__SUBJECT_KEKS": '{"1": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}',
+            "EVENT_STORE__SUBJECT_REF_KEY": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
         }
         with (
             patch.dict(os.environ, env, clear=True),

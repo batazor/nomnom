@@ -6,6 +6,7 @@ no ports (``boundaries/payments/ops/README.md``)::
     python -m entrypoints.payments_admin.main projections check
     python -m entrypoints.payments_admin.main projections rebuild [--snapshots]
     python -m entrypoints.payments_admin.main subjects forget <user-id>
+    python -m entrypoints.payments_admin.main subjects rewrap
     python -m entrypoints.payments_admin.main payments history <payment-id>
 
 Each command prints one JSON line; the exit code is 1 on an error or a found difference.
@@ -24,7 +25,7 @@ from pkg import telemetry
 from pkg.config import EventStoreSettings, database
 from slices.payment.domains.payment import OperationRequester, PaymentId, SealedSubject
 from slices.payment.infrastructure.repository import (
-    DatabasePaymentRepository,
+    DatabasePaymentAuditReader,
     DatabaseSubjectKeys,
     ProjectionRebuilder,
 )
@@ -47,6 +48,7 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     subjects = groups.add_parser("subjects").add_subparsers(dest="command", required=True)
     forget = subjects.add_parser("forget", help="clear the key of a user (crypto-shredding)")
     forget.add_argument("subject_id")
+    subjects.add_parser("rewrap", help="move subject keys to the newest KEK version")
     payments = groups.add_parser("payments").add_subparsers(dest="command", required=True)
     history = payments.add_parser("history", help="print the operations of a Payment")
     history.add_argument("payment_id")
@@ -59,23 +61,27 @@ def run(args: argparse.Namespace) -> int:
     settings = EventStoreSettings()
     try:
         db.check()
+        keys = DatabaseSubjectKeys(db, settings.subject_keks, settings.subject_ref_key)
         match args.group:
             case "projections":
                 return _projections(args, ProjectionRebuilder(db, settings.snapshot_every))
             case "subjects":
-                forgotten = DatabaseSubjectKeys(db, settings.subject_kek).forget(args.subject_id)
-                _print({"forgotten": forgotten})
-                return 0
+                return _subjects(args, keys)
             case "payments":
-                return _history(
-                    DatabasePaymentRepository(db, settings.snapshot_every),
-                    DatabaseSubjectKeys(db, settings.subject_kek),
-                    PaymentId(args.payment_id),
-                )
+                return _history(DatabasePaymentAuditReader(db), keys, PaymentId(args.payment_id))
             case group:
                 raise ValueError(f"unknown command group {group}")
     finally:
         db.close()
+
+
+def _subjects(args: argparse.Namespace, keys: DatabaseSubjectKeys) -> int:
+    if args.command == "forget":
+        _print({"forgotten": keys.forget(args.subject_id)})
+        return 0
+    result = keys.rewrap()
+    _print(asdict(result))
+    return 1 if result.remaining else 0
 
 
 def _projections(args: argparse.Namespace, rebuilder: ProjectionRebuilder) -> int:
@@ -88,25 +94,25 @@ def _projections(args: argparse.Namespace, rebuilder: ProjectionRebuilder) -> in
 
 
 def _history(
-    payments: DatabasePaymentRepository, keys: DatabaseSubjectKeys, payment_id: PaymentId
+    reader: DatabasePaymentAuditReader, keys: DatabaseSubjectKeys, payment_id: PaymentId
 ) -> int:
-    payment = payments.get(payment_id)
-    if payment is None:
+    view = reader.history(payment_id)
+    if view is None:
         logger.error("payments-admin: payment %s not found", payment_id)
         return 1
     _print(
         {
-            "payment_id": payment.id,
-            "state": payment.state.value,
+            "payment_id": view.payment_id,
+            "state": view.state.value,
             "operations": [
                 {
-                    "id": operation.id,
+                    "id": operation.operation_id,
                     "kind": operation.kind.value,
                     "state": operation.state.value,
                     "requested_at": operation.requested_at.isoformat(),
                     "requested_by": _requester(keys, operation.requested_by),
                 }
-                for operation in payment.operations
+                for operation in view.operations
             ],
         }
     )

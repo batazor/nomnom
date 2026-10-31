@@ -264,7 +264,7 @@ class PaymentEventStoreTest(unittest.TestCase):
         payment.complete_operation(OperationId("op-c"), OperationOutcome.success(), NOW)
         # Одним commit: Requested, Succeeded, Captured — версии 5, 6, 7.
         self.assertEqual(self.payments.save(payment), 7)
-        self.assertEqual(self.snapshot_row(), (7, 3))
+        self.assertEqual(self.snapshot_row(), (7, 4))
         self.assertEqual(self.rows("SELECT count(*) FROM payment_snapshots"), [(1,)])
 
     def test_ac_1036_rollback_keeps_neither_events_nor_snapshot(self) -> None:
@@ -334,7 +334,7 @@ class PaymentEventStoreTest(unittest.TestCase):
 
     def test_ac_1038_load_applies_only_the_tail(self) -> None:
         full = self.snapshotted()
-        self.assertEqual(self.snapshot_row(), (5, 3))
+        self.assertEqual(self.snapshot_row(), (5, 4))
         self.reader.get_metrics_data()
 
         with mock.patch.object(repositories, "read_events", wraps=repositories.read_events) as read:
@@ -373,7 +373,7 @@ class PaymentEventStoreTest(unittest.TestCase):
             payment.request_operation(operation, OperationKind.CAPTURE, key, NOW, REQUESTER)
             payment.complete_operation(operation, OperationOutcome.declined("no"), NOW)
             self.payments.save(payment)
-        self.assertEqual(self.snapshot_row(), (10, 3))
+        self.assertEqual(self.snapshot_row(), (10, 4))
         self.assertEqual(self.stored().version, 10)
 
     def test_ac_1041_unreadable_snapshot_of_the_current_schema_is_an_error(self) -> None:
@@ -401,9 +401,8 @@ class PaymentEventStoreTest(unittest.TestCase):
                     ),
                 )
         loaded = self.stored("payment-g")
-        self.assertIsNone(loaded.operations[0].requested_by)
         old_state = encode_snapshot(loaded.model)
-        del old_state["operations"][0]["requested_by"]
+        old_state["operations"][0]["requested_by"] = None
         with self.database.connection() as conn:
             project_payment(conn, loaded.model, loaded.version)
             conn.execute(
@@ -420,9 +419,10 @@ class PaymentEventStoreTest(unittest.TestCase):
         )
         self.assertEqual(self.payments.save(payment), 5)
 
-        self.assertEqual(self.snapshot_row("payment-g"), (5, 3))
-        stored = self.stored("payment-g")
-        self.assertEqual([op.requested_by for op in stored.operations], [None, REQUESTER])
+        self.assertEqual(self.snapshot_row("payment-g"), (5, 4))
+        view = self.kit.audit.history(PaymentId("payment-g"))
+        assert view is not None
+        self.assertEqual([op.requested_by for op in view.operations], [None, REQUESTER])
         self.assertEqual(
             [
                 row[0]

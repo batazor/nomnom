@@ -21,6 +21,7 @@ from payment_fakes import (
     ORCHESTRATOR,
     REQUESTER,
     SUBJECT_KEK,
+    SUBJECT_REF_KEY,
     FakePaymentProvider,
     FakePermissions,
 )
@@ -370,7 +371,7 @@ class RepositoryIntegrationTest(unittest.TestCase):
             operation_ids=_Ids(),
             applier=ProviderResultApplier(self.payments, self.outbox, _Clock(), FsmMetrics()),
             transitions=FsmMetrics(),
-            subjects=DatabaseSubjectKeys(self.database, SUBJECT_KEK),
+            subjects=DatabaseSubjectKeys(self.database, {1: SUBJECT_KEK}, SUBJECT_REF_KEY),
         )
         handler = AuthorizePaymentHandler(executor)
         command = AuthorizePaymentInput(

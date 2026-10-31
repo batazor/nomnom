@@ -10,7 +10,7 @@ from typing import Any, LiteralString, override
 from unittest import mock
 
 import pytest
-from payment_fakes import NOW, SUBJECT_KEK, PaymentsTestKit
+from payment_fakes import NOW, SUBJECT_KEK, SUBJECT_REF_KEY, PaymentsTestKit
 
 from entrypoints.payments_admin import main as admin
 from infrastructure.repository import Database
@@ -61,7 +61,7 @@ class SubjectKeysTest(unittest.TestCase):
         return payment_id
 
     def requester(self, payment_id: PaymentId) -> OperationRequester:
-        requester = self.kit.payment(payment_id).operations[0].requested_by
+        requester = self.kit.requester_of(payment_id)
         assert requester is not None
         return requester
 
@@ -178,15 +178,78 @@ class SubjectKeysTest(unittest.TestCase):
 
     def test_another_kek_cannot_open_the_keys(self) -> None:
         sealed = self.keys.seal(USER)
-        with self.assertRaisesRegex(UnreadableStoredDataError, "KEK"):
-            DatabaseSubjectKeys(self.database, OTHER_KEK).reveal(sealed)
+        with self.assertRaisesRegex(UnreadableStoredDataError, "does not open"):
+            DatabaseSubjectKeys(self.database, {1: OTHER_KEK}, SUBJECT_REF_KEY).reveal(sealed)
+
+    def test_missing_kek_version_is_an_error(self) -> None:
+        sealed = self.keys.seal(USER)
+        with self.assertRaisesRegex(UnreadableStoredDataError, "not configured"):
+            DatabaseSubjectKeys(self.database, {2: OTHER_KEK}, SUBJECT_REF_KEY).reveal(sealed)
+
+    def test_config_without_keks_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            DatabaseSubjectKeys(self.database, {}, SUBJECT_REF_KEY)
+
+    def rotated(self) -> DatabaseSubjectKeys:
+        return DatabaseSubjectKeys(self.database, {1: SUBJECT_KEK, 2: OTHER_KEK}, SUBJECT_REF_KEY)
+
+    def versions(self) -> list[int]:
+        return [row[0] for row in self.rows("SELECT kek_version FROM subject_keys ORDER BY 1")]
+
+    def test_rotation_keeps_old_records_readable_and_users_findable(self) -> None:
+        sealed = self.keys.seal(USER)
+        rotated = self.rotated()
+
+        # Обе версии настроены: старый ключ читается и остаётся тем же для того же пользователя.
+        self.assertEqual(rotated.reveal(sealed), USER)
+        self.assertEqual(rotated.seal(USER).key_id, sealed.key_id)
+        self.assertEqual(self.versions(), [1])
+        # Новый пользователь сразу получает старшую версию.
+        rotated.seal("operator-2")
+        self.assertEqual(self.versions(), [1, 2])
+
+        result = rotated.rewrap()
+
+        self.assertEqual((result.rewrapped, result.remaining), (1, 0))
+        self.assertEqual(self.versions(), [2, 2])
+        # Старая версия больше не нужна, а шифротекст в журнале не менялся.
+        without_old = DatabaseSubjectKeys(self.database, {2: OTHER_KEK}, SUBJECT_REF_KEY)
+        self.assertEqual(without_old.reveal(sealed), USER)
+        self.assertTrue(without_old.forget(USER))
+        self.assertIsNone(without_old.reveal(sealed))
+
+    def test_rewrap_skips_forgotten_keys_and_is_repeatable(self) -> None:
+        self.keys.seal(USER)
+        self.keys.forget(USER)
+        rotated = self.rotated()
+
+        self.assertEqual(rotated.rewrap().rewrapped, 0)
+        self.assertEqual(rotated.rewrap().remaining, 0)
+
+    def test_rewrap_moves_more_keys_than_one_batch(self) -> None:
+        for number in range(105):
+            self.keys.seal(f"operator-{number}")
+
+        result = self.rotated().rewrap()
+
+        self.assertEqual((result.rewrapped, result.remaining), (105, 0))
+
+    def test_failed_rewrap_keeps_the_batch(self) -> None:
+        self.keys.seal(USER)
+        wrong = DatabaseSubjectKeys(self.database, {1: OTHER_KEK, 2: SUBJECT_KEK}, SUBJECT_REF_KEY)
+
+        with self.assertRaises(UnreadableStoredDataError):
+            wrong.rewrap()
+
+        self.assertEqual(self.versions(), [1])
 
     def run_admin(self, *args: str) -> tuple[int, dict[str, Any]]:
         stdout = io.StringIO()
         env = {
             "DATABASE__URI": self.uri,
             "EVENT_STORE__SNAPSHOT_EVERY": "5",
-            "EVENT_STORE__SUBJECT_KEK": SUBJECT_KEK,
+            "EVENT_STORE__SUBJECT_KEKS": json.dumps({"1": SUBJECT_KEK}),
+            "EVENT_STORE__SUBJECT_REF_KEY": SUBJECT_REF_KEY,
         }
         with (
             mock.patch.dict(os.environ, env, clear=True),
@@ -216,6 +279,9 @@ class SubjectKeysTest(unittest.TestCase):
             {"status": "forgotten", "kind": "user", "id": None, "delegate": "bff"},
         )
         self.assertEqual(self.run_admin("subjects", "forget", USER), (0, {"forgotten": False}))
+        self.assertEqual(
+            self.run_admin("subjects", "rewrap"), (0, {"rewrapped": 0, "remaining": 0})
+        )
 
     def test_admin_history_of_a_missing_payment_fails(self) -> None:
         with self.assertLogs(admin.logger, "ERROR"):

@@ -1,0 +1,17 @@
+{{- /* Локальный ADR 2 payments: секреты ключей субъектов. lookup сохраняет значения при upgrade: ротация меняет keks в Secret. */ -}}
+{{- $existing := lookup "v1" "Secret" "nomnom-payments" "payments-subject-keys" | default dict }}
+{{- $keks := dig "data" "keks" "" $existing | b64dec }}
+{{- if not $keks }}{{- $keks = printf "{\"1\": \"%s\"}" (randAlphaNum 48) }}{{- end }}
+{{- $refKey := dig "data" "ref-key" "" $existing | b64dec }}
+{{- if not $refKey }}{{- $refKey = randAlphaNum 48 }}{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: payments-subject-keys
+  namespace: nomnom-payments
+  labels:
+    {{- include "bootstrap.labels" . | nindent 4 }}
+type: Opaque
+data:
+  keks: {{ $keks | b64enc }}
+  ref-key: {{ $refKey | b64enc }}

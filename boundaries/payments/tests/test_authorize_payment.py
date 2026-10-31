@@ -88,7 +88,7 @@ class AuthorizePaymentTest(unittest.TestCase):
         result = self.handler.handle(self.authorize())
 
         self.assertEqual(
-            self.kit.operation(result.operation_id).requested_by,
+            self.kit.requester_of(result.payment_id),
             OperationRequester(RequesterKind.SERVICE, ORCHESTRATOR.id),
         )
 
@@ -99,7 +99,7 @@ class AuthorizePaymentTest(unittest.TestCase):
             AuthorizePaymentInput(subject=user, payment_id=self.payment_id, idempotency_key=KEY)
         )
 
-        requester = self.kit.operation(result.operation_id).requested_by
+        requester = self.kit.requester_of(result.payment_id)
         assert requester is not None
         assert isinstance(requester.id, SealedSubject)
         self.assertEqual((requester.kind, requester.delegate), (RequesterKind.USER, "bff"))

@@ -11,6 +11,7 @@ technology.
 from .event_codec import UnreadableStoredDataError
 from .projection_rebuild import ProjectionMismatch, ProjectionRebuilder, RebuildResult
 from .queries import (
+    DatabasePaymentAuditReader,
     DatabasePaymentOperationHistory,
     DatabasePaymentStatusReader,
 )
@@ -23,6 +24,7 @@ from .repositories import (
 from .subject_keys import DatabaseSubjectKeys
 
 __all__ = [
+    "DatabasePaymentAuditReader",
     "DatabasePaymentOperationHistory",
     "DatabasePaymentOutbox",
     "DatabasePaymentRepository",

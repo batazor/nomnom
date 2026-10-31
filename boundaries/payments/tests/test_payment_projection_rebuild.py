@@ -118,7 +118,7 @@ class ProjectionRebuilderTest(unittest.TestCase):
 
         self.assertEqual(result.snapshots, 1)
         rows = self.table("payment_snapshots")
-        self.assertEqual([(row[0], row[1], row[2]) for row in rows], [(payment_id, 5, 3)])
+        self.assertEqual([(row[0], row[1], row[2]) for row in rows], [(payment_id, 5, 4)])
         self.assertEqual(self.rebuilder.check(), [])
         stored = self.payments.get(payment_id)
         assert stored is not None
@@ -273,7 +273,8 @@ class ProjectionRebuilderTest(unittest.TestCase):
         env = {
             "DATABASE__URI": self.uri,
             "EVENT_STORE__SNAPSHOT_EVERY": str(SNAPSHOT_EVERY),
-            "EVENT_STORE__SUBJECT_KEK": "k" * 32,
+            "EVENT_STORE__SUBJECT_KEKS": '{"1": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}',
+            "EVENT_STORE__SUBJECT_REF_KEY": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
         }
         with (
             mock.patch.dict(os.environ, env, clear=True),

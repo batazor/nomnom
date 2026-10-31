@@ -105,11 +105,16 @@ spec:
                   name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
-            - name: EVENT_STORE__SUBJECT_KEK
+            - name: EVENT_STORE__SUBJECT_KEKS
               valueFrom:
                 secretKeyRef:
-                  name: {{ required "eventStore.subjectKekSecret.name is required" .Values.eventStore.subjectKekSecret.name | quote }}
-                  key: {{ .Values.eventStore.subjectKekSecret.key | quote }}
+                  name: {{ required "eventStore.subjectKeysSecret.name is required" .Values.eventStore.subjectKeysSecret.name | quote }}
+                  key: {{ .Values.eventStore.subjectKeysSecret.keksKey | quote }}
+            - name: EVENT_STORE__SUBJECT_REF_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "eventStore.subjectKeysSecret.name is required" .Values.eventStore.subjectKeysSecret.name | quote }}
+                  key: {{ .Values.eventStore.subjectKeysSecret.refKeyKey | quote }}
             {{- include "payments.databaseEnv" . | nindent 12 }}
             {{- include "payments.otelEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}

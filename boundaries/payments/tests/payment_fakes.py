@@ -62,6 +62,7 @@ from slices.payment.domains.payment import (
 )
 from slices.payment.infrastructure.observability import FsmMetrics
 from slices.payment.infrastructure.repository import (
+    DatabasePaymentAuditReader,
     DatabasePaymentOperationHistory,
     DatabasePaymentOutbox,
     DatabasePaymentRepository,
@@ -85,9 +86,11 @@ MARKET = MarketId("berlin")
 SNAPSHOT_EVERY = 2
 # EVENT_STORE__SNAPSHOT_EVERY обязателен: без него load_settings падает.
 SUBJECT_KEK = "test-subject-kek-with-at-least-32-characters"
+SUBJECT_REF_KEY = "test-subject-ref-key-with-at-least-32-characters"
 REQUIRED_EVENT_STORE_ENV = {
     "EVENT_STORE__SNAPSHOT_EVERY": "5",
-    "EVENT_STORE__SUBJECT_KEK": SUBJECT_KEK,
+    "EVENT_STORE__SUBJECT_KEKS": '{"1": "' + SUBJECT_KEK + '"}',
+    "EVENT_STORE__SUBJECT_REF_KEY": SUBJECT_REF_KEY,
 }
 # Only facts with a contract reach the Outbox of the real mapper.
 _UNPUBLISHED = (PaymentCreated, PaymentOperationRequested, PaymentOperationSucceeded)
@@ -253,7 +256,8 @@ class PaymentsTestKit:
             )
         self.uow = CountingUnitOfWork(DatabaseUnitOfWork(database))
         self.payments = StalePaymentRepository(database, SNAPSHOT_EVERY)
-        self.subjects = DatabaseSubjectKeys(database, SUBJECT_KEK)
+        self.subjects = DatabaseSubjectKeys(database, {1: SUBJECT_KEK}, SUBJECT_REF_KEY)
+        self.audit = DatabasePaymentAuditReader(database)
         self.history = DatabasePaymentOperationHistory(database)
         self.statuses = DatabasePaymentStatusReader(database)
         self.outbox = FailingOutbox(DatabasePaymentOutbox(database, PickledEventsMapper()))
@@ -363,6 +367,12 @@ class PaymentsTestKit:
         with self.database.connection() as conn:
             rows = conn.execute("SELECT id FROM payment_operations ORDER BY id").fetchall()
         return [self.operation(OperationId(row[0])) for row in rows]
+
+    def requester_of(self, payment_id: PaymentId) -> OperationRequester | None:
+        """Requester of the first operation of the Payment."""
+        view = self.audit.history(payment_id)
+        assert view is not None, payment_id
+        return view.operations[0].requested_by
 
     def provider_messages(self) -> set[str]:
         with self.database.connection() as conn:

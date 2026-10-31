@@ -79,7 +79,8 @@ class FakeProviderTest(unittest.TestCase):
                 {
                     "PROVIDER__KIND": "unknown",
                     "EVENT_STORE__SNAPSHOT_EVERY": "5",
-                    "EVENT_STORE__SUBJECT_KEK": "k" * 32,
+                    "EVENT_STORE__SUBJECT_KEKS": '{"1": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}',
+                    "EVENT_STORE__SUBJECT_REF_KEY": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
                 },
                 clear=True,
             ),

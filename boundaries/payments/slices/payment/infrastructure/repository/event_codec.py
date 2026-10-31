@@ -41,7 +41,7 @@ from slices.payment.domains.payment import (
 
 # Поднимается при любом изменении формы снапшота или смысла evolve: снапшот другой версии
 # не используется, состояние собирается из всего потока.
-SNAPSHOT_SCHEMA_VERSION = 3
+SNAPSHOT_SCHEMA_VERSION = 4
 
 type Payload = dict[str, Any]
 
@@ -247,7 +247,6 @@ _OPERATION_FIELDS: Mapping[str, _Field] = {
     "provider_reference": _optional(_TEXT),
     "decline_reason": _optional(_TEXT),
     "completed_at": _optional(_TIME),
-    "requested_by": _optional(_REQUESTER),
 }
 
 _SNAPSHOT_FIELDS: Mapping[str, _Field] = {

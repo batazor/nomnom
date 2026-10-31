@@ -39,8 +39,8 @@ spicedb:
 
 # Локальный ADR 2: Secret создаёт chart ops/kind/bootstrap.
 eventStore:
-  subjectKekSecret:
-    name: payments-subject-kek
+  subjectKeysSecret:
+    name: payments-subject-keys
 
 # ADR 8: PostgreSQL payments тестового окружения; Secret payments-postgres создаёт chart ops/kind/bootstrap.
 database:

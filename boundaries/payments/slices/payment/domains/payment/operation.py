@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import override
 
-from .ids import OperationId, OperationKind, OperationRequester, PaymentId
+from .ids import OperationId, OperationKind, PaymentId
 from .vo.money import Money
 
 
@@ -127,7 +127,6 @@ class PaymentOperation:
     provider_reference: str | None = None
     decline_reason: str | None = None
     completed_at: datetime | None = None
-    requested_by: OperationRequester | None = None
 
     def __post_init__(self) -> None:
         if not self.idempotency_key.strip():

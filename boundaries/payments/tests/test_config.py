@@ -11,7 +11,8 @@ from pkg.config import load_settings
 REQUIRED_ENV = {
     "DATABASE__URI": "postgresql://payments@localhost/payments",
     "EVENT_STORE__SNAPSHOT_EVERY": "5",
-    "EVENT_STORE__SUBJECT_KEK": "test-subject-kek-with-at-least-32-characters",
+    "EVENT_STORE__SUBJECT_KEKS": '{"1": "test-subject-kek-with-at-least-32-characters"}',
+    "EVENT_STORE__SUBJECT_REF_KEY": "test-subject-ref-key-with-at-least-32-characters",
 }
 
 
@@ -28,25 +29,40 @@ class EventStoreSettingsTest(unittest.TestCase):
             ):
                 load_settings()
 
-    def test_subject_kek_is_required_and_long_enough(self) -> None:
-        for value in (None, "", "short"):
+    def test_subject_keks_are_required_and_valid(self) -> None:
+        for value in (None, "", "not json", "{}", '{"1": "short"}', '{"0": "' + "k" * 32 + '"}'):
             environment = {
                 "DATABASE__URI": REQUIRED_ENV["DATABASE__URI"],
                 "EVENT_STORE__SNAPSHOT_EVERY": "5",
+                "EVENT_STORE__SUBJECT_REF_KEY": "r" * 32,
             }
             if value is not None:
-                environment["EVENT_STORE__SUBJECT_KEK"] = value
+                environment["EVENT_STORE__SUBJECT_KEKS"] = value
             with (
                 self.subTest(value=value),
                 patch.dict(os.environ, environment, clear=True),
-                self.assertRaisesRegex(ValidationError, "EVENT_STORE__SUBJECT_KEK"),
+                self.assertRaises(ValueError),
             ):
                 load_settings()
 
-    def test_subject_kek_stays_out_of_repr(self) -> None:
+    def test_subject_ref_key_is_required_and_long_enough(self) -> None:
+        for value in (None, "short"):
+            environment = {key: v for key, v in REQUIRED_ENV.items() if "REF_KEY" not in key}
+            if value is not None:
+                environment["EVENT_STORE__SUBJECT_REF_KEY"] = value
+            with (
+                self.subTest(value=value),
+                patch.dict(os.environ, environment, clear=True),
+                self.assertRaisesRegex(ValidationError, "EVENT_STORE__SUBJECT_REF_KEY"),
+            ):
+                load_settings()
+
+    def test_subject_secrets_stay_out_of_repr(self) -> None:
         with patch.dict(os.environ, REQUIRED_ENV, clear=True):
             settings = load_settings().event_store
-        self.assertNotIn(settings.subject_kek, repr(settings))
+        self.assertEqual(set(settings.subject_keks), {1})
+        self.assertNotIn(settings.subject_keks[1], repr(settings))
+        self.assertNotIn(settings.subject_ref_key, repr(settings))
 
     def test_snapshot_every_is_loaded(self) -> None:
         with patch.dict(os.environ, REQUIRED_ENV, clear=True):

@@ -187,7 +187,6 @@ def evolve(state: PaymentModel | None, event: PaymentDomainEvent) -> PaymentMode
                 event.idempotency_key,
                 event.amount,
                 event.requested_at,
-                requested_by=event.requested_by,
             )
             return replace(payment, operations=(*payment.operations, operation))
         case PaymentOperationSucceeded():

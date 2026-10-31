@@ -144,12 +144,10 @@ class VersioningTest(unittest.TestCase):
         self.assertNotIn("requested_by", payload)
 
     def test_mixed_stream_keeps_the_requester_of_new_events(self) -> None:
-        payment = Payment.from_history(
-            None, 0, decoded(recorded_streams()["mixed_schema_versions"])
-        )
+        events = decoded(recorded_streams()["mixed_schema_versions"])
 
         self.assertEqual(
-            [op.requested_by for op in payment.operations],
+            [e.requested_by for e in events if isinstance(e, PaymentOperationRequested)],
             [None, OperationRequester(RequesterKind.USER, "operator-1", "bff")],
         )
 

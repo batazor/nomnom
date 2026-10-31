@@ -158,18 +158,10 @@ class EvolveTest(unittest.TestCase):
         self.assertEqual(state.operations[0].state, OperationState.SUCCEEDED)
         self.assertEqual(state.operations[0].provider_reference, "auth-1")
 
-    def test_operation_keeps_who_requested_it(self) -> None:
+    def test_requester_stays_out_of_the_state(self) -> None:
         state = fold([CREATED, requested(OperationKind.AUTHORIZE)])
         assert state is not None
-        self.assertEqual(state.operations[0].requested_by, REQUESTER)
-
-    def test_event_recorded_before_requested_by_replays_as_unknown(self) -> None:
-        old = PaymentOperationRequested(
-            OPERATION, PAYMENT, OperationKind.AUTHORIZE, "key-1", AMOUNT, NOW, None
-        )
-        state = fold([CREATED, old])
-        assert state is not None
-        self.assertIsNone(state.operations[0].requested_by)
+        self.assertFalse(hasattr(state.operations[0], "requested_by"))
 
     def test_ac_1023_cancelled_authorization_clears_provider_reference(self) -> None:
         state = fold(

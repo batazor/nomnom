@@ -161,7 +161,10 @@ class PaymentContainer(containers.DeclarativeContainer):
     )
     # Per-user keys of crypto-shredding: requested_by is sealed before the stream (local ADR 2).
     subjects = providers.Singleton(
-        DatabaseSubjectKeys, database, event_store_settings.provided.subject_kek
+        DatabaseSubjectKeys,
+        database,
+        event_store_settings.provided.subject_keks,
+        event_store_settings.provided.subject_ref_key,
     )
     statuses = providers.Singleton(DatabasePaymentStatusReader, database)
     outbox = providers.Singleton(
