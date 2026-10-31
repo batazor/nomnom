@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { Cook, CookRepository } from "../../domains/cook/cook.ts";
@@ -6,7 +5,7 @@ import type { CookPoolAccess } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
 import { type CookChangeResult, toCookView } from "../cook-view/cook-view.ts";
 import type { CookWorkload } from "../cook-workload/cook-workload.ts";
-import { NotFoundError } from "../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../failure/failure.ts";
 
 export type CookCommand = Readonly<{
   subject: Subject;
@@ -38,13 +37,14 @@ export const changeCook = async (
     at: Date,
   ) => boolean,
 ): Promise<CookChangeResult> => {
-  await requirePermission(
-    dependencies.accessControl.canManageCooks(
+  if (
+    !(await dependencies.accessControl.canManageCooks(
       command.subject,
       command.restaurantId,
-    ),
-    action,
-  );
+    ))
+  ) {
+    throw new PermissionDeniedError(action);
+  }
   return dependencies.unitOfWork.run(async () => {
     const cook = await dependencies.cooks.get(command.cookId);
     if (cook === undefined || cook.restaurantId !== command.restaurantId) {

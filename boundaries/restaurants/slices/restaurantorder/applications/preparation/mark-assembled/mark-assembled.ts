@@ -1,7 +1,7 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { RestaurantOrderRepository } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../../access-control/access-control.ts";
 import type { Clock } from "../../clock/clock.ts";
+import { PermissionDeniedError } from "../../failure/failure.ts";
 import type { KitchenCommand } from "../../kitchen-command/kitchen-command.ts";
 import { loadRestaurantOrder } from "../../load/load.ts";
 import {
@@ -32,13 +32,14 @@ export class MarkAssembledHandler {
   }
 
   async execute(command: MarkAssembled): Promise<RestaurantOrderView> {
-    await requirePermission(
-      this.#accessControl.canOperateKitchen(
+    if (
+      !(await this.#accessControl.canOperateKitchen(
         command.subject,
         command.restaurantId,
-      ),
-      "mark restaurant order assembled",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("mark restaurant order assembled");
+    }
     const order = await loadRestaurantOrder(
       this.#restaurantOrders,
       command.restaurantId,

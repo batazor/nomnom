@@ -1,10 +1,13 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import { Menu, type MenuRepository } from "../../domains/menu/menu.ts";
 import type { MenuAccessControl } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
-import { AlreadyExistsError, NotFoundError } from "../failure/failure.ts";
+import {
+  AlreadyExistsError,
+  NotFoundError,
+  PermissionDeniedError,
+} from "../failure/failure.ts";
 import type { IdGenerator } from "../id-generator/id-generator.ts";
 
 export type CreateMenu = Readonly<{
@@ -44,10 +47,14 @@ export class CreateMenuHandler {
   }
 
   async execute(command: CreateMenu): Promise<CreateMenuResult> {
-    await requirePermission(
-      this.#accessControl.canManageMenu(command.subject, command.restaurantId),
-      "create menu",
-    );
+    if (
+      !(await this.#accessControl.canManageMenu(
+        command.subject,
+        command.restaurantId,
+      ))
+    ) {
+      throw new PermissionDeniedError("create menu");
+    }
     const restaurant = await this.#restaurants.get(command.restaurantId);
     if (restaurant === undefined) {
       throw new NotFoundError("Restaurant", command.restaurantId);

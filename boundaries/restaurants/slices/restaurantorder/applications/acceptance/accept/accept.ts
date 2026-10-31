@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { Outbox } from "../../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../../pkg/unit-of-work/unit-of-work.ts";
 import {
@@ -11,7 +10,7 @@ import type {
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../../access-control/access-control.ts";
 import type { Clock } from "../../clock/clock.ts";
-import { NotFoundError } from "../../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../../failure/failure.ts";
 import type { KitchenCommand } from "../../kitchen-command/kitchen-command.ts";
 import { loadRestaurantOrder } from "../../load/load.ts";
 import { saveAndPublish } from "../../publish-change/publish-change.ts";
@@ -115,13 +114,14 @@ export class AcceptOrderHandler {
   }
 
   async execute(command: AcceptOrder): Promise<RestaurantOrderView> {
-    await requirePermission(
-      this.#accessControl.canOperateKitchen(
+    if (
+      !(await this.#accessControl.canOperateKitchen(
         command.subject,
         command.restaurantId,
-      ),
-      "accept restaurant order",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("accept restaurant order");
+    }
     const now = this.#clock.now();
     return this.#unitOfWork.run(async () => {
       const order = await loadRestaurantOrder(

@@ -1,20 +1,4 @@
 /**
- * Authorization errors shared by the use cases of `restaurants`; `code` is the
- * same stable contract as in the errors of the slices.
- */
-
-export class PermissionDeniedError extends Error {
-  readonly code = "permission_denied";
-  readonly action: string;
-
-  constructor(action: string) {
-    super(`permission denied: ${action}`);
-    this.name = "PermissionDeniedError";
-    this.action = action;
-  }
-}
-
-/**
  * Authorization decision could not be obtained (for example the permission
  * service is unreachable). Access control fails closed with this error.
  */

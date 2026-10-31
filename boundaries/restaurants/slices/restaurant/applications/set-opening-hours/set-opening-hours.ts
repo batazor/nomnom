@@ -1,10 +1,10 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type {
   OpeningInterval,
   RestaurantRepository,
 } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantAccessControl } from "../access-control/access-control.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import { loadRestaurant } from "../load/load.ts";
 import {
   type RestaurantChangeResult,
@@ -35,13 +35,14 @@ export class SetOpeningHoursHandler {
   }
 
   async execute(command: SetOpeningHours): Promise<RestaurantChangeResult> {
-    await requirePermission(
-      this.#accessControl.canManageRestaurant(
+    if (
+      !(await this.#accessControl.canManageRestaurant(
         command.subject,
         command.restaurantId,
-      ),
-      "set opening hours",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("set opening hours");
+    }
     const restaurant = await loadRestaurant(
       this.#restaurants,
       command.restaurantId,

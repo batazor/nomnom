@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
@@ -10,6 +9,7 @@ import {
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import { loadRestaurantOrder } from "../load/load.ts";
 import { saveAndPublish } from "../publish-change/publish-change.ts";
 import {
@@ -52,13 +52,14 @@ export const executeKitchenCommand = async (
     repeatPolicy?: RepeatPolicy;
   }>,
 ): Promise<RestaurantOrderView> => {
-  await requirePermission(
-    dependencies.accessControl.canOperateKitchen(
+  if (
+    !(await dependencies.accessControl.canOperateKitchen(
       command.subject,
       command.restaurantId,
-    ),
-    options.action,
-  );
+    ))
+  ) {
+    throw new PermissionDeniedError(options.action);
+  }
   const now = dependencies.clock.now();
   return dependencies.unitOfWork.run(async () => {
     const order = await loadRestaurantOrder(

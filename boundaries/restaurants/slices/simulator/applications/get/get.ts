@@ -1,7 +1,7 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { SimulatorStateRepository } from "../../domains/simulator/simulator.ts";
 import type { SimulatorAccess } from "../access-control/access-control.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 
 export type GetSimulator = Readonly<{ subject: Subject }>;
 
@@ -21,10 +21,9 @@ export class GetSimulatorHandler {
   }
 
   async execute(query: GetSimulator): Promise<SimulatorView> {
-    await requirePermission(
-      this.#accessControl.canOperateSimulator(query.subject),
-      "get_simulator",
-    );
+    if (!(await this.#accessControl.canOperateSimulator(query.subject))) {
+      throw new PermissionDeniedError("get_simulator");
+    }
     return { enabled: await this.#state.isEnabled() };
   }
 }

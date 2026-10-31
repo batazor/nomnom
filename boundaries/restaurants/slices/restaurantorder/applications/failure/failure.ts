@@ -42,3 +42,15 @@ export class ConcurrencyConflictError extends Error {
     this.aggregateId = aggregateId;
   }
 }
+
+/** The subject has no permission for the action. */
+export class PermissionDeniedError extends Error {
+  readonly code = "permission_denied";
+  readonly action: string;
+
+  constructor(action: string) {
+    super(`permission denied: ${action}`);
+    this.name = "PermissionDeniedError";
+    this.action = action;
+  }
+}

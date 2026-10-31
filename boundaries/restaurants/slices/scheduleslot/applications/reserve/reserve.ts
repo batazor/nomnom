@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type {
@@ -14,7 +13,11 @@ import {
 } from "../../domains/scheduleslot/scheduleslot.ts";
 import type { SlotReservationAccess } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
-import { ConcurrencyConflictError, NotFoundError } from "../failure/failure.ts";
+import {
+  ConcurrencyConflictError,
+  NotFoundError,
+  PermissionDeniedError,
+} from "../failure/failure.ts";
 import { windowAvailability } from "../window-availability/window-availability.ts";
 
 export type ReserveScheduledSlot = Readonly<{
@@ -80,10 +83,11 @@ export class ReserveScheduledSlotHandler {
   async execute(
     command: ReserveScheduledSlot,
   ): Promise<ReserveScheduledSlotResult> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(command.subject),
-      "reserve scheduled slot",
-    );
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(command.subject))
+    ) {
+      throw new PermissionDeniedError("reserve scheduled slot");
+    }
     for (let attempt = 1; ; attempt += 1) {
       try {
         return await this.#unitOfWork.run(() => this.#attempt(command));

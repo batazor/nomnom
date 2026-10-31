@@ -1,7 +1,6 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { RestaurantOrderViewAccess } from "../access-control/access-control.ts";
-import { NotFoundError } from "../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../failure/failure.ts";
 import type { RestaurantOrderView } from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type GetRestaurantOrder = Readonly<{
@@ -32,13 +31,14 @@ export class GetRestaurantOrderHandler {
   }
 
   async execute(query: GetRestaurantOrder): Promise<RestaurantOrderView> {
-    await requirePermission(
-      this.#accessControl.canViewRestaurantOrders(
+    if (
+      !(await this.#accessControl.canViewRestaurantOrders(
         query.subject,
         query.restaurantId,
-      ),
-      "view restaurant order",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("view restaurant order");
+    }
     const order = await this.#reader.get(
       query.restaurantId,
       query.restaurantOrderId,

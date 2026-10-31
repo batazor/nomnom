@@ -1,9 +1,9 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { RestaurantRepository } from "../../domains/restaurant/restaurant.ts";
 import type { MoneyValue } from "../../domains/restaurant/vo/money.ts";
 import type { RestaurantAccessControl } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import { loadRestaurant } from "../load/load.ts";
 import {
   type RestaurantChangeResult,
@@ -43,13 +43,14 @@ export class UpdateRestaurantHandler {
   }
 
   async execute(command: UpdateRestaurant): Promise<RestaurantChangeResult> {
-    await requirePermission(
-      this.#accessControl.canManageRestaurant(
+    if (
+      !(await this.#accessControl.canManageRestaurant(
         command.subject,
         command.restaurantId,
-      ),
-      "update restaurant",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("update restaurant");
+    }
     const restaurant = await loadRestaurant(
       this.#restaurants,
       command.restaurantId,

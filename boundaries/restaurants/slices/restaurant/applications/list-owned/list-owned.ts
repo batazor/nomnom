@@ -1,6 +1,6 @@
-import { PermissionDeniedError } from "../../../../pkg/authz/errors.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import { MarketId } from "../../domains/restaurant/restaurant.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import {
   DEFAULT_RESTAURANT_PAGE_SIZE,
   InvalidPageSizeError,

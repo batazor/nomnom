@@ -1,9 +1,9 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { CookRepository } from "../../domains/cook/cook.ts";
 import type { CookPoolAccess } from "../access-control/access-control.ts";
 import { type CookView, toCookView } from "../cook-view/cook-view.ts";
 import type { CookWorkload } from "../cook-workload/cook-workload.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 
 export type GetCookPool = Readonly<{ subject: Subject; restaurantId: string }>;
 
@@ -33,13 +33,14 @@ export class GetCookPoolHandler {
   }
 
   async execute(query: GetCookPool): Promise<CookPoolView> {
-    await requirePermission(
-      this.#accessControl.canViewRestaurantOrders(
+    if (
+      !(await this.#accessControl.canViewRestaurantOrders(
         query.subject,
         query.restaurantId,
-      ),
-      "get cook pool",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("get cook pool");
+    }
     const [pool, assignments, queued] = await Promise.all([
       this.#cooks.listPool(query.restaurantId),
       this.#workload.activeAssignments(query.restaurantId),

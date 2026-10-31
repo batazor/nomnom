@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../../pkg/authz/subject.ts";
 import {
   AlreadyInStateError,
@@ -6,7 +5,7 @@ import {
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { FulfillmentProcessAccess } from "../../access-control/access-control.ts";
 import type { Clock } from "../../clock/clock.ts";
-import { NotFoundError } from "../../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../../failure/failure.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
@@ -42,10 +41,11 @@ export class QueueRestaurantOrderHandler {
   }
 
   async execute(command: QueueRestaurantOrder): Promise<RestaurantOrderView> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(command.subject),
-      "queue restaurant order",
-    );
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(command.subject))
+    ) {
+      throw new PermissionDeniedError("queue restaurant order");
+    }
     const order = await this.#restaurantOrders.get(command.restaurantOrderId);
     if (order === undefined) {
       throw new NotFoundError("RestaurantOrder", command.restaurantOrderId);

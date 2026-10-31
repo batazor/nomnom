@@ -1,12 +1,11 @@
 import { v1 } from "@authzed/authzed-node";
-
-import { AuthorizationUnavailableError } from "../../pkg/authz/errors.ts";
 import type {
   AuthorizationRevision,
   OwnerRelationshipWriter,
   StaffRelationshipWriter,
 } from "../../slices/restaurant/applications/access-control/access-control.ts";
 import { type RelationshipsClient, withDeadline } from "./client.ts";
+import { AuthorizationUnavailableError } from "./errors.ts";
 
 export const RESTAURANT = "restaurant";
 export const USER = "user";

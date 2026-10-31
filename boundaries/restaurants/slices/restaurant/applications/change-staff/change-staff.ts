@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type {
   Restaurant,
@@ -9,6 +8,7 @@ import type {
   RestaurantAccessControl,
   StaffRelationshipWriter,
 } from "../access-control/access-control.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import { loadRestaurant } from "../load/load.ts";
 
 export type ChangeStaffDependencies = {
@@ -51,13 +51,14 @@ export const changeStaff = async (
     input: { restaurantId: string; userId: string },
   ) => Promise<AuthorizationRevision>,
 ): Promise<StaffChangeResult> => {
-  await requirePermission(
-    dependencies.accessControl.canManageRestaurant(
+  if (
+    !(await dependencies.accessControl.canManageRestaurant(
       command.subject,
       command.restaurantId,
-    ),
-    action,
-  );
+    ))
+  ) {
+    throw new PermissionDeniedError(action);
+  }
   const restaurant = await loadRestaurant(
     dependencies.restaurants,
     command.restaurantId,

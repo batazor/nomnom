@@ -1,10 +1,12 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { ScheduleSlotRepository } from "../../domains/scheduleslot/scheduleslot.ts";
 import type { SlotReservationAccess } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
-import { ConcurrencyConflictError } from "../failure/failure.ts";
+import {
+  ConcurrencyConflictError,
+  PermissionDeniedError,
+} from "../failure/failure.ts";
 import { RESERVE_ATTEMPTS } from "../reserve/reserve.ts";
 
 export type ReleaseScheduledSlot = Readonly<{
@@ -37,10 +39,11 @@ export class ReleaseScheduledSlotHandler {
   }
 
   async execute(command: ReleaseScheduledSlot): Promise<boolean> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(command.subject),
-      "release scheduled slot",
-    );
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(command.subject))
+    ) {
+      throw new PermissionDeniedError("release scheduled slot");
+    }
     for (let attempt = 1; ; attempt += 1) {
       try {
         return await this.#unitOfWork.run(async () => {

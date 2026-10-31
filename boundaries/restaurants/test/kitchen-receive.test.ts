@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import {
   AlreadyExistsError,
   NotFoundError,
+  PermissionDeniedError,
 } from "../slices/restaurantorder/applications/failure/failure.ts";
 import {
   InvalidRestaurantOrderError,

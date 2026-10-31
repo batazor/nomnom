@@ -7,10 +7,12 @@ import {
   timestampFromDate,
 } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
-
-import { PermissionDeniedError } from "../pkg/authz/errors.ts";
+import { PermissionDeniedError as RestaurantPermissionDeniedError } from "../slices/restaurant/applications/failure/failure.ts";
 import { InvalidScheduledOrderSettingsError } from "../slices/restaurant/domains/restaurant/restaurant.ts";
-import { NotFoundError } from "../slices/scheduleslot/applications/failure/failure.ts";
+import {
+  NotFoundError,
+  PermissionDeniedError,
+} from "../slices/scheduleslot/applications/failure/failure.ts";
 import { ReserveScheduledSlotHandler } from "../slices/scheduleslot/applications/reserve/reserve.ts";
 import {
   type DeliveryWindow,
@@ -118,7 +120,7 @@ test("AC-894 AC-895 Set Scheduled Order Settings sets the capacity, a non-positi
       restaurantId,
       settings: settings(8),
     }),
-    PermissionDeniedError,
+    RestaurantPermissionDeniedError,
   );
   assert.equal(
     (await world.restaurants.get(restaurantId))?.scheduledOrders?.slotCapacity,

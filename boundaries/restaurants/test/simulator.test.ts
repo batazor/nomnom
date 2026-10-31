@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
 import { loadSimulatorConfig } from "../pkg/config/config.ts";
+import { PermissionDeniedError as RestaurantOrderPermissionDeniedError } from "../slices/restaurantorder/applications/failure/failure.ts";
+import { PermissionDeniedError } from "../slices/simulator/applications/failure/failure.ts";
 import { GetSimulatorHandler } from "../slices/simulator/applications/get/get.ts";
 import { SetSimulatorEnabledHandler } from "../slices/simulator/applications/set-enabled/set-enabled.ts";
 import {
@@ -398,7 +398,9 @@ test("FR-605 a failed use case is logged, dropped and does not stop the pass", a
   );
   assert.equal(world.logged.length, 1);
   assert.equal(world.logged[0]?.action, "accept");
-  assert.ok(world.logged[0]?.error instanceof PermissionDeniedError);
+  assert.ok(
+    world.logged[0]?.error instanceof RestaurantOrderPermissionDeniedError,
+  );
   assert.equal(
     world.simulator.planOf(deniedOrder.restaurantOrderId),
     undefined,

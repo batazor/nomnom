@@ -1,6 +1,4 @@
 import { v1 } from "@authzed/authzed-node";
-
-import { AuthorizationUnavailableError } from "../../pkg/authz/errors.ts";
 import type { Subject } from "../../pkg/authz/subject.ts";
 import type { CookPoolAccess } from "../../slices/cook/applications/access-control/access-control.ts";
 import type { MenuAccessControl } from "../../slices/menu/applications/access-control/access-control.ts";
@@ -18,6 +16,7 @@ import {
   type PermissionsClient,
   withDeadline,
 } from "./client.ts";
+import { AuthorizationUnavailableError } from "./errors.ts";
 
 /** Singleton object of `definition platform` (authorization/schema.zed). */
 export const PLATFORM_ID = "nomnom";

@@ -1,10 +1,9 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import { Cook, type CookRepository } from "../../domains/cook/cook.ts";
 import type { CookPoolAccess } from "../access-control/access-control.ts";
 import { type CookView, toCookView } from "../cook-view/cook-view.ts";
 import type { CookRestaurants } from "../cook-workload/cook-workload.ts";
-import { NotFoundError } from "../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../failure/failure.ts";
 import type { IdGenerator } from "../id-generator/id-generator.ts";
 
 export type HireCook = Readonly<{
@@ -33,10 +32,14 @@ export class HireCookHandler {
   }
 
   async execute(command: HireCook): Promise<CookView> {
-    await requirePermission(
-      this.#accessControl.canManageCooks(command.subject, command.restaurantId),
-      "hire cook",
-    );
+    if (
+      !(await this.#accessControl.canManageCooks(
+        command.subject,
+        command.restaurantId,
+      ))
+    ) {
+      throw new PermissionDeniedError("hire cook");
+    }
     const cook = Cook.hire({
       id: this.#ids.next(),
       restaurantId: command.restaurantId,

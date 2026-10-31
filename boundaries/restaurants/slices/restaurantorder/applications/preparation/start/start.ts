@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../../pkg/unit-of-work/unit-of-work.ts";
@@ -11,6 +10,7 @@ import {
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../../access-control/access-control.ts";
 import type { Clock } from "../../clock/clock.ts";
+import { PermissionDeniedError } from "../../failure/failure.ts";
 import type {
   KitchenQueueOrdering,
   KitchenQueueReader,
@@ -98,13 +98,14 @@ export class StartPreparationHandler {
   async execute(
     command: StartPreparation,
   ): Promise<RestaurantOrderView | undefined> {
-    await requirePermission(
-      this.#accessControl.canOperateKitchen(
+    if (
+      !(await this.#accessControl.canOperateKitchen(
         command.subject,
         command.restaurantId,
-      ),
-      "start preparation",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("start preparation");
+    }
     const requestId = command.requestId.trim();
     if (requestId.length === 0) {
       throw new InvalidRestaurantOrderError(

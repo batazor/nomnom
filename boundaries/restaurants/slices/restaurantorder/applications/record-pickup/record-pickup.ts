@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import {
@@ -6,7 +5,7 @@ import {
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { FulfillmentProcessAccess } from "../access-control/access-control.ts";
-import { NotFoundError } from "../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../failure/failure.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
@@ -43,10 +42,11 @@ export class RecordPickupHandler {
   }
 
   async execute(command: RecordPickup): Promise<RestaurantOrderView> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(command.subject),
-      "record pickup",
-    );
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(command.subject))
+    ) {
+      throw new PermissionDeniedError("record pickup");
+    }
     return this.#unitOfWork.run(async () => {
       const order = await this.#restaurantOrders.findByOrderId(command.orderId);
       if (order === undefined) {

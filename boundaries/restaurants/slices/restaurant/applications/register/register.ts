@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import {
   Restaurant,
@@ -9,6 +8,7 @@ import type {
   RestaurantAccessControl,
 } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import type { IdGenerator } from "../id-generator/id-generator.ts";
 import {
   type RestaurantView,
@@ -52,10 +52,9 @@ export class RegisterRestaurantHandler {
   async execute(
     command: RegisterRestaurant,
   ): Promise<RegisterRestaurantResult> {
-    await requirePermission(
-      this.#accessControl.canRegisterRestaurant(command.subject),
-      "register restaurant",
-    );
+    if (!(await this.#accessControl.canRegisterRestaurant(command.subject))) {
+      throw new PermissionDeniedError("register restaurant");
+    }
     const restaurant = Restaurant.register({
       id: this.#ids.next(),
       name: command.name,

@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { v1 } from "@authzed/authzed-node";
-
+import { AuthorizationUnavailableError } from "../infrastructure/spicedb/errors.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import { AuthorizationUnavailableError } from "../pkg/authz/errors.ts";
 import { loadConfig } from "../pkg/config/config.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
 

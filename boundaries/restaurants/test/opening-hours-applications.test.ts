@@ -4,7 +4,7 @@ import test from "node:test";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 
-import { PermissionDeniedError } from "../pkg/authz/errors.ts";
+import { PermissionDeniedError } from "../slices/restaurant/applications/failure/failure.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
 import { ListRestaurantsHandler } from "../slices/restaurant/applications/list/list.ts";
 import {

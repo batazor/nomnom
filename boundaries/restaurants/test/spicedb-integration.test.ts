@@ -5,7 +5,7 @@ import {
   createSpiceDbClient,
   type SpiceDbClient,
 } from "../infrastructure/spicedb/client.ts";
-import { AuthorizationUnavailableError } from "../pkg/authz/errors.ts";
+import { AuthorizationUnavailableError } from "../infrastructure/spicedb/errors.ts";
 import type { SpiceDbConfig } from "../pkg/config/config.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
 

@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
@@ -11,7 +10,7 @@ import type {
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { FulfillmentCoordinatorAccess } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
-import { NotFoundError } from "../failure/failure.ts";
+import { NotFoundError, PermissionDeniedError } from "../failure/failure.ts";
 import { saveAndPublish } from "../publish-change/publish-change.ts";
 
 export type CancelRestaurantOrder = Readonly<{
@@ -95,13 +94,14 @@ export class CancelRestaurantOrderHandler {
   async execute(
     command: CancelRestaurantOrder,
   ): Promise<CancelRestaurantOrderResult> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(
         command.subject,
         command.restaurantId,
-      ),
-      "cancel restaurant order",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("cancel restaurant order");
+    }
     const now = this.#clock.now();
     return this.#unitOfWork.run(async () => {
       const order = await this.#restaurantOrders.findByOrderId(command.orderId);

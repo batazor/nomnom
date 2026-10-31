@@ -11,7 +11,7 @@ import {
   SpiceDbAccessControl,
 } from "../infrastructure/spicedb/access-control.ts";
 import type { PermissionsClient } from "../infrastructure/spicedb/client.ts";
-import { AuthorizationUnavailableError } from "../pkg/authz/errors.ts";
+import { AuthorizationUnavailableError } from "../infrastructure/spicedb/errors.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
 import { loadSpiceDbConfig } from "../pkg/config/config.ts";
 

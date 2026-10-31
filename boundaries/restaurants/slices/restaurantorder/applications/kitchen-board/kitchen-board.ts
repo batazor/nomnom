@@ -1,7 +1,7 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { RestaurantOrderState } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control/access-control.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 
 /** Restaurant Order of any restaurant in one of the requested states. */
 export type KitchenOrderInState<State extends RestaurantOrderState> = Readonly<{
@@ -32,12 +32,14 @@ export type KitchenBoardQuery = Readonly<{
 }>;
 
 /** Kitchen board read models are visible to the restaurant staff only. */
-export const authorizeKitchenBoard = (
+export const authorizeKitchenBoard = async (
   accessControl: KitchenStaffAccess,
   query: KitchenBoardQuery,
   action: string,
-): Promise<void> =>
-  requirePermission(
-    accessControl.canOperateKitchen(query.subject, query.restaurantId),
-    action,
-  );
+): Promise<void> => {
+  if (
+    !(await accessControl.canOperateKitchen(query.subject, query.restaurantId))
+  ) {
+    throw new PermissionDeniedError(action);
+  }
+};

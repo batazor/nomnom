@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  AuthorizationUnavailableError,
-  PermissionDeniedError,
-} from "../pkg/authz/errors.ts";
+import { AuthorizationUnavailableError } from "../infrastructure/spicedb/errors.ts";
 import type { StaffRelationshipWriter } from "../slices/restaurant/applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
-import { NotFoundError } from "../slices/restaurant/applications/failure/failure.ts";
+import {
+  NotFoundError,
+  PermissionDeniedError,
+} from "../slices/restaurant/applications/failure/failure.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import {
   InvalidRestaurantError,

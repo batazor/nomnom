@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../../pkg/authz/subject.ts";
 import type { MarketId } from "../../../../restaurant/domains/restaurant/restaurant.ts";
 import {
@@ -10,7 +9,11 @@ import {
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { FulfillmentCoordinatorAccess } from "../../access-control/access-control.ts";
 import type { Clock } from "../../clock/clock.ts";
-import { AlreadyExistsError, NotFoundError } from "../../failure/failure.ts";
+import {
+  AlreadyExistsError,
+  NotFoundError,
+  PermissionDeniedError,
+} from "../../failure/failure.ts";
 import type { IdGenerator } from "../../id-generator/id-generator.ts";
 import {
   type RestaurantOrderView,
@@ -75,13 +78,14 @@ export class ReceiveOrderRequestHandler {
   async execute(
     command: ReceiveOrderRequest,
   ): Promise<ReceiveOrderRequestResult> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(
         command.subject,
         command.restaurantId,
-      ),
-      "receive order request",
-    );
+      ))
+    ) {
+      throw new PermissionDeniedError("receive order request");
+    }
     // The Restaurant Order takes the Market of its restaurant (ADR 41).
     const existing = await this.#existing(command);
     if (existing !== undefined) {

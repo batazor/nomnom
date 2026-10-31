@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
@@ -9,7 +8,11 @@ import {
 } from "../../domains/scheduleslot/scheduleslot.ts";
 import type { SlotReservationAccess } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
-import { ConcurrencyConflictError, NotFoundError } from "../failure/failure.ts";
+import {
+  ConcurrencyConflictError,
+  NotFoundError,
+  PermissionDeniedError,
+} from "../failure/failure.ts";
 import { RESERVE_ATTEMPTS } from "../reserve/reserve.ts";
 
 export type ConfirmScheduledSlot = Readonly<{
@@ -56,10 +59,11 @@ export class ConfirmScheduledSlotHandler {
   async execute(
     command: ConfirmScheduledSlot,
   ): Promise<ConfirmScheduledSlotResult> {
-    await requirePermission(
-      this.#accessControl.canCoordinateFulfillment(command.subject),
-      "confirm scheduled slot",
-    );
+    if (
+      !(await this.#accessControl.canCoordinateFulfillment(command.subject))
+    ) {
+      throw new PermissionDeniedError("confirm scheduled slot");
+    }
     for (let attempt = 1; ; attempt += 1) {
       try {
         return await this.#unitOfWork.run(() => this.#attempt(command));

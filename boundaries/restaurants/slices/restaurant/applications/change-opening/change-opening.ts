@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import { publishAggregateChange } from "../../../../pkg/outbox/publish-aggregate-change.ts";
@@ -9,6 +8,7 @@ import type {
 } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantAccessControl } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import { loadRestaurant } from "../load/load.ts";
 import {
   type RestaurantChangeResult,
@@ -33,13 +33,14 @@ export const changeOpening = async (
   action: string,
   change: (restaurant: Restaurant, at: Date) => boolean,
 ): Promise<RestaurantChangeResult> => {
-  await requirePermission(
-    dependencies.accessControl.canManageRestaurant(
+  if (
+    !(await dependencies.accessControl.canManageRestaurant(
       command.subject,
       command.restaurantId,
-    ),
-    action,
-  );
+    ))
+  ) {
+    throw new PermissionDeniedError(action);
+  }
   const at = dependencies.clock.now();
   return dependencies.unitOfWork.run(async () => {
     const restaurant = await loadRestaurant(

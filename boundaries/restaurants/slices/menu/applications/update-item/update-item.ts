@@ -1,4 +1,3 @@
-import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
@@ -9,6 +8,7 @@ import {
 import type { MenuRepository } from "../../domains/menu/menu.ts";
 import type { MenuAccessControl } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
+import { PermissionDeniedError } from "../failure/failure.ts";
 import {
   loadMenu,
   type MenuItemChangeResult,
@@ -54,10 +54,14 @@ export class UpdateMenuItemHandler {
   }
 
   async execute(command: UpdateMenuItem): Promise<MenuItemChangeResult> {
-    await requirePermission(
-      this.#accessControl.canManageMenu(command.subject, command.restaurantId),
-      "update menu item",
-    );
+    if (
+      !(await this.#accessControl.canManageMenu(
+        command.subject,
+        command.restaurantId,
+      ))
+    ) {
+      throw new PermissionDeniedError("update menu item");
+    }
     const price =
       command.price === undefined ? undefined : Money.from(command.price);
     const now = this.#clock.now();
