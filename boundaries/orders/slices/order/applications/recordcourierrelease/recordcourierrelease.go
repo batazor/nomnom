@@ -16,7 +16,7 @@ import (
 	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -62,7 +62,7 @@ type Handler struct {
 	inbox       unitofwork.Inbox
 	orders      order.Repository
 	assignments order.CourierAssignments
-	changes     syncorderrelationships.Changes
+	changes     syncrelationships.Changes
 }
 
 func NewHandler(
@@ -70,7 +70,7 @@ func NewHandler(
 	inbox unitofwork.Inbox,
 	orders order.Repository,
 	assignments order.CourierAssignments,
-	changes syncorderrelationships.Changes,
+	changes syncrelationships.Changes,
 ) Handler {
 	return Handler{uow: uow, inbox: inbox, orders: orders, assignments: assignments, changes: changes}
 }

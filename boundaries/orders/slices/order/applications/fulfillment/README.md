@@ -7,8 +7,8 @@ Package не является use case. Он объявляет единстве
 | Порт | Кто использует | Семантика |
 | --- | --- | --- |
 | `Starter` | `startfulfillment` | Старт workflow одного `Order` с его `OrderPlaced` (`StartRequest{OrderID, EventID, OccurredAt}`) после commit Inbox; повтор адресует тот же workflow и дедуплицируется по `event_id`, закрытый workflow заново не стартует |
-| `Notifier` | `confirmorder`, `rejectorder`, `record…` | Передача сигнала с исходным `event_id`; workflow дедуплицирует по нему; закрытый workflow — `ErrWorkflowNotFound` |
-| `CancellationRequester` | `requestordercancellation` | Передача Cancellation Request с `RequestID` и исходным subject; бизнес-отказ workflow — `ErrCancellationRefused` |
+| `Notifier` | `order/confirm`, `order/reject`, `record…` | Передача сигнала с исходным `event_id`; workflow дедуплицирует по нему; закрытый workflow — `ErrWorkflowNotFound` |
+| `CancellationRequester` | `order/requestcancellation` | Передача Cancellation Request с `RequestID` и исходным subject; бизнес-отказ workflow — `ErrCancellationRefused` |
 
 `KindPreparationDelayed` (с `ExpectedReadyAt`) и `KindPreparationFailed` — не шаги FSM `Order`: задержка только заменяет срок готовности `Order` (Record Preparation Delay, `ExpectedReadyAt` уходит в уведомление), неудачу consumer передаёт workflow без изменения агрегата.
 
@@ -16,7 +16,7 @@ Package не является use case. Он объявляет единстве
 
 ## Поток входящего сигнала
 
-Каждый из 9 входящих use cases (`confirmorder`, `rejectorder`, `record…`) пишет insert-first протокол Inbox сам, общего handler'а нет: они различаются тем, что читают, проверяют и сохраняют.
+Каждый из 9 входящих use cases (`order/confirm`, `order/reject`, `record…`) пишет insert-first протокол Inbox сам, общего handler'а нет: они различаются тем, что читают, проверяют и сохраняют.
 
 ```text
 unitofwork.AcceptOnce: UoW { Inbox.Accept(consumer, event_id) → load Order → domain method → ClassifySignal → Save } → commit → Notify(event_id)

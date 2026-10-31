@@ -24,9 +24,9 @@ import (
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
+	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -60,8 +60,8 @@ func newClientWith(t *testing.T, subjects grpcadapter.SubjectResolver, store *re
 
 // commandPorts are the ports of the command use cases besides store and authorizer.
 type commandPorts struct {
-	catalog  placeorder.Catalog
-	slots    placeorder.SlotReservations
+	catalog  place.Catalog
+	slots    place.SlotReservations
 	workflow fulfillment.CancellationRequester
 	clock    *fake.Clock
 }
@@ -275,16 +275,16 @@ func TestPlaceOrderWithDeliveryWindow(t *testing.T) {
 	alternative, err := order.NewDeliveryWindow(windowStart.Add(15*time.Minute), windowStart.Add(30*time.Minute))
 	require.NoError(t, err)
 	store, catalog, slots := repositorytest.Open(t), NewMockCatalog(t), NewMockSlotReservations(t)
-	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).Return(placeorder.CatalogSnapshot{
+	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).Return(place.CatalogSnapshot{
 		MarketID:     ordertest.MarketID(t),
 		Currency:     "EUR",
-		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+		Items:        map[order.MenuItemID]place.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "100"),
 	}, nil).Times(2)
 	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).Return(window, nil).Once()
 	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-2")).
-		Return(order.DeliveryWindow{}, placeorder.SlotUnavailable{Alternatives: []order.DeliveryWindow{alternative}}).Once()
+		Return(order.DeliveryWindow{}, place.SlotUnavailable{Alternatives: []order.DeliveryWindow{alternative}}).Once()
 	subjects := NewMockSubjectResolver(t)
 	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
 	client := newClientWithPorts(t, subjects, store, NewMockAuthorizer(t), commandPorts{
@@ -375,10 +375,10 @@ func placeRequest() *ordersv1.PlaceOrderRequest {
 // AC-508: PlaceOrder places the Order for the verified Customer and starts fulfillment.
 func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 	store, catalog := repositorytest.Open(t), NewMockCatalog(t)
-	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).Return(placeorder.CatalogSnapshot{
+	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).Return(place.CatalogSnapshot{
 		MarketID:     ordertest.MarketID(t),
 		Currency:     "EUR",
-		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+		Items:        map[order.MenuItemID]place.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "100"),
 	}, nil).Once()
@@ -409,7 +409,7 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", usecase.ErrDependencyUnavailable)).Once()
+		Return(place.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", usecase.ErrDependencyUnavailable)).Once()
 	subjects := NewMockSubjectResolver(t)
 	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
 	client := newClientWithPorts(t, subjects, repositorytest.Open(t), NewMockAuthorizer(t), commandPorts{
@@ -429,13 +429,13 @@ func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
 		code   codes.Code
 		reason string
 	}{
-		"unknown restaurant": {placeorder.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
-		"closed restaurant":  {placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
+		"unknown restaurant": {place.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
+		"closed restaurant":  {place.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store, catalog := repositorytest.Open(t), NewMockCatalog(t)
 			catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-				Return(placeorder.CatalogSnapshot{}, tc.err).Once()
+				Return(place.CatalogSnapshot{}, tc.err).Once()
 			subjects := NewMockSubjectResolver(t)
 			subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
 			client := newClientWithPorts(t, subjects, store, NewMockAuthorizer(t), commandPorts{
@@ -455,10 +455,10 @@ func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
 // AC-567: an unavailable Menu Item is ORDER_NOT_ORDERABLE with its code and id.
 func TestPlaceOrderNamesUnorderableItems(t *testing.T) {
 	catalog := NewMockCatalog(t)
-	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "menu-gyoza"}).Return(placeorder.CatalogSnapshot{
+	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "menu-gyoza"}).Return(place.CatalogSnapshot{
 		MarketID: ordertest.MarketID(t),
 		Currency: "EUR",
-		Items: map[order.MenuItemID]placeorder.CatalogItem{
+		Items: map[order.MenuItemID]place.CatalogItem{
 			"pizza":      {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
 			"menu-gyoza": {UnitPrice: ordertest.Money(t, "4.00"), Available: false},
 		},
@@ -483,10 +483,10 @@ func TestPlaceOrderNamesUnorderableItems(t *testing.T) {
 func TestPlaceOrderNamesEveryReasonCodeOnce(t *testing.T) {
 	// The catalog knows only pizza of the requested items.
 	catalog := NewMockCatalog(t)
-	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "menu-gyoza", "menu-tea"}).Return(placeorder.CatalogSnapshot{
+	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "menu-gyoza", "menu-tea"}).Return(place.CatalogSnapshot{
 		MarketID:     ordertest.MarketID(t),
 		Currency:     "EUR",
-		Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+		Items:        map[order.MenuItemID]place.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "10"),
 	}, nil).Once()
@@ -666,8 +666,8 @@ func TestRequestOrderCancellationMapsErrors(t *testing.T) {
 		authorizer := NewMockAuthorizer(t)
 		authorizer.EXPECT().Check(mock.Anything, authz.AccessCheck{
 			Subject:    supportConsole,
-			Permission: requestordercancellation.PermissionCancel,
-			Resource:   authz.Resource{Type: requestordercancellation.ResourceOrder, ID: "order-1"},
+			Permission: requestcancellation.PermissionCancel,
+			Resource:   authz.Resource{Type: requestcancellation.ResourceOrder, ID: "order-1"},
 		}).Return(spicedb.ErrUnavailable).Once()
 		store := repositorytest.Open(t)
 		require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))

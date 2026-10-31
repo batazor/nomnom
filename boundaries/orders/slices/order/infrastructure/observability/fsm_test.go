@@ -12,8 +12,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/closure/completeorder"
-	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
+	"nomnom/orders/slices/order/applications/closure/complete"
+	"nomnom/orders/slices/order/applications/closure/failorcancel"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -62,15 +62,15 @@ func TestObservedStoreCountsFSMTransitions(t *testing.T) {
 	store, pg := observedStore(t)
 	ctx := context.Background()
 	require.NoError(t, pg.Add(ctx, ordertest.New(t, "order-1", ordertest.WithState(order.StateDelivered))))
-	complete := completeorder.NewHandler(store, store, store)
-	finalize := failorcancelorder.NewHandler(store, store, store)
+	completeOrder := complete.NewHandler(store, store, store)
+	finalize := failorcancel.NewHandler(store, store, store)
 	completedAt := ordertest.PlacedAt.Add(time.Hour)
 
 	for range 2 {
-		_, err := complete.Handle(ctx, completeorder.Input{OrderID: "order-1", CompletedAt: completedAt})
+		_, err := completeOrder.Handle(ctx, complete.Input{OrderID: "order-1", CompletedAt: completedAt})
 		require.NoError(t, err)
 	}
-	_, err := finalize.Handle(ctx, failorcancelorder.Input{
+	_, err := finalize.Handle(ctx, failorcancel.Input{
 		OrderID: "order-1", Outcome: order.OutcomeCancellation, ReasonCode: "customer_requested", DecidedAt: completedAt,
 	})
 	var invalid order.InvalidTransition

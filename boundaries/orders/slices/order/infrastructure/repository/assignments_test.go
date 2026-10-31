@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 )
@@ -17,10 +17,10 @@ import (
 // transaction, as Sync Order Relationships does.
 func subjectsOf(t *testing.T, store interface {
 	Do(context.Context, func(context.Context) error) error
-	RelationshipSubjects(context.Context, order.ID) (syncorderrelationships.Subjects, error)
-}, id order.ID) syncorderrelationships.Subjects {
+	RelationshipSubjects(context.Context, order.ID) (syncrelationships.Subjects, error)
+}, id order.ID) syncrelationships.Subjects {
 	t.Helper()
-	var subjects syncorderrelationships.Subjects
+	var subjects syncrelationships.Subjects
 	require.NoError(t, store.Do(context.Background(), func(ctx context.Context) error {
 		var err error
 		subjects, err = store.RelationshipSubjects(ctx, id)
@@ -40,7 +40,7 @@ func TestCourierAssignment(t *testing.T) {
 	_, found, err := store.CourierAssignment(ctx, id)
 	require.NoError(t, err)
 	assert.False(t, found)
-	assert.Equal(t, syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}, subjectsOf(t, store, id),
+	assert.Equal(t, syncrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}, subjectsOf(t, store, id),
 		"an Order without assignment has no delivery subject")
 
 	at := time.Date(2026, 10, 25, 13, 0, 0, 0, time.UTC)
@@ -60,7 +60,7 @@ func TestCourierAssignment(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, order.CourierAssignment{DeliveryID: "delivery-1", CourierID: "courier-2", AssignedAt: at, DeliveryVersion: 3}, stored)
-	assert.Equal(t, syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1", DeliveryID: "delivery-1"},
+	assert.Equal(t, syncrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1", DeliveryID: "delivery-1"},
 		subjectsOf(t, store, id))
 
 	err = store.Do(ctx, func(ctx context.Context) error {

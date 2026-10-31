@@ -1,4 +1,4 @@
-// Package scheduledslots implements the placeorder.SlotReservations port on
+// Package scheduledslots implements the place.SlotReservations port on
 // ReserveScheduledSlot of restaurants, called through the internal gateway
 // under the service identity of orders before the Place Order transaction
 // (FR-681, FR-692).
@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 
 	"buf.build/gen/go/nomnom/restaurants/grpc/go/nomnom/restaurants/v1/restaurantsv1grpc"
@@ -39,7 +39,7 @@ type Slots struct {
 	timeout time.Duration
 }
 
-var _ placeorder.SlotReservations = (*Slots)(nil)
+var _ place.SlotReservations = (*Slots)(nil)
 
 // New binds the adapter to the gateway connection; timeout bounds one
 // reservation.
@@ -48,7 +48,7 @@ func New(conn grpc.ClientConnInterface, timeout time.Duration) *Slots {
 }
 
 // Reserve holds the window under the order id; a repeat with the same order
-// id returns the same reservation. A full window is placeorder.SlotUnavailable
+// id returns the same reservation. A full window is place.SlotUnavailable
 // with the alternatives of restaurants.
 func (s *Slots) Reserve(ctx context.Context, restaurantID order.RestaurantID, windowStart time.Time, orderID order.ID) (order.DeliveryWindow, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
@@ -73,7 +73,7 @@ func (s *Slots) Reserve(ctx context.Context, restaurantID order.RestaurantID, wi
 			}
 			alternatives = append(alternatives, converted)
 		}
-		return order.DeliveryWindow{}, placeorder.SlotUnavailable{Alternatives: alternatives}
+		return order.DeliveryWindow{}, place.SlotUnavailable{Alternatives: alternatives}
 	default:
 		return order.DeliveryWindow{}, fmt.Errorf("restaurants.ReserveScheduledSlot %q: %w: no result", restaurantID, ErrInvalidReservation)
 	}
@@ -102,9 +102,9 @@ func mapError(restaurantID order.RestaurantID, err error) error {
 	case code == codes.InvalidArgument:
 		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, usecase.ErrInvalidInput, err)
 	case code == codes.NotFound:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, placeorder.ErrUnknownRestaurant, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, place.ErrUnknownRestaurant, err)
 	case code == codes.FailedPrecondition && reason(err) == ReasonScheduledOrdersUnavailable:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, placeorder.ErrScheduledOrdersUnavailable, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, place.ErrScheduledOrdersUnavailable, err)
 	case code == codes.FailedPrecondition:
 		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, ErrInvalidReservation, err)
 	case code == codes.Canceled || errors.Is(err, context.Canceled):

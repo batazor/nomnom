@@ -12,7 +12,7 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -116,10 +116,10 @@ func TestCustomerPlacesOrderAfterRandomDelay(t *testing.T) {
 	h.random.EXPECT().IntN(2).Return(0).Once()
 	h.keys.EXPECT().NewKey().Return("key-1").Once()
 	h.placementCatalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"tea", "soup"}).
-		Return(placeorder.CatalogSnapshot{
+		Return(place.CatalogSnapshot{
 			MarketID: ordertest.MarketID(t),
 			Currency: "EUR",
-			Items: map[order.MenuItemID]placeorder.CatalogItem{
+			Items: map[order.MenuItemID]place.CatalogItem{
 				"soup": {UnitPrice: ordertest.Money(t, "6.00"), Available: true},
 				"tea":  {UnitPrice: ordertest.Money(t, "2.00"), Available: true},
 			},
@@ -161,10 +161,10 @@ func TestCustomerCancelsPlacedOrderAfterDelay(t *testing.T) {
 	h.random.EXPECT().IntN(2).Return(0).Once()
 	h.keys.EXPECT().NewKey().Return("key-1").Once()
 	h.placementCatalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-		Return(placeorder.CatalogSnapshot{
+		Return(place.CatalogSnapshot{
 			MarketID:     ordertest.MarketID(t),
 			Currency:     "EUR",
-			Items:        map[order.MenuItemID]placeorder.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
+			Items:        map[order.MenuItemID]place.CatalogItem{"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true}},
 			MinimumTotal: ordertest.Money(t, "0"),
 			MaximumTotal: ordertest.Money(t, "1000"),
 		}, nil).Once()
@@ -238,7 +238,7 @@ func TestCustomerContinuesAfterFailedPlacement(t *testing.T) {
 	h.random.EXPECT().IntN(2).Return(0).Once()
 	h.keys.EXPECT().NewKey().Return("key-1").Once()
 	h.placementCatalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("unknown-restaurant"), []order.MenuItemID{"pizza"}).
-		Return(placeorder.CatalogSnapshot{}, fmt.Errorf("%w: %q", placeorder.ErrUnknownRestaurant, "unknown-restaurant")).Once()
+		Return(place.CatalogSnapshot{}, fmt.Errorf("%w: %q", place.ErrUnknownRestaurant, "unknown-restaurant")).Once()
 	h.customer.Tick(ctx, start.Add(2*minDelay))
 	h.catalog.AssertNumberOfCalls(t, "OpenRestaurants", 2)
 	assert.Empty(t, h.placedOrders(), "Place Order refused the unknown restaurant")

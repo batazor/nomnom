@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
+	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -30,8 +30,8 @@ type ReasonCodes []string
 
 // Outcomes cancellation requests: ответ use case и отказ по правилам.
 const (
-	CancellationRequested        = string(requestordercancellation.OutcomeRequested)
-	CancellationAlreadyCancelled = string(requestordercancellation.OutcomeAlreadyCancelled)
+	CancellationRequested        = string(requestcancellation.OutcomeRequested)
+	CancellationAlreadyCancelled = string(requestcancellation.OutcomeAlreadyCancelled)
 	CancellationRejected         = "rejected"
 )
 
@@ -176,11 +176,11 @@ func (m *DomainMetrics) reasonLabel(code string) string {
 // CancellationRequests декорирует Request Order Cancellation: ответ use case —
 // его outcome, отказ по правилам — rejected; технический сбой здесь не
 // считается (он виден в nomnom_usecase_duration_seconds).
-func CancellationRequests(m *DomainMetrics, handle func(context.Context, requestordercancellation.Input) (requestordercancellation.Result, error)) func(context.Context, requestordercancellation.Input) (requestordercancellation.Result, error) {
+func CancellationRequests(m *DomainMetrics, handle func(context.Context, requestcancellation.Input) (requestcancellation.Result, error)) func(context.Context, requestcancellation.Input) (requestcancellation.Result, error) {
 	if m == nil {
 		return handle
 	}
-	return func(ctx context.Context, in requestordercancellation.Input) (requestordercancellation.Result, error) {
+	return func(ctx context.Context, in requestcancellation.Input) (requestcancellation.Result, error) {
 		result, err := handle(ctx, in)
 		outcome := string(result.Outcome)
 		if err != nil {

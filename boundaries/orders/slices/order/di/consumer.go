@@ -4,19 +4,19 @@ import (
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/reject"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/applications/startfulfillment"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -30,9 +30,9 @@ type InboxStore interface {
 	unitofwork.Inbox
 	order.Repository
 	order.CourierAssignments
-	syncorderrelationships.Changes
-	syncorderrelationships.Reader
-	syncorderrelationships.Revisions
+	syncrelationships.Changes
+	syncrelationships.Reader
+	syncrelationships.Revisions
 }
 
 // ConsumerWorkflow — Order Fulfillment Workflow для handlers orders-consumer:
@@ -59,10 +59,10 @@ type Consumer struct {
 func (c Consumer) Handlers(workflow ConsumerWorkflow) ordermessaging.Handlers {
 	store, relationships, uc := c.Store, c.Relationships, c.Telemetry
 	return ordermessaging.Handlers{
-		ConfirmOrder:             telemetry.Instrument(uc, observability.ConfirmOrder, confirmorder.NewHandler(store, store, store, workflow).Handle),
-		RejectOrder:              telemetry.Instrument(uc, observability.RejectOrder, rejectorder.NewHandler(store, store, store, workflow).Handle),
+		ConfirmOrder:             telemetry.Instrument(uc, observability.ConfirmOrder, confirm.NewHandler(store, store, store, workflow).Handle),
+		RejectOrder:              telemetry.Instrument(uc, observability.RejectOrder, reject.NewHandler(store, store, store, workflow).Handle),
 		RecordPreparationStarted: telemetry.Instrument(uc, observability.RecordPreparationStarted, recordpreparationstarted.NewHandler(store, store, store, workflow).Handle),
-		RecordOrderReady:         telemetry.Instrument(uc, observability.RecordOrderReady, recordorderready.NewHandler(store, store, store, workflow).Handle),
+		RecordOrderReady:         telemetry.Instrument(uc, observability.RecordOrderReady, recordready.NewHandler(store, store, store, workflow).Handle),
 		RecordPreparationDelay:   telemetry.Instrument(uc, observability.RecordPreparationDelay, recordpreparationdelay.NewHandler(store, store, store, workflow).Handle),
 		RelayPreparationIssue:    telemetry.Instrument(uc, observability.RelayPreparationIssue, relaypreparationissue.NewHandler(workflow).Handle),
 		RecordCourierAssignment:  telemetry.Instrument(uc, observability.RecordCourierAssignment, recordcourierassignment.NewHandler(store, store, store, workflow, store, store).Handle),
@@ -70,7 +70,7 @@ func (c Consumer) Handlers(workflow ConsumerWorkflow) ordermessaging.Handlers {
 		RecordPickup:             telemetry.Instrument(uc, observability.RecordPickup, recordpickup.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryCompletion: telemetry.Instrument(uc, observability.RecordDeliveryCompletion, recorddeliverycompletion.NewHandler(store, store, store, workflow).Handle),
 		RecordDeliveryFailure:    telemetry.Instrument(uc, observability.RecordDeliveryFailure, recorddeliveryfailure.NewHandler(store, store, store, workflow).Handle),
-		SyncOrderRelationships:   telemetry.Instrument(uc, observability.SyncOrderRelationships, syncorderrelationships.NewHandler(store, store, relationships, store).Handle),
+		SyncOrderRelationships:   telemetry.Instrument(uc, observability.SyncOrderRelationships, syncrelationships.NewHandler(store, store, relationships, store).Handle),
 		StartFulfillment:         telemetry.Instrument(uc, observability.StartFulfillment, startfulfillment.NewHandler(store, store, store, workflow).Handle),
 	}
 }

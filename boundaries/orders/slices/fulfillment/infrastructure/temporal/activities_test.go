@@ -16,10 +16,10 @@ import (
 
 	"nomnom/orders/di"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
-	"nomnom/orders/slices/order/applications/closure/completeorder"
-	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
+	"nomnom/orders/slices/order/applications/closure/complete"
+	"nomnom/orders/slices/order/applications/closure/failorcancel"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
-	"nomnom/orders/slices/order/applications/getfulfillmentorder"
+	"nomnom/orders/slices/order/applications/getforfulfillment"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -34,10 +34,10 @@ func activities(t *testing.T, state order.State) (*temporal.Activities, *reposit
 	require.NoError(t, store.Add(context.Background(), ordertest.New(t, orderID, ordertest.WithState(state))))
 	return &temporal.Activities{
 		Orders: di.NewFulfillmentOrders(&orderdi.FulfillmentModule{
-			GetOrder:      getfulfillmentorder.NewHandler(store),
-			RecordPayment: recordpaymentauthorization.NewHandler(store, store),
-			Complete:      completeorder.NewHandler(store, store, store),
-			Finalize:      failorcancelorder.NewHandler(store, store, store),
+			GetForFulfillment: getforfulfillment.NewHandler(store),
+			RecordPayment:     recordpaymentauthorization.NewHandler(store, store),
+			Complete:          complete.NewHandler(store, store, store),
+			Finalize:          failorcancel.NewHandler(store, store, store),
 		}),
 		Payments:    NewMockPayments(t),
 		Restaurants: NewMockRestaurants(t),

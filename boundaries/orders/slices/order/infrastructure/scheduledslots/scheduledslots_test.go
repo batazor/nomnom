@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/scheduledslots"
 
@@ -81,7 +81,7 @@ func TestReserveFullWindowIsSlotUnavailableWithAlternatives(t *testing.T) {
 
 	_, err := newSlots(t, server).Reserve(context.Background(), "restaurant-1", windowStart, "order-1")
 
-	var unavailable placeorder.SlotUnavailable
+	var unavailable place.SlotUnavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Len(t, unavailable.Alternatives, 1)
 	assert.Equal(t, windowStart.Add(15*time.Minute), unavailable.Alternatives[0].Start())
@@ -97,8 +97,8 @@ func TestReserveMapsErrors(t *testing.T) {
 		want error
 	}{
 		"window off the grid":          {err: status.Error(codes.InvalidArgument, "off the grid"), want: usecase.ErrInvalidInput},
-		"unknown restaurant":           {err: status.Error(codes.NotFound, "no restaurant"), want: placeorder.ErrUnknownRestaurant},
-		"scheduled orders unavailable": {err: scheduledUnavailable.Err(), want: placeorder.ErrScheduledOrdersUnavailable},
+		"unknown restaurant":           {err: status.Error(codes.NotFound, "no restaurant"), want: place.ErrUnknownRestaurant},
+		"scheduled orders unavailable": {err: scheduledUnavailable.Err(), want: place.ErrScheduledOrdersUnavailable},
 		"unknown precondition":         {err: status.Error(codes.FailedPrecondition, "other"), want: scheduledslots.ErrInvalidReservation},
 		"transport":                    {err: status.Error(codes.Unavailable, "down"), want: usecase.ErrDependencyUnavailable},
 	} {

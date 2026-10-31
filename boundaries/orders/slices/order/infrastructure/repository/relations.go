@@ -8,7 +8,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -17,19 +17,19 @@ import (
 // row: Place Order, Record Courier Assignment and Record Courier Release
 // change them under FOR UPDATE and wait for the sync to commit, then record
 // RelationshipsChanged again.
-func (s *Store) RelationshipSubjects(ctx context.Context, orderID order.ID) (syncorderrelationships.Subjects, error) {
+func (s *Store) RelationshipSubjects(ctx context.Context, orderID order.ID) (syncrelationships.Subjects, error) {
 	var (
-		subjects   syncorderrelationships.Subjects
+		subjects   syncrelationships.Subjects
 		deliveryID *string
 	)
 	err := s.queryRow(ctx, psql.Select("customer_id", "restaurant_id", "delivery_id").
 		From("orders").Where(sq.Eq{"id": orderID}).Suffix("FOR SHARE"),
 		&subjects.CustomerID, &subjects.RestaurantID, &deliveryID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return syncorderrelationships.Subjects{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
+		return syncrelationships.Subjects{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, orderID)
 	}
 	if err != nil {
-		return syncorderrelationships.Subjects{}, fmt.Errorf("read relationship subjects of %s: %w", orderID, err)
+		return syncrelationships.Subjects{}, fmt.Errorf("read relationship subjects of %s: %w", orderID, err)
 	}
 	subjects.DeliveryID = deref(deliveryID)
 	return subjects, nil

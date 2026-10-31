@@ -2,20 +2,20 @@ package messaging
 
 import (
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"nomnom/orders/infrastructure/messaging"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/reject"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
@@ -37,8 +37,8 @@ func expectedTime(at *timestamppb.Timestamp) time.Time {
 	return at.AsTime()
 }
 
-func toConfirmOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderAccepted) confirmorder.Input {
-	return confirmorder.Input{
+func toConfirmOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderAccepted) confirm.Input {
+	return confirm.Input{
 		EventID:         e.EventID,
 		OrderID:         order.ID(event.GetOrderId()),
 		OccurredAt:      e.OccurredAt,
@@ -46,16 +46,16 @@ func toConfirmOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderAc
 	}
 }
 
-func toRejectOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderRejected) rejectorder.Input {
-	return rejectorder.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt, Reason: event.GetReason()}
+func toRejectOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderRejected) reject.Input {
+	return reject.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt, Reason: event.GetReason()}
 }
 
 func toRecordPreparationStarted(e messaging.Envelope, event *restaurantsv1.PreparationStarted) recordpreparationstarted.Input {
 	return recordpreparationstarted.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
 }
 
-func toRecordOrderReady(e messaging.Envelope, event *restaurantsv1.RestaurantOrderReady) recordorderready.Input {
-	return recordorderready.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
+func toRecordOrderReady(e messaging.Envelope, event *restaurantsv1.RestaurantOrderReady) recordready.Input {
+	return recordready.Input{EventID: e.EventID, OrderID: order.ID(event.GetOrderId()), OccurredAt: e.OccurredAt}
 }
 
 func toRecordPreparationDelay(e messaging.Envelope, event *restaurantsv1.PreparationDelayed) recordpreparationdelay.Input {
@@ -131,8 +131,8 @@ func toRecordDeliveryFailure(e messaging.Envelope, event *deliveryv1.DeliveryFai
 
 // toSyncOrderRelationships takes only the Order id: the sync reads the rest
 // from the Order.
-func toSyncOrderRelationships(_ messaging.Envelope, event *ordersv1.OrderRelationshipsChanged) syncorderrelationships.Input {
-	return syncorderrelationships.Input{OrderID: order.ID(event.GetOrderId())}
+func toSyncOrderRelationships(_ messaging.Envelope, event *ordersv1.OrderRelationshipsChanged) syncrelationships.Input {
+	return syncrelationships.Input{OrderID: order.ID(event.GetOrderId())}
 }
 
 // toStartFulfillment carries the Delivery Window of a Scheduled Order: the

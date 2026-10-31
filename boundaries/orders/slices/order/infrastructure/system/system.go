@@ -1,5 +1,5 @@
 // Package system provides the process implementations of application.Clock and
-// placeorder.IDGenerator.
+// place.IDGenerator.
 package system
 
 import (

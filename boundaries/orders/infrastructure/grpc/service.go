@@ -10,11 +10,11 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
-	"nomnom/orders/slices/order/applications/getorder"
-	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/closure/requestcancellation"
+	"nomnom/orders/slices/order/applications/get"
+	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/applications/orderdetails"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 	"nomnom/orders/slices/simulator/applications/switchsimulator"
@@ -29,10 +29,10 @@ type SimulatorSwitch interface {
 // OrderHandlers are the order use cases the API serves. The composition root
 // fills them from the assembled order slice.
 type OrderHandlers struct {
-	PlaceOrder               usecase.Handler[placeorder.Input, placeorder.Result]
-	RequestOrderCancellation usecase.Handler[requestordercancellation.Input, requestordercancellation.Result]
-	GetOrder                 usecase.Handler[getorder.Query, orderdetails.View]
-	ListCustomerOrders       usecase.Handler[listcustomerorders.Query, listcustomerorders.Page]
+	PlaceOrder               usecase.Handler[place.Input, place.Result]
+	RequestOrderCancellation usecase.Handler[requestcancellation.Input, requestcancellation.Result]
+	GetOrder                 usecase.Handler[get.Query, orderdetails.View]
+	ListCustomerOrders       usecase.Handler[listforcustomer.Query, listforcustomer.Page]
 }
 
 type Service struct {
@@ -75,7 +75,7 @@ func (s *Service) GetOrder(ctx context.Context, request *ordersv1.GetOrderReques
 	if err != nil {
 		return nil, transportError(err)
 	}
-	view, err := s.module.GetOrder.Handle(ctx, getorder.Query{
+	view, err := s.module.GetOrder.Handle(ctx, get.Query{
 		Subject: subject,
 		OrderID: order.ID(request.GetOrderId()),
 	})
@@ -90,7 +90,7 @@ func (s *Service) ListCustomerOrders(ctx context.Context, request *ordersv1.List
 	if err != nil {
 		return nil, transportError(err)
 	}
-	page, err := s.module.ListCustomerOrders.Handle(ctx, listcustomerorders.Query{
+	page, err := s.module.ListCustomerOrders.Handle(ctx, listforcustomer.Query{
 		Subject:    subject,
 		CustomerID: order.CustomerID(request.GetCustomerId()),
 		MarketID:   request.GetMarketId(),
@@ -117,9 +117,9 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 	if err != nil {
 		return nil, transportError(err)
 	}
-	items := make([]placeorder.ItemInput, 0, len(request.GetItems()))
+	items := make([]place.ItemInput, 0, len(request.GetItems()))
 	for _, item := range request.GetItems() {
-		items = append(items, placeorder.ItemInput{MenuItemID: order.MenuItemID(item.GetMenuItemId()), Quantity: int(item.GetQuantity())})
+		items = append(items, place.ItemInput{MenuItemID: order.MenuItemID(item.GetMenuItemId()), Quantity: int(item.GetQuantity())})
 	}
 	var windowStart time.Time
 	if request.GetDeliveryWindowStart() != nil {
@@ -128,7 +128,7 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 		}
 		windowStart = request.GetDeliveryWindowStart().AsTime()
 	}
-	result, err := s.module.PlaceOrder.Handle(ctx, placeorder.Input{
+	result, err := s.module.PlaceOrder.Handle(ctx, place.Input{
 		Subject:             subject,
 		IdempotencyKey:      request.GetIdempotencyKey(),
 		RestaurantID:        order.RestaurantID(request.GetRestaurantId()),
@@ -174,7 +174,7 @@ func (s *Service) RequestOrderCancellation(ctx context.Context, request *ordersv
 	if err != nil {
 		return nil, transportError(err)
 	}
-	result, err := s.module.RequestOrderCancellation.Handle(ctx, requestordercancellation.Input{
+	result, err := s.module.RequestOrderCancellation.Handle(ctx, requestcancellation.Input{
 		Subject:   subject,
 		OrderID:   order.ID(request.GetOrderId()),
 		RequestID: request.GetRequestId(),
@@ -186,11 +186,11 @@ func (s *Service) RequestOrderCancellation(ctx context.Context, request *ordersv
 	return &ordersv1.RequestOrderCancellationResponse{Outcome: cancellationOutcome(result.Outcome)}, nil
 }
 
-func cancellationOutcome(outcome requestordercancellation.Outcome) ordersv1.CancellationRequestOutcome {
+func cancellationOutcome(outcome requestcancellation.Outcome) ordersv1.CancellationRequestOutcome {
 	switch outcome {
-	case requestordercancellation.OutcomeRequested:
+	case requestcancellation.OutcomeRequested:
 		return ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_REQUESTED
-	case requestordercancellation.OutcomeAlreadyCancelled:
+	case requestcancellation.OutcomeAlreadyCancelled:
 		return ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_ALREADY_CANCELLED
 	default:
 		return ordersv1.CancellationRequestOutcome_CANCELLATION_REQUEST_OUTCOME_UNSPECIFIED
@@ -263,7 +263,7 @@ func expectedTime(at time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(at)
 }
 
-func orderSummary(entry listcustomerorders.Entry) *ordersv1.OrderSummary {
+func orderSummary(entry listforcustomer.Entry) *ordersv1.OrderSummary {
 	return &ordersv1.OrderSummary{
 		OrderId:      string(entry.OrderID),
 		RestaurantId: string(entry.RestaurantID),

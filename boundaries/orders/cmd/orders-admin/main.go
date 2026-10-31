@@ -30,7 +30,7 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
@@ -226,7 +226,7 @@ func resync(ctx context.Context, db database.Config, spice config.SpiceDBConfig)
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	sync := syncorderrelationships.NewHandler(store, store, spicedb.NewAuthorizer(client, nil, spice.Timeout), store)
+	sync := syncrelationships.NewHandler(store, store, spicedb.NewAuthorizer(client, nil, spice.Timeout), store)
 
 	synced := 0
 	var after order.ID
@@ -236,7 +236,7 @@ func resync(ctx context.Context, db database.Config, spice config.SpiceDBConfig)
 			return err
 		}
 		for _, id := range ids {
-			if _, err := sync.Handle(ctx, syncorderrelationships.Input{OrderID: id}); err != nil {
+			if _, err := sync.Handle(ctx, syncrelationships.Input{OrderID: id}); err != nil {
 				return fmt.Errorf("resync after %d orders: %w", synced, err)
 			}
 			synced++

@@ -9,7 +9,7 @@ import (
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/infrastructure/messaging"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -32,7 +32,7 @@ type RelationshipChanges struct {
 	now   func() time.Time
 }
 
-var _ syncorderrelationships.Changes = RelationshipChanges{}
+var _ syncrelationships.Changes = RelationshipChanges{}
 
 func NewRelationshipChanges(store VersionStore) RelationshipChanges {
 	return RelationshipChanges{store: store, now: time.Now}

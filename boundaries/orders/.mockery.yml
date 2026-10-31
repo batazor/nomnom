@@ -80,7 +80,7 @@ packages:
             filename: mocks_test.go
             pkgname: grpcadapter_test
   # Ports of the order slice, generated into each consumer's tests.
-  nomnom/orders/slices/order/applications/getorder:
+  nomnom/orders/slices/order/applications/get:
     config:
       filename: "mocks_{{.SrcPackageName}}_test.go"
     interfaces:
@@ -88,15 +88,15 @@ packages:
         configs:
           - dir: infrastructure/grpc
             pkgname: grpcadapter_test
-          - dir: slices/order/applications/getorder
-            pkgname: getorder_test
-          - dir: slices/order/applications/listcustomerorders
-            pkgname: listcustomerorders_test
-          - dir: slices/order/applications/closure/requestordercancellation
-            pkgname: requestordercancellation_test
+          - dir: slices/order/applications/get
+            pkgname: get_test
+          - dir: slices/order/applications/listforcustomer
+            pkgname: listforcustomer_test
+          - dir: slices/order/applications/closure/requestcancellation
+            pkgname: requestcancellation_test
           - dir: slices/simulator/applications/customersimulator
             pkgname: customersimulator_test
-  nomnom/orders/slices/order/applications/placeorder:
+  nomnom/orders/slices/order/applications/place:
     config:
       filename: "mocks_{{.SrcPackageName}}_test.go"
     interfaces:
@@ -104,22 +104,22 @@ packages:
         configs:
           - dir: infrastructure/grpc
             pkgname: grpcadapter_test
-          - dir: slices/order/applications/placeorder
+          - dir: slices/order/applications/place
             filename: mocks_test.go
-            pkgname: placeorder_test
+            pkgname: place_test
           - dir: slices/simulator/applications/customersimulator
             pkgname: customersimulator_test
             structname: MockPlacementCatalog
       IdempotencyKeys:
         config:
-          dir: slices/order/applications/placeorder
+          dir: slices/order/applications/place
           filename: mocks_test.go
-          pkgname: placeorder_test
+          pkgname: place_test
       SlotReservations:
         configs:
-          - dir: slices/order/applications/placeorder
+          - dir: slices/order/applications/place
             filename: mocks_test.go
-            pkgname: placeorder_test
+            pkgname: place_test
           - dir: infrastructure/grpc
             pkgname: grpcadapter_test
   nomnom/orders/slices/order/applications/fulfillment:
@@ -130,14 +130,14 @@ packages:
         configs:
           - dir: infrastructure/grpc
             pkgname: grpcadapter_test
-          - dir: slices/order/applications/closure/requestordercancellation
-            pkgname: requestordercancellation_test
+          - dir: slices/order/applications/closure/requestcancellation
+            pkgname: requestcancellation_test
           - dir: slices/simulator/applications/customersimulator
             pkgname: customersimulator_test
       Notifier:
         configs:
-          - dir: slices/order/applications/fulfillmentsteps/confirmorder
-            pkgname: confirmorder_test
+          - dir: slices/order/applications/fulfillmentsteps/confirm
+            pkgname: confirm_test
           - dir: slices/order/applications/fulfillmentsteps/recordcourierassignment
             pkgname: recordcourierassignment_test
           - dir: slices/order/applications/recordcourierrelease
@@ -146,16 +146,16 @@ packages:
             pkgname: recorddeliverycompletion_test
           - dir: slices/order/applications/fulfillmentsteps/recorddeliveryfailure
             pkgname: recorddeliveryfailure_test
-          - dir: slices/order/applications/fulfillmentsteps/recordorderready
-            pkgname: recordorderready_test
+          - dir: slices/order/applications/fulfillmentsteps/recordready
+            pkgname: recordready_test
           - dir: slices/order/applications/fulfillmentsteps/recordpickup
             pkgname: recordpickup_test
           - dir: slices/order/applications/recordpreparationdelay
             pkgname: recordpreparationdelay_test
           - dir: slices/order/applications/fulfillmentsteps/recordpreparationstarted
             pkgname: recordpreparationstarted_test
-          - dir: slices/order/applications/fulfillmentsteps/rejectorder
-            pkgname: rejectorder_test
+          - dir: slices/order/applications/fulfillmentsteps/reject
+            pkgname: reject_test
           - dir: slices/order/applications/relaypreparationissue
             pkgname: relaypreparationissue_test
           - dir: slices/order/di
@@ -186,7 +186,7 @@ packages:
           - dir: slices/fulfillment/infrastructure/temporal
             filename: mocks_planschedule_test.go
             pkgname: temporal_test
-  nomnom/orders/slices/order/applications/syncorderrelationships:
+  nomnom/orders/slices/order/applications/syncrelationships:
     config:
       filename: mocks_test.go
     interfaces:
@@ -208,31 +208,31 @@ packages:
     interfaces:
       Repository:
         configs:
-          - dir: slices/order/applications/fulfillmentsteps/confirmorder
-            pkgname: confirmorder_test
+          - dir: slices/order/applications/fulfillmentsteps/confirm
+            pkgname: confirm_test
           - dir: slices/order/applications/fulfillmentsteps/recordcourierassignment
             pkgname: recordcourierassignment_test
           - dir: slices/order/applications/fulfillmentsteps/recorddeliverycompletion
             pkgname: recorddeliverycompletion_test
           - dir: slices/order/applications/fulfillmentsteps/recorddeliveryfailure
             pkgname: recorddeliveryfailure_test
-          - dir: slices/order/applications/fulfillmentsteps/recordorderready
-            pkgname: recordorderready_test
+          - dir: slices/order/applications/fulfillmentsteps/recordready
+            pkgname: recordready_test
           - dir: slices/order/applications/fulfillmentsteps/recordpickup
             pkgname: recordpickup_test
           - dir: slices/order/applications/recordpreparationdelay
             pkgname: recordpreparationdelay_test
           - dir: slices/order/applications/fulfillmentsteps/recordpreparationstarted
             pkgname: recordpreparationstarted_test
-          - dir: slices/order/applications/fulfillmentsteps/rejectorder
-            pkgname: rejectorder_test
+          - dir: slices/order/applications/fulfillmentsteps/reject
+            pkgname: reject_test
   nomnom/orders/slices/order/applications/orderdetails:
     interfaces:
       CancellationPolicy:
         config:
-          dir: slices/order/applications/getorder
+          dir: slices/order/applications/get
           filename: mocks_test.go
-          pkgname: getorder_test
+          pkgname: get_test
   nomnom/orders/slices/order/infrastructure/cancellationpolicy:
     interfaces:
       Policy:

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -49,7 +49,7 @@ func TestAcceptance(t *testing.T) {
 					}).
 					Return(nil).
 					Once()
-				_, err := confirmorder.NewHandler(store, store, store, workflow).Handle(ctx, confirmorder.Input{
+				_, err := confirm.NewHandler(store, store, store, workflow).Handle(ctx, confirm.Input{
 					EventID: "accepted", OrderID: "order-1", OccurredAt: occurredAt, ExpectedReadyAt: readyAt,
 				})
 				require.NoError(godog.T(ctx), err)

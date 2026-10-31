@@ -24,7 +24,7 @@ import (
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -138,7 +138,7 @@ func (a *Authorizer) check(ctx context.Context, check authz.AccessCheck) error {
 // wanted and DELETEs the others in one atomic WriteRelationships, and returns
 // its ZedToken. The result depends only on subjects, so a repeated or late
 // sync is idempotent.
-func (a *Authorizer) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncorderrelationships.Subjects) (authz.AuthorizationRevision, error) {
+func (a *Authorizer) SyncOrderRelationships(ctx context.Context, orderID order.ID, subjects syncrelationships.Subjects) (authz.AuthorizationRevision, error) {
 	resource := &v1.ObjectReference{ObjectType: resourceOrder, ObjectId: string(orderID)}
 	wanted := map[string]*v1.SubjectReference{
 		relationCustomer:   objectSubject(subjectUser, string(subjects.CustomerID)),

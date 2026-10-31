@@ -8,12 +8,12 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrIdempotencyKeyTaken: the key already identifies another Order.
-var ErrIdempotencyKeyTaken = placeorder.ErrIdempotencyKeyTaken
+var ErrIdempotencyKeyTaken = place.ErrIdempotencyKeyTaken
 
 func (s *Store) FindOrder(ctx context.Context, customerID order.CustomerID, key string) (order.ID, bool, error) {
 	var id order.ID

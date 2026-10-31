@@ -14,7 +14,7 @@ import (
 	"nomnom/orders/di"
 	ports "nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/infrastructure/temporal"
-	"nomnom/orders/slices/order/applications/getfulfillmentorder"
+	"nomnom/orders/slices/order/applications/getforfulfillment"
 	"nomnom/orders/slices/order/applications/planschedule"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
@@ -34,7 +34,7 @@ func scheduledActivities(t *testing.T) (*temporal.Activities, *MockRestaurants, 
 	delivery := NewMockDeliveryDuration(t)
 	return &temporal.Activities{
 		Orders: di.NewFulfillmentOrders(&orderdi.FulfillmentModule{
-			GetOrder: getfulfillmentorder.NewHandler(store),
+			GetForFulfillment: getforfulfillment.NewHandler(store),
 			Plan: planschedule.NewHandler(store, preparation, delivery, order.SchedulePolicy{
 				PreparationBuffer: 5 * time.Minute, ReplanLead: 30 * time.Minute,
 			}),

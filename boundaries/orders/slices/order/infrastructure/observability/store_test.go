@@ -11,7 +11,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"nomnom/orders/slices/order/applications/closure/completeorder"
+	"nomnom/orders/slices/order/applications/closure/complete"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -29,10 +29,10 @@ func TestObservedStoreCountsRetriedCompletionOnce(t *testing.T) {
 	mem := repositorytest.Open(t)
 	require.NoError(t, mem.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateDelivered))))
 	store := observability.ObservedStore{UnitOfWork: mem, Outbox: mem, Metrics: observability.NewDomainMetrics(nil)}
-	handler := completeorder.NewHandler(store, mem, store)
+	handler := complete.NewHandler(store, mem, store)
 
 	for range 2 {
-		_, err := handler.Handle(context.Background(), completeorder.Input{OrderID: "order-1", CompletedAt: ordertest.PlacedAt.Add(time.Hour)})
+		_, err := handler.Handle(context.Background(), complete.Input{OrderID: "order-1", CompletedAt: ordertest.PlacedAt.Add(time.Hour)})
 		require.NoError(t, err)
 	}
 

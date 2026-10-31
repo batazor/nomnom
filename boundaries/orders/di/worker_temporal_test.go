@@ -17,11 +17,11 @@ import (
 	fulfillmentdi "nomnom/orders/slices/fulfillment/di"
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordready"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -105,9 +105,9 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 			20*time.Second, 100*time.Millisecond, "activity %s did not complete", name)
 	}
 	type signal func(ctx context.Context, eventID string) error
-	confirm := confirmorder.NewHandler(store, store, store, port)
+	confirmOrder := confirm.NewHandler(store, store, store, port)
 	assign := recordcourierassignment.NewHandler(store, store, store, port, store, orderdi.NewProcessStore(store, nil))
-	ready := recordorderready.NewHandler(store, store, store, port)
+	ready := recordready.NewHandler(store, store, store, port)
 	pickup := recordpickup.NewHandler(store, store, store, port)
 	complete := recorddeliverycompletion.NewHandler(store, store, store, port)
 	// Inbox в PostgreSQL переживает прогоны: event_id уникален для заказа, иначе
@@ -118,7 +118,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 	require.NoError(t, port.Start(ctx, fulfillment.StartRequest{OrderID: orderID, RestaurantID: "restaurant-1"}))
 	waitActivity(fulfillmenttemporal.ActivityRequestRestaurantOrder)
 	send("accepted", func(ctx context.Context, id string) error {
-		_, err := confirm.Handle(ctx, confirmorder.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		_, err := confirmOrder.Handle(ctx, confirm.Input{EventID: id, OrderID: orderID, OccurredAt: now})
 		return err
 	})
 	waitActivity(fulfillmenttemporal.ActivityCreateDelivery)
@@ -127,7 +127,7 @@ func TestWorkerCompletesOrderAgainstTemporal(t *testing.T) {
 		return err
 	})
 	send("ready", func(ctx context.Context, id string) error {
-		_, err := ready.Handle(ctx, recordorderready.Input{EventID: id, OrderID: orderID, OccurredAt: now})
+		_, err := ready.Handle(ctx, recordready.Input{EventID: id, OrderID: orderID, OccurredAt: now})
 		return err
 	})
 	send("picked-up", func(ctx context.Context, id string) error {

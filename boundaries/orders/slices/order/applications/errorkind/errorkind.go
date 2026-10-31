@@ -7,7 +7,7 @@
 // same way (FR-545).
 //
 // The function lives in the slice rather than in pkg/usecase: the use
-// case sentinels it reads (placeorder, fulfillment) import pkg/usecase.
+// case sentinels it reads (place, fulfillment) import pkg/usecase.
 package errorkind
 
 import (
@@ -16,7 +16,7 @@ import (
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -30,7 +30,7 @@ func Classify(err error) usecase.ErrorKind {
 		guard             order.GuardFailed
 		notOrderable      order.NotOrderable
 		notCancellable    order.CancellationNotAllowed
-		slotUnavailable   placeorder.SlotUnavailable
+		slotUnavailable   place.SlotUnavailable
 	)
 	switch {
 	case errors.Is(err, usecase.ErrDependencyUnavailable), errors.Is(err, fulfillment.ErrWorkflowNotFound):
@@ -41,14 +41,14 @@ func Classify(err error) usecase.ErrorKind {
 		errors.As(err, &notOrderable), errors.As(err, &notCancellable),
 		errors.Is(err, order.ErrOrderRequiresItems), errors.Is(err, order.ErrDuplicateMenuItem),
 		errors.Is(err, order.ErrInvalidCancellationReason),
-		errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders), errors.Is(err, placeorder.ErrPremiumUnavailable),
-		errors.As(err, &slotUnavailable), errors.Is(err, placeorder.ErrScheduledOrdersUnavailable),
+		errors.Is(err, place.ErrRestaurantNotAcceptingOrders), errors.Is(err, place.ErrPremiumUnavailable),
+		errors.As(err, &slotUnavailable), errors.Is(err, place.ErrScheduledOrdersUnavailable),
 		errors.Is(err, order.ErrNotScheduled),
 		errors.Is(err, fulfillment.ErrCancellationRefused):
 		return usecase.KindDomainRule
 	case errors.Is(err, authz.ErrPermissionDenied):
 		return usecase.KindPermission
-	case errors.Is(err, order.ErrOrderNotFound), errors.Is(err, placeorder.ErrUnknownRestaurant):
+	case errors.Is(err, order.ErrOrderNotFound), errors.Is(err, place.ErrUnknownRestaurant):
 		return usecase.KindNotFound
 	case errors.Is(err, order.ErrOrderAlreadyExists):
 		return usecase.KindAlreadyExists

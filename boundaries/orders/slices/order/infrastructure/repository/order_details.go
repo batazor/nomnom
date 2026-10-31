@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -261,23 +261,23 @@ func decodeDetails(id order.ID, customerID order.CustomerID, marketID string, pl
 // ListCustomerOrders pages the projection of one Customer in one Market by
 // (placed_at desc, order_id desc) with a keyset cursor, on the index
 // order_details_customer_market_history.
-func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorders.PageRequest) (listcustomerorders.Rows, error) {
+func (s *Store) ListCustomerOrders(ctx context.Context, request listforcustomer.PageRequest) (listforcustomer.Rows, error) {
 	query := psql.Select("order_id", "placed_at", "details").
 		From("order_details").Where(sq.Eq{"customer_id": request.CustomerID, "market_id": request.MarketID.String()})
 	if request.Cursor != "" {
 		placedAt, id, err := decodeCursor(request.Cursor)
 		if err != nil {
-			return listcustomerorders.Rows{}, usecase.InvalidInput("cursor", "is malformed")
+			return listforcustomer.Rows{}, usecase.InvalidInput("cursor", "is malformed")
 		}
 		query = query.Where("(placed_at, order_id) < (?, ?)", placedAt, id)
 	}
 	rows, err := s.query(ctx, query.OrderBy("placed_at DESC", "order_id DESC").Suffix("LIMIT ?", request.Limit+1))
 	if err != nil {
-		return listcustomerorders.Rows{}, fmt.Errorf("list orders of %s: %w", request.CustomerID, err)
+		return listforcustomer.Rows{}, fmt.Errorf("list orders of %s: %w", request.CustomerID, err)
 	}
 	defer rows.Close()
 
-	page := listcustomerorders.Rows{Rows: []listcustomerorders.Row{}}
+	page := listforcustomer.Rows{Rows: []listforcustomer.Row{}}
 	for rows.Next() {
 		var (
 			id       order.ID
@@ -285,16 +285,16 @@ func (s *Store) ListCustomerOrders(ctx context.Context, request listcustomerorde
 			raw      []byte
 		)
 		if err := rows.Scan(&id, &placedAt, &raw); err != nil {
-			return listcustomerorders.Rows{}, fmt.Errorf("scan order details: %w", err)
+			return listforcustomer.Rows{}, fmt.Errorf("scan order details: %w", err)
 		}
 		details, err := decodeDetails(id, request.CustomerID, request.MarketID.String(), placedAt, raw)
 		if err != nil {
-			return listcustomerorders.Rows{}, err
+			return listforcustomer.Rows{}, err
 		}
-		page.Rows = append(page.Rows, listcustomerorders.Row{Details: details, Cursor: encodeCursor(details.PlacedAt, string(id))})
+		page.Rows = append(page.Rows, listforcustomer.Row{Details: details, Cursor: encodeCursor(details.PlacedAt, string(id))})
 	}
 	if err := rows.Err(); err != nil {
-		return listcustomerorders.Rows{}, err
+		return listforcustomer.Rows{}, err
 	}
 	if len(page.Rows) > request.Limit {
 		page.Rows = page.Rows[:request.Limit]

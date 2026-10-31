@@ -11,7 +11,7 @@ Kafka → Subscriber → EventGroupProcessor → watermill_handler → mapper �
 
 | Handler group | Топик | Событие → use case |
 | --- | --- | --- |
-| `orders.restaurant-order-events` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → `confirmorder`; `RestaurantOrderRejected` → `rejectorder`; `PreparationStarted` → `recordpreparationstarted`; `RestaurantOrderReady` → `recordorderready`; `PreparationDelayed` → `recordpreparationdelay`; `PreparationFailed` → `relaypreparationissue`; `RestaurantOrderCancelled` — подтверждается без действия: отмену запросил сам workflow |
+| `orders.restaurant-order-events` | `restaurants.v1.restaurant-order-events` | `RestaurantOrderAccepted` → `order/confirm`; `RestaurantOrderRejected` → `order/reject`; `PreparationStarted` → `recordpreparationstarted`; `RestaurantOrderReady` → `order/recordready`; `PreparationDelayed` → `recordpreparationdelay`; `PreparationFailed` → `relaypreparationissue`; `RestaurantOrderCancelled` — подтверждается без действия: отмену запросил сам workflow |
 | `orders.delivery-events` | `delivery.v1.delivery-events` | `CourierAssignedToDelivery` → `recordcourierassignment`; `CourierUnassignedFromDelivery`, `DeliveryCancelled` → `recordcourierrelease`; `DeliveryPickedUp` → `recordpickup`; `DeliveryCompleted` → `recorddeliverycompletion`; `DeliveryFailed` → `recorddeliveryfailure` |
 | `orders.order-events` | `orders.v1.order-events` (собственный, [ADR 5](../../../../docs/adr/0005-order-fulfillment-orchestration.md#старт)) | `OrderPlaced` → `startfulfillment` (`SignalWithStart` workflow; ошибка Temporal — transient); `OrderCompleted`, `OrderCancelled` — явный no-op ack, иначе `rejectUnknownEvents` отправил бы их в `orders.v1.order-events.dlq` |
 

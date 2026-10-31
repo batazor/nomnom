@@ -8,11 +8,11 @@ import (
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/orders"
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
-	"nomnom/orders/slices/order/applications/closure/completeorder"
-	"nomnom/orders/slices/order/applications/closure/failorcancelorder"
+	"nomnom/orders/slices/order/applications/closure/complete"
+	"nomnom/orders/slices/order/applications/closure/failorcancel"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
-	"nomnom/orders/slices/order/applications/getfulfillmentorder"
+	"nomnom/orders/slices/order/applications/getforfulfillment"
 	"nomnom/orders/slices/order/applications/planschedule"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
@@ -33,7 +33,7 @@ func NewFulfillmentOrders(module *orderdi.FulfillmentModule) orders.Orders {
 }
 
 func (o FulfillmentOrders) Get(ctx context.Context, orderID string) (orders.Order, error) {
-	view, err := o.module.GetOrder.Handle(ctx, getfulfillmentorder.Query{OrderID: order.ID(orderID)})
+	view, err := o.module.GetForFulfillment.Handle(ctx, getforfulfillment.Query{OrderID: order.ID(orderID)})
 	if err != nil {
 		return orders.Order{}, portError(err)
 	}
@@ -63,7 +63,7 @@ func (o FulfillmentOrders) RecordPaymentAuthorization(ctx context.Context, order
 }
 
 func (o FulfillmentOrders) Complete(ctx context.Context, orderID string, completedAt time.Time) error {
-	_, err := o.module.Complete.Handle(ctx, completeorder.Input{OrderID: order.ID(orderID), CompletedAt: completedAt})
+	_, err := o.module.Complete.Handle(ctx, complete.Input{OrderID: order.ID(orderID), CompletedAt: completedAt})
 	return portError(err)
 }
 
@@ -72,7 +72,7 @@ func (o FulfillmentOrders) FailOrCancel(ctx context.Context, decision orders.Fin
 	if err != nil {
 		return err
 	}
-	_, err = o.module.Finalize.Handle(ctx, failorcancelorder.Input{
+	_, err = o.module.Finalize.Handle(ctx, failorcancel.Input{
 		OrderID:    order.ID(decision.OrderID),
 		Outcome:    outcome,
 		ReasonCode: decision.ReasonCode,

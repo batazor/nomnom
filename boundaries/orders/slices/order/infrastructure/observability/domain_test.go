@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
+	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
@@ -135,17 +135,17 @@ func TestCancellationsSplitByOutcomeWithClosedReasons(t *testing.T) {
 func TestCancellationRequestsCountAnswersAndRejectionsNotFailures(t *testing.T) {
 	reader := installMeter(t)
 	m := observability.NewDomainMetrics(testReasons)
-	answer := func(result requestordercancellation.Result, err error) {
-		handle := observability.CancellationRequests(m, func(context.Context, requestordercancellation.Input) (requestordercancellation.Result, error) {
+	answer := func(result requestcancellation.Result, err error) {
+		handle := observability.CancellationRequests(m, func(context.Context, requestcancellation.Input) (requestcancellation.Result, error) {
 			return result, err
 		})
-		_, _ = handle(context.Background(), requestordercancellation.Input{})
+		_, _ = handle(context.Background(), requestcancellation.Input{})
 	}
 
-	answer(requestordercancellation.Result{Outcome: requestordercancellation.OutcomeRequested}, nil)
-	answer(requestordercancellation.Result{Outcome: requestordercancellation.OutcomeAlreadyCancelled}, nil)
-	answer(requestordercancellation.Result{}, authz.FailClosed(errors.New("denied")))
-	answer(requestordercancellation.Result{}, errors.New("connection reset"))
+	answer(requestcancellation.Result{Outcome: requestcancellation.OutcomeRequested}, nil)
+	answer(requestcancellation.Result{Outcome: requestcancellation.OutcomeAlreadyCancelled}, nil)
+	answer(requestcancellation.Result{}, authz.FailClosed(errors.New("denied")))
+	answer(requestcancellation.Result{}, errors.New("connection reset"))
 
 	assert.Equal(t, map[string]int64{"requested": 1, "already_cancelled": 1, "rejected": 1},
 		sums(t, collect(t, reader)["nomnom.orders.cancellation_requests"], "nomnom.outcome"))

@@ -11,7 +11,7 @@ import (
 
 	"nomnom/orders/pkg/config/database"
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/listcustomerorders"
+	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -42,24 +42,24 @@ func TestOrderDetailsReads(t *testing.T) {
 	_, err = store.OrderDetails(ctx, "missing")
 	require.ErrorIs(t, err, order.ErrOrderNotFound)
 
-	first, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2})
+	first, err := store.ListCustomerOrders(ctx, listforcustomer.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2})
 	require.NoError(t, err)
 	require.Len(t, first.Rows, 2)
 	assert.Equal(t, []order.ID{ids[2], ids[1]}, []order.ID{first.Rows[0].Details.OrderID, first.Rows[1].Details.OrderID})
 	require.NotEmpty(t, first.NextCursor)
 	assert.Equal(t, first.NextCursor, first.Rows[1].Cursor, "the last order continues the page")
 
-	resumed, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: first.Rows[0].Cursor})
+	resumed, err := store.ListCustomerOrders(ctx, listforcustomer.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: first.Rows[0].Cursor})
 	require.NoError(t, err)
 	assert.Equal(t, []order.ID{ids[1], ids[0]}, []order.ID{resumed.Rows[0].Details.OrderID, resumed.Rows[1].Details.OrderID}, "any order cursor resumes after it")
 
-	second, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: first.NextCursor})
+	second, err := store.ListCustomerOrders(ctx, listforcustomer.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: first.NextCursor})
 	require.NoError(t, err)
 	require.Len(t, second.Rows, 1)
 	assert.Equal(t, ids[0], second.Rows[0].Details.OrderID)
 	assert.Empty(t, second.NextCursor)
 
-	_, err = store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: "%%%"})
+	_, err = store.ListCustomerOrders(ctx, listforcustomer.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 2, Cursor: "%%%"})
 	require.ErrorIs(t, err, usecase.ErrInvalidInput)
 }
 
@@ -75,13 +75,13 @@ func TestListCustomerOrdersFiltersByMarket(t *testing.T) {
 	hamburgMarket, err := vo.NewMarketID("hamburg")
 	require.NoError(t, err)
 
-	page, err := store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: hamburgMarket, Limit: 10})
+	page, err := store.ListCustomerOrders(ctx, listforcustomer.PageRequest{CustomerID: customer, MarketID: hamburgMarket, Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, page.Rows, 1)
 	assert.Equal(t, hamburg, page.Rows[0].Details.OrderID)
 	assert.Equal(t, hamburgMarket, page.Rows[0].Details.MarketID)
 
-	page, err = store.ListCustomerOrders(ctx, listcustomerorders.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 10})
+	page, err = store.ListCustomerOrders(ctx, listforcustomer.PageRequest{CustomerID: customer, MarketID: ordertest.MarketID(t), Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, page.Rows, 1)
 	assert.Equal(t, berlin, page.Rows[0].Details.OrderID)

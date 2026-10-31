@@ -20,19 +20,19 @@ import (
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/reject"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/applications/startfulfillment"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/infrastructure/messaging/outbound"
 )
 
@@ -45,10 +45,10 @@ const (
 
 // Handlers are the application handlers the order slice consumes events with.
 type Handlers struct {
-	ConfirmOrder             usecase.Handler[confirmorder.Input, confirmorder.Result]
-	RejectOrder              usecase.Handler[rejectorder.Input, rejectorder.Result]
+	ConfirmOrder             usecase.Handler[confirm.Input, confirm.Result]
+	RejectOrder              usecase.Handler[reject.Input, reject.Result]
 	RecordPreparationStarted usecase.Handler[recordpreparationstarted.Input, recordpreparationstarted.Result]
-	RecordOrderReady         usecase.Handler[recordorderready.Input, recordorderready.Result]
+	RecordOrderReady         usecase.Handler[recordready.Input, recordready.Result]
 	RecordPreparationDelay   usecase.Handler[recordpreparationdelay.Input, recordpreparationdelay.Result]
 	RelayPreparationIssue    usecase.Handler[relaypreparationissue.Input, relaypreparationissue.Result]
 	RecordCourierAssignment  usecase.Handler[recordcourierassignment.Input, recordcourierassignment.Result]
@@ -56,7 +56,7 @@ type Handlers struct {
 	RecordPickup             usecase.Handler[recordpickup.Input, recordpickup.Result]
 	RecordDeliveryCompletion usecase.Handler[recorddeliverycompletion.Input, recorddeliverycompletion.Result]
 	RecordDeliveryFailure    usecase.Handler[recorddeliveryfailure.Input, recorddeliveryfailure.Result]
-	SyncOrderRelationships   usecase.Handler[syncorderrelationships.Input, syncorderrelationships.Result]
+	SyncOrderRelationships   usecase.Handler[syncrelationships.Input, syncrelationships.Result]
 	StartFulfillment         usecase.Handler[startfulfillment.Input, startfulfillment.Result]
 }
 
@@ -148,13 +148,13 @@ func acknowledge[E any]() cqrs.GroupEventHandler {
 // isDuplicate reports an Inbox duplicate of the use cases with an Inbox.
 func isDuplicate(out any) bool {
 	switch r := out.(type) {
-	case confirmorder.Result:
+	case confirm.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate
-	case rejectorder.Result:
+	case reject.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordpreparationstarted.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate
-	case recordorderready.Result:
+	case recordready.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate
 	case recordpreparationdelay.Result:
 		return r.Outcome == fulfillment.OutcomeDuplicate

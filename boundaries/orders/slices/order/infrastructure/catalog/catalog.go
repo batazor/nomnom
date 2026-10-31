@@ -1,4 +1,4 @@
-// Package catalog implements the placeorder.Catalog port on the public read
+// Package catalog implements the place.Catalog port on the public read
 // RPCs GetRestaurant and GetMenu of restaurants, called through the internal
 // gateway before the Place Order transaction. Order total limits are not
 // published by restaurants yet and come from configuration (placeholders).
@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 
@@ -48,13 +48,13 @@ type Catalog struct {
 	timeout time.Duration
 }
 
-var _ placeorder.Catalog = (*Catalog)(nil)
+var _ place.Catalog = (*Catalog)(nil)
 
 func New(conn grpc.ClientConnInterface, limits Limits, timeout time.Duration) *Catalog {
 	return &Catalog{client: restaurantsv1grpc.NewRestaurantsServiceClient(conn), limits: limits, timeout: timeout}
 }
 
-func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (placeorder.CatalogSnapshot, error) {
+func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (place.CatalogSnapshot, error) {
 	if c.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
@@ -63,34 +63,34 @@ func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID,
 
 	restaurant, err := c.client.GetRestaurant(ctx, &restaurantsv1.GetRestaurantRequest{RestaurantId: string(restaurantID)})
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, mapError("restaurants.GetRestaurant", restaurantID, err)
+		return place.CatalogSnapshot{}, mapError("restaurants.GetRestaurant", restaurantID, err)
 	}
 	// The Order is placed in the Market of the Restaurant (ADR 41); restaurants
 	// always publishes it, so a missing or malformed market_id is a broken
 	// contract of the dependency, never a Market chosen here.
 	marketID, err := vo.NewMarketID(restaurant.GetRestaurant().GetMarketId())
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q: %w: %v", restaurantID, ErrInvalidRestaurant, err)
+		return place.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q: %w: %v", restaurantID, ErrInvalidRestaurant, err)
 	}
 	// accepting_orders is the flag of the restaurant and its opening hours at
 	// the time of the read (FR-699); is_open alone ignores the schedule.
 	if !restaurant.GetRestaurant().GetAcceptingOrders() {
-		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurant %q: %w", restaurantID, placeorder.ErrRestaurantNotAcceptingOrders)
+		return place.CatalogSnapshot{}, fmt.Errorf("restaurant %q: %w", restaurantID, place.ErrRestaurantNotAcceptingOrders)
 	}
 
 	menu, err := c.client.GetMenu(ctx, &restaurantsv1.GetMenuRequest{RestaurantId: string(restaurantID)})
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, mapError("restaurants.GetMenu", restaurantID, err)
+		return place.CatalogSnapshot{}, mapError("restaurants.GetMenu", restaurantID, err)
 	}
 	snapshot, err := c.snapshot(restaurantID, menu.GetItems(), menuItemIDs)
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, err
+		return place.CatalogSnapshot{}, err
 	}
 	snapshot.MarketID = marketID
 	if fee := restaurant.GetRestaurant().GetPremiumFee(); fee != nil {
 		premiumFee, err := vo.ParseMoney(fee.GetAmount(), fee.GetCurrency())
 		if err != nil {
-			return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q premium_fee: %w: %v", restaurantID, ErrInvalidRestaurant, err)
+			return place.CatalogSnapshot{}, fmt.Errorf("restaurants.GetRestaurant %q premium_fee: %w: %v", restaurantID, ErrInvalidRestaurant, err)
 		}
 		snapshot.PremiumFee = &premiumFee
 	}
@@ -99,31 +99,31 @@ func (c *Catalog) Snapshot(ctx context.Context, restaurantID order.RestaurantID,
 
 // snapshot keeps only the requested Menu Items: items missing from the menu
 // stay out of the snapshot and are unavailable to Place Order.
-func (c *Catalog) snapshot(restaurantID order.RestaurantID, items []*restaurantsv1.MenuItem, requested []order.MenuItemID) (placeorder.CatalogSnapshot, error) {
+func (c *Catalog) snapshot(restaurantID order.RestaurantID, items []*restaurantsv1.MenuItem, requested []order.MenuItemID) (place.CatalogSnapshot, error) {
 	currency, err := menuCurrency(items)
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurant %q: %w", restaurantID, err)
+		return place.CatalogSnapshot{}, fmt.Errorf("restaurant %q: %w", restaurantID, err)
 	}
 	if currency == "" {
 		// An empty menu is a restaurant without a menu.
-		return placeorder.CatalogSnapshot{}, fmt.Errorf("restaurant %q has an empty menu: %w", restaurantID, placeorder.ErrUnknownRestaurant)
+		return place.CatalogSnapshot{}, fmt.Errorf("restaurant %q has an empty menu: %w", restaurantID, place.ErrUnknownRestaurant)
 	}
 	minimum, err := vo.NewMoney(c.limits.MinimumTotal, currency)
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, fmt.Errorf("catalog minimum total: %w", err)
+		return place.CatalogSnapshot{}, fmt.Errorf("catalog minimum total: %w", err)
 	}
 	maximum, err := vo.NewMoney(c.limits.MaximumTotal, currency)
 	if err != nil {
-		return placeorder.CatalogSnapshot{}, fmt.Errorf("catalog maximum total: %w", err)
+		return place.CatalogSnapshot{}, fmt.Errorf("catalog maximum total: %w", err)
 	}
 
 	byID := make(map[order.MenuItemID]*restaurantsv1.MenuItem, len(items))
 	for _, item := range items {
 		byID[order.MenuItemID(item.GetMenuItemId())] = item
 	}
-	snapshot := placeorder.CatalogSnapshot{
+	snapshot := place.CatalogSnapshot{
 		Currency:     currency,
-		Items:        make(map[order.MenuItemID]placeorder.CatalogItem, len(requested)),
+		Items:        make(map[order.MenuItemID]place.CatalogItem, len(requested)),
 		MinimumTotal: minimum,
 		MaximumTotal: maximum,
 	}
@@ -134,12 +134,12 @@ func (c *Catalog) snapshot(restaurantID order.RestaurantID, items []*restaurants
 		}
 		price, err := vo.ParseMoney(item.GetPrice().GetAmount(), item.GetPrice().GetCurrency())
 		if err != nil {
-			return placeorder.CatalogSnapshot{}, fmt.Errorf("price of menu item %q: %w", id, err)
+			return place.CatalogSnapshot{}, fmt.Errorf("price of menu item %q: %w", id, err)
 		}
 		if item.GetName() == "" {
-			return placeorder.CatalogSnapshot{}, fmt.Errorf("menu item %q has no name", id)
+			return place.CatalogSnapshot{}, fmt.Errorf("menu item %q has no name", id)
 		}
-		snapshot.Items[id] = placeorder.CatalogItem{Name: item.GetName(), UnitPrice: price, Available: item.GetAvailable()}
+		snapshot.Items[id] = place.CatalogItem{Name: item.GetName(), UnitPrice: price, Available: item.GetAvailable()}
 	}
 	return snapshot, nil
 }
@@ -170,7 +170,7 @@ func menuCurrency(items []*restaurantsv1.MenuItem) (string, error) {
 func mapError(call string, restaurantID order.RestaurantID, err error) error {
 	switch code := status.Code(err); {
 	case code == codes.NotFound:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, placeorder.ErrUnknownRestaurant, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, place.ErrUnknownRestaurant, err)
 	case code == codes.InvalidArgument:
 		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, usecase.ErrInvalidInput, err)
 	case code == codes.Canceled || errors.Is(err, context.Canceled):

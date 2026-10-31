@@ -20,19 +20,19 @@ import (
 
 	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirmorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliverycompletion"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recorddeliveryfailure"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordorderready"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpickup"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
-	"nomnom/orders/slices/order/applications/fulfillmentsteps/rejectorder"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordready"
+	"nomnom/orders/slices/order/applications/fulfillmentsteps/reject"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/applications/startfulfillment"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
@@ -64,10 +64,10 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 	}
 	starter, notifier, relationships := NewMockStarter(t), NewMockNotifier(t), NewMockRelationships(t)
 	handlers := ordermessaging.Handlers{
-		ConfirmOrder:             confirmorder.NewHandler(store, store, store, notifier),
-		RejectOrder:              rejectorder.NewHandler(store, store, store, notifier),
+		ConfirmOrder:             confirm.NewHandler(store, store, store, notifier),
+		RejectOrder:              reject.NewHandler(store, store, store, notifier),
 		RecordPreparationStarted: recordpreparationstarted.NewHandler(store, store, store, notifier),
-		RecordOrderReady:         recordorderready.NewHandler(store, store, store, notifier),
+		RecordOrderReady:         recordready.NewHandler(store, store, store, notifier),
 		RecordPreparationDelay:   recordpreparationdelay.NewHandler(store, store, store, notifier),
 		RelayPreparationIssue:    relaypreparationissue.NewHandler(notifier),
 		RecordCourierAssignment:  recordcourierassignment.NewHandler(store, store, store, notifier, store, store),
@@ -75,7 +75,7 @@ func startConsumer(t *testing.T, orders ...*order.Order) consumer {
 		RecordPickup:             recordpickup.NewHandler(store, store, store, notifier),
 		RecordDeliveryCompletion: recorddeliverycompletion.NewHandler(store, store, store, notifier),
 		RecordDeliveryFailure:    recorddeliveryfailure.NewHandler(store, store, store, notifier),
-		SyncOrderRelationships:   syncorderrelationships.NewHandler(store, store, relationships, store),
+		SyncOrderRelationships:   syncrelationships.NewHandler(store, store, relationships, store),
 		StartFulfillment:         startfulfillment.NewHandler(store, store, store, starter),
 	}
 
@@ -382,7 +382,7 @@ func TestInvalidCommandGoesToDLQ(t *testing.T) {
 func TestRelationshipsChangedSyncsTheOrderState(t *testing.T) {
 	c := startConsumer(t, ordertest.New(t, "order-1"))
 	c.relationships.EXPECT().SyncOrderRelationships(mock.Anything, order.ID("order-1"),
-		syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}).
+		syncrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"}).
 		Return(authz.AuthorizationRevision("zedtoken-1"), nil).Once()
 
 	c.publish(t, outbound.OrderRelationshipsTopic, "event-1", &ordersv1.OrderRelationshipsChanged{OrderId: "order-1"})

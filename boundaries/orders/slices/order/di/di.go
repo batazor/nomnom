@@ -17,8 +17,8 @@ import (
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/orderdetails"
-	"nomnom/orders/slices/order/applications/placeorder"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/place"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/infrastructure/cancellationpolicy"
 	"nomnom/orders/slices/order/infrastructure/catalog"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -87,7 +87,7 @@ type Workflow interface {
 
 // NewCatalog — catalog snapshot Place Order: GetRestaurant и GetMenu restaurants
 // через internal gateway (lazy connection, projected token из IDENTITY__TOKEN_DIR).
-func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityConfig, limits config.CatalogConfig) (placeorder.Catalog, func(), error) {
+func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityConfig, limits config.CatalogConfig) (place.Catalog, func(), error) {
 	minimum, err := decimal.NewFromString(limits.MinimumTotal)
 	if err != nil {
 		return nil, nil, fmt.Errorf("catalog minimum_total: %w", err)
@@ -108,7 +108,7 @@ func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityCo
 // ReserveScheduledSlot restaurants через internal gateway от service identity
 // orders (projected token nomnom.restaurants из IDENTITY__TOKEN_DIR); deadline —
 // CATALOG__TIMEOUT, как у чтений каталога до транзакции.
-func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.IdentityConfig, catalog config.CatalogConfig) (placeorder.SlotReservations, func(), error) {
+func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.IdentityConfig, catalog config.CatalogConfig) (place.SlotReservations, func(), error) {
 	conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
 	if err != nil {
 		return nil, nil, err
@@ -120,7 +120,7 @@ func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.I
 func NewClock() usecase.Clock { return system.Clock{} }
 
 // NewOrderIDs — генератор UUIDv7 идентификаторов Order.
-func NewOrderIDs() placeorder.IDGenerator { return system.OrderIDs{} }
+func NewOrderIDs() place.IDGenerator { return system.OrderIDs{} }
 
 // NewAuthorizer connects the authorization ports to SpiceDB (ADR 18). The
 // endpoint is required: a process that checks permissions does not start
@@ -139,7 +139,7 @@ func NewAuthorizer(cfg config.SpiceDBConfig, revisions spicedb.RevisionReader) (
 // RelationshipSync — writer связей order в SpiceDB процесса orders-consumer:
 // Sync Order Relationships приводит order#customer, order#restaurant и
 // order#delivery к состоянию Order по RelationshipsChanged (ADR 18).
-type RelationshipSync = syncorderrelationships.Relationships
+type RelationshipSync = syncrelationships.Relationships
 
 // NewRelationshipSync подключает consumer к SpiceDB: без SPICEDB__ENDPOINT
 // процесс не стартует.

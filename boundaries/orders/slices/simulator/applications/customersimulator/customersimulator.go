@@ -14,10 +14,10 @@ import (
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/closure/requestordercancellation"
-	"nomnom/orders/slices/order/applications/getorder"
+	"nomnom/orders/slices/order/applications/closure/requestcancellation"
+	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/orderdetails"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -55,9 +55,9 @@ type Keys interface {
 type Dependencies struct {
 	Switch              Switch
 	Catalog             Catalog
-	PlaceOrder          usecase.Handler[placeorder.Input, placeorder.Result]
-	GetOrder            usecase.Handler[getorder.Query, orderdetails.View]
-	RequestCancellation usecase.Handler[requestordercancellation.Input, requestordercancellation.Result]
+	PlaceOrder          usecase.Handler[place.Input, place.Result]
+	GetOrder            usecase.Handler[get.Query, orderdetails.View]
+	RequestCancellation usecase.Handler[requestcancellation.Input, requestcancellation.Result]
 	Random              Random
 	Keys                Keys
 	CustomerID          string
@@ -131,32 +131,32 @@ func (c *Customer) placeOrder(ctx context.Context, now time.Time) {
 	}
 }
 
-func (c *Customer) chooseOrder(ctx context.Context) (placeorder.Input, error) {
+func (c *Customer) chooseOrder(ctx context.Context) (place.Input, error) {
 	restaurants, err := c.deps.Catalog.OpenRestaurants(ctx)
 	if err != nil {
-		return placeorder.Input{}, err
+		return place.Input{}, err
 	}
 	if len(restaurants) == 0 {
-		return placeorder.Input{}, fmt.Errorf("no open restaurant")
+		return place.Input{}, fmt.Errorf("no open restaurant")
 	}
 	restaurantID := restaurants[c.deps.Random.IntN(len(restaurants))]
 	menu, err := c.deps.Catalog.AvailableMenuItems(ctx, restaurantID)
 	if err != nil {
-		return placeorder.Input{}, err
+		return place.Input{}, err
 	}
 	if len(menu) == 0 {
-		return placeorder.Input{}, fmt.Errorf("restaurant %q has no available menu item", restaurantID)
+		return place.Input{}, fmt.Errorf("restaurant %q has no available menu item", restaurantID)
 	}
 	// Partial Fisher–Yates: the first count items are distinct random picks.
 	candidates := append([]order.MenuItemID(nil), menu...)
 	count := 1 + c.deps.Random.IntN(min(maxItems, len(candidates)))
-	items := make([]placeorder.ItemInput, 0, count)
+	items := make([]place.ItemInput, 0, count)
 	for i := range count {
 		j := i + c.deps.Random.IntN(len(candidates)-i)
 		candidates[i], candidates[j] = candidates[j], candidates[i]
-		items = append(items, placeorder.ItemInput{MenuItemID: candidates[i], Quantity: 1 + c.deps.Random.IntN(maxQuantity)})
+		items = append(items, place.ItemInput{MenuItemID: candidates[i], Quantity: 1 + c.deps.Random.IntN(maxQuantity)})
 	}
-	return placeorder.Input{
+	return place.Input{
 		Subject:        c.subject(),
 		IdempotencyKey: c.deps.Keys.NewKey(),
 		RestaurantID:   restaurantID,
@@ -179,7 +179,7 @@ func (c *Customer) cancelDue(ctx context.Context, now time.Time) {
 }
 
 func (c *Customer) cancel(ctx context.Context, orderID order.ID) {
-	view, err := c.deps.GetOrder.Handle(ctx, getorder.Query{Subject: c.subject(), OrderID: orderID})
+	view, err := c.deps.GetOrder.Handle(ctx, get.Query{Subject: c.subject(), OrderID: orderID})
 	if err != nil {
 		slog.ErrorContext(ctx, "simulator: get order failed", slog.String("order_id", string(orderID)), telemetry.LogErrorKey, err)
 		return
@@ -187,7 +187,7 @@ func (c *Customer) cancel(ctx context.Context, orderID order.ID) {
 	if view.State != order.StatePlaced && view.State != order.StatePaid {
 		return
 	}
-	result, err := c.deps.RequestCancellation.Handle(ctx, requestordercancellation.Input{
+	result, err := c.deps.RequestCancellation.Handle(ctx, requestcancellation.Input{
 		Subject:   c.subject(),
 		OrderID:   orderID,
 		RequestID: c.deps.Keys.NewKey(),

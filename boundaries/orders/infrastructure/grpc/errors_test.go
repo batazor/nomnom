@@ -14,7 +14,7 @@ import (
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -39,10 +39,10 @@ func TestTransportErrorKeepsPublishedCodesAndReasons(t *testing.T) {
 		{usecase.ErrDependencyUnavailable, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
 		{fulfillment.ErrWorkflowNotFound, codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
 		{authz.FailClosed(fmt.Errorf("spicedb: %w", usecase.ErrDependencyUnavailable)), codes.Unavailable, "DEPENDENCY_UNAVAILABLE"},
-		{placeorder.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
-		{placeorder.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
-		{placeorder.ErrPremiumUnavailable, codes.FailedPrecondition, "PREMIUM_UNAVAILABLE"},
-		{placeorder.ErrScheduledOrdersUnavailable, codes.FailedPrecondition, "SCHEDULED_ORDERS_UNAVAILABLE"},
+		{place.ErrUnknownRestaurant, codes.NotFound, "RESTAURANT_NOT_FOUND"},
+		{place.ErrRestaurantNotAcceptingOrders, codes.FailedPrecondition, "RESTAURANT_NOT_ACCEPTING_ORDERS"},
+		{place.ErrPremiumUnavailable, codes.FailedPrecondition, "PREMIUM_UNAVAILABLE"},
+		{place.ErrScheduledOrdersUnavailable, codes.FailedPrecondition, "SCHEDULED_ORDERS_UNAVAILABLE"},
 		{order.ErrInvalidDeliveryWindow, codes.InvalidArgument, "INVALID_ORDER"},
 		{usecase.InvalidInput("order_id", "is required"), codes.InvalidArgument, "INVALID_ARGUMENT"},
 		{order.NotOrderable{}, codes.FailedPrecondition, "ORDER_NOT_ORDERABLE"},

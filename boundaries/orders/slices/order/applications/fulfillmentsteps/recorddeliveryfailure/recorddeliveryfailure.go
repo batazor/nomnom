@@ -1,5 +1,5 @@
 // Package recorddeliveryfailure records a business failure of Delivery with its reason;
-// the negative outcome is fixed later by failorcancelorder.
+// the negative outcome is fixed later by failorcancel.
 package recorddeliveryfailure
 
 import (

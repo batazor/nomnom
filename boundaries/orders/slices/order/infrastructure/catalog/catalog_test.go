@@ -22,7 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -84,7 +84,7 @@ func TestSnapshotReadsRequestedItemsOfOpenRestaurant(t *testing.T) {
 
 	assert.Equal(t, "EUR", snapshot.Currency)
 	assert.Equal(t, ordertest.MarketID(t), snapshot.MarketID, "the Order is placed in the Market of the Restaurant")
-	assert.Equal(t, map[order.MenuItemID]placeorder.CatalogItem{
+	assert.Equal(t, map[order.MenuItemID]place.CatalogItem{
 		"pizza": {Name: "pizza", UnitPrice: ordertest.Money(t, "12.50"), Available: true},
 		"gyoza": {Name: "gyoza", UnitPrice: ordertest.Money(t, "6"), Available: false},
 	}, snapshot.Items, "only requested items with their names; unknown ones stay out and are unavailable")
@@ -161,7 +161,7 @@ func TestSnapshotRefusesClosedRestaurant(t *testing.T) {
 	// No GetMenu expectation: the menu is not read.
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
-	require.ErrorIs(t, err, placeorder.ErrRestaurantNotAcceptingOrders)
+	require.ErrorIs(t, err, place.ErrRestaurantNotAcceptingOrders)
 }
 
 // FR-699: a restaurant opened by the flag but outside its opening hours does
@@ -175,7 +175,7 @@ func TestSnapshotRefusesRestaurantOutsideOpeningHours(t *testing.T) {
 	}}, nil).Once()
 
 	_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
-	require.ErrorIs(t, err, placeorder.ErrRestaurantNotAcceptingOrders)
+	require.ErrorIs(t, err, place.ErrRestaurantNotAcceptingOrders)
 }
 
 func TestSnapshotMapsErrors(t *testing.T) {
@@ -185,9 +185,9 @@ func TestSnapshotMapsErrors(t *testing.T) {
 		items         []*restaurantsv1.MenuItem
 		want          error
 	}{
-		"restaurant not found": {restaurantErr: status.Error(codes.NotFound, "no restaurant"), want: placeorder.ErrUnknownRestaurant},
-		"menu not found":       {menuErr: status.Error(codes.NotFound, "no menu"), want: placeorder.ErrUnknownRestaurant},
-		"empty menu":           {want: placeorder.ErrUnknownRestaurant},
+		"restaurant not found": {restaurantErr: status.Error(codes.NotFound, "no restaurant"), want: place.ErrUnknownRestaurant},
+		"menu not found":       {menuErr: status.Error(codes.NotFound, "no menu"), want: place.ErrUnknownRestaurant},
+		"empty menu":           {want: place.ErrUnknownRestaurant},
 		"invalid argument":     {restaurantErr: status.Error(codes.InvalidArgument, "bad id"), want: usecase.ErrInvalidInput},
 		"unavailable":          {restaurantErr: status.Error(codes.Unavailable, "down"), want: usecase.ErrDependencyUnavailable},
 		"unauthenticated":      {restaurantErr: status.Error(codes.Unauthenticated, "who"), want: usecase.ErrDependencyUnavailable},

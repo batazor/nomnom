@@ -14,7 +14,7 @@ import (
 
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -58,18 +58,18 @@ func transportError(err error) error {
 	var details []protoadapt.MessageV1
 	var notOrderable order.NotOrderable
 	var notCancellable order.CancellationNotAllowed
-	var slotUnavailable placeorder.SlotUnavailable
+	var slotUnavailable place.SlotUnavailable
 	switch {
-	case errors.Is(err, placeorder.ErrUnknownRestaurant):
+	case errors.Is(err, place.ErrUnknownRestaurant):
 		answer.reason = "RESTAURANT_NOT_FOUND"
-	case errors.Is(err, placeorder.ErrRestaurantNotAcceptingOrders):
+	case errors.Is(err, place.ErrRestaurantNotAcceptingOrders):
 		answer.reason = "RESTAURANT_NOT_ACCEPTING_ORDERS"
-	case errors.Is(err, placeorder.ErrPremiumUnavailable):
+	case errors.Is(err, place.ErrPremiumUnavailable):
 		answer.reason = "PREMIUM_UNAVAILABLE"
 	case errors.As(err, &slotUnavailable):
 		answer.reason = "SLOT_UNAVAILABLE"
 		details = append(details, slotUnavailableDetail(slotUnavailable))
-	case errors.Is(err, placeorder.ErrScheduledOrdersUnavailable):
+	case errors.Is(err, place.ErrScheduledOrdersUnavailable):
 		answer.reason = "SCHEDULED_ORDERS_UNAVAILABLE"
 	case errors.Is(err, usecase.ErrInvalidInput):
 	case errors.As(err, &notOrderable):
@@ -104,7 +104,7 @@ func withInfo(code codes.Code, reason, message string, metadata map[string]strin
 
 // slotUnavailableDetail carries the nearest available windows of a full
 // Delivery Window (FR-692).
-func slotUnavailableDetail(err placeorder.SlotUnavailable) *ordersv1.SlotUnavailable {
+func slotUnavailableDetail(err place.SlotUnavailable) *ordersv1.SlotUnavailable {
 	detail := &ordersv1.SlotUnavailable{Alternatives: make([]*ordersv1.DeliveryWindow, 0, len(err.Alternatives))}
 	for _, window := range err.Alternatives {
 		detail.Alternatives = append(detail.Alternatives, &ordersv1.DeliveryWindow{

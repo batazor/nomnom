@@ -17,7 +17,7 @@ import (
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/testfixture"
 	"nomnom/orders/pkg/usecase"
-	"nomnom/orders/slices/order/applications/syncorderrelationships"
+	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
@@ -112,7 +112,7 @@ func TestSyncFailsAsUnavailable(t *testing.T) {
 	})).Return(nil, errors.New("unavailable")).Once()
 	a := spicedb.NewAuthorizer(permissions, nil, time.Second)
 
-	_, err := a.SyncOrderRelationships(context.Background(), "order-1", syncorderrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"})
+	_, err := a.SyncOrderRelationships(context.Background(), "order-1", syncrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"})
 
 	require.ErrorIs(t, err, spicedb.ErrUnavailable)
 	require.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
@@ -137,7 +137,7 @@ func TestAgainstSpiceDB(t *testing.T) {
 
 	sync := func(restaurantID, deliveryID string) {
 		t.Helper()
-		revision, err := a.SyncOrderRelationships(ctx, order.ID(orderID), syncorderrelationships.Subjects{
+		revision, err := a.SyncOrderRelationships(ctx, order.ID(orderID), syncrelationships.Subjects{
 			CustomerID: order.CustomerID(customerID), RestaurantID: order.RestaurantID(restaurantID), DeliveryID: deliveryID,
 		})
 		require.NoError(t, err)

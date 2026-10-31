@@ -11,7 +11,7 @@ import (
 	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
-	"nomnom/orders/slices/order/applications/placeorder"
+	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -26,7 +26,7 @@ var cases = []struct {
 	{"invalid input", usecase.InvalidInput("order_id", "is required"), usecase.KindInvalidInput},
 	{"invalid value", vo.ErrInvalidQuantity, usecase.KindInvalidInput},
 	{"order not found", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), usecase.KindNotFound},
-	{"unknown restaurant", placeorder.ErrUnknownRestaurant, usecase.KindNotFound},
+	{"unknown restaurant", place.ErrUnknownRestaurant, usecase.KindNotFound},
 	{"order exists", order.ErrOrderAlreadyExists, usecase.KindAlreadyExists},
 	{"concurrency conflict", usecase.ErrConcurrencyConflict, usecase.KindConflict},
 	{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), usecase.KindDomainRule},
@@ -36,7 +36,7 @@ var cases = []struct {
 	{"no items", order.ErrOrderRequiresItems, usecase.KindDomainRule},
 	{"duplicate item", order.ErrDuplicateMenuItem, usecase.KindDomainRule},
 	{"cancellation reason", order.ErrInvalidCancellationReason, usecase.KindDomainRule},
-	{"restaurant closed", placeorder.ErrRestaurantNotAcceptingOrders, usecase.KindDomainRule},
+	{"restaurant closed", place.ErrRestaurantNotAcceptingOrders, usecase.KindDomainRule},
 	{"cancellation refused", fulfillment.ErrCancellationRefused, usecase.KindDomainRule},
 	{"permission denied", authz.ErrPermissionDenied, usecase.KindPermission},
 	{"dependency unavailable", usecase.ErrDependencyUnavailable, usecase.KindUnavailable},
