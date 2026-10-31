@@ -321,10 +321,10 @@ Histograms в секундах получают явные границы `SECON
 | `PROVIDER__STRIPE_TIMEOUT` | Deadline одного запроса, `<int>(ms\|s\|m)`, по умолчанию `10s`. |
 | `PROVIDER__WEBHOOK_SECRET` | `whsec_...` от `stripe listen` или endpoint в Dashboard. |
 
-Запуск в kind: Stripe не достучится до кластера, webhooks доставляет Stripe CLI. Секрет печатает `stripe listen`, его порт — `WEBHOOKS_HOST_PORT` (`18085`):
+Запуск в kind: Stripe не достучится до кластера, webhooks доставляет Stripe CLI. Без `stripe login` CLI берёт ключ из `STRIPE_API_KEY`. Секрет печатает `stripe listen --print-secret`, порт — `WEBHOOKS_HOST_PORT` (`18085`):
 
 ```bash
-stripe listen --skip-verify --forward-to https://api.nomnom.localhost:18085/webhooks/provider
+stripe listen --all-snapshot --skip-verify --forward-to https://webhooks.nomnom.localhost:18085/webhooks/provider
 ```
 
 ```bash
