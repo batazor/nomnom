@@ -24,18 +24,20 @@ theorem terminal_no_exit {s target : State} {t : Trigger} {c : Bool}
 /-- A state that is not terminal can still move: no delivery gets stuck. -/
 theorem open_can_move {s : State} (h : s.is_terminal = ok false) :
     ∃ t target c, outcome s t = ok (.Allowed target c) := by
-  cases s <;>
-    simp_all [State.is_terminal, State.in_node, parent, outcome,
-      CompoundState.Insts.CoreCmpPartialEqCompoundState.eq, CompoundState.read_discriminant]
-  · exact ⟨.Assign, _, _, rfl⟩
-  · exact ⟨.Pickup, _, _, rfl⟩
-  · exact ⟨.Complete, _, _, rfl⟩
+  cases s
+  · exact ⟨.Assign, .Assigned, true, by simp [outcome]⟩
+  · exact ⟨.Pickup, .PickedUp, false, by simp [outcome]⟩
+  · exact ⟨.Complete, .Delivered, false, by simp [outcome]⟩
+  all_goals
+    simp [State.is_terminal, State.in_node, parent,
+      CompoundState.Insts.CoreCmpPartialEqCompoundState.eq, CompoundState.read_discriminant] at h
 
 /-- Repeating the trigger of an allowed transition never moves again. -/
 theorem repeat_does_not_move {s target target' : State} {t : Trigger} {c c' : Bool}
     (h : outcome s t = ok (.Allowed target c)) (ne : target ≠ .Waiting) :
     outcome target t ≠ ok (.Allowed target' c') := by
-  cases s <;> cases t <;> simp_all [outcome] <;> subst_vars <;> simp_all [outcome]
+  cases s <;> cases t <;> cases target <;>
+    first | (simp [outcome] at h; done) | simp_all [outcome]
 
 /-- A transition that brings a courier into a delivery requires one: the guard
     keeps the stored rule of `requires_courier`. -/
@@ -43,14 +45,15 @@ theorem courier_guarded {s target : State} {t : Trigger} {c : Bool}
     (h : outcome s t = ok (.Allowed target c))
     (before : requires_courier s = ok false) (after : requires_courier target = ok true) :
     c = true := by
-  cases s <;> cases t <;> simp_all [outcome, requires_courier] <;> subst_vars <;>
-    simp_all [requires_courier]
+  cases s <;> cases t <;> cases target <;>
+    first | (simp [outcome] at h; done) | simp_all [outcome, requires_courier]
 
 /-- Pickup is the point of no cancellation: a picked up delivery cannot cancel. -/
 theorem no_cancel_after_pickup {target : State} {c : Bool} :
     outcome .PickedUp .Cancel ≠ ok (.Allowed target c) := by
   simp [outcome]
 
+set_option maxHeartbeats 4000000 in
 /-- A transition read from a stored state change is a transition of the table. -/
 theorem applied_sound {s target : State} {r : TransitionResult}
     (h : applied_transition s target = ok (some r)) :
@@ -64,14 +67,13 @@ theorem applied_sound {s target : State} {r : TransitionResult}
 theorem applied_complete {s target : State} {t : Trigger} {c : Bool}
     (h : outcome s t = ok (.Allowed target c)) :
     applied_transition s target = ok (some { «from» := s, trigger := t, «to» := target }) := by
-  cases s <;> cases t <;> simp_all [outcome] <;> subst_vars <;>
-    simp [applied_transition, leads_to, outcome,
+  cases s <;> cases t <;> cases target <;>
+    simp_all [applied_transition, leads_to, outcome,
       State.Insts.CoreCmpPartialEqState.eq, State.read_discriminant]
 
 /-- A newly named expected time is after the moment it was named. -/
-theorem named_is_after {at_ now : Std.I64} (h : in_future at_ now = ok true) :
+theorem named_is_after {at_ now : I64} (h : in_future at_ now = ok true) :
     now.val < at_.val := by
   simp_all [in_future]
-  scalar_tac
 
 end Proofs.Delivery

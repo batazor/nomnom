@@ -219,7 +219,7 @@ func TestMain(m *testing.M) {
 
 ## Формальные доказательства
 
-Чистые доменные инварианты Rust (`delivery`), которые не являются юзкейсами, доказываются в Lean 4 на всех входах, а не проверяются примерами: Aeneas извлекает production-код в Lean. Адаптеры, async и хранилище в извлечение не входят. Первая цель — FSM оффера, запуск и ограничения — в [`boundaries/delivery/verification`](../boundaries/delivery/verification/README.md). `make verify-lean` не входит в `make check`, потому что требует отдельного toolchain.
+Чистые доменные инварианты Rust (`delivery`), которые не являются юзкейсами, доказываются в Lean 4 на всех входах, а не проверяются примерами: Aeneas извлекает production-код в Lean. Адаптеры, async и хранилище в извлечение не входят. Сейчас доказаны FSM `Delivery` и оффера и правила сроков; запуск и ограничения — в [`boundaries/delivery/verification`](../boundaries/delivery/verification/README.md). `make verify-lean` не входит в `make check`, потому что требует отдельного toolchain.
 
 ## Performance Testing
 

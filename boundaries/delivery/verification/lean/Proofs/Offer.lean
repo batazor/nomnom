@@ -67,7 +67,7 @@ theorem applied_complete {s target : OfferState} {t : OfferTrigger}
       OfferState.Insts.CoreCmpPartialEqOfferState.eq, OfferState.read_discriminant]
 
 /-- A new offer with a valid expiry is open when it is offered. -/
-theorem new_offer_open {offered expires : Std.I64}
+theorem new_offer_open {offered expires : I64}
     (h : valid_expiry offered expires = ok true) :
     open_at .Pending offered expires = ok true := by
   simp only [valid_expiry, open_at, past_deadline, OfferState.Insts.CoreCmpPartialEqOfferState.eq,
@@ -77,20 +77,20 @@ theorem new_offer_open {offered expires : Std.I64}
 
 /-- A pending offer is either open or past its deadline, never both: accept and
     reject end exactly where expire starts. -/
-theorem open_iff_not_past (now expires : Std.I64) :
+theorem open_iff_not_past (now expires : I64) :
     open_at .Pending now expires = ok (!(decide (now.val > expires.val))) := by
   simp [open_at, past_deadline, OfferState.Insts.CoreCmpPartialEqOfferState.eq,
     OfferState.read_discriminant]
 
 /-- A deadline once passed stays passed. -/
-theorem past_stays_past {now later expires : Std.I64}
+theorem past_stays_past {now later expires : I64}
     (h : past_deadline now expires = ok true) (le : now.val ≤ later.val) :
     past_deadline later expires = ok true := by
   simp_all [past_deadline]
   scalar_tac
 
 /-- A closed offer is never open, whatever the clock says. -/
-theorem closed_not_open {s : OfferState} (ne : s ≠ .Pending) (now expires : Std.I64) :
+theorem closed_not_open {s : OfferState} (ne : s ≠ .Pending) (now expires : I64) :
     open_at s now expires = ok false := by
   cases s <;> simp_all [open_at, past_deadline, OfferState.Insts.CoreCmpPartialEqOfferState.eq,
     OfferState.read_discriminant]
