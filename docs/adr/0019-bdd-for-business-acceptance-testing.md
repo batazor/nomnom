@@ -53,4 +53,4 @@ Gherkin пишется на английском с ubiquitous language соот
 
 Появляются требования к стабильным идентификаторам спецификаций, проверке traceability и дисциплине step definitions: они только подготавливают состояние, вызывают application interface и проверяют результат, не реализуя бизнес-алгоритм повторно. Slice acceptance требует Docker, как и `make test` в `orders`. BDD не заменяет domain/application unit tests, Testcontainers, Temporal replay/timer tests или kind E2E; часть поведения неизбежно проверяется несколькими типами тестов на разных seams.
 
-Первый исполняемый сценарий — пилот `godog` на Record Courier Release в `orders`. Остальные `.feature` пока не исполняются, runners других boundaries не подключены.
+`.feature` в `orders` исполняются `godog` под `go test`; runners других boundaries не подключены.

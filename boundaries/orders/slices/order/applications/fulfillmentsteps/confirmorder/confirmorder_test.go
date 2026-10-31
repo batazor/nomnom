@@ -30,7 +30,8 @@ func input(eventID string) confirmorder.Input {
 	return confirmorder.Input{EventID: eventID, OrderID: "order-1", OccurredAt: occurredAt}
 }
 
-// AC-108 (confirmorder.feature @AC-001): acceptance confirms the Order and lets fulfillment continue.
+// AC-108: acceptance of an Order past placed changes nothing; the placed Order is
+// the scenario @AC-001 of confirmorder.feature.
 func TestConfirmOrderByState(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -38,7 +39,6 @@ func TestConfirmOrderByState(t *testing.T) {
 		outcome   fulfillment.Outcome
 		wantState order.State
 	}{
-		{name: "placed is confirmed", state: order.StatePlaced, outcome: fulfillment.OutcomeApplied, wantState: order.StateConfirmed},
 		{name: "confirmed stays confirmed", state: order.StateConfirmed, outcome: fulfillment.OutcomeAlreadyApplied, wantState: order.StateConfirmed},
 		{name: "cancelled is late", state: order.StateCancelled, outcome: fulfillment.OutcomeIgnoredLate, wantState: order.StateCancelled},
 	}
@@ -78,37 +78,6 @@ func TestConfirmOrderRecordsAcceptanceMoment(t *testing.T) {
 	require.NoError(t, err)
 	snapshot, _ := store.Snapshot("order-1")
 	assert.Equal(t, []order.AppliedTransition{{Trigger: order.TriggerConfirm, OccurredAt: occurredAt}}, snapshot.Transitions)
-}
-
-// confirmorder.feature @AC-003: acceptance received again has no additional business effect.
-func TestConfirmOrderReceivedAgainHasNoAdditionalEffect(t *testing.T) {
-	handler, store, workflow := setup(t, order.StatePlaced)
-	// Every delivery notifies the workflow; the workflow deduplicates by event_id.
-	workflow.EXPECT().
-		Notify(mock.Anything, fulfillment.Notification{
-			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
-		}).
-		Return(nil).
-		Times(2)
-	workflow.EXPECT().
-		Notify(mock.Anything, fulfillment.Notification{
-			OrderID: "order-1", EventID: "event-2", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
-		}).
-		Return(nil).
-		Once()
-
-	_, err := handler.Handle(context.Background(), input("event-1"))
-	require.NoError(t, err)
-	redelivered, err := handler.Handle(context.Background(), input("event-1"))
-	require.NoError(t, err)
-	republished, err := handler.Handle(context.Background(), input("event-2"))
-	require.NoError(t, err)
-
-	assert.Equal(t, fulfillment.OutcomeDuplicate, redelivered.Outcome)
-	assert.Equal(t, fulfillment.OutcomeAlreadyApplied, republished.Outcome)
-	snapshot, _ := store.Snapshot("order-1")
-	assert.Equal(t, order.StateConfirmed, snapshot.State)
-	assert.Equal(t, uint64(2), snapshot.Version, "only the first event saves the Order")
 }
 
 // FR-611: acceptance stores the ready time named by the restaurant.

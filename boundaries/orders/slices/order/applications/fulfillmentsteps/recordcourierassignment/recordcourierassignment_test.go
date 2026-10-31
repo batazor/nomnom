@@ -23,44 +23,25 @@ func input(eventID string) recordcourierassignment.Input {
 	return recordcourierassignment.Input{EventID: eventID, OrderID: "order-1", OccurredAt: occurredAt}
 }
 
-// AC-110 (recordcourierassignment.feature @AC-002): the assignment keeps the
-// State of a non-final Order and adds nothing to its history; a final Order
-// ignores it as late.
-func TestHandleByOrderState(t *testing.T) {
-	tests := []struct {
-		name      string
-		options   []ordertest.Option
-		outcome   fulfillment.Outcome
-		wantState order.State
-	}{
-		{name: "placed", outcome: fulfillment.OutcomeApplied, wantState: order.StatePlaced},
-		{
-			name:      "cancelled is late",
-			options:   []ordertest.Option{ordertest.WithState(order.StateCancelled)},
-			outcome:   fulfillment.OutcomeIgnoredLate,
-			wantState: order.StateCancelled,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store := repositorytest.Open(t)
-			workflow := NewMockNotifier(t)
-			workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
-				OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
-			}).Return(nil).Once()
-			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", tt.options...)))
-			handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
+// AC-110: a final Order ignores the assignment as late; the placed Order is the
+// scenario @AC-002 of recordcourierassignment.feature.
+func TestHandleIgnoresCancelledOrderAsLate(t *testing.T) {
+	store := repositorytest.Open(t)
+	workflow := NewMockNotifier(t)
+	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+	}).Return(nil).Once()
+	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateCancelled))))
+	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
 
-			result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
+	result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
 
-			require.NoError(t, err)
-			assert.Equal(t, recordcourierassignment.Result{Outcome: tt.outcome, WorkflowNotified: true}, result)
-			snapshot, _ := store.Snapshot("order-1")
-			assert.Equal(t, tt.wantState, snapshot.State)
-			assert.Empty(t, snapshot.Transitions)
-			assert.Equal(t, 1, store.InboxSize())
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, recordcourierassignment.Result{Outcome: fulfillment.OutcomeIgnoredLate, WorkflowNotified: true}, result)
+	snapshot, _ := store.Snapshot("order-1")
+	assert.Equal(t, order.StateCancelled, snapshot.State)
+	assert.Empty(t, snapshot.Transitions)
+	assert.Equal(t, 1, store.InboxSize())
 }
 
 // An event without names reaches the workflow and changes nothing in the Order.

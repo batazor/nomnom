@@ -215,7 +215,7 @@ func TestMain(m *testing.M) {
 | Python | `payments` | `pytest-bdd` |
 | BFF | `bff` | Выбрать по фактическому runtime harness |
 
-В `orders` `godog` подключён пилотом к Record Courier Release, остальные `.feature` этого boundary пока не исполняются. Runner и его зависимости добавляются только вместе с первым executable scenario соответствующего boundary. Версии фиксируются на момент реализации. Отчёты runner могут публиковаться как living documentation, если генерируются из успешно выполненных сценариев и сохраняют ссылки на `AC-*`.
+В `orders` `godog` исполняет все `.feature` под `go test`. Runner и его зависимости добавляются только вместе с первым executable scenario соответствующего boundary. Версии фиксируются на момент реализации. Отчёты runner могут публиковаться как living documentation, если генерируются из успешно выполненных сценариев и сохраняют ссылки на `AC-*`.
 
 ## Performance Testing
 

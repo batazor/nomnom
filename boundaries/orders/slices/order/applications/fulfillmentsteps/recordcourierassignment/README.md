@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recordcourierassignment.go`](recordcourierassignment.go), unit-тесты: [`recordcourierassignment_test.go`](recordcourierassignment_test.go).
+Handler: [`recordcourierassignment.go`](recordcourierassignment.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`recordcourierassignment_test.go`](recordcourierassignment_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt, DeliveryID, CourierID}` → `Order.AdmitCourierAssignment`: финальный `Order` отказывает (`ignored_late`); Order State и история переходов не меняются. `order_details` отдаёт время текущего назначения как `courier_assigned_at`.
 - **Relationships:** в том же Inbox unit of work (`unitofwork.AcceptOnce`) назначение `order.CourierAssignment{DeliveryID, CourierID, AssignedAt, DeliveryVersion}` читается под row lock; правила — в домене: событие с Delivery `aggregate_version` ниже сохранённого назначения или снятия пропускается (`Supersedes`, FR-564; `occurred_at` порядок commit не задаёт), иначе `order.CourierAssignments` сохраняет назначение и версию. Для новой Delivery в той же транзакции записывается `RelationshipsChanged`: Sync Order Relationships приводит `order#delivery@delivery` к сохранённой Delivery ([ADR 18](../../../../../../../docs/adr/0018-spicedb-for-authorization.md)); переназначение курьера в пределах уже связанной Delivery (`LinksDelivery`) связи не меняет и `RelationshipsChanged` не пишет. Курьер видит заказ через `delivery->act_as_courier`, которым управляет `delivery`. Reassignment (`applied`) меняет только назначение, срок Pickup и, для другой Delivery, `order#delivery`. Срок Pickup (`ExpectedPickupAt`, FR-611) берёт только не устаревшее по `Supersedes` событие: `Order.ExpectPickupAt` заменяет прежний срок (пустой — не назван), и `Order` сохраняется при любом новом назначении, чтобы `order_details` и Change Notification шли за ним; устаревшее событие — `already_applied` без `Save`. Ошибка записи `RelationshipsChanged` откатывает Inbox record вместе с назначением; SpiceDB use case не вызывает. Событие без `delivery_id`/`courier_id` доходит до workflow и не меняет relationships.
@@ -41,7 +41,7 @@ Handler: [`recordcourierassignment.go`](recordcourierassignment.go), unit-тес
 - **Outcomes:** `applied`, `already_applied` (повтор шага под новым `event_id`), `ignored_late` (`Order` в `completed`/`cancelled`, `event_id` фиксируется), `duplicate`. Закрытый workflow не является ошибкой (`WorkflowNotified=false`); прочая ошибка уведомления возвращается, чтобы событие было доставлено повторно.
 - **Outbox:** только `RelationshipsChanged` во внутренний стрим `orders.v1.order-relationships`; исходящее Integration Event для этого сценария не определено.
 - **Требования:** FR-104, FR-107, FR-109, FR-110; AC-106, AC-107, AC-110, AC-112…AC-114 в OpenSpec change `implement-orders-application-layer`; FR-469, AC-518…AC-521 в change `add-order-command-rpcs-and-relationships`, в редакции change `scope-courier-access-to-assignment` (только `order#delivery`).
-- **`.feature`:** сценарии `@AC-002` проверяются unit-тестами handler против PostgreSQL (testcontainers); Gherkin runner (`godog`) пока не подключён.
+- **`.feature`:** сценарии `@AC-002` исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 ## Acceptance
 
