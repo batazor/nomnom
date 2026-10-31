@@ -2,7 +2,7 @@
 
 Решение: [ADR 28. Selective Use of Watermill CQRS](adr/0028-selective-use-of-watermill-cqrs.md#восстановление-из-dlq).
 
-Consumer отправляет в `<stream>.dlq` то, что повтором не лечится: битый record (deserialization, в том числе value вне wire format Schema Registry и схема другого `event_type`), неизвестный `event_type` и permanent error handler'а. Это дефект кода или контракта, поэтому DLQ разбирает оператор после исправления, а не автоматический retry. Transient-ошибки в DLQ не попадают: partition ждёт, пока зависимость вернётся.
+Consumer отправляет в `<stream>.dlq` то, что повтором не лечится: битый record (deserialization, в том числе value вне wire format Schema Registry и схема другого `event_type`), неизвестный `event_type`, permanent error и panic handler'а. Это дефект кода или контракта, поэтому DLQ разбирает оператор после исправления, а не автоматический retry. Transient-ошибки в DLQ не попадают: partition ждёт, пока зависимость вернётся.
 
 ## Модель
 

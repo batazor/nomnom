@@ -198,21 +198,21 @@ func TestDeserializationErrorGoesToDLQBeforeHandler(t *testing.T) {
 	assert.Zero(t, calls.Load())
 }
 
-func TestPanicIsRecoveredAndRetried(t *testing.T) {
+func TestHandlerPanicGoesToDLQWithoutRetry(t *testing.T) {
 	schemas := NewMockSchemaSubjects(t)
 	schemas.EXPECT().Subjects(mock.Anything, schemaID).Return([]string{stringValue}, nil)
 	var calls atomic.Int32
 	h := start(t, schemas, func(context.Context, *wrapperspb.StringValue) error {
-		if calls.Add(1) == 1 {
-			panic("boom")
-		}
-		return nil
+		calls.Add(1)
+		panic("boom")
 	})
 
 	h.publish(t, event(t, "event-1", wrapperspb.String("x")))
 
-	assert.Equal(t, int32(2), calls.Load())
-	h.noPoison(t)
+	poisoned := h.poisoned(t)
+	assert.Equal(t, "event-1", poisoned.UUID)
+	assert.Equal(t, "handler panicked: boom", poisoned.Metadata.Get(messaging.ReasonDeadLetteredMetadata))
+	assert.Equal(t, int32(1), calls.Load())
 }
 
 func TestPermanentErrorGoesToDLQWithoutRetry(t *testing.T) {

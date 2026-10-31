@@ -71,7 +71,7 @@ Custom `CommandEventMarshaler`: имя — `event_type` envelope (полное �
 | Business error | domain / application | ack; результат — outbox-событие или лог, не retry |
 | Duplicate (Inbox) | application | ack, no-op |
 
-Middleware снаружи внутрь: `Recoverer → OpenTelemetry/metrics → deserialization guard → Retry → dead letter → unknown event_type → handler`. Unmarshaler никогда не возвращает ошибку: в sarama это остановило бы partition. Подробности, Kafka-клиент (ClientID, initial offset, otelsarama, ключ `aggregate_id`) и метрики — [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md).
+Middleware снаружи внутрь: `Recoverer → OpenTelemetry/metrics → deserialization guard → Retry → dead letter → panic → unknown event_type → handler`. Unmarshaler никогда не возвращает ошибку: в sarama это остановило бы partition. Подробности, Kafka-клиент (ClientID, initial offset, otelsarama, ключ `aggregate_id`) и метрики — [ADR 28](adr/0028-selective-use-of-watermill-cqrs.md).
 
 DLQ разбирает оператор после исправления дефекта: redrive в исходный стрим или discard, по consumer group; состояние разбора — offset группы `<group>.dlq`. Runbook — [Разбор DLQ](dlq.md).
 

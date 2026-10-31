@@ -80,6 +80,7 @@ Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrast
 | --- | --- | --- |
 | Deserialization (битый record, невалидный envelope) | subscriber unmarshaler | `<stream>.dlq` + ack до любого handler |
 | Unknown `event_type`, permanent | infrastructure | `<stream>.dlq` + ack |
+| Panic handler'а | application / infrastructure | `<stream>.dlq` + ack без retry: дефект кода, а повтор на той же записи остановил бы partition до выхода исправления и не дал бы сигнала `kafka-poison` |
 | Transient (DB, network) | infrastructure / application | Retry middleware с backoff и лимитом; после исчерпания — nack: partition ждёт, Kafka доставляет повторно |
 | Business error | domain / application | ack; результат — через outbox-событие или лог, не retry |
 | Duplicate (Inbox) | application | ack, no-op |
@@ -110,7 +111,7 @@ Value Integration Event — wire format Schema Registry ([ADR 25](0025-integrati
 Снаружи внутрь:
 
 ```text
-Recoverer (panic → error) → OpenTelemetry/metrics → deserialization guard → schema subject → Retry → dead letter (permanent → <stream>.dlq) → unknown event_type → handler
+Recoverer (panic → error) → OpenTelemetry/metrics → deserialization guard → schema subject → Retry → dead letter (permanent → <stream>.dlq) → panic (→ permanent) → unknown event_type → handler
 ```
 
 `CircuitBreaker` — опционально на handlers с внешними зависимостями вне UoW (SpiceDB, gateway); решение при реализации.

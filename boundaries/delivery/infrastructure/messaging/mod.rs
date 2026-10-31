@@ -7,8 +7,8 @@
 //! - success, including a duplicate of the Inbox or a type the handler does
 //!   not consume — commit;
 //! - broken envelope, value outside the Schema Registry wire format, schema
-//!   of another `event_type` (FR-715) or permanent error of the handler — the
-//!   message goes to
+//!   of another `event_type` (FR-715), permanent error or panic of the handler —
+//!   the message goes to
 //!   `<stream>.dlq` with the dead letter headers of the other consumers
 //!   (`reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned`), then
 //!   commit;
@@ -30,6 +30,7 @@ use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::message::{BorrowedMessage, Header, Headers, Message, OwnedHeaders};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use tokio::sync::watch;
+use tokio::task::JoinError;
 
 use crate::pkg::config::{InitialOffset, KafkaConfig};
 
@@ -220,12 +221,7 @@ impl EventConsumer {
                 Arc::clone(&payload),
             );
             let outcome = tokio::task::spawn_blocking(move || call(&event, &body)).await;
-            let outcome = outcome.unwrap_or_else(|error| {
-                Err(HandlingError::Transient(format!(
-                    "handler aborted: {error}"
-                )))
-            });
-            match outcome {
+            match outcome.unwrap_or_else(|error| Err(join_failure(error))) {
                 Ok(()) => return true,
                 Err(HandlingError::Permanent(reason)) => {
                     self.dead_letter(message, &headers, &reason).await;
@@ -315,6 +311,22 @@ impl EventConsumer {
     }
 }
 
+/// Failure of the task of a handler. A panic is a defect of the code: a repeat
+/// on the same record would stop the partition until a fix is released.
+/// A cancelled task says nothing about the message.
+fn join_failure(error: JoinError) -> HandlingError {
+    if !error.is_panic() {
+        return HandlingError::Transient(format!("handler aborted: {error}"));
+    }
+    let panic = error.into_panic();
+    let detail = match (panic.downcast_ref::<&str>(), panic.downcast_ref::<String>()) {
+        (Some(text), _) => text,
+        (_, Some(text)) => text.as_str(),
+        _ => "payload is not text",
+    };
+    HandlingError::Permanent(format!("handler panicked: {detail}"))
+}
+
 /// Headers of a message; a header without a value is empty.
 fn headers(message: &BorrowedMessage<'_>) -> Vec<(String, Vec<u8>)> {
     message
@@ -340,4 +352,36 @@ async fn pause(duration: Duration, stop: &mut watch::Receiver<bool>) -> bool {
         _ = stop.wait_for(|stopped| *stopped) => true,
     };
     stopped || *stop.borrow()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_panic_of_the_handler_is_permanent() {
+        let literal = tokio::task::spawn_blocking(|| panic!("boom"))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            join_failure(literal),
+            HandlingError::Permanent("handler panicked: boom".to_owned())
+        );
+
+        let formatted = tokio::task::spawn_blocking(|| panic!("order {}", 7))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            join_failure(formatted),
+            HandlingError::Permanent("handler panicked: order 7".to_owned())
+        );
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_handler_is_transient() {
+        let task = tokio::spawn(std::future::pending::<()>());
+        task.abort();
+        let error = task.await.unwrap_err();
+        assert!(matches!(join_failure(error), HandlingError::Transient(_)));
+    }
 }

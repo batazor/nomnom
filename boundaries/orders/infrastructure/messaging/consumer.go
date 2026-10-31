@@ -3,6 +3,7 @@ package messaging
 import (
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"slices"
 	"time"
 
@@ -71,9 +72,9 @@ const (
 // EventGroupProcessor handler group per stream and the middleware chain of
 // ADR 28, outermost first:
 //
-//	Recoverer → OpenTelemetry/metrics → Watermill metrics → deserialization guard → schema subject → Retry → dead letter → unknown event_type → handler
+//	Recoverer → OpenTelemetry/metrics → Watermill metrics → deserialization guard → schema subject → Retry → dead letter → panic → unknown event_type → handler
 //
-//	deserialization error, schema of another event_type, permanent, unknown → <stream>.dlq + ack
+//	deserialization error, schema of another event_type, permanent, handler panic, unknown → <stream>.dlq + ack
 //	schema registry unavailable → nack, the partition waits and Kafka redelivers
 //	transient → Retry with backoff; exhausted → nack, the partition waits and Kafka redelivers
 //	business → ack, logged
@@ -142,6 +143,7 @@ func NewConsumerRouter(
 		retry.Middleware,
 		tel.countAttempts,
 		dlq.permanent,
+		dlq.panicked,
 		rejectUnknownEvents(known),
 	)...)
 
@@ -239,6 +241,26 @@ func (q deadLetterQueue) permanent(next message.HandlerFunc) message.HandlerFunc
 			return produced, err
 		}
 		return nil, q.send(msg, ClassPermanent, err.Error())
+	}
+}
+
+// panicked makes a panic of the handler permanent: it is a defect of the code,
+// and a repeat on the same record would stop the partition until a fix is
+// released. Recoverer stays outermost for the middleware above this one.
+func (q deadLetterQueue) panicked(next message.HandlerFunc) message.HandlerFunc {
+	return func(msg *message.Message) (produced []*message.Message, err error) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				q.logger.Error("integration event handler panicked", nil, watermill.LogFields{
+					"message_uuid": msg.UUID,
+					"event_type":   msg.Metadata.Get(EventTypeMetadata),
+					"panic":        recovered,
+					"stack":        string(debug.Stack()),
+				})
+				produced, err = nil, Permanent(fmt.Errorf("handler panicked: %v", recovered))
+			}
+		}()
+		return next(msg)
 	}
 }
 
