@@ -10,8 +10,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
-from pkg.outbox import AggregateRef
 from pkg.telemetry import current_traceparent
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.domains.payment import PaymentDomainEvent
 
 # ADR 31: namespace of deterministic Outbox event ids.

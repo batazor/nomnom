@@ -34,7 +34,6 @@ from infrastructure.repository import (
     OutboxMessage,
     outbox_event_id,
 )
-from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -43,6 +42,7 @@ from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     ProviderResultApplier,
 )
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from pkg.outbox import AggregateRef
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.applications.ports import Clock
 from slices.payment.domains.payment import (
     AlreadyInStateError,

@@ -5,8 +5,8 @@
 //! Assignment Workflow of the delivery (FR-704).
 
 use crate::pkg::authz::Subject;
-use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::delivery::applications::Clock;
+use crate::slices::delivery::applications::unit_of_work::UnitOfWork;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };

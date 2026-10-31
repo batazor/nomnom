@@ -8,7 +8,6 @@ use std::sync::Arc;
 use shaku::{Component, HasComponent, Interface, module};
 
 use crate::pkg::authz::Subject;
-use crate::pkg::unit_of_work::{ScopedUnitOfWork, TransactionScope};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
@@ -33,6 +32,7 @@ use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::applications::tracking::get_by_order::{self, OrderDeliveryReadModel};
+use crate::slices::delivery::applications::unit_of_work::{ScopedUnitOfWork, TransactionScope};
 use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::applications::{
     assignment::advance, assignment::create, assignment::find_courier,

@@ -40,7 +40,6 @@ linters:
           allow:
             - $gostd
             - nomnom/orders/pkg/authz
-            - nomnom/orders/pkg/unitofwork
             - nomnom/orders/pkg/telemetry
             - nomnom/orders/slices/order/domains
             - nomnom/orders/slices/fulfillment/domains

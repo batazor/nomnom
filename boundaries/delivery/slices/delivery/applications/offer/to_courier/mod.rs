@@ -7,9 +7,9 @@
 //! delivery is woken, so it waits for the answer or the deadline of the offer.
 
 use crate::pkg::authz::Subject;
-use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
+use crate::slices::delivery::applications::unit_of_work::UnitOfWork;
 use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
 

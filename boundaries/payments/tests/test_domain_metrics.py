@@ -11,7 +11,6 @@ from payment_fakes import MARKET, NOW, ORCHESTRATOR, PaymentsTestKit
 from psycopg import errors
 
 from infrastructure.repository import Database
-from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
@@ -21,6 +20,7 @@ from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     ProviderResultApplier,
 )
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.applications.ports import ProviderOperationOutcome
 from slices.payment.applications.refund import RefundPaymentHandler, RefundPaymentInput
 from slices.payment.domains.payment import (

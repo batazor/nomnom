@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 import jwt
 from jwt import PyJWK
 
-from pkg.authz import Subject, SubjectKind
+from slices.payment.applications.authz import Subject, SubjectKind
 
 from .identity_tokens import (
     ALLOWED_ALGORITHMS,

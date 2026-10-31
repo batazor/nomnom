@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Protocol
 
-from pkg.authz import Subject
+from slices.payment.applications.authz import Subject
 from slices.payment.domains.payment import (
     OperationId,
     OperationKind,

@@ -12,10 +12,10 @@
 //! the courier search of its Market (FR-706).
 
 use crate::pkg::authz::Subject;
-use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::unit_of_work::UnitOfWork;
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureReason, DeliveryId, DeliveryRepository, FailureReporter,
 };

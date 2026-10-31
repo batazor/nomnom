@@ -15,8 +15,8 @@
 //!
 //! Авторизация — SpiceDB (`infrastructure::spicedb`), хранилище —
 //! PostgreSQL (`infrastructure::repository`, ADR 0001 контекста), идентификаторы —
-//! UUIDv7 (`infrastructure::ids`), locator — сохранённые позиции курьеров
-//! (`infrastructure::locator`). Тестовые графы идут в тестовый PostgreSQL
+//! UUIDv7 (`slices::delivery::infrastructure::ids`), locator — сохранённые позиции курьеров
+//! (`slices::delivery::infrastructure::locator`). Тестовые графы идут в тестовый PostgreSQL
 //! (`infrastructure::repository::test_support`); статическая авторизация,
 //! locator и запись relationships для них — `infrastructure::memory`.
 

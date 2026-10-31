@@ -5,11 +5,15 @@ import pytest
 from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
-from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
-from pkg.outbox import AggregateRef
 from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
+)
+from slices.payment.applications.authz import (
+    AuthorizationUnavailableError,
+    PermissionDeniedError,
+    Subject,
+    SubjectKind,
 )
 from slices.payment.applications.capture import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import (
@@ -19,6 +23,7 @@ from slices.payment.applications.errors import (
     PaymentNotFoundError,
 )
 from slices.payment.applications.operation_flow import OperationStatus
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.applications.ports import (
     PaymentPermission,
     ProviderOperationOutcome,

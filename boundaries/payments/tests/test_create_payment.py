@@ -10,7 +10,7 @@ from payment_fakes import (
 )
 
 from infrastructure.repository import Database
-from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
+from slices.payment.applications.authz import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.create import (
     CreatePaymentHandler,
     CreatePaymentInput,

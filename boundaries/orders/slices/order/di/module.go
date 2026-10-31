@@ -5,13 +5,13 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/applications/syncrelationships"
+	"nomnom/orders/slices/order/applications/unitofwork"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/observability"
 )

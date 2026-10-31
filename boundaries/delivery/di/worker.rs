@@ -23,8 +23,6 @@ use temporalio_sdk::{Runtime, Worker as TemporalSdkWorker, WorkerOptions};
 use tokio::sync::{oneshot, watch};
 use url::Url;
 
-use crate::infrastructure::ids::UuidIdGenerator;
-use crate::infrastructure::locator::StoredCourierLocator;
 use crate::infrastructure::repository::Store;
 use crate::infrastructure::temporal::{
     AssignmentActivities, AssignmentSteps, AssignmentWorkflow, Step, TASK_QUEUE,
@@ -33,11 +31,13 @@ use crate::pkg::config::{TemporalConfig, WorkerConfig};
 use crate::pkg::lifecycle::Worker;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::pkg::telemetry::{self, Telemetry};
-use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
+use crate::slices::delivery::applications::unit_of_work::ScopedUnitOfWork;
 use crate::slices::delivery::applications::{assignment::advance, offer::expire};
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
+use crate::slices::delivery::infrastructure::ids::UuidIdGenerator;
+use crate::slices::delivery::infrastructure::locator::StoredCourierLocator;
 use crate::slices::delivery::infrastructure::observed_use_cases::{
     ADVANCE_ASSIGNMENT, EXPIRE_DELIVERY_OFFER, classify,
 };

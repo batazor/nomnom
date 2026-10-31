@@ -23,13 +23,13 @@ from infrastructure.repository import (
     OutboxMessage,
     create_database,
 )
-from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import database, load_settings
-from pkg.outbox import AggregateRef
+from slices.payment.applications.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
     ProviderResultApplier,
 )
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.applications.ports import (
     PaymentPermission,
     PaymentResource,

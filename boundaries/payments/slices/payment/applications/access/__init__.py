@@ -1,6 +1,6 @@
 """Authoritative permission check performed before any protected domain operation."""
 
-from pkg.authz import PermissionDeniedError, Subject
+from slices.payment.applications.authz import PermissionDeniedError, Subject
 
 from ..ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 

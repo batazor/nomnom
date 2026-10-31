@@ -6,9 +6,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from pkg.authz import Subject
-from pkg.outbox import AggregateRef
+from slices.payment.applications.authz import Subject
 from slices.payment.applications.errors import ApplicationError
+from slices.payment.applications.outbox import AggregateRef
 from slices.payment.domains.payment import (
     InvalidTransitionError,
     Money,

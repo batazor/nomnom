@@ -14,7 +14,6 @@ use shaku::{Component, Interface, module};
 #[cfg(test)]
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::pkg::persistence::RepositoryError;
-use crate::pkg::unit_of_work::{TransactionScope, UnitOfWorkError};
 use crate::slices::courier::applications::Clock as CourierClock;
 use crate::slices::courier::applications::assignment::{CourierAssignment, CourierAssignmentError};
 use crate::slices::courier::applications::authorization::CourierAuthorization;
@@ -38,6 +37,7 @@ use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessag
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
+use crate::slices::delivery::applications::unit_of_work::{TransactionScope, UnitOfWorkError};
 use crate::slices::delivery::applications::{Clock as DeliveryClock, IdGenerator};
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
@@ -219,14 +219,14 @@ impl SharedRelationships for LocalRelationships {
 }
 
 /// Генератор идентификаторов `Delivery` и offer: UUIDv7 в процессе
-/// ([`UuidIdGenerator`](crate::infrastructure::ids::UuidIdGenerator)),
+/// ([`UuidIdGenerator`](crate::slices::delivery::infrastructure::ids::UuidIdGenerator)),
 /// последовательный только в тестах (FR-541).
 pub trait ProcessIds: IdGenerator + Send + Sync {}
 
 impl<T: IdGenerator + Send + Sync> ProcessIds for T {}
 
 /// Локатор курьеров: сохранённые позиции в процессе
-/// ([`StoredCourierLocator`](crate::infrastructure::locator::StoredCourierLocator)),
+/// ([`StoredCourierLocator`](crate::slices::delivery::infrastructure::locator::StoredCourierLocator)),
 /// статический только в тестах (FR-542).
 pub trait ProcessLocator: CourierLocator + Send + Sync {}
 

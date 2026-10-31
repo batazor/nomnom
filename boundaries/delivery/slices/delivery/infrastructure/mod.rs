@@ -7,7 +7,9 @@
 
 mod duration_facts;
 pub mod failure_log;
+pub mod ids;
 mod integration_events;
+pub mod locator;
 pub mod observability;
 pub mod observed_use_cases;
 pub mod random;

@@ -394,7 +394,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 
 Ресурсы: клиент SpiceDB, пул PostgreSQL, resolver identity и MeterProvider создаёт `compose` один раз на процесс, ими владеет модуль; транзакция живёт один use case (Unit of Work хранилища); worker создаётся provider'ом один раз после открытия технического порта, поэтому бизнес-порт открывается последним. Shaku-компоненты собираются синхронно и без ошибок, поэтому подключение к инфраструктуре (fail fast) выполняет `compose`, а не компонент. `Lifecycle` (технический порт, сигналы, drain) остаётся в `cmd`: это runtime contract процесса, а не зависимость use cases.
 
-Shaku импортируют только модули `di`; `domains/`, `applications/`, `infrastructure/` и `cmd/` от него не зависят. Shaku требует `Send + Sync` от интерфейсов и создаёт отдельный экземпляр на каждый компонент, поэтому порты, которые обслуживает одно хранилище, собраны в интерфейс-агрегатор слайса. Generic `UnitOfWork` передаётся через object-safe `TransactionScope` и адаптер `ScopedUnitOfWork` из `pkg/unit_of_work`.
+Shaku импортируют только модули `di`; `domains/`, `applications/`, `infrastructure/` и `cmd/` от него не зависят. Shaku требует `Send + Sync` от интерфейсов и создаёт отдельный экземпляр на каждый компонент, поэтому порты, которые обслуживает одно хранилище, собраны в интерфейс-агрегатор слайса. Generic `UnitOfWork` передаётся через object-safe `TransactionScope` и адаптер `ScopedUnitOfWork` из `slices/delivery/applications/unit_of_work`.
 
 Решение зафиксировано в общесистемном [ADR 5](../../docs/adr/0005-dependency-injection-strategy.md).
 
@@ -506,8 +506,8 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_tracing
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - `Store` (`infrastructure/repository`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox по контракту ADR 37 (retention при записи), встроенные миграции при старте процесса;
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`), публикует коннектор Debezium `delivery-outbox` (CDC, ADR 37, Helm `cdc.*`);
-- `UuidIdGenerator` (`infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
-- `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Delivery не хранит место pickup, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
+- `UuidIdGenerator` (`slices/delivery/infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
+- `StoredCourierLocator` (`slices/delivery/infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Delivery не хранит место pickup, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
 - тестовые адаптеры не-storage портов в `infrastructure/memory` (статическая authorization, запись relationships, управляемые clock и id generator, статический locator) — только для тестов; хранилище в тестах — PostgreSQL (testcontainers, `TestStore`).
 
 Не реализованы: команда разбора DLQ группы `delivery`, расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы все use cases, кроме Find Courier, Offer Delivery и Reassign Courier (шаги процесса назначения) и шагов Assignment Workflow Advance Assignment и Expire Delivery Offer.

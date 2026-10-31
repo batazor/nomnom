@@ -5,7 +5,7 @@ A declined cancellation keeps the Payment ``authorized``. The Order is not chang
 
 from dataclasses import dataclass
 
-from pkg.authz import Subject
+from slices.payment.applications.authz import Subject
 from slices.payment.domains.payment import OperationKind
 
 from ..operation_flow import PaymentOperationExecutor, PaymentOperationResult
