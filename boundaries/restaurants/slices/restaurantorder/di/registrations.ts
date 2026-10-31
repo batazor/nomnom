@@ -15,8 +15,6 @@ import {
   query,
   type UseCase,
 } from "../../../pkg/telemetry/usecase.ts";
-import type { Clock } from "../../../pkg/usecase/clock.ts";
-import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { MenuRepository } from "../../menu/domains/menu/menu.ts";
 import type { WaitTimeStatisticsStore } from "../../restaurant/applications/record-wait-time/record-wait-time.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
@@ -36,6 +34,8 @@ import type {
   RestaurantOrderViewAccess,
 } from "../applications/access-control/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../applications/cancel/cancel.ts";
+import type { Clock } from "../applications/clock/clock.ts";
+import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import {
   GetKitchenQueueHandler,
   type KitchenQueueOrdering,

@@ -1,8 +1,8 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { SimulatorStateRepository } from "../../domains/simulator/simulator.ts";
 import type { SimulatorAccess } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
 import type { SimulatorView } from "../get/get.ts";
 
 export type SetSimulatorEnabled = Readonly<{

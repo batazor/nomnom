@@ -1,12 +1,12 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { Cook, CookRepository } from "../../domains/cook/cook.ts";
 import type { CookPoolAccess } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
 import { type CookChangeResult, toCookView } from "../cook-view/cook-view.ts";
 import type { CookWorkload } from "../cook-workload/cook-workload.ts";
+import { NotFoundError } from "../failure/failure.ts";
 
 export type CookCommand = Readonly<{
   subject: Subject;

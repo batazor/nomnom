@@ -15,14 +15,14 @@ import {
   query,
   type UseCase,
 } from "../../../pkg/telemetry/usecase.ts";
-import type { Clock } from "../../../pkg/usecase/clock.ts";
-import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { MenuAccessControl } from "../applications/access-control/access-control.ts";
 import { AddMenuItemHandler } from "../applications/add-item/add-item.ts";
 import { BatchGetMenusHandler } from "../applications/batch-get/batch-get.ts";
+import type { Clock } from "../applications/clock/clock.ts";
 import { CreateMenuHandler } from "../applications/create/create.ts";
 import { GetMenuHandler } from "../applications/get/get.ts";
+import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import { SetMenuItemAvailabilityHandler } from "../applications/set-item-availability/set-item-availability.ts";
 import { UpdateMenuItemHandler } from "../applications/update-item/update-item.ts";
 import type { MenuRepository } from "../domains/menu/menu.ts";

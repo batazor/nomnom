@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import type { Outbox } from "../pkg/outbox/outbox.ts";
-import { NotFoundError } from "../pkg/usecase/errors.ts";
+import { NotFoundError } from "../slices/restaurantorder/applications/failure/failure.ts";
 import {
   AlreadyInStateError,
   GuardFailedError,

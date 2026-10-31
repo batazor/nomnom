@@ -1,5 +1,5 @@
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
+import type { Clock } from "../clock/clock.ts";
+import { NotFoundError } from "../failure/failure.ts";
 import {
   type AcceptingCatalogRestaurantView,
   acceptanceAt,

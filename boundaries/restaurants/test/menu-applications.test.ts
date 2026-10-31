@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import type { Outbox } from "../pkg/outbox/outbox.ts";
-import { AlreadyExistsError, NotFoundError } from "../pkg/usecase/errors.ts";
+import {
+  AlreadyExistsError,
+  NotFoundError,
+} from "../slices/menu/applications/failure/failure.ts";
 import { InvalidMoneyError } from "../slices/restaurant/domains/restaurant/vo/money.ts";
 import { createMenuWorld } from "./support/menus.ts";
 import {

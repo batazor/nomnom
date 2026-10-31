@@ -1,11 +1,6 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import {
-  ConcurrencyConflictError,
-  NotFoundError,
-} from "../../../../pkg/usecase/errors.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import {
   type DeliveryWindow,
@@ -13,6 +8,8 @@ import {
   UnknownSlotReservationError,
 } from "../../domains/scheduleslot/scheduleslot.ts";
 import type { SlotReservationAccess } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
+import { ConcurrencyConflictError, NotFoundError } from "../failure/failure.ts";
 import { RESERVE_ATTEMPTS } from "../reserve/reserve.ts";
 
 export type ConfirmScheduledSlot = Readonly<{

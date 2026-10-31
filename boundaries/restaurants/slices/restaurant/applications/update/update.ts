@@ -1,9 +1,9 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../domains/restaurant/restaurant.ts";
 import type { MoneyValue } from "../../domains/restaurant/vo/money.ts";
 import type { RestaurantAccessControl } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
 import { loadRestaurant } from "../load/load.ts";
 import {
   type RestaurantChangeResult,

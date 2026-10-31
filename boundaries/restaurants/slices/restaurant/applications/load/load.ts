@@ -1,8 +1,8 @@
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type {
   Restaurant,
   RestaurantRepository,
 } from "../../domains/restaurant/restaurant.ts";
+import { NotFoundError } from "../failure/failure.ts";
 
 export const loadRestaurant = async (
   restaurants: RestaurantRepository,

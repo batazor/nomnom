@@ -1,5 +1,4 @@
-import { batchIds } from "../../../../pkg/usecase/batch.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
+import type { Clock } from "../clock/clock.ts";
 import {
   type AcceptingCatalogRestaurantView,
   acceptanceAt,
@@ -17,6 +16,25 @@ export interface RestaurantBatchReader {
     restaurantIds: readonly string[],
   ): Promise<readonly CatalogRestaurantView[]>;
 }
+
+const MAX_BATCH_SIZE = 100;
+
+export class InvalidBatchError extends Error {
+  readonly code = "invalid_batch";
+
+  constructor(size: number) {
+    super(`a batch must have 1..${MAX_BATCH_SIZE} ids, got ${size}`);
+    this.name = "InvalidBatchError";
+  }
+}
+
+/** The distinct ids of a batch; empty or more than 100 is InvalidBatchError. */
+const batchIds = (ids: readonly string[]): readonly string[] => {
+  if (ids.length === 0 || ids.length > MAX_BATCH_SIZE) {
+    throw new InvalidBatchError(ids.length);
+  }
+  return [...new Set(ids)];
+};
 
 /**
  * Returns the public representation of up to 100 restaurants for a page of

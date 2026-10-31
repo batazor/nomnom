@@ -1,7 +1,7 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { RestaurantOrderViewAccess } from "../access-control/access-control.ts";
+import { NotFoundError } from "../failure/failure.ts";
 import type { RestaurantOrderView } from "../restaurant-order-view/restaurant-order-view.ts";
 
 export type GetRestaurantOrder = Readonly<{

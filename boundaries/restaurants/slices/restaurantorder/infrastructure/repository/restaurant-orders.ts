@@ -4,7 +4,7 @@ import {
   VersionedCollection,
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
-import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
+import { ConcurrencyConflictError } from "../../applications/failure/failure.ts";
 import type { RestaurantOrderReader } from "../../applications/get/get.ts";
 import type {
   KitchenQueueEntry,
@@ -124,7 +124,7 @@ export const createRestaurantOrderCollection = (
   new VersionedCollection<RestaurantOrderDocument>({
     db,
     name: RESTAURANT_ORDERS_COLLECTION,
-    aggregateType: "RestaurantOrder",
+    conflict: (id) => new ConcurrencyConflictError("RestaurantOrder", id),
     unitOfWork,
     // Two active orders of one cook (FR-617) and two orders started by one
     // Start Next Preparation request lose like a concurrent write.

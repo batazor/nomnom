@@ -1,10 +1,10 @@
-import type { Clock } from "../../../../../pkg/usecase/clock.ts";
 import type {
   OrderPriority,
   OrderScheduleValue,
   RestaurantOrderState,
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../../access-control/access-control.ts";
+import type { Clock } from "../../clock/clock.ts";
 import {
   authorizeKitchenBoard,
   type KitchenBoardItem,

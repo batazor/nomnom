@@ -11,10 +11,10 @@ import {
   query,
   type UseCase,
 } from "../../../pkg/telemetry/usecase.ts";
-import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { RestaurantOrderCradle } from "../../restaurantorder/di/registrations.ts";
 import type { SimulatorAccess } from "../applications/access-control/access-control.ts";
+import type { Clock } from "../applications/clock/clock.ts";
 import { GetSimulatorHandler } from "../applications/get/get.ts";
 import { SetSimulatorEnabledHandler } from "../applications/set-enabled/set-enabled.ts";
 import { KitchenSimulator } from "../applications/simulate-kitchen/simulate-kitchen.ts";

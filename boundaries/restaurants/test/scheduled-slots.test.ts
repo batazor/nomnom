@@ -9,8 +9,8 @@ import {
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
-import { NotFoundError } from "../pkg/usecase/errors.ts";
 import { InvalidScheduledOrderSettingsError } from "../slices/restaurant/domains/restaurant/restaurant.ts";
+import { NotFoundError } from "../slices/scheduleslot/applications/failure/failure.ts";
 import { ReserveScheduledSlotHandler } from "../slices/scheduleslot/applications/reserve/reserve.ts";
 import {
   type DeliveryWindow,

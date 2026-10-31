@@ -46,7 +46,6 @@ import { ParallelWorkers, type Worker } from "../pkg/lifecycle/lifecycle.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
-import type { Clock } from "../pkg/usecase/clock.ts";
 import {
   CachedMenuReader,
   menuCacheRefreshes,
@@ -88,6 +87,10 @@ import {
 } from "../slices/restaurantorder/infrastructure/repository/restaurant-orders.ts";
 import { createProcessContainer, type Registrations } from "./container.ts";
 import { instrumentUseCases } from "./usecases.ts";
+
+interface Clock {
+  now(): Date;
+}
 
 /** Configuration and resources the composition root hands to the container. */
 export type ConsumerResources = Readonly<{

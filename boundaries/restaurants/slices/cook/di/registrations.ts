@@ -13,18 +13,18 @@ import {
   query,
   type UseCase,
 } from "../../../pkg/telemetry/usecase.ts";
-import type { Clock } from "../../../pkg/usecase/clock.ts";
-import type { IdGenerator } from "../../../pkg/usecase/id-generator.ts";
 import type { CookAssigner } from "../../restaurantorder/applications/preparation/start/start.ts";
 import type { CookPoolAccess } from "../applications/access-control/access-control.ts";
 import { PoolCookAssigner } from "../applications/assign/assign.ts";
 import type { ChangeCookDependencies } from "../applications/change/change.ts";
+import type { Clock } from "../applications/clock/clock.ts";
 import type {
   CookRestaurants,
   CookWorkload,
 } from "../applications/cook-workload/cook-workload.ts";
 import { GetCookPoolHandler } from "../applications/get-pool/get-pool.ts";
 import { HireCookHandler } from "../applications/hire/hire.ts";
+import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import { PutCookOnLineHandler } from "../applications/put-on-line/put-on-line.ts";
 import { RetireCookHandler } from "../applications/retire/retire.ts";
 import { TakeCookOffLineHandler } from "../applications/take-off-line/take-off-line.ts";

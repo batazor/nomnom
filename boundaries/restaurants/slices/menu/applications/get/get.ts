@@ -1,4 +1,4 @@
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
+import { NotFoundError } from "../failure/failure.ts";
 import type { MenuView } from "../menu-support/menu-support.ts";
 
 export type GetMenu = Readonly<{ restaurantId: string }>;

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type { AcceptOrderHandler } from "../../../restaurantorder/applications/acceptance/accept/accept.ts";
 import type { RejectOrderHandler } from "../../../restaurantorder/applications/acceptance/reject/reject.ts";
 import type { MarkAssembledHandler } from "../../../restaurantorder/applications/preparation/mark-assembled/mark-assembled.ts";
@@ -23,6 +22,7 @@ import {
   type SimulatorStateRepository,
   shiftPlan,
 } from "../../domains/simulator/simulator.ts";
+import type { Clock } from "../clock/clock.ts";
 
 /**
  * Restaurant Order waiting for an action of its restaurant. `marketId` is the

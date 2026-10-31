@@ -1,11 +1,11 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
-import type { IdGenerator } from "../../../../pkg/usecase/id-generator.ts";
 import { Cook, type CookRepository } from "../../domains/cook/cook.ts";
 import type { CookPoolAccess } from "../access-control/access-control.ts";
 import { type CookView, toCookView } from "../cook-view/cook-view.ts";
 import type { CookRestaurants } from "../cook-workload/cook-workload.ts";
+import { NotFoundError } from "../failure/failure.ts";
+import type { IdGenerator } from "../id-generator/id-generator.ts";
 
 export type HireCook = Readonly<{
   subject: Subject;

@@ -30,7 +30,7 @@ import {
   restaurantRelationshipWrite,
   USER,
 } from "../../../../infrastructure/spicedb/relationships.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
+import type { Clock } from "../../applications/clock/clock.ts";
 import type {
   ReconcileStats,
   RestaurantMembers,

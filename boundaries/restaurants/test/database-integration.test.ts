@@ -31,10 +31,7 @@ import {
   migrationsChangelogCollection,
 } from "../infrastructure/repository/run-migrations.ts";
 import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
-import {
-  AlreadyExistsError,
-  ConcurrencyConflictError,
-} from "../pkg/usecase/errors.ts";
+import { AlreadyExistsError } from "../slices/menu/applications/failure/failure.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import {
   createMenuCollection,
@@ -42,6 +39,7 @@ import {
   DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
 import { up as menusMarket } from "../slices/menu/infrastructure/repository/migrations/0002-market.ts";
+import { ConcurrencyConflictError } from "../slices/restaurant/applications/failure/failure.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { Money } from "../slices/restaurant/domains/restaurant/vo/money.ts";
 import { up as restaurantsMarket } from "../slices/restaurant/infrastructure/repository/migrations/0003-market.ts";

@@ -1,12 +1,12 @@
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type {
   WaitLevelChanged,
   WaitTimePolicy,
   WaitTimeStatistics,
 } from "../../domains/restaurant/wait-time.ts";
+import type { Clock } from "../clock/clock.ts";
+import { NotFoundError } from "../failure/failure.ts";
 
 /** `aggregate_type` of RestaurantWaitLevelChanged in the Outbox. */
 export const WAIT_TIME_AGGREGATE_TYPE = "RestaurantWaitTime";

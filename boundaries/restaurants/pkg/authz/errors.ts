@@ -1,6 +1,6 @@
 /**
  * Authorization errors shared by the use cases of `restaurants`; `code` is the
- * same stable contract as in `pkg/usecase/errors.ts`.
+ * same stable contract as in the errors of the slices.
  */
 
 export class PermissionDeniedError extends Error {

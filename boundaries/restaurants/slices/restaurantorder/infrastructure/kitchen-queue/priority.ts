@@ -1,6 +1,6 @@
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { WaitTimeStatisticsStore } from "../../../restaurant/applications/record-wait-time/record-wait-time.ts";
 import type { WaitTimePolicy } from "../../../restaurant/domains/restaurant/wait-time.ts";
+import { NotFoundError } from "../../applications/failure/failure.ts";
 import type {
   KitchenQueueEntry,
   KitchenQueueOrdering,

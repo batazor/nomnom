@@ -49,8 +49,6 @@ import type { Outbox } from "../pkg/outbox/outbox.ts";
 import type { Logger } from "../pkg/telemetry/logger.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
-import type { Clock } from "../pkg/usecase/clock.ts";
-import type { IdGenerator } from "../pkg/usecase/id-generator.ts";
 import type { CookPoolAccess } from "../slices/cook/applications/access-control/access-control.ts";
 import {
   COOK_USE_CASES,
@@ -105,6 +103,14 @@ import {
 } from "../slices/simulator/di/registrations.ts";
 import { createProcessContainer, type Registrations } from "./container.ts";
 import { instrumentUseCases } from "./usecases.ts";
+
+interface Clock {
+  now(): Date;
+}
+
+interface IdGenerator {
+  next(): string;
+}
 
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;

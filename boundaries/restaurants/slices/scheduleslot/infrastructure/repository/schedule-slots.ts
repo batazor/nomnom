@@ -4,7 +4,7 @@ import {
   VersionedCollection,
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
-import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
+import { ConcurrencyConflictError } from "../../applications/failure/failure.ts";
 import {
   ScheduleSlot,
   type ScheduleSlotRepository,
@@ -52,7 +52,7 @@ export const createScheduleSlotCollection = (
   new VersionedCollection<ScheduleSlotDocument>({
     db,
     name: SCHEDULE_SLOTS_COLLECTION,
-    aggregateType: "ScheduleSlot",
+    conflict: (id) => new ConcurrencyConflictError("ScheduleSlot", id),
     unitOfWork,
     // An order reserved concurrently in another window loses like a
     // concurrent write: the retry finds its reservation.

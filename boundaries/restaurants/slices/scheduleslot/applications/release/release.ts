@@ -1,10 +1,10 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
 import type { ScheduleSlotRepository } from "../../domains/scheduleslot/scheduleslot.ts";
 import type { SlotReservationAccess } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
+import { ConcurrencyConflictError } from "../failure/failure.ts";
 import { RESERVE_ATTEMPTS } from "../reserve/reserve.ts";
 
 export type ReleaseScheduledSlot = Readonly<{

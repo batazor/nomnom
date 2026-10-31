@@ -3,12 +3,12 @@ import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import { publishAggregateChange } from "../../../../pkg/outbox/publish-aggregate-change.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import type {
   Restaurant,
   RestaurantRepository,
 } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantAccessControl } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
 import { loadRestaurant } from "../load/load.ts";
 import {
   type RestaurantChangeResult,

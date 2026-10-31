@@ -53,7 +53,7 @@ module.exports = {
       to: {
         dependencyTypesNot: ["core"],
         pathNot:
-          "^(slices/[^/]+/(domains|applications)/|pkg/(usecase|authz|unit-of-work|outbox)/)",
+          "^(slices/[^/]+/(domains|applications)/|pkg/(authz|unit-of-work|outbox)/)",
       },
     },
     {

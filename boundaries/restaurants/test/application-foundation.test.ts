@@ -5,7 +5,7 @@ import {
   VersionedCollection,
   type VersionedDocument,
 } from "../infrastructure/repository/versioned-collection.ts";
-import { ConcurrencyConflictError } from "../pkg/usecase/errors.ts";
+import { ConcurrencyConflictError } from "../slices/restaurant/applications/failure/failure.ts";
 import { createTestDatabase, RecordedOutbox } from "./support/database.ts";
 
 const aggregate = { type: "Restaurant", id: "r-1", version: 1 };
@@ -18,7 +18,7 @@ const setup = async () => {
   const store = new VersionedCollection<NamedDocument>({
     db,
     name: "foundation",
-    aggregateType: "Restaurant",
+    conflict: (id) => new ConcurrencyConflictError("Restaurant", id),
     unitOfWork,
   });
   const outbox = new RecordedOutbox(db, unitOfWork);

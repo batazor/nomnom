@@ -1,7 +1,5 @@
 import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import type { IdGenerator } from "../../../../pkg/usecase/id-generator.ts";
 import {
   Restaurant,
   type RestaurantRepository,
@@ -10,6 +8,8 @@ import type {
   OwnerRelationshipWriter,
   RestaurantAccessControl,
 } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
+import type { IdGenerator } from "../id-generator/id-generator.ts";
 import {
   type RestaurantView,
   toRestaurantView,

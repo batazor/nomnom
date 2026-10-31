@@ -1,8 +1,6 @@
 /**
- * Application errors shared by the use cases of `restaurants`.
- *
- * Every error exposes a stable `code` that transport adapters map to their own
- * contract (for example gRPC status and `ErrorInfo.reason`).
+ * Application errors of the restaurant slice. Every error exposes a stable `code`
+ * that transport adapters map to their own contract.
  */
 
 export class NotFoundError extends Error {
@@ -13,19 +11,6 @@ export class NotFoundError extends Error {
   constructor(resource: string, resourceId: string) {
     super(`${resource} ${resourceId} was not found`);
     this.name = "NotFoundError";
-    this.resource = resource;
-    this.resourceId = resourceId;
-  }
-}
-
-export class AlreadyExistsError extends Error {
-  readonly code = "already_exists";
-  readonly resource: string;
-  readonly resourceId: string;
-
-  constructor(resource: string, resourceId: string) {
-    super(`${resource} ${resourceId} already exists`);
-    this.name = "AlreadyExistsError";
     this.resource = resource;
     this.resourceId = resourceId;
   }

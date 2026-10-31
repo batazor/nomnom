@@ -1,8 +1,6 @@
 import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { Outbox } from "../../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../../pkg/usecase/errors.ts";
 import {
   type AcceptanceConditions,
   evaluateOrderAcceptance,
@@ -12,6 +10,8 @@ import type {
   RestaurantOrderRepository,
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../../access-control/access-control.ts";
+import type { Clock } from "../../clock/clock.ts";
+import { NotFoundError } from "../../failure/failure.ts";
 import type { KitchenCommand } from "../../kitchen-command/kitchen-command.ts";
 import { loadRestaurantOrder } from "../../load/load.ts";
 import { saveAndPublish } from "../../publish-change/publish-change.ts";

@@ -1,5 +1,5 @@
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import { MarketId } from "../../domains/restaurant/restaurant.ts";
+import type { Clock } from "../clock/clock.ts";
 import {
   type AcceptingCatalogRestaurantView,
   acceptanceAt,

@@ -1,7 +1,5 @@
 import type { Subject } from "../../pkg/authz/subject.ts";
 import type { Outbox } from "../../pkg/outbox/outbox.ts";
-import type { Clock } from "../../pkg/usecase/clock.ts";
-import type { IdGenerator } from "../../pkg/usecase/id-generator.ts";
 import type {
   AuthorizationRevision,
   OwnerRelationshipWriter,
@@ -9,7 +7,9 @@ import type {
   StaffRelationshipWriter,
 } from "../../slices/restaurant/applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
+import type { Clock } from "../../slices/restaurant/applications/clock/clock.ts";
 import { CloseRestaurantHandler } from "../../slices/restaurant/applications/close/close.ts";
+import type { IdGenerator } from "../../slices/restaurant/applications/id-generator/id-generator.ts";
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open/open.ts";
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register/register.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";

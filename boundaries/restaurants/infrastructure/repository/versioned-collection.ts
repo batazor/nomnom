@@ -1,7 +1,6 @@
 import type { Collection, Db, Document, Filter, FindOptions } from "mongodb";
 import { MongoServerError } from "mongodb";
 
-import { ConcurrencyConflictError } from "../../pkg/usecase/errors.ts";
 import type { DatabaseUnitOfWork } from "./unit-of-work.ts";
 
 /** Technical fields every aggregate document carries next to its data. */
@@ -26,7 +25,7 @@ export type DuplicateKeyMapper<D> = (
  */
 export class VersionedCollection<D extends VersionedDocument> {
   readonly collection: Collection<D>;
-  readonly #aggregateType: string;
+  readonly #conflict: (id: string) => Error;
   readonly #unitOfWork: DatabaseUnitOfWork;
   readonly #duplicateKey: DuplicateKeyMapper<D>;
   readonly #readModelFields: readonly string[];
@@ -34,7 +33,8 @@ export class VersionedCollection<D extends VersionedDocument> {
   constructor(options: {
     db: Db;
     name: string;
-    aggregateType: string;
+    /** The error of a lost optimistic concurrency race, owned by the slice. */
+    conflict: (id: string) => Error;
     unitOfWork: DatabaseUnitOfWork;
     duplicateKey?: DuplicateKeyMapper<D>;
     /**
@@ -44,7 +44,7 @@ export class VersionedCollection<D extends VersionedDocument> {
     readModelFields?: readonly string[];
   }) {
     this.collection = options.db.collection<D>(options.name);
-    this.#aggregateType = options.aggregateType;
+    this.#conflict = options.conflict;
     this.#unitOfWork = options.unitOfWork;
     this.#duplicateKey = options.duplicateKey ?? (() => undefined);
     this.#readModelFields = options.readModelFields ?? [];
@@ -74,7 +74,7 @@ export class VersionedCollection<D extends VersionedDocument> {
   /**
    * Inserts the document for `expectedVersion` 0, otherwise replaces it only
    * if the stored version still equals `expectedVersion`. Returns the new
-   * version; a lost race is {@link ConcurrencyConflictError}.
+   * version; a lost race is the `conflict` error of the slice.
    */
   async save(
     id: string,
@@ -117,14 +117,14 @@ export class VersionedCollection<D extends VersionedDocument> {
                 { session: this.#session },
               );
         if (result.matchedCount === 0) {
-          throw new ConcurrencyConflictError(this.#aggregateType, id);
+          throw this.#conflict(id);
         }
       }
     } catch (error) {
       if (error instanceof MongoServerError && error.code === 11000) {
         const keyPattern = (error.keyPattern ?? {}) as Record<string, unknown>;
         if ("_id" in keyPattern) {
-          throw new ConcurrencyConflictError(this.#aggregateType, id);
+          throw this.#conflict(id);
         }
         throw this.#duplicateKey(keyPattern, document) ?? error;
       }

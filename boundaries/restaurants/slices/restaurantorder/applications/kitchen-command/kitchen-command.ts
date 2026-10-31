@@ -2,7 +2,6 @@ import { requirePermission } from "../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Outbox } from "../../../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../../../pkg/unit-of-work/unit-of-work.ts";
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
 import {
   AlreadyInStateError,
   type RestaurantOrder,
@@ -10,6 +9,7 @@ import {
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control/access-control.ts";
+import type { Clock } from "../clock/clock.ts";
 import { loadRestaurantOrder } from "../load/load.ts";
 import { saveAndPublish } from "../publish-change/publish-change.ts";
 import {

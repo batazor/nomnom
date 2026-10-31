@@ -11,9 +11,9 @@ import {
   query,
   type UseCase,
 } from "../../../pkg/telemetry/usecase.ts";
-import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { SlotReservationAccess } from "../applications/access-control/access-control.ts";
+import type { Clock } from "../applications/clock/clock.ts";
 import { ConfirmScheduledSlotHandler } from "../applications/confirm/confirm.ts";
 import { ListScheduledSlotsHandler } from "../applications/list/list.ts";
 import { ReleaseScheduledSlotHandler } from "../applications/release/release.ts";

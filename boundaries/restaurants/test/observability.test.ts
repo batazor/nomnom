@@ -71,7 +71,7 @@ import {
   USECASE_DURATION_BUCKETS,
   UseCaseTelemetry,
 } from "../pkg/telemetry/usecase.ts";
-import { NotFoundError } from "../pkg/usecase/errors.ts";
+import { NotFoundError } from "../slices/restaurantorder/applications/failure/failure.ts";
 import { createTestDatabase } from "./support/database.ts";
 import {
   createInfrastructure,

@@ -5,6 +5,7 @@ import {
   VersionedCollection,
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
+import { ConcurrencyConflictError } from "../../applications/failure/failure.ts";
 import {
   Cook,
   type CookRepository,
@@ -54,7 +55,7 @@ export class DatabaseCookRepository implements CookRepository {
     this.#collection = new VersionedCollection<CookDocument>({
       db,
       name: COOKS_COLLECTION,
-      aggregateType: "Cook",
+      conflict: (id) => new ConcurrencyConflictError("Cook", id),
       unitOfWork,
     });
     this.#saved = saved;

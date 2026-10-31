@@ -1,8 +1,8 @@
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type {
   RestaurantOrder,
   RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
+import { NotFoundError } from "../failure/failure.ts";
 
 /**
  * Loads an order addressed by restaurant and id. An order of another

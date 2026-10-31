@@ -4,8 +4,11 @@ import {
   VersionedCollection,
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
-import { AlreadyExistsError } from "../../../../pkg/usecase/errors.ts";
 import type { MenuBatchReader } from "../../applications/batch-get/batch-get.ts";
+import {
+  AlreadyExistsError,
+  ConcurrencyConflictError,
+} from "../../applications/failure/failure.ts";
 import type { MenuReader } from "../../applications/get/get.ts";
 import type { MenuView } from "../../applications/menu-support/menu-support.ts";
 import {
@@ -71,7 +74,7 @@ export const createMenuCollection = (
   new VersionedCollection<MenuDocument>({
     db,
     name: MENUS_COLLECTION,
-    aggregateType: "Menu",
+    conflict: (id) => new ConcurrencyConflictError("Menu", id),
     unitOfWork,
     duplicateKey: (keyPattern, document) =>
       "restaurantId" in keyPattern

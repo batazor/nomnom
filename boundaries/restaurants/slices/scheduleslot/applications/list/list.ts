@@ -1,10 +1,10 @@
-import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../pkg/usecase/errors.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import type {
   DeliveryWindows,
   ScheduleSlotRepository,
 } from "../../domains/scheduleslot/scheduleslot.ts";
+import type { Clock } from "../clock/clock.ts";
+import { NotFoundError } from "../failure/failure.ts";
 import {
   type WindowAvailability,
   windowAvailability,

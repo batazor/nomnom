@@ -1,12 +1,12 @@
 import { requirePermission } from "../../../../../pkg/authz/require-permission.ts";
 import type { Subject } from "../../../../../pkg/authz/subject.ts";
-import type { Clock } from "../../../../../pkg/usecase/clock.ts";
-import { NotFoundError } from "../../../../../pkg/usecase/errors.ts";
 import {
   AlreadyInStateError,
   type RestaurantOrderRepository,
 } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { FulfillmentProcessAccess } from "../../access-control/access-control.ts";
+import type { Clock } from "../../clock/clock.ts";
+import { NotFoundError } from "../../failure/failure.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
