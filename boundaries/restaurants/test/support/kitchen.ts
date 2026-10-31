@@ -2,12 +2,12 @@ import type { Subject } from "../../pkg/authz/subject.ts";
 import type { Outbox } from "../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../pkg/unit-of-work/unit-of-work.ts";
 import type { CookPoolAccess } from "../../slices/cook/applications/access-control/access-control.ts";
-import { PoolCookAssigner } from "../../slices/cook/applications/assign-cook/assign-cook.ts";
-import { GetCookPoolHandler } from "../../slices/cook/applications/get-cook-pool/get-cook-pool.ts";
-import { HireCookHandler } from "../../slices/cook/applications/hire-cook/hire-cook.ts";
-import { PutCookOnLineHandler } from "../../slices/cook/applications/put-cook-on-line/put-cook-on-line.ts";
-import { RetireCookHandler } from "../../slices/cook/applications/retire-cook/retire-cook.ts";
-import { TakeCookOffLineHandler } from "../../slices/cook/applications/take-cook-off-line/take-cook-off-line.ts";
+import { PoolCookAssigner } from "../../slices/cook/applications/assign/assign.ts";
+import { GetCookPoolHandler } from "../../slices/cook/applications/get-pool/get-pool.ts";
+import { HireCookHandler } from "../../slices/cook/applications/hire/hire.ts";
+import { PutCookOnLineHandler } from "../../slices/cook/applications/put-on-line/put-on-line.ts";
+import { RetireCookHandler } from "../../slices/cook/applications/retire/retire.ts";
+import { TakeCookOffLineHandler } from "../../slices/cook/applications/take-off-line/take-off-line.ts";
 import { DatabaseCookRepository } from "../../slices/cook/infrastructure/repository/cooks.ts";
 import {
   createRestaurantCollection,
@@ -17,28 +17,28 @@ import {
   type AcceptanceConditionsProvider,
   AcceptOrderHandler,
   type ReadyTimeEstimator,
-} from "../../slices/restaurantorder/applications/acceptance/accept-order/accept-order.ts";
-import { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/acceptance/receive-order-request/receive-order-request.ts";
-import { RejectOrderHandler } from "../../slices/restaurantorder/applications/acceptance/reject-order/reject-order.ts";
+} from "../../slices/restaurantorder/applications/acceptance/accept/accept.ts";
+import { ReceiveOrderRequestHandler } from "../../slices/restaurantorder/applications/acceptance/receive-request/receive-request.ts";
+import { RejectOrderHandler } from "../../slices/restaurantorder/applications/acceptance/reject/reject.ts";
 import type {
   FulfillmentCoordinatorAccess,
   FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
 } from "../../slices/restaurantorder/applications/access-control/access-control.ts";
-import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel-restaurant-order/cancel-restaurant-order.ts";
-import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get-restaurant-order/get-restaurant-order.ts";
-import { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+import { CancelRestaurantOrderHandler } from "../../slices/restaurantorder/applications/cancel/cancel.ts";
+import { GetRestaurantOrderHandler } from "../../slices/restaurantorder/applications/get/get.ts";
+import { GetKitchenQueueHandler } from "../../slices/restaurantorder/applications/kitchen-board/get-queue/get-queue.ts";
 import { ListActivePreparationsHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-active-preparations/list-active-preparations.ts";
-import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-ready-orders/list-ready-orders.ts";
-import { ListScheduledOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-scheduled-orders/list-scheduled-orders.ts";
+import { ListReadyOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-ready/list-ready.ts";
+import { ListScheduledOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-scheduled/list-scheduled.ts";
 import type { RepeatPolicy } from "../../slices/restaurantorder/applications/kitchen-command/kitchen-command.ts";
 import { MarkAssembledHandler } from "../../slices/restaurantorder/applications/preparation/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../../slices/restaurantorder/applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import { QueueRestaurantOrderHandler } from "../../slices/restaurantorder/applications/preparation/queue-restaurant-order/queue-restaurant-order.ts";
-import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/preparation/report-preparation-delay/report-preparation-delay.ts";
-import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/preparation/report-preparation-failure/report-preparation-failure.ts";
-import { StartPreparationHandler } from "../../slices/restaurantorder/applications/preparation/start-preparation/start-preparation.ts";
+import { QueueRestaurantOrderHandler } from "../../slices/restaurantorder/applications/preparation/queue/queue.ts";
+import { ReportPreparationDelayHandler } from "../../slices/restaurantorder/applications/preparation/report-delay/report-delay.ts";
+import { ReportPreparationFailureHandler } from "../../slices/restaurantorder/applications/preparation/report-failure/report-failure.ts";
+import { StartPreparationHandler } from "../../slices/restaurantorder/applications/preparation/start/start.ts";
 import type { AcceptanceConditions } from "../../slices/restaurantorder/domains/restaurantorder/acceptance.ts";
 import type { CancellationPolicy } from "../../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { PriorityKitchenQueueOrdering } from "../../slices/restaurantorder/infrastructure/kitchen-queue/priority.ts";
@@ -52,10 +52,10 @@ import {
   RepositoryRestaurantExistence,
 } from "../../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";
 import type { SlotReservationAccess } from "../../slices/scheduleslot/applications/access-control/access-control.ts";
-import { ConfirmScheduledSlotHandler } from "../../slices/scheduleslot/applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
-import { ListScheduledSlotsHandler } from "../../slices/scheduleslot/applications/list-scheduled-slots/list-scheduled-slots.ts";
-import { ReleaseScheduledSlotHandler } from "../../slices/scheduleslot/applications/release-scheduled-slot/release-scheduled-slot.ts";
-import { ReserveScheduledSlotHandler } from "../../slices/scheduleslot/applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
+import { ConfirmScheduledSlotHandler } from "../../slices/scheduleslot/applications/confirm/confirm.ts";
+import { ListScheduledSlotsHandler } from "../../slices/scheduleslot/applications/list/list.ts";
+import { ReleaseScheduledSlotHandler } from "../../slices/scheduleslot/applications/release/release.ts";
+import { ReserveScheduledSlotHandler } from "../../slices/scheduleslot/applications/reserve/reserve.ts";
 import { DeliveryWindows } from "../../slices/scheduleslot/domains/scheduleslot/scheduleslot.ts";
 import {
   createScheduleSlotCollection,

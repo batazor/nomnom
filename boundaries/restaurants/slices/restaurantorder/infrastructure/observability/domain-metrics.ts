@@ -26,8 +26,8 @@ import type {
   ReceiveOrderRequest,
   ReceiveOrderRequestHandler,
   ReceiveOrderRequestResult,
-} from "../../applications/acceptance/receive-order-request/receive-order-request.ts";
-import type { CancelRestaurantOrderResult } from "../../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+} from "../../applications/acceptance/receive-request/receive-request.ts";
+import type { CancelRestaurantOrderResult } from "../../applications/cancel/cancel.ts";
 import {
   ALL_STATES,
   InvalidTransitionError,

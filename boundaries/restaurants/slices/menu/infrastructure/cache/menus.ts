@@ -16,8 +16,8 @@ import {
   ReadCache,
 } from "../../../../infrastructure/valkey/read-cache.ts";
 import type { CacheRefreshes } from "../../../../infrastructure/valkey/refresh.ts";
-import type { MenuBatchReader } from "../../applications/batch-get-menus/batch-get-menus.ts";
-import type { MenuReader } from "../../applications/get-menu/get-menu.ts";
+import type { MenuBatchReader } from "../../applications/batch-get/batch-get.ts";
+import type { MenuReader } from "../../applications/get/get.ts";
 import type { MenuView } from "../../applications/menu-support/menu-support.ts";
 
 export class CachedMenuReader implements MenuReader, MenuBatchReader {

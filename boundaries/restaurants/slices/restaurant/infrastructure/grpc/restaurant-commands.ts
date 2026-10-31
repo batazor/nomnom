@@ -20,15 +20,15 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { CloseRestaurantHandler } from "../../applications/close-restaurant/close-restaurant.ts";
-import type { OpenRestaurantHandler } from "../../applications/open-restaurant/open-restaurant.ts";
+import type { CloseRestaurantHandler } from "../../applications/close/close.ts";
+import type { OpenRestaurantHandler } from "../../applications/open/open.ts";
 import type { RestaurantChangeResult } from "../../applications/restaurant-view/restaurant-view.ts";
 import type { SetOpeningHoursHandler } from "../../applications/set-opening-hours/set-opening-hours.ts";
 import type { SetScheduledOrderSettingsHandler } from "../../applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
 import type {
   PremiumFeeChange,
   UpdateRestaurantHandler,
-} from "../../applications/update-restaurant/update-restaurant.ts";
+} from "../../applications/update/update.ts";
 import type { ScheduledOrderSettingsValue } from "../../domains/restaurant/restaurant.ts";
 import { toRestaurantMessage } from "./messages.ts";
 

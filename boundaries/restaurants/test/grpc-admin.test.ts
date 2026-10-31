@@ -9,7 +9,7 @@ import {
 } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { AuthorizationUnavailableError } from "../pkg/authz/errors.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
-import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
+import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
 import { createService, rejectingSubjects } from "./support/grpc.ts";
 import {
   BERLIN,

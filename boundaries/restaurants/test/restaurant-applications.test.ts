@@ -4,17 +4,17 @@ import test from "node:test";
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import type { Outbox } from "../pkg/outbox/outbox.ts";
 import { NotFoundError } from "../pkg/usecase/errors.ts";
-import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
+import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
 import {
   InvalidPageSizeError,
   ListRestaurantsHandler,
-} from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
-import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
+} from "../slices/restaurant/applications/list/list.ts";
+import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned/list-owned.ts";
+import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register/register.ts";
 import {
   type PremiumFeeChange,
   UpdateRestaurantHandler,
-} from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
+} from "../slices/restaurant/applications/update/update.ts";
 import {
   InvalidMarketIdError,
   InvalidRestaurantError,

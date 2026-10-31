@@ -18,12 +18,12 @@ import {
 } from "../../infrastructure/grpc/service.ts";
 import type { SubjectResolver } from "../../infrastructure/grpc/subject.ts";
 import type { Subject } from "../../pkg/authz/subject.ts";
-import { BatchGetRestaurantsHandler } from "../../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
-import { GetRestaurantHandler } from "../../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
-import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
-import type { ListActiveRestaurantOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-incoming-orders/list-incoming-orders.ts";
+import { BatchGetRestaurantsHandler } from "../../slices/restaurant/applications/batch-get/batch-get.ts";
+import { GetRestaurantHandler } from "../../slices/restaurant/applications/get/get.ts";
+import { ListRestaurantsHandler } from "../../slices/restaurant/applications/list/list.ts";
+import { ListOwnedRestaurantsHandler } from "../../slices/restaurant/applications/list-owned/list-owned.ts";
+import type { ListActiveRestaurantOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-active/list-active.ts";
+import type { ListIncomingOrdersHandler } from "../../slices/restaurantorder/applications/kitchen-board/list-incoming/list-incoming.ts";
 import { createKitchenWorld, ordersService } from "./kitchen.ts";
 
 export const context = undefined as never;

@@ -26,33 +26,33 @@ import {
   type AcceptanceFactsReader,
   AcceptOrderHandler,
   type ReadyTimeEstimator,
-} from "../applications/acceptance/accept-order/accept-order.ts";
-import { ReceiveOrderRequestHandler } from "../applications/acceptance/receive-order-request/receive-order-request.ts";
-import { RejectOrderHandler } from "../applications/acceptance/reject-order/reject-order.ts";
+} from "../applications/acceptance/accept/accept.ts";
+import { ReceiveOrderRequestHandler } from "../applications/acceptance/receive-request/receive-request.ts";
+import { RejectOrderHandler } from "../applications/acceptance/reject/reject.ts";
 import type {
   FulfillmentCoordinatorAccess,
   FulfillmentProcessAccess,
   KitchenStaffAccess,
   RestaurantOrderViewAccess,
 } from "../applications/access-control/access-control.ts";
-import { CancelRestaurantOrderHandler } from "../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
+import { CancelRestaurantOrderHandler } from "../applications/cancel/cancel.ts";
 import {
   GetKitchenQueueHandler,
   type KitchenQueueOrdering,
-} from "../applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
-import { ListActiveRestaurantOrdersHandler } from "../applications/kitchen-board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import { ListIncomingOrdersHandler } from "../applications/kitchen-board/list-incoming-orders/list-incoming-orders.ts";
-import { ListScheduledOrdersHandler } from "../applications/kitchen-board/list-scheduled-orders/list-scheduled-orders.ts";
+} from "../applications/kitchen-board/get-queue/get-queue.ts";
+import { ListActiveRestaurantOrdersHandler } from "../applications/kitchen-board/list-active/list-active.ts";
+import { ListIncomingOrdersHandler } from "../applications/kitchen-board/list-incoming/list-incoming.ts";
+import { ListScheduledOrdersHandler } from "../applications/kitchen-board/list-scheduled/list-scheduled.ts";
 import type { KitchenCommandDependencies } from "../applications/kitchen-command/kitchen-command.ts";
 import { MarkAssembledHandler } from "../applications/preparation/mark-assembled/mark-assembled.ts";
 import { MarkReadyForPickupHandler } from "../applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import { QueueRestaurantOrderHandler } from "../applications/preparation/queue-restaurant-order/queue-restaurant-order.ts";
-import { ReportPreparationDelayHandler } from "../applications/preparation/report-preparation-delay/report-preparation-delay.ts";
-import { ReportPreparationFailureHandler } from "../applications/preparation/report-preparation-failure/report-preparation-failure.ts";
+import { QueueRestaurantOrderHandler } from "../applications/preparation/queue/queue.ts";
+import { ReportPreparationDelayHandler } from "../applications/preparation/report-delay/report-delay.ts";
+import { ReportPreparationFailureHandler } from "../applications/preparation/report-failure/report-failure.ts";
 import {
   type CookAssigner,
   StartPreparationHandler,
-} from "../applications/preparation/start-preparation/start-preparation.ts";
+} from "../applications/preparation/start/start.ts";
 import { RecordPickupHandler } from "../applications/record-pickup/record-pickup.ts";
 import type { RestaurantOrderRepository } from "../domains/restaurantorder/restaurantorder.ts";
 import { OpeningHoursAcceptanceConditions } from "../infrastructure/acceptance/opening-hours.ts";

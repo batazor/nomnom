@@ -19,10 +19,10 @@ import {
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
-import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
+import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
+import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register/register.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
-import { UpdateRestaurantHandler } from "../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
+import { UpdateRestaurantHandler } from "../slices/restaurant/applications/update/update.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,

@@ -19,11 +19,11 @@ import {
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
-import type { AddMenuItemHandler } from "../../applications/add-menu-item/add-menu-item.ts";
-import type { CreateMenuHandler } from "../../applications/create-menu/create-menu.ts";
+import type { AddMenuItemHandler } from "../../applications/add-item/add-item.ts";
+import type { CreateMenuHandler } from "../../applications/create/create.ts";
 import type { MenuItemChangeResult } from "../../applications/menu-support/menu-support.ts";
-import type { SetMenuItemAvailabilityHandler } from "../../applications/set-menu-item-availability/set-menu-item-availability.ts";
-import type { UpdateMenuItemHandler } from "../../applications/update-menu-item/update-menu-item.ts";
+import type { SetMenuItemAvailabilityHandler } from "../../applications/set-item-availability/set-item-availability.ts";
+import type { UpdateMenuItemHandler } from "../../applications/update-item/update-item.ts";
 import { toMenuItemMessage } from "./messages.ts";
 
 export type MenuRpcDependencies = Readonly<{

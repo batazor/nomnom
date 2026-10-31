@@ -14,10 +14,10 @@ import {
 import type { Clock } from "../../../pkg/usecase/clock.ts";
 import type { RestaurantRepository } from "../../restaurant/domains/restaurant/restaurant.ts";
 import type { SlotReservationAccess } from "../applications/access-control/access-control.ts";
-import { ConfirmScheduledSlotHandler } from "../applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
-import { ListScheduledSlotsHandler } from "../applications/list-scheduled-slots/list-scheduled-slots.ts";
-import { ReleaseScheduledSlotHandler } from "../applications/release-scheduled-slot/release-scheduled-slot.ts";
-import { ReserveScheduledSlotHandler } from "../applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
+import { ConfirmScheduledSlotHandler } from "../applications/confirm/confirm.ts";
+import { ListScheduledSlotsHandler } from "../applications/list/list.ts";
+import { ReleaseScheduledSlotHandler } from "../applications/release/release.ts";
+import { ReserveScheduledSlotHandler } from "../applications/reserve/reserve.ts";
 import { DeliveryWindows } from "../domains/scheduleslot/scheduleslot.ts";
 import {
   createScheduleSlotCollection,

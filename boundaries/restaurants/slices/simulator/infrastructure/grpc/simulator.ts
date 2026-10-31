@@ -8,8 +8,8 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { GetSimulatorHandler } from "../../applications/get-simulator/get-simulator.ts";
-import type { SetSimulatorEnabledHandler } from "../../applications/set-simulator-enabled/set-simulator-enabled.ts";
+import type { GetSimulatorHandler } from "../../applications/get/get.ts";
+import type { SetSimulatorEnabledHandler } from "../../applications/set-enabled/set-enabled.ts";
 
 export type SimulatorRpcDependencies = Readonly<{
   getSimulator: Pick<GetSimulatorHandler, "execute">;

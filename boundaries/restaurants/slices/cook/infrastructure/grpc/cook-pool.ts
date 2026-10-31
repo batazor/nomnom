@@ -15,13 +15,13 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { CookCommand } from "../../applications/change-cook/change-cook.ts";
+import type { CookCommand } from "../../applications/change/change.ts";
 import type { CookView } from "../../applications/cook-view/cook-view.ts";
-import type { GetCookPoolHandler } from "../../applications/get-cook-pool/get-cook-pool.ts";
-import type { HireCookHandler } from "../../applications/hire-cook/hire-cook.ts";
-import type { PutCookOnLineHandler } from "../../applications/put-cook-on-line/put-cook-on-line.ts";
-import type { RetireCookHandler } from "../../applications/retire-cook/retire-cook.ts";
-import type { TakeCookOffLineHandler } from "../../applications/take-cook-off-line/take-cook-off-line.ts";
+import type { GetCookPoolHandler } from "../../applications/get-pool/get-pool.ts";
+import type { HireCookHandler } from "../../applications/hire/hire.ts";
+import type { PutCookOnLineHandler } from "../../applications/put-on-line/put-on-line.ts";
+import type { RetireCookHandler } from "../../applications/retire/retire.ts";
+import type { TakeCookOffLineHandler } from "../../applications/take-off-line/take-off-line.ts";
 
 export type CookPoolRpcDependencies = Readonly<{
   getCookPool: Pick<GetCookPoolHandler, "execute">;

@@ -5,7 +5,7 @@ import type {
   ScheduledOrderSettingsValue,
 } from "../../domains/restaurant/restaurant.ts";
 import type { RestaurantAccessControl } from "../access-control/access-control.ts";
-import { loadRestaurant } from "../load-restaurant/load-restaurant.ts";
+import { loadRestaurant } from "../load/load.ts";
 import {
   type RestaurantChangeResult,
   toRestaurantView,

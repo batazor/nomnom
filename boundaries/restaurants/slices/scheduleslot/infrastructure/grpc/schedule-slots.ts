@@ -20,10 +20,10 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { ConfirmScheduledSlotHandler } from "../../applications/confirm-scheduled-slot/confirm-scheduled-slot.ts";
-import type { ListScheduledSlotsHandler } from "../../applications/list-scheduled-slots/list-scheduled-slots.ts";
-import type { ReleaseScheduledSlotHandler } from "../../applications/release-scheduled-slot/release-scheduled-slot.ts";
-import type { ReserveScheduledSlotHandler } from "../../applications/reserve-scheduled-slot/reserve-scheduled-slot.ts";
+import type { ConfirmScheduledSlotHandler } from "../../applications/confirm/confirm.ts";
+import type { ListScheduledSlotsHandler } from "../../applications/list/list.ts";
+import type { ReleaseScheduledSlotHandler } from "../../applications/release/release.ts";
+import type { ReserveScheduledSlotHandler } from "../../applications/reserve/reserve.ts";
 import type { DeliveryWindow } from "../../domains/scheduleslot/scheduleslot.ts";
 
 export type ScheduleSlotRpcDependencies = Readonly<{

@@ -32,17 +32,17 @@ import type {
   StaffRelationshipWriter,
 } from "../applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../applications/assign-staff/assign-staff.ts";
-import { BatchGetRestaurantsHandler } from "../applications/batch-get-restaurants/batch-get-restaurants.ts";
-import { CloseRestaurantHandler } from "../applications/close-restaurant/close-restaurant.ts";
-import { GetRestaurantHandler } from "../applications/get-restaurant/get-restaurant.ts";
-import { ListOwnedRestaurantsHandler } from "../applications/list-owned-restaurants/list-owned-restaurants.ts";
-import { ListRestaurantsHandler } from "../applications/list-restaurants/list-restaurants.ts";
-import { OpenRestaurantHandler } from "../applications/open-restaurant/open-restaurant.ts";
-import { RegisterRestaurantHandler } from "../applications/register-restaurant/register-restaurant.ts";
+import { BatchGetRestaurantsHandler } from "../applications/batch-get/batch-get.ts";
+import { CloseRestaurantHandler } from "../applications/close/close.ts";
+import { GetRestaurantHandler } from "../applications/get/get.ts";
+import { ListRestaurantsHandler } from "../applications/list/list.ts";
+import { ListOwnedRestaurantsHandler } from "../applications/list-owned/list-owned.ts";
+import { OpenRestaurantHandler } from "../applications/open/open.ts";
+import { RegisterRestaurantHandler } from "../applications/register/register.ts";
 import { RevokeStaffHandler } from "../applications/revoke-staff/revoke-staff.ts";
 import { SetOpeningHoursHandler } from "../applications/set-opening-hours/set-opening-hours.ts";
 import { SetScheduledOrderSettingsHandler } from "../applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
-import { UpdateRestaurantHandler } from "../applications/update-restaurant/update-restaurant.ts";
+import { UpdateRestaurantHandler } from "../applications/update/update.ts";
 import { WaitTimePolicy } from "../domains/restaurant/wait-time.ts";
 import { CachedRestaurantCatalog } from "../infrastructure/cache/restaurants.ts";
 import { restaurantEventMapper } from "../infrastructure/integration/restaurant-events.ts";

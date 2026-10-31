@@ -6,10 +6,10 @@ import {
 } from "../../../../infrastructure/repository/versioned-collection.ts";
 import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
 import type { AuthorizationRevision } from "../../applications/access-control/access-control.ts";
-import type { RestaurantBatchReader } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
-import type { RestaurantPublicReader } from "../../applications/get-restaurant/get-restaurant.ts";
-import type { OwnedRestaurantsReader } from "../../applications/list-owned-restaurants/list-owned-restaurants.ts";
-import type { RestaurantCatalogReader } from "../../applications/list-restaurants/list-restaurants.ts";
+import type { RestaurantBatchReader } from "../../applications/batch-get/batch-get.ts";
+import type { RestaurantPublicReader } from "../../applications/get/get.ts";
+import type { RestaurantCatalogReader } from "../../applications/list/list.ts";
+import type { OwnedRestaurantsReader } from "../../applications/list-owned/list-owned.ts";
 import type {
   StoredWaitTime,
   WaitTimeStatisticsStore,

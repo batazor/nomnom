@@ -14,7 +14,7 @@ import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationshi
 import type { Subject } from "../pkg/authz/subject.ts";
 import type { RestaurantAccessControl } from "../slices/restaurant/applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
-import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
+import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register/register.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {

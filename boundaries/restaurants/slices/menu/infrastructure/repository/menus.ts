@@ -5,8 +5,8 @@ import {
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
 import { AlreadyExistsError } from "../../../../pkg/usecase/errors.ts";
-import type { MenuBatchReader } from "../../applications/batch-get-menus/batch-get-menus.ts";
-import type { MenuReader } from "../../applications/get-menu/get-menu.ts";
+import type { MenuBatchReader } from "../../applications/batch-get/batch-get.ts";
+import type { MenuReader } from "../../applications/get/get.ts";
 import type { MenuView } from "../../applications/menu-support/menu-support.ts";
 import {
   Menu,

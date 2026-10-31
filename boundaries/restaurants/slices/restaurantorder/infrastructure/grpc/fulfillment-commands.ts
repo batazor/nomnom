@@ -14,9 +14,9 @@ import {
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { ReceiveOrderRequestHandler } from "../../applications/acceptance/receive-order-request/receive-order-request.ts";
-import type { CancelRestaurantOrderHandler } from "../../applications/cancel-restaurant-order/cancel-restaurant-order.ts";
-import type { QueueRestaurantOrderHandler } from "../../applications/preparation/queue-restaurant-order/queue-restaurant-order.ts";
+import type { ReceiveOrderRequestHandler } from "../../applications/acceptance/receive-request/receive-request.ts";
+import type { CancelRestaurantOrderHandler } from "../../applications/cancel/cancel.ts";
+import type { QueueRestaurantOrderHandler } from "../../applications/preparation/queue/queue.ts";
 import type { RecordPickupHandler } from "../../applications/record-pickup/record-pickup.ts";
 import { fromPriorityMessage, toRestaurantOrderMessage } from "./messages.ts";
 

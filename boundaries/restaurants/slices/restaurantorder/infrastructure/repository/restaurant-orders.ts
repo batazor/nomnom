@@ -5,36 +5,36 @@ import {
   type VersionedDocument,
 } from "../../../../infrastructure/repository/versioned-collection.ts";
 import { ConcurrencyConflictError } from "../../../../pkg/usecase/errors.ts";
-import type { RestaurantOrderReader } from "../../applications/get-restaurant-order/get-restaurant-order.ts";
+import type { RestaurantOrderReader } from "../../applications/get/get.ts";
 import type {
   KitchenQueueEntry,
   KitchenQueueReader,
-} from "../../applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+} from "../../applications/kitchen-board/get-queue/get-queue.ts";
 import type {
   KitchenOrderInState,
   KitchenOrdersInStatesReader,
 } from "../../applications/kitchen-board/kitchen-board.ts";
 import type {
+  ActiveRestaurantOrder,
+  ActiveRestaurantOrdersReader,
+} from "../../applications/kitchen-board/list-active/list-active.ts";
+import type {
   ActivePreparation,
   ActivePreparationsReader,
 } from "../../applications/kitchen-board/list-active-preparations/list-active-preparations.ts";
 import type {
-  ActiveRestaurantOrder,
-  ActiveRestaurantOrdersReader,
-} from "../../applications/kitchen-board/list-active-restaurant-orders/list-active-restaurant-orders.ts";
-import type {
   IncomingOrder,
   IncomingOrdersReader,
-} from "../../applications/kitchen-board/list-incoming-orders/list-incoming-orders.ts";
+} from "../../applications/kitchen-board/list-incoming/list-incoming.ts";
 import type {
   ReadyOrder,
   ReadyOrdersReader,
-} from "../../applications/kitchen-board/list-ready-orders/list-ready-orders.ts";
+} from "../../applications/kitchen-board/list-ready/list-ready.ts";
 import type {
   ScheduledOrder,
   ScheduledOrdersReader,
-} from "../../applications/kitchen-board/list-scheduled-orders/list-scheduled-orders.ts";
-import type { StartedOrders } from "../../applications/preparation/start-preparation/start-preparation.ts";
+} from "../../applications/kitchen-board/list-scheduled/list-scheduled.ts";
+import type { StartedOrders } from "../../applications/preparation/start/start.ts";
 import {
   type RestaurantOrderView,
   snapshotToView,

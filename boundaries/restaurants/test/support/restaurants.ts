@@ -9,13 +9,13 @@ import type {
   StaffRelationshipWriter,
 } from "../../slices/restaurant/applications/access-control/access-control.ts";
 import { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
-import { CloseRestaurantHandler } from "../../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
-import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
-import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register-restaurant/register-restaurant.ts";
+import { CloseRestaurantHandler } from "../../slices/restaurant/applications/close/close.ts";
+import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open/open.ts";
+import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register/register.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
 import { SetOpeningHoursHandler } from "../../slices/restaurant/applications/set-opening-hours/set-opening-hours.ts";
 import { SetScheduledOrderSettingsHandler } from "../../slices/restaurant/applications/set-scheduled-order-settings/set-scheduled-order-settings.ts";
-import { UpdateRestaurantHandler } from "../../slices/restaurant/applications/update-restaurant/update-restaurant.ts";
+import { UpdateRestaurantHandler } from "../../slices/restaurant/applications/update/update.ts";
 import type { OpeningInterval } from "../../slices/restaurant/domains/restaurant/restaurant.ts";
 import { WaitTimePolicy } from "../../slices/restaurant/domains/restaurant/wait-time.ts";
 import {

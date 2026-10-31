@@ -4,7 +4,7 @@ import type { WaitTimePolicy } from "../../../restaurant/domains/restaurant/wait
 import type {
   KitchenQueueEntry,
   KitchenQueueOrdering,
-} from "../../applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+} from "../../applications/kitchen-board/get-queue/get-queue.ts";
 import { OrderPriority } from "../../domains/restaurantorder/restaurantorder.ts";
 
 /**

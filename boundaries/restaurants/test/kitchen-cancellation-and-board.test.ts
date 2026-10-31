@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import { NotFoundError } from "../pkg/usecase/errors.ts";
-import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/kitchen-board/get-kitchen-queue/get-kitchen-queue.ts";
+import { GetKitchenQueueHandler } from "../slices/restaurantorder/applications/kitchen-board/get-queue/get-queue.ts";
 import {
   cook,
   createKitchenWorld,

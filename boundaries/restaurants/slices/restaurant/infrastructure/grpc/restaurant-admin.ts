@@ -13,7 +13,7 @@ import {
 import { withRequestRevision } from "../../../../infrastructure/grpc/revision.ts";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
 import type { AssignStaffHandler } from "../../applications/assign-staff/assign-staff.ts";
-import type { RegisterRestaurantHandler } from "../../applications/register-restaurant/register-restaurant.ts";
+import type { RegisterRestaurantHandler } from "../../applications/register/register.ts";
 import type { RevokeStaffHandler } from "../../applications/revoke-staff/revoke-staff.ts";
 import { toRestaurantMessage, toStaffMessage } from "./messages.ts";
 

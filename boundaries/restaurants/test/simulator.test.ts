@@ -4,8 +4,8 @@ import test from "node:test";
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
 import { loadSimulatorConfig } from "../pkg/config/config.ts";
-import { GetSimulatorHandler } from "../slices/simulator/applications/get-simulator/get-simulator.ts";
-import { SetSimulatorEnabledHandler } from "../slices/simulator/applications/set-simulator-enabled/set-simulator-enabled.ts";
+import { GetSimulatorHandler } from "../slices/simulator/applications/get/get.ts";
+import { SetSimulatorEnabledHandler } from "../slices/simulator/applications/set-enabled/set-enabled.ts";
 import {
   KitchenSimulator,
   SIMULATED_FAILURE_REASON,

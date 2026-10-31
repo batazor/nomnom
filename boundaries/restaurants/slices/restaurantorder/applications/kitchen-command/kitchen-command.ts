@@ -10,8 +10,8 @@ import {
   type RestaurantOrderRepository,
 } from "../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../access-control/access-control.ts";
-import { loadRestaurantOrder } from "../load-restaurant-order/load-restaurant-order.ts";
-import { saveAndPublish } from "../publish-order-change/publish-order-change.ts";
+import { loadRestaurantOrder } from "../load/load.ts";
+import { saveAndPublish } from "../publish-change/publish-change.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,

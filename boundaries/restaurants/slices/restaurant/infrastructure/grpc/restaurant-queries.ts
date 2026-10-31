@@ -12,10 +12,10 @@ import {
   type RestaurantsService,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import type { SubjectResolver } from "../../../../infrastructure/grpc/subject.ts";
-import type { BatchGetRestaurantsHandler } from "../../applications/batch-get-restaurants/batch-get-restaurants.ts";
-import type { GetRestaurantHandler } from "../../applications/get-restaurant/get-restaurant.ts";
-import type { ListOwnedRestaurantsHandler } from "../../applications/list-owned-restaurants/list-owned-restaurants.ts";
-import type { ListRestaurantsHandler } from "../../applications/list-restaurants/list-restaurants.ts";
+import type { BatchGetRestaurantsHandler } from "../../applications/batch-get/batch-get.ts";
+import type { GetRestaurantHandler } from "../../applications/get/get.ts";
+import type { ListRestaurantsHandler } from "../../applications/list/list.ts";
+import type { ListOwnedRestaurantsHandler } from "../../applications/list-owned/list-owned.ts";
 import { toCatalogRestaurantMessage, toRestaurantMessage } from "./messages.ts";
 
 export type RestaurantQueryRpcDependencies = Readonly<{

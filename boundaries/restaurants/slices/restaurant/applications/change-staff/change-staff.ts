@@ -9,7 +9,7 @@ import type {
   RestaurantAccessControl,
   StaffRelationshipWriter,
 } from "../access-control/access-control.ts";
-import { loadRestaurant } from "../load-restaurant/load-restaurant.ts";
+import { loadRestaurant } from "../load/load.ts";
 
 export type ChangeStaffDependencies = {
   accessControl: RestaurantAccessControl;

@@ -28,7 +28,7 @@ import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts
 import type { Subject } from "../pkg/authz/subject.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import { startTracing, type Tracing } from "../pkg/telemetry/tracing.ts";
-import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
+import { SetMenuItemAvailabilityHandler } from "../slices/menu/applications/set-item-availability/set-item-availability.ts";
 import { Menu } from "../slices/menu/domains/menu/menu.ts";
 import {
   MENU_AGGREGATE_TYPE,
@@ -38,8 +38,8 @@ import {
   createMenuCollection,
   DatabaseMenuRepository,
 } from "../slices/menu/infrastructure/repository/menus.ts";
-import { CloseRestaurantHandler } from "../slices/restaurant/applications/close-restaurant/close-restaurant.ts";
-import { OpenRestaurantHandler } from "../slices/restaurant/applications/open-restaurant/open-restaurant.ts";
+import { CloseRestaurantHandler } from "../slices/restaurant/applications/close/close.ts";
+import { OpenRestaurantHandler } from "../slices/restaurant/applications/open/open.ts";
 import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { Money } from "../slices/restaurant/domains/restaurant/vo/money.ts";
 import {

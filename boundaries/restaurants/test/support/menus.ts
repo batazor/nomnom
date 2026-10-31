@@ -1,12 +1,12 @@
 import type { Subject } from "../../pkg/authz/subject.ts";
 import type { Outbox } from "../../pkg/outbox/outbox.ts";
 import type { MenuAccessControl } from "../../slices/menu/applications/access-control/access-control.ts";
-import { AddMenuItemHandler } from "../../slices/menu/applications/add-menu-item/add-menu-item.ts";
-import { BatchGetMenusHandler } from "../../slices/menu/applications/batch-get-menus/batch-get-menus.ts";
-import { CreateMenuHandler } from "../../slices/menu/applications/create-menu/create-menu.ts";
-import { GetMenuHandler } from "../../slices/menu/applications/get-menu/get-menu.ts";
-import { SetMenuItemAvailabilityHandler } from "../../slices/menu/applications/set-menu-item-availability/set-menu-item-availability.ts";
-import { UpdateMenuItemHandler } from "../../slices/menu/applications/update-menu-item/update-menu-item.ts";
+import { AddMenuItemHandler } from "../../slices/menu/applications/add-item/add-item.ts";
+import { BatchGetMenusHandler } from "../../slices/menu/applications/batch-get/batch-get.ts";
+import { CreateMenuHandler } from "../../slices/menu/applications/create/create.ts";
+import { GetMenuHandler } from "../../slices/menu/applications/get/get.ts";
+import { SetMenuItemAvailabilityHandler } from "../../slices/menu/applications/set-item-availability/set-item-availability.ts";
+import { UpdateMenuItemHandler } from "../../slices/menu/applications/update-item/update-item.ts";
 import {
   createMenuCollection,
   DatabaseMenuReader,

@@ -9,8 +9,8 @@ import {
   GetMenuResponseSchema,
   type RestaurantsService,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
-import type { BatchGetMenusHandler } from "../../applications/batch-get-menus/batch-get-menus.ts";
-import type { GetMenuHandler } from "../../applications/get-menu/get-menu.ts";
+import type { BatchGetMenusHandler } from "../../applications/batch-get/batch-get.ts";
+import type { GetMenuHandler } from "../../applications/get/get.ts";
 import { toMenuItemMessages } from "./messages.ts";
 
 export type MenuQueryRpcDependencies = Readonly<{

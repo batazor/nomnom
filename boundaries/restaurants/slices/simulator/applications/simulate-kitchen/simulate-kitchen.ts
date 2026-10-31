@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { Clock } from "../../../../pkg/usecase/clock.ts";
-import type { AcceptOrderHandler } from "../../../restaurantorder/applications/acceptance/accept-order/accept-order.ts";
-import type { RejectOrderHandler } from "../../../restaurantorder/applications/acceptance/reject-order/reject-order.ts";
+import type { AcceptOrderHandler } from "../../../restaurantorder/applications/acceptance/accept/accept.ts";
+import type { RejectOrderHandler } from "../../../restaurantorder/applications/acceptance/reject/reject.ts";
 import type { MarkAssembledHandler } from "../../../restaurantorder/applications/preparation/mark-assembled/mark-assembled.ts";
 import type { MarkReadyForPickupHandler } from "../../../restaurantorder/applications/preparation/mark-ready-for-pickup/mark-ready-for-pickup.ts";
-import type { ReportPreparationDelayHandler } from "../../../restaurantorder/applications/preparation/report-preparation-delay/report-preparation-delay.ts";
-import type { ReportPreparationFailureHandler } from "../../../restaurantorder/applications/preparation/report-preparation-failure/report-preparation-failure.ts";
-import type { StartPreparationHandler } from "../../../restaurantorder/applications/preparation/start-preparation/start-preparation.ts";
+import type { ReportPreparationDelayHandler } from "../../../restaurantorder/applications/preparation/report-delay/report-delay.ts";
+import type { ReportPreparationFailureHandler } from "../../../restaurantorder/applications/preparation/report-failure/report-failure.ts";
+import type { StartPreparationHandler } from "../../../restaurantorder/applications/preparation/start/start.ts";
 import {
   NoCookAvailableError,
   RestaurantOrderState,

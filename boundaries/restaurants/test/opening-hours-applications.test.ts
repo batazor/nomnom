@@ -5,13 +5,13 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 
 import { PermissionDeniedError } from "../pkg/authz/errors.ts";
-import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
+import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
+import { ListRestaurantsHandler } from "../slices/restaurant/applications/list/list.ts";
 import {
   InvalidOpeningHoursError,
   InvalidTimeZoneError,
 } from "../slices/restaurant/domains/restaurant/restaurant.ts";
-import { AcceptOrderHandler } from "../slices/restaurantorder/applications/acceptance/accept-order/accept-order.ts";
+import { AcceptOrderHandler } from "../slices/restaurantorder/applications/acceptance/accept/accept.ts";
 import { GuardFailedError } from "../slices/restaurantorder/domains/restaurantorder/restaurantorder.ts";
 import { OpeningHoursAcceptanceConditions } from "../slices/restaurantorder/infrastructure/acceptance/opening-hours.ts";
 import { RepositoryAcceptanceFactsReader } from "../slices/restaurantorder/infrastructure/restaurant-facts/restaurant-facts.ts";

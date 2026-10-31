@@ -30,10 +30,10 @@ import {
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
 import { loadIdentityConfig } from "../pkg/config/config.ts";
-import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get-restaurants/batch-get-restaurants.ts";
-import { GetRestaurantHandler } from "../slices/restaurant/applications/get-restaurant/get-restaurant.ts";
-import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned-restaurants/list-owned-restaurants.ts";
-import { ListRestaurantsHandler } from "../slices/restaurant/applications/list-restaurants/list-restaurants.ts";
+import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get/batch-get.ts";
+import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
+import { ListRestaurantsHandler } from "../slices/restaurant/applications/list/list.ts";
+import { ListOwnedRestaurantsHandler } from "../slices/restaurant/applications/list-owned/list-owned.ts";
 import { createKitchenWorld } from "./support/kitchen.ts";
 
 /** Общие тестовые векторы ADR 27: `<repo>/tests/identity/fixtures`. */

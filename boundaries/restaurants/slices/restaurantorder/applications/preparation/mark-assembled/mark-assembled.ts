@@ -3,7 +3,7 @@ import type { Clock } from "../../../../../pkg/usecase/clock.ts";
 import type { RestaurantOrderRepository } from "../../../domains/restaurantorder/restaurantorder.ts";
 import type { KitchenStaffAccess } from "../../access-control/access-control.ts";
 import type { KitchenCommand } from "../../kitchen-command/kitchen-command.ts";
-import { loadRestaurantOrder } from "../../load-restaurant-order/load-restaurant-order.ts";
+import { loadRestaurantOrder } from "../../load/load.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
