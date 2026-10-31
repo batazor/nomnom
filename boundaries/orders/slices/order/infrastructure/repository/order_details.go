@@ -20,16 +20,16 @@ import (
 	"nomnom/orders/slices/order/domains/order/vo"
 )
 
-// OrderDetailsProjectionVersion is the shape of order_details.details. A change
-// of the document increments it: catch-up at process start projects every row
-// of an older version again.
+// OrderDetailsProjectionVersion is the shape of order_details.details and the
+// rules that fill it. A change of the document or a fixed projection defect
+// increments it: catch-up projects every row of another version again.
 const OrderDetailsProjectionVersion = 6
 
-// projectionBatch bounds the Orders projected again in one pass of catch-up
-// and rebuild; each Order is projected in its own transaction.
+// projectionBatch bounds the Orders selected at once by catch-up; each Order is
+// projected in its own transaction.
 const projectionBatch = 500
 
-// projectionLockKey is the advisory lock of catch-up and rebuild: "orders_details".
+// projectionLockKey is the advisory lock of catch-up: "orders_details".
 const projectionLockKey int64 = 0x6f72645f64657461
 
 // detailsDocument is the stored form of orderdetails.Details without the
@@ -319,42 +319,29 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	return placedAt, id, err
 }
 
-// ProjectionScope selects the Orders that catch-up or rebuild project again.
-type ProjectionScope string
+// ErrCatchUpInProgress means another process holds the projection lock and is
+// catching up now.
+var ErrCatchUpInProgress = errors.New("order details catch-up is already running")
 
-const (
-	// ScopeStale is Orders without a row, with a row of an older
-	// projection_version or of another Order version.
-	ScopeStale ProjectionScope = "stale"
-	// ScopeAll is every Order: repair after a projection defect fixed without a
-	// new projection_version.
-	ScopeAll ProjectionScope = "all"
-)
-
-// CatchUpOrderDetails projects the stale Orders again; every process calls it
-// at start after the migrations.
+// CatchUpOrderDetails projects the stale Orders again from the order tables:
+// Orders without a row, with a row of another projection_version or of another
+// Order version. It goes in batches by order id, each Order in its own
+// transaction under a share lock of its row, so a concurrent change waits and
+// is never overwritten, and an interrupted pass leaves only stale rows for the
+// next one. The advisory lock is not waited for: a held lock is
+// ErrCatchUpInProgress. It returns the number of Orders projected.
 func (s *Store) CatchUpOrderDetails(ctx context.Context) (int, error) {
-	return s.ReprojectOrderDetails(ctx, ScopeStale)
-}
-
-// ReprojectOrderDetails projects the Orders of scope again from the order
-// tables, in batches by order id, each Order in its own transaction under a
-// share lock of its row, so a concurrent change waits and is never overwritten.
-// Processes starting at once serialize on an advisory lock: the second finds
-// nothing stale. It returns the number of Orders projected.
-func (s *Store) ReprojectOrderDetails(ctx context.Context, scope ProjectionScope) (int, error) {
-	switch scope {
-	case ScopeStale, ScopeAll:
-	default:
-		return 0, fmt.Errorf("unknown projection scope %q", scope)
-	}
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("acquire connection for the projection lock: %w", err)
 	}
 	defer conn.Release()
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", projectionLockKey); err != nil {
+	var locked bool
+	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", projectionLockKey).Scan(&locked); err != nil {
 		return 0, fmt.Errorf("projection lock: %w", err)
+	}
+	if !locked {
+		return 0, ErrCatchUpInProgress
 	}
 	defer func() {
 		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", projectionLockKey)
@@ -363,7 +350,7 @@ func (s *Store) ReprojectOrderDetails(ctx context.Context, scope ProjectionScope
 	projected := 0
 	after := ""
 	for {
-		ids, err := s.projectionBatch(ctx, scope, after)
+		ids, err := s.staleOrders(ctx, after)
 		if err != nil {
 			return projected, err
 		}
@@ -380,24 +367,22 @@ func (s *Store) ReprojectOrderDetails(ctx context.Context, scope ProjectionScope
 	}
 	if projected > 0 {
 		slog.InfoContext(ctx, "order details projected again",
-			slog.String("scope", string(scope)), slog.Int("orders", projected),
+			slog.Int("orders", projected),
 			slog.Int("projection_version", OrderDetailsProjectionVersion))
 	}
 	return projected, nil
 }
 
-func (s *Store) projectionBatch(ctx context.Context, scope ProjectionScope, after string) ([]order.ID, error) {
-	query := psql.Select("o.id").From("orders o").
-		Where(sq.Gt{"o.id": after}).OrderBy("o.id").Limit(projectionBatch)
-	if scope == ScopeStale {
-		query = query.LeftJoin("order_details d ON d.order_id = o.id").
-			Where(sq.Or{
-				sq.Eq{"d.order_id": nil},
-				sq.NotEq{"d.projection_version": OrderDetailsProjectionVersion},
-				sq.Expr("d.order_version <> o.version"),
-			})
-	}
-	rows, err := s.query(ctx, query)
+func (s *Store) staleOrders(ctx context.Context, after string) ([]order.ID, error) {
+	rows, err := s.query(ctx, psql.Select("o.id").From("orders o").
+		LeftJoin("order_details d ON d.order_id = o.id").
+		Where(sq.Gt{"o.id": after}).
+		Where(sq.Or{
+			sq.Eq{"d.order_id": nil},
+			sq.NotEq{"d.projection_version": OrderDetailsProjectionVersion},
+			sq.Expr("d.order_version <> o.version"),
+		}).
+		OrderBy("o.id").Limit(projectionBatch))
 	if err != nil {
 		return nil, fmt.Errorf("select orders to project: %w", err)
 	}

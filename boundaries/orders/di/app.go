@@ -25,19 +25,20 @@ import (
 // AppServiceName — service.name API по умолчанию; OTEL_SERVICE_NAME переопределяет.
 const AppServiceName = "orders"
 
-// App — lifecycle.Worker бизнес-порта и владелец SimulatorRunner.
+// App — lifecycle.Worker бизнес-порта, владелец SimulatorRunner и ProjectionCatchUp.
 type App struct {
 	server     *grpc.Server
 	order      *orderdi.Module
 	simulator  *SimulatorRunner
+	catchUp    *ProjectionCatchUp
 	addr       string
 	listener   net.Listener
 	newMetrics func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
 	metrics    *telemetry.Metrics
 }
 
-func NewApp(cfg config.ServerConfig, server *grpc.Server, order *orderdi.Module, simulator *SimulatorRunner) *App {
-	return &App{server: server, order: order, simulator: simulator, addr: fmt.Sprintf(":%d", cfg.Port), newMetrics: telemetry.Start}
+func NewApp(cfg config.ServerConfig, server *grpc.Server, order *orderdi.Module, simulator *SimulatorRunner, catchUp *ProjectionCatchUp) *App {
+	return &App{server: server, order: order, simulator: simulator, catchUp: catchUp, addr: fmt.Sprintf(":%d", cfg.Port), newMetrics: telemetry.Start}
 }
 
 // Start поднимает metrics pipeline и открывает бизнес-порт; после него процесс может стать ready.
@@ -58,20 +59,30 @@ func (a *App) Start(ctx context.Context) error {
 	return nil
 }
 
-// Run обслуживает входящие запросы и тики Simulator до вызова Shutdown.
+// Run обслуживает входящие запросы и тики Simulator до вызова Shutdown и один
+// раз догоняет проекцию; ошибка прохода завершает процесс.
 func (a *App) Run() error {
 	go a.simulator.Run()
-	if err := a.server.Serve(a.listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-		return fmt.Errorf("serve grpc: %w", err)
+	go a.catchUp.Run()
+	served := make(chan error, 1)
+	go func() { served <- a.server.Serve(a.listener) }()
+	select {
+	case err := <-a.catchUp.Failed():
+		a.server.Stop()
+		return errors.Join(err, <-served)
+	case err := <-served:
+		if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			return fmt.Errorf("serve grpc: %w", err)
+		}
+		return nil
 	}
-	return nil
 }
 
 // Shutdown прекращает приём новых запросов, закрывает idle keep-alive
 // соединения и дожидается начатых до дедлайна ctx; оставшиеся соединения
 // закрываются принудительно. Финальный export метрик — после drain.
 func (a *App) Shutdown(ctx context.Context) error {
-	return errors.Join(a.simulator.Shutdown(ctx), a.stop(ctx), a.flushMetrics(ctx))
+	return errors.Join(a.simulator.Shutdown(ctx), a.catchUp.Shutdown(ctx), a.stop(ctx), a.flushMetrics(ctx))
 }
 
 func (a *App) flushMetrics(ctx context.Context) error {

@@ -149,24 +149,32 @@ func TestCatchUpProjectsStaleOrders(t *testing.T) {
 	assert.Zero(t, again, "nothing is stale after catch-up")
 }
 
-// Rebuild projects every Order again, current rows included.
-func TestRebuildProjectsEveryOrder(t *testing.T) {
+// A held projection lock is reported at once; the stale rows stay for the next
+// pass, which runs after the lock is released.
+func TestCatchUpDoesNotWaitForAHeldLock(t *testing.T) {
 	store := repositorytest.Open(t)
 	ctx := context.Background()
-	id := uniqueID("rebuild")
+	id := uniqueID("locked")
 	require.NoError(t, store.Add(ctx, ordertest.New(t, id)))
-	exec(t, store, `UPDATE order_details SET details = jsonb_set(details, '{state}', '"broken"') WHERE order_id = $1`, id)
+	exec(t, store, `DELETE FROM order_details WHERE order_id = $1`, id)
+	holder, err := store.Pool().Acquire(ctx)
+	require.NoError(t, err)
+	defer holder.Release()
+	const projectionLock int64 = 0x6f72645f64657461
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_lock($1)`, projectionLock)
+	require.NoError(t, err)
 
-	projected, err := store.ReprojectOrderDetails(ctx, repository.ScopeAll)
+	_, err = store.CatchUpOrderDetails(ctx)
 
+	require.ErrorIs(t, err, repository.ErrCatchUpInProgress)
+	_, err = store.OrderDetails(ctx, id)
+	require.ErrorIs(t, err, order.ErrOrderNotFound)
+
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_unlock($1)`, projectionLock)
+	require.NoError(t, err)
+	projected, err := store.CatchUpOrderDetails(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, projected)
-	details, err := store.OrderDetails(ctx, id)
-	require.NoError(t, err)
-	assert.Equal(t, order.StatePlaced, details.State)
-
-	_, err = store.ReprojectOrderDetails(ctx, "partial")
-	require.Error(t, err, "an unknown scope is an error, not a default")
 }
 
 func exec(t *testing.T, store *repositorytest.Store, sql string, args ...any) {

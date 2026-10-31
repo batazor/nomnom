@@ -455,13 +455,12 @@ Premium Priority (FR-650) — колонки `orders.priority` (`STANDARD`/`PREM
 Delivery Window запланированного заказа (FR-681) — nullable `orders.delivery_window_start`/`delivery_window_end`
 (миграция `00010_delivery_window`, CHECK: обе NULL — ASAP-заказ, иначе `start < end`; значения существующим строкам не подставляются)
 и `delivery_window` документа `order_details` (projection version 3).
-Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, после
-миграций процесс догоняет устаревшие строки (catch-up), полное перестроение —
-`orders-admin projections rebuild order-details`, догон после выкатки — `orders-admin projections catch-up order-details` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
+Чтения идут из проекции `order_details`: репозиторий пишет её в транзакции каждого `Add`/`Save`, процесс
+API в фоне после старта догоняет устаревшие строки (catch-up), догон по требованию — `orders-admin projections catch-up order-details`, исправление дефекта проектора поднимает `projection_version` ([ADR 4](docs/adr/0004-использование-cqrs-в-orders.md#перестроение-проекции)).
 
 Операторская команда `cmd/orders-admin` входит в образ и запускается разово в pod `orders-consumer`
 (`kubectl -n nomnom-orders exec deploy/orders-consumer -- /orders-admin …`): `dlq list|redrive|discard`
-для dead letters группы `orders` ([Разбор DLQ](../../docs/dlq.md)), `projections catch-up|rebuild order-details` и `authz resync` (связи order всех заказов в SpiceDB заново из PostgreSQL).
+для dead letters группы `orders` ([Разбор DLQ](../../docs/dlq.md)), `projections catch-up order-details` и `authz resync` (связи order всех заказов в SpiceDB заново из PostgreSQL).
 Тесты, которым нужно хранилище, используют этот же store через `repositorytest` (Docker обязателен для `make test`).
 
 OpenSpec change `add-order-command-rpcs-and-relationships` (FR-464…FR-470, AC-508…AC-524)

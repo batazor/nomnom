@@ -44,7 +44,7 @@ var (
 // `make generate`.
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
-	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, NewDatabasePool, simulatorUseCasesSet, wire.Bind(new(switchsimulator.Authorizer), new(orderdi.Authorizer)), simulatordi.APISet, NewSimulatorRunner, temporalAPISet, grpcSet, NewApp)
+	wire.Build(configSet, storeSet, NewReasonCodes, orderdi.TelemetrySet, orderdi.APISet, NewDatabasePool, simulatorUseCasesSet, wire.Bind(new(switchsimulator.Authorizer), new(orderdi.Authorizer)), simulatordi.APISet, NewSimulatorRunner, NewProjectionCatchUp, temporalAPISet, grpcSet, NewApp)
 	return nil, nil, nil
 }
 

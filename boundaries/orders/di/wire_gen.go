@@ -111,7 +111,8 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	}
 	server := NewGRPCServer(module, diModule, subjectResolver)
 	simulatorRunner := NewSimulatorRunner(diModule)
-	app := NewApp(serverConfig, server, module, simulatorRunner)
+	projectionCatchUp := NewProjectionCatchUp(store)
+	app := NewApp(serverConfig, server, module, simulatorRunner, projectionCatchUp)
 	return app, func() {
 		cleanup6()
 		cleanup5()

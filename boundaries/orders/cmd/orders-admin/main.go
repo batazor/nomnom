@@ -1,11 +1,10 @@
 // Command orders-admin — операторские действия orders, запускается разово в pod
-// orders-consumer (kubectl exec), где уже есть конфигурация Kafka и PostgreSQL, а
-// projections catch-up — ещё и hook Job chart после каждого install/upgrade:
+// orders-consumer (kubectl exec), где уже есть конфигурация Kafka и PostgreSQL:
 //
 //	orders-admin dlq list --stream <topic>
 //	orders-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
 //	orders-admin dlq discard --stream <topic> --partition <p> --through <offset> --reason <text>
-//	orders-admin projections catch-up|rebuild order-details
+//	orders-admin projections catch-up order-details
 //	orders-admin authz resync
 //
 // DLQ — dead letters consumer group процесса (ADR 28, runbook docs/dlq.md);
@@ -48,7 +47,7 @@ const usage = `usage:
   orders-admin dlq list --stream <topic>
   orders-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
   orders-admin dlq discard --stream <topic> --partition <p> --through <offset> --reason <text>
-  orders-admin projections catch-up|rebuild order-details
+  orders-admin projections catch-up order-details
   orders-admin authz resync`
 
 func main() {
@@ -196,17 +195,8 @@ func describe(letter messaging.DeadLetter) deadLetterView {
 }
 
 func projections(ctx context.Context, cfg database.Config, args []string) error {
-	if len(args) != 2 || args[1] != "order-details" {
+	if len(args) != 2 || args[0] != "catch-up" || args[1] != "order-details" {
 		return errors.New(usage)
-	}
-	var scope repository.ProjectionScope
-	switch args[0] {
-	case "catch-up":
-		scope = repository.ScopeStale
-	case "rebuild":
-		scope = repository.ScopeAll
-	default:
-		return fmt.Errorf("unknown projections action %q\n%s", args[0], usage)
 	}
 	// The schema is migrated by the running processes; a missing table fails
 	// the command.
@@ -215,8 +205,8 @@ func projections(ctx context.Context, cfg database.Config, args []string) error 
 		return err
 	}
 	defer store.Close()
-	projected, err := store.ReprojectOrderDetails(ctx, scope)
-	slog.InfoContext(ctx, "order details projected", slog.String("scope", string(scope)), slog.Int("orders", projected))
+	projected, err := store.CatchUpOrderDetails(ctx)
+	slog.InfoContext(ctx, "order details projected", slog.Int("orders", projected))
 	return err
 }
 
