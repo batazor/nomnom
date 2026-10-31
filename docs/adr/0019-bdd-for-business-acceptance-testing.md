@@ -14,17 +14,17 @@ Accepted
 
 nomnom ведёт требования и архитектурные изменения через Spec-Driven Development (SDD) в `openspec/`. Спецификации описывают требования и acceptance criteria, но сами по себе не доказывают, что значимое бизнес-поведение выполняется production-кодом. Одновременно существующая стратегия уже разделяет быстрые проверки домена и application handlers, интеграционные проверки реальной инфраструктуры и системные E2E в kind.
 
-Если применять BDD ко всем требованиям или описывать в Gherkin транспорт, хранилище и middleware, сценарии станут дорогой копией unit/integration tests и спецификаций. Нужна ограниченная роль executable acceptance scenarios, сохраняющая Vertical Slice Architecture, отделение Temporal orchestration от домена, Inbox/Outbox guarantees и границу authorization между application use case и SpiceDB policy.
+Если описывать в Gherkin транспорт, хранилище и middleware, сценарии станут дорогой копией unit/integration tests и спецификаций. Роль executable acceptance scenarios должна сохранять Vertical Slice Architecture, отделение Temporal orchestration от домена, Inbox/Outbox guarantees и границу authorization между application use case и SpiceDB policy.
 
 ## Decision
 
-Использовать BDD для исполняемой проверки значимого бизнес-поведения. BDD дополняет SDD, но не заменяет его:
+BDD — основной способ тестировать use case: исполняемая проверка его бизнес-поведения. BDD дополняет SDD, но не заменяет его:
 
 ```text
-SDD → Specification → Acceptance Criteria → optional BDD scenarios → Implementation → Verification
+SDD → Specification → Acceptance Criteria → BDD scenarios → Implementation → Verification
 ```
 
-Не каждое требование или acceptance criterion получает BDD scenario. Сценарии выбираются, когда бизнес-правило важно выразить и проверить языком, понятным без знания реализации.
+Каждый use case с наблюдаемым бизнес-поведением получает `.feature`; рост числа строк теста не повод от этого отказаться. Без `.feature` остаются только технические пакеты без use case. Mapper, SQL, serialization, DI и другие технические функции по-прежнему проверяются обычными tests.
 
 Принять два уровня BDD:
 
@@ -37,7 +37,7 @@ Gherkin пишется на английском с ubiquitous language соот
 
 Каждый scenario связывается со стабильным идентификатором acceptance criterion тегом `@AC-NNN`; `@FR-NNN` может дополнительно указывать requirement. `make arch-check` проверяет, что каждый такой tag разрешается ровно в один идентификатор в `openspec/specs`.
 
-Сценарий заменяет test того же поведения, а не дублирует его: граничные случаи и технические варианты остаются обычными tests. Шаг — тело теста: ожидания моков пишутся в нём инлайн, до вызова handler, без функций-обёрток и `.Maybe()`. Текст сценария утверждает только то, что шаг действительно проверяет. Неопределённое продуктовое правило получает `@pending` и не считается окончательным исполняемым тестом. Текст спецификации в `.feature` не копируется.
+Сценарий заменяет test того же поведения, а не дублирует его: граничные случаи и технические варианты остаются обычными tests. Шаг — тело теста: ожидания моков пишутся в нём инлайн, до вызова handler, без функций-обёрток и `.Maybe()`. Текст сценария утверждает только то, что шаг действительно проверяет. Неопределённое продуктовое правило или поведение без `AC-*` в `openspec/specs` получает `@pending` и не считается окончательным исполняемым тестом; его шаги, если поведение реализовано, всё равно исполняются. Текст спецификации в `.feature` не копируется.
 
 Повторная доставка проверяется в BDD как бизнес-гарантия «одно логическое событие — один логический эффект». Transactional Inbox, атомарность с business storage, Outbox recovery, конкуренция и инфраструктурные сбои проверяются integration/fault tests. BDD применим к техническому отказу только тогда, когда спецификация задаёт наблюдаемый бизнес-результат.
 
@@ -49,7 +49,7 @@ Gherkin пишется на английском с ubiquitous language соот
 
 ## Consequences
 
-Критичные acceptance criteria получают исполняемую связь между спецификацией и production behaviour, а сценарии остаются устойчивыми к смене транспорта и storage. Два уровня дают быстрый feedback для одного use case и детерминированную проверку orchestration без wall-clock ожиданий и реальных провайдеров.
+Acceptance criteria use case получают исполняемую связь между спецификацией и production behaviour, а сценарии остаются устойчивыми к смене транспорта и storage. Два уровня дают быстрый feedback для одного use case и детерминированную проверку orchestration без wall-clock ожиданий и реальных провайдеров.
 
 Появляются требования к стабильным идентификаторам спецификаций, проверке traceability и дисциплине step definitions: они только подготавливают состояние, вызывают application interface и проверяют результат, не реализуя бизнес-алгоритм повторно. Slice acceptance требует Docker, как и `make test` в `orders`. BDD не заменяет domain/application unit tests, Testcontainers, Temporal replay/timer tests или kind E2E; часть поведения неизбежно проверяется несколькими типами тестов на разных seams.
 

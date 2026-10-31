@@ -15,7 +15,7 @@
 
 ## Реализация
 
-Handler: [`listcustomerorders.go`](listcustomerorders.go), unit-тесты: [`listcustomerorders_test.go`](listcustomerorders_test.go).
+Handler: [`listcustomerorders.go`](listcustomerorders.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`listcustomerorders_test.go`](listcustomerorders_test.go).
 
 - **Вход:** `Query{Subject, CustomerID, MarketID, Limit, Cursor}`; `MarketID` обязателен ([ADR 41](../../../../../../docs/adr/0041-cell-based-architecture-with-control-plane.md)): пустой или не slug `^[a-z][a-z0-9-]{1,31}$` — `INVALID_ARGUMENT`; `Limit` по умолчанию 20, максимум 100.
 - **Порядок:** собственная история Customer фильтруется по `customer_id` без authorization graph; другой subject проходит `view_orders` на `customer:<id>` (fail closed) → `Reader.ListCustomerOrders` — страница проекции `OrderDetails` только Market `MarketID` (фильтр в SQL, индекс `order_details_customer_market_history (customer_id, market_id, placed_at DESC, order_id DESC)`) → Cancellation Window каждого заказа.
@@ -24,6 +24,6 @@ Handler: [`listcustomerorders.go`](listcustomerorders.go), unit-тесты: [`li
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/listcustomerorders.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`listcustomerorders.feature`](acceptance/listcustomerorders.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers); сценарий `@pending` о Market (ADR 41) ждёт своего AC.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../README.md#use-cases).

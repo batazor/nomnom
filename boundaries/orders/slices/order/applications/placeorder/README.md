@@ -33,7 +33,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`placeorder.go`](placeorder.go), unit-тесты: [`placeorder_test.go`](placeorder_test.go).
+Handler: [`placeorder.go`](placeorder.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`placeorder_test.go`](placeorder_test.go).
 
 - **Вход:** `Input{Subject, IdempotencyKey, RestaurantID, Items[{MenuItemID, Quantity}], Priority}`; subject — `user`, он же Customer. `Priority` — `STANDARD` или `PREMIUM`; пустой — `STANDARD`, другое значение — invalid input (FR-650).
 - **Премиум-приоритет:** для `PREMIUM` доплата берётся из `premium_fee` ресторана в catalog snapshot, фиксируется в Order (`order.Service`) и входит в `total`; ресторан без доплаты — `ErrPremiumUnavailable` (gRPC `FAILED_PRECONDITION`, `PREMIUM_UNAVAILABLE`), ничего не сохраняется. Доплата в другой валюте, чем позиции, — ошибка арифметики Money (`INVALID_ORDER`). Позже изменённая доплата ресторана оформленный Order не меняет.
@@ -47,6 +47,6 @@ Handler: [`placeorder.go`](placeorder.go), unit-тесты: [`placeorder_test.go
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/placeorder.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`placeorder.feature`](acceptance/placeorder.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers); сценарии `@pending` ждут переноса AC-854, AC-855, AC-856, AC-912 и AC-913 в `openspec/specs`.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../README.md#use-cases).

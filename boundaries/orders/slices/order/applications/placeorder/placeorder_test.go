@@ -61,51 +61,6 @@ func validInput() placeorder.Input {
 	}
 }
 
-// AC-100: the Order is placed from snapshot prices with OrderPlaced in the same transaction.
-func TestPlaceOrderFromCatalogSnapshot(t *testing.T) {
-	e := newEnv(t)
-	e.catalog.EXPECT().
-		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
-		Return(placeorder.CatalogSnapshot{
-			MarketID: ordertest.MarketID(t),
-			Currency: "EUR",
-			Items: map[order.MenuItemID]placeorder.CatalogItem{
-				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
-			},
-			MinimumTotal: ordertest.Money(t, "10"),
-			MaximumTotal: ordertest.Money(t, "100"),
-		}, nil).
-		Once()
-
-	result, err := e.handler.Handle(context.Background(), validInput())
-
-	require.NoError(t, err)
-	assert.Equal(t, placeorder.Result{OrderID: "order-1"}, result)
-	placed, ok := e.store.Snapshot("order-1")
-	require.True(t, ok)
-	assert.Equal(t, order.StatePlaced, placed.State)
-	assert.Equal(t, order.CustomerID("customer-1"), placed.CustomerID)
-	assert.Equal(t, now, placed.PlacedAt)
-	assert.Equal(t, ordertest.MarketID(t), placed.MarketID, "the Order takes the Market of the Restaurant")
-
-	records := e.store.OutboxRecords()
-	require.Len(t, records, 1)
-	assert.Equal(t, repositorytest.ExpectedOutbox(t, "order-1", 1, order.OrderPlaced{
-		OrderID:      "order-1",
-		CustomerID:   "customer-1",
-		RestaurantID: "restaurant-1",
-		MarketID:     ordertest.MarketID(t),
-		Total:        ordertest.Money(t, "29.00"),
-		PlacedAt:     now,
-		Items:        placed.Items,
-	})[0], records[0])
-
-	// ADR 18: the relationships of the new Order are synced by
-	// orders-consumer from RelationshipsChanged committed with it.
-	assert.Equal(t, []order.ID{"order-1"}, e.store.RelationshipChanges())
-}
-
 // ADR 41: the Market comes only from the Restaurant of the catalog snapshot; a
 // snapshot without one places nothing and is not invalid input of the Customer.
 func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
@@ -132,100 +87,14 @@ func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
 	assert.Empty(t, e.store.RelationshipChanges())
 }
 
-// AC-101: unavailable items or limits reject placement without effects.
-func TestPlaceOrderRejectsNotOrderableItems(t *testing.T) {
-	tests := []struct {
-		name    string
-		items   []placeorder.ItemInput
-		catalog map[order.MenuItemID]placeorder.CatalogItem
-		reasons []order.PolicyReasonCode
-	}{
-		{
-			name:  "unavailable item",
-			items: []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}, {MenuItemID: "cake", Quantity: 1}},
-			catalog: map[order.MenuItemID]placeorder.CatalogItem{
-				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-				"cake":  {UnitPrice: ordertest.Money(t, "6.00"), Available: false},
-			},
-			reasons: []order.PolicyReasonCode{order.OrderItemUnavailable},
-		},
-		{
-			name:  "unknown item",
-			items: []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}, {MenuItemID: "ghost", Quantity: 1}},
-			catalog: map[order.MenuItemID]placeorder.CatalogItem{
-				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-			},
-			reasons: []order.PolicyReasonCode{order.OrderItemUnavailable},
-		},
-		{
-			name:  "below minimum",
-			items: []placeorder.ItemInput{{MenuItemID: "soup", Quantity: 1}},
-			catalog: map[order.MenuItemID]placeorder.CatalogItem{
-				"soup": {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
-			},
-			reasons: []order.PolicyReasonCode{order.OrderTotalBelowMinimum},
-		},
-		{
-			name:  "above maximum",
-			items: []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 9}},
-			catalog: map[order.MenuItemID]placeorder.CatalogItem{
-				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-			},
-			reasons: []order.PolicyReasonCode{order.OrderTotalAboveMaximum},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := newEnv(t)
-			menuItemIDs := make([]order.MenuItemID, 0, len(tt.items))
-			for _, item := range tt.items {
-				menuItemIDs = append(menuItemIDs, item.MenuItemID)
-			}
-			e.catalog.EXPECT().
-				Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), menuItemIDs).
-				Return(placeorder.CatalogSnapshot{
-					MarketID:     ordertest.MarketID(t),
-					Currency:     "EUR",
-					Items:        tt.catalog,
-					MinimumTotal: ordertest.Money(t, "10"),
-					MaximumTotal: ordertest.Money(t, "100"),
-				}, nil).
-				Once()
-			in := validInput()
-			in.Items = tt.items
-
-			_, err := e.handler.Handle(context.Background(), in)
-
-			var notOrderable order.NotOrderable
-			require.ErrorAs(t, err, &notOrderable)
-			codes := make([]order.PolicyReasonCode, 0, len(notOrderable.Reasons))
-			for _, reason := range notOrderable.Reasons {
-				codes = append(codes, reason.Code)
-			}
-			assert.Equal(t, tt.reasons, codes)
-			assertNothingPlaced(t, e)
-		})
-	}
-}
-
-// AC-102: malformed input is rejected before the catalog is read.
+// Technical input is rejected before the catalog is read; the malformed items of
+// AC-102 are scenarios of placeorder.feature.
 func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 	tests := []struct {
 		name    string
 		mutate  func(*placeorder.Input)
 		wantErr error
 	}{
-		{name: "no items", mutate: func(in *placeorder.Input) { in.Items = nil }, wantErr: order.ErrOrderRequiresItems},
-		{
-			name:    "zero quantity",
-			mutate:  func(in *placeorder.Input) { in.Items[0].Quantity = 0 },
-			wantErr: vo.ErrInvalidQuantity,
-		},
-		{
-			name:    "duplicate menu item",
-			mutate:  func(in *placeorder.Input) { in.Items[1].MenuItemID = in.Items[0].MenuItemID },
-			wantErr: order.ErrDuplicateMenuItem,
-		},
 		{name: "no idempotency key", mutate: func(in *placeorder.Input) { in.IdempotencyKey = "" }, wantErr: usecase.ErrInvalidInput},
 		{name: "no restaurant", mutate: func(in *placeorder.Input) { in.RestaurantID = "" }, wantErr: usecase.ErrInvalidInput},
 		{
@@ -251,37 +120,23 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 	}
 }
 
-// AC-103: a repeated request returns the same Order.
-func TestPlaceOrderIsIdempotentByKey(t *testing.T) {
+// AC-103: another idempotency key places another Order; the repeat with the same
+// key is a scenario of placeorder.feature.
+func TestPlaceOrderWithAnotherKeyPlacesAnotherOrder(t *testing.T) {
 	e := newEnv(t)
-	// A replay does not read the catalog again: one read for key-1, one for key-2.
 	e.catalog.EXPECT().
 		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
-		Return(placeorder.CatalogSnapshot{
-			MarketID: ordertest.MarketID(t),
-			Currency: "EUR",
-			Items: map[order.MenuItemID]placeorder.CatalogItem{
-				"pizza": {UnitPrice: ordertest.Money(t, "12.50"), Available: true},
-				"soup":  {UnitPrice: ordertest.Money(t, "4.00"), Available: true},
-			},
-			MinimumTotal: ordertest.Money(t, "10"),
-			MaximumTotal: ordertest.Money(t, "100"),
-		}, nil).
+		Return(openSnapshot(t), nil).
 		Times(2)
-
-	first, err := e.handler.Handle(context.Background(), validInput())
+	_, err := e.handler.Handle(context.Background(), validInput())
 	require.NoError(t, err)
-	second, err := e.handler.Handle(context.Background(), validInput())
-	require.NoError(t, err)
-
-	assert.Equal(t, placeorder.Result{OrderID: first.OrderID, Replayed: true}, second)
-	assert.Len(t, e.store.OutboxRecords(), 1)
 
 	other := validInput()
 	other.IdempotencyKey = "key-2"
-	third, err := e.handler.Handle(context.Background(), other)
+	result, err := e.handler.Handle(context.Background(), other)
+
 	require.NoError(t, err)
-	assert.Equal(t, order.ID("order-2"), third.OrderID)
+	assert.Equal(t, order.ID("order-2"), result.OrderID)
 }
 
 func TestPlaceOrderPropagatesCatalogFailure(t *testing.T) {
@@ -448,41 +303,6 @@ func premiumInput() placeorder.Input {
 		Items:          []placeorder.ItemInput{{MenuItemID: "pizza", Quantity: 1}},
 		Priority:       string(order.PriorityPremium),
 	}
-}
-
-// AC-854, AC-856: the fee of the snapshot is fixed in the Order and is part of
-// its total.
-func TestPlaceOrderPremiumAddsTheFeeOfTheRestaurant(t *testing.T) {
-	e := newEnv(t)
-	fee, err := vo.ParseMoney("99.00", "RUB")
-	require.NoError(t, err)
-	e.catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-		Return(premiumSnapshot(t, &fee), nil).Once()
-
-	_, err = e.handler.Handle(context.Background(), premiumInput())
-
-	require.NoError(t, err)
-	placed, ok := e.store.Snapshot("order-1")
-	require.True(t, ok)
-	assert.Equal(t, order.PriorityPremium, placed.Service.Priority())
-	stored, premium := placed.Service.PremiumFee()
-	require.True(t, premium)
-	assert.True(t, stored.Equal(fee), "the fee of the snapshot is kept in the Order")
-	restored, err := order.Restore(placed)
-	require.NoError(t, err)
-	assert.Equal(t, "599 RUB", restored.Total().String())
-}
-
-// AC-855: Premium Priority at a restaurant without a fee places nothing.
-func TestPlaceOrderPremiumWithoutFeeIsUnavailable(t *testing.T) {
-	e := newEnv(t)
-	e.catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-		Return(premiumSnapshot(t, nil), nil).Once()
-
-	_, err := e.handler.Handle(context.Background(), premiumInput())
-
-	require.ErrorIs(t, err, placeorder.ErrPremiumUnavailable)
-	assertNothingPlaced(t, e)
 }
 
 // FR-650: an unknown priority is refused before the catalog.

@@ -30,7 +30,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`failorcancelorder.go`](failorcancelorder.go), unit-тесты: [`failorcancelorder_test.go`](failorcancelorder_test.go).
+Handler: [`failorcancelorder.go`](failorcancelorder.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`failorcancelorder_test.go`](failorcancelorder_test.go).
 
 - **Вход:** `Input{OrderID, Outcome (cancellation|failure), ReasonCode, DecidedAt}` от Activity.
 - **Порядок:** `UnitOfWork { Orders.Get → Order.Cancel(decidedAt, reason) → Save → Outbox.Append(OrderCancelled) }`.
@@ -40,6 +40,6 @@ Handler: [`failorcancelorder.go`](failorcancelorder.go), unit-тесты: [`fail
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/failorcancelorder.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`failorcancelorder.feature`](acceptance/failorcancelorder.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

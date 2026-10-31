@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recordpickup.go`](recordpickup.go), unit-тесты: [`recordpickup_test.go`](recordpickup_test.go).
+Handler: [`recordpickup.go`](recordpickup.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`recordpickup_test.go`](recordpickup_test.go), [`inbox_test.go`](inbox_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt, ExpectedDeliveredAt}` → `Order.RecordPickup`: переход `pick_up`, затем `Order.ExpectDeliveredAt` — срок вручения курьера (пустой — не назван, FR-611); монотонный переход в `picked_up`.
 - **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; поток входящего сигнала — [`fulfillment`](../../fulfillment/README.md#поток-входящего-сигнала).
@@ -43,6 +43,6 @@ Handler: [`recordpickup.go`](recordpickup.go), unit-тесты: [`recordpickup_t
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/recordpickup.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`recordpickup.feature`](acceptance/recordpickup.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers). Сбои уведомления, транзакции и конкурентные изменения (AC-113, AC-114, AC-130) остаются обычными тестами.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

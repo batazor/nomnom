@@ -7,10 +7,10 @@
 Основной процесс требований и архитектурных изменений — Spec-Driven Development (SDD) в [`openspec/`](../openspec/):
 
 ```text
-SDD → Specification → Acceptance Criteria → optional BDD scenarios → Implementation → Verification
+SDD → Specification → Acceptance Criteria → BDD scenarios → Implementation → Verification
 ```
 
-BDD превращает выбранные acceptance criteria в исполняемые бизнес-сценарии. Он не заменяет спецификацию и не применяется автоматически к каждому требованию. Сценарий оправдан, когда правило важно для бизнеса, имеет наблюдаемый результат и полезно читается без знания реализации.
+BDD — основной способ тестировать use case: acceptance criteria становятся исполняемыми бизнес-сценариями. Он не заменяет спецификацию. Каждый use case с наблюдаемым бизнес-поведением получает `.feature`; без него остаются только технические пакеты без use case.
 
 Mapper, repository SQL, Protobuf serialization, DI container, Helm rendering, middleware headers и отдельные технические функции проверяются unit/integration tests, а не BDD.
 
@@ -130,7 +130,7 @@ Business failure (`Kitchen Order` rejected, Authorization declined) выража
 
 ## BDD и domain unit tests
 
-Domain unit tests исчерпывающе проверяют value objects, граничные значения, таблицы переходов и многочисленные edge cases. BDD оставляет небольшой набор ключевых правил, читаемых как спецификация, и взаимодействие нескольких правил. `Scenario Outline` используется для нескольких значимых бизнес-вариантов, а не как перенос большой edge-case matrix из unit tests. Один BDD scenario может поддерживаться несколькими более узкими unit tests.
+Domain unit tests исчерпывающе проверяют value objects, граничные значения, таблицы переходов и многочисленные edge cases. BDD описывает правила use case, читаемые как спецификация, и взаимодействие нескольких правил. `Scenario Outline` используется для нескольких значимых бизнес-вариантов, а не как перенос большой edge-case matrix из unit tests. Один BDD scenario может поддерживаться несколькими более узкими unit tests.
 
 BDD не заменяет technical integration/E2E coverage. Inbox duplicate detection и rollback, Kafka redelivery, Temporal replay, NetworkPolicy и Helm проверяются соответствующими integration, workflow или kind tests. Если технический сбой имеет специфицированный бизнес-наблюдаемый результат, `.feature` описывает только этот результат, а техническая причина отдельно воспроизводится integration test.
 
@@ -145,7 +145,7 @@ BDD не заменяет technical integration/E2E coverage. Inbox duplicate de
 - каждый Gherkin scenario содержит ровно один основной tag `@AC-NNN`; `@FR-NNN` допустим как дополнительная ссылка на requirement;
 - `make arch-check` требует, чтобы каждый `@AC-*`/`@FR-*` из `.feature` встречался в `openspec/specs` ровно один раз, а у сценария без `@pending` был один `@AC-*`. Уникальность всех идентификаторов пока не проверяется: в `openspec/specs` есть дубли (`FR-497`…`FR-499`, `AC-567`…`AC-569`).
 
-`.feature` не копирует содержание спецификации. Если продуктовое правило не согласовано, scenario получает `@pending`, остаётся видимым в отчёте и исключается из набора окончательных acceptance checks до решения вопроса.
+`.feature` не копирует содержание спецификации. Если продуктовое правило не согласовано или у поведения нет `AC-*` в `openspec/specs`, scenario получает `@pending`, остаётся видимым в отчёте и исключается из набора окончательных acceptance checks до решения вопроса. Шаги такого сценария, если поведение реализовано, исполняются под `go test` и заменяют тест того же поведения.
 
 ## Idempotency
 

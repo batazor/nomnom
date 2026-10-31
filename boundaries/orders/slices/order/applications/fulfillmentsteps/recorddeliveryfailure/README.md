@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recorddeliveryfailure.go`](recorddeliveryfailure.go), unit-тесты: [`recorddeliveryfailure_test.go`](recorddeliveryfailure_test.go).
+Handler: [`recorddeliveryfailure.go`](recorddeliveryfailure.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`inbox_test.go`](inbox_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt, Reason}` → `Order.RecordDeliveryFailure`: переход в `delivery_failed`; `cancelled` и код причины фиксирует `failorcancelorder`.
 - **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; поток входящего сигнала — [`fulfillment`](../../fulfillment/README.md#поток-входящего-сигнала).
@@ -43,6 +43,6 @@ Handler: [`recorddeliveryfailure.go`](recorddeliveryfailure.go), unit-тесты
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/recorddeliveryfailure.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`recorddeliveryfailure.feature`](acceptance/recorddeliveryfailure.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers). Сбои уведомления, транзакции и конкурентные изменения (AC-113, AC-114, AC-130) остаются обычными тестами.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

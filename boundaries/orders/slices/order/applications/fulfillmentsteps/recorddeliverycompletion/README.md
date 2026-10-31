@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recorddeliverycompletion.go`](recorddeliverycompletion.go), unit-тесты: [`recorddeliverycompletion_test.go`](recorddeliverycompletion_test.go).
+Handler: [`recorddeliverycompletion.go`](recorddeliverycompletion.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`inbox_test.go`](inbox_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt}` → `Order.RecordDeliveryCompletion`: переход в `delivered`; `Order` не завершается — Completion фиксирует `completeorder`.
 - **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; поток входящего сигнала — [`fulfillment`](../../fulfillment/README.md#поток-входящего-сигнала).
@@ -43,6 +43,6 @@ Handler: [`recorddeliverycompletion.go`](recorddeliverycompletion.go), unit-те
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/recorddeliverycompletion.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`recorddeliverycompletion.feature`](acceptance/recorddeliverycompletion.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers). Сбои уведомления, транзакции и конкурентные изменения (AC-113, AC-114, AC-130) остаются обычными тестами.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

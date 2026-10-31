@@ -30,7 +30,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`completeorder.go`](completeorder.go), unit-тесты: [`completeorder_test.go`](completeorder_test.go).
+Handler: [`completeorder.go`](completeorder.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`completeorder_test.go`](completeorder_test.go).
 
 - **Вход:** `Input{OrderID, CompletedAt}` от Activity (`service` identity внутри `orders`, отдельной authorization нет). `CompletedAt` — время Workflow (`workflow.Now`) в `StepInput.DecidedAt`: оно одинаково во всех попытках Activity; Activity, запланированная до появления поля, берёт время своего планирования.
 - **Порядок:** `UnitOfWork { Orders.Get → Order.Complete(CompletedAt) → Save → Outbox.Append(OrderCompleted) }`. `OrderCompleted` несёт `CompletedAt`, Integration Event публикуется с ним как `occurred_at` (FR-544), а не со временем записи в Outbox.
@@ -39,6 +39,6 @@ Handler: [`completeorder.go`](completeorder.go), unit-тесты: [`completeorde
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/completeorder.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`completeorder.feature`](acceptance/completeorder.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

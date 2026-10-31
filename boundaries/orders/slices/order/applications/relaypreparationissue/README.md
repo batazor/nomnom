@@ -9,8 +9,12 @@
 
 ## Реализация
 
-Handler: [`relaypreparationissue.go`](relaypreparationissue.go), unit-тесты: [`relaypreparationissue_test.go`](relaypreparationissue_test.go).
+Handler: [`relaypreparationissue.go`](relaypreparationissue.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`relaypreparationissue_test.go`](relaypreparationissue_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt, Reason}` → `fulfillment.Notifier.Notify` с `preparation_failed`.
 - **Inbox и UoW:** не используются — это вход orchestration, а не шаг FSM `Order`; локального state нет, workflow дедуплицирует по `event_id`.
 - **Ошибки:** закрытый workflow — не ошибка (`WorkflowNotified=false`); прочая ошибка уведомления возвращается для повторной доставки.
+
+## Acceptance
+
+Executable-сценарии: [`relaypreparationissue.feature`](acceptance/relaypreparationissue.feature) исполняются `godog` под `go test`; все сценарии `@pending`: критерия с `AC-*` в `openspec/specs` нет. Хранилища у use case нет.

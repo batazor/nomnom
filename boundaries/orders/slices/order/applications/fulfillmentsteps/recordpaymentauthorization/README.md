@@ -30,12 +30,16 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recordpaymentauthorization.go`](recordpaymentauthorization.go), тесты поверх PostgreSQL: [`recordpaymentauthorization_test.go`](recordpaymentauthorization_test.go).
+Handler: [`recordpaymentauthorization.go`](recordpaymentauthorization.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`recordpaymentauthorization_test.go`](recordpaymentauthorization_test.go).
 
 - **Вход:** `Input{OrderID, AuthorizedAt}` от Activity (`service` identity внутри `orders`, отдельной authorization нет). `AuthorizedAt` — время Workflow (`StepInput.DecidedAt`), одинаковое во всех попытках Activity.
 - **Порядок:** `UnitOfWork { Orders.Get → Order.RecordPaymentAuthorization(AuthorizedAt) → Save }`; `Save` store процесса пишет `order_details` и Change Notification `orderChanged`.
 - **Результат:** `recorded` или `already_recorded` (повтор Activity без изменений); `Order` дальше `paid` — `InvalidTransition`.
 - **Outbox:** Integration Event не публикуется — соседним контекстам переход не нужен.
 - **Требования:** FR-639, AC-829, AC-830 в OpenSpec change `start-fulfillment-and-pay-before-kitchen`.
+
+## Acceptance
+
+Executable-сценарии: [`recordpaymentauthorization.feature`](acceptance/recordpaymentauthorization.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

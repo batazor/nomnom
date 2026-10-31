@@ -18,48 +18,6 @@ import (
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
 
-// AC-106: the same event_id changes nothing and re-notifies the workflow.
-func TestDuplicateEventIsNoOpAndNotifiesAgain(t *testing.T) {
-	store := repositorytest.Open(t)
-	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := NewMockNotifier(t)
-	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantRejected, OccurredAt: occurredAt, Reason: "restaurant_closed"}).Return(nil).Times(2)
-	handler := rejectorder.NewHandler(store, store, store, workflow)
-
-	first, err := handler.Handle(context.Background(), input("event-1"))
-	require.NoError(t, err)
-	second, err := handler.Handle(context.Background(), input("event-1"))
-	require.NoError(t, err)
-
-	assert.Equal(t, rejectorder.Result{Outcome: fulfillment.OutcomeApplied, WorkflowNotified: true}, first)
-	assert.Equal(t, rejectorder.Result{Outcome: fulfillment.OutcomeDuplicate, WorkflowNotified: true}, second)
-	snapshot, _ := store.Snapshot("order-1")
-	assert.Equal(t, uint64(2), snapshot.Version, "the duplicate must not save the Order")
-	assert.Equal(t, 1, store.InboxSize())
-}
-
-// AC-112: a signal for a final Order is recorded in the Inbox and ignored; the
-// workflow of a final Order is closed.
-func TestLateSignalForFinalOrderIsIgnored(t *testing.T) {
-	for _, state := range []order.State{order.StateCompleted, order.StateCancelled} {
-		t.Run(string(state), func(t *testing.T) {
-			store := repositorytest.Open(t)
-			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
-			workflow := NewMockNotifier(t)
-			workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantRejected, OccurredAt: occurredAt, Reason: "restaurant_closed"}).Return(fulfillment.ErrWorkflowNotFound).Once()
-
-			result, err := rejectorder.NewHandler(store, store, store, workflow).Handle(context.Background(), input("event-1"))
-
-			require.NoError(t, err)
-			assert.Equal(t, rejectorder.Result{Outcome: fulfillment.OutcomeIgnoredLate}, result)
-			snapshot, _ := store.Snapshot("order-1")
-			assert.Empty(t, snapshot.Transitions)
-			assert.Equal(t, uint64(1), snapshot.Version)
-			assert.Equal(t, 1, store.InboxSize(), "redelivery must become a duplicate")
-		})
-	}
-}
-
 // AC-113: a failed notification keeps the commit and is repaired by redelivery.
 func TestFailedNotificationIsReturnedAndRepairedByRedelivery(t *testing.T) {
 	store := repositorytest.Open(t)

@@ -33,7 +33,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`requestordercancellation.go`](requestordercancellation.go), unit-тесты: [`requestordercancellation_test.go`](requestordercancellation_test.go).
+Handler: [`requestordercancellation.go`](requestordercancellation.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`requestordercancellation_test.go`](requestordercancellation_test.go).
 
 - **Вход:** `Input{Subject, OrderID, RequestID, Reason}`.
 - **Порядок:** authorization `cancel` на `order:<id>` (fail closed) → `Orders.Get` → `CancellationPolicy.Window(placedAt)` → `Order.CheckCancellation(now, window)` → `fulfillment.CancellationRequester.RequestCancellation` с исходным subject. UoW не используется: запрос локально не сохраняется.
@@ -43,6 +43,6 @@ Handler: [`requestordercancellation.go`](requestordercancellation.go), unit-те
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/requestordercancellation.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`requestordercancellation.feature`](acceptance/requestordercancellation.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers); сценарии `@pending` ждут переноса AC-916 в `openspec/specs`.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

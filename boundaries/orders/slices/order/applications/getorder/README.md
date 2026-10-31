@@ -15,7 +15,7 @@
 
 ## Реализация
 
-Handler: [`getorder.go`](getorder.go), unit-тесты: [`getorder_test.go`](getorder_test.go).
+Handler: [`getorder.go`](getorder.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`getorder_test.go`](getorder_test.go).
 
 - **Вход:** `Query{Subject, OrderID}`.
 - **Порядок:** authorization `view` на `order:<id>` до чтения (fail closed, не раскрывает существование) → `Reader.OrderDetails` — строка проекции `OrderDetails` ([ADR 4](../../../../docs/adr/0004-использование-cqrs-в-orders.md#проекция-orderdetails)) без восстановления агрегата → Cancellation Window политики на момент чтения. UoW не используется.
@@ -24,6 +24,6 @@ Handler: [`getorder.go`](getorder.go), unit-тесты: [`getorder_test.go`](get
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/getorder.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`getorder.feature`](acceptance/getorder.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../README.md#use-cases).

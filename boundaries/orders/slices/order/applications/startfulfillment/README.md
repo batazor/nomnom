@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`startfulfillment.go`](startfulfillment.go), тесты поверх PostgreSQL: [`startfulfillment_test.go`](startfulfillment_test.go).
+Handler: [`startfulfillment.go`](startfulfillment.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`startfulfillment_test.go`](startfulfillment_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt}` → `application.AcceptOnce` (Inbox + чтение `Order` в одной UoW) → после commit `fulfillment.Starter.Start` с `order_id`, `event_id` и моментом события.
 - **Inbox consumer:** `orders.startfulfillment`. Дубликат читает `Order` отдельной UoW и снова вызывает старт: так лечится сбой между commit Inbox и стартом.
@@ -40,5 +40,9 @@ Handler: [`startfulfillment.go`](startfulfillment.go), тесты поверх P
 - **Ошибки:** неизвестный `Order` — not found (permanent); ошибка старта — `ErrDependencyUnavailable`, сообщение не подтверждается и доставляется повторно, в DLQ не уходит.
 - **Outbox:** не пишется.
 - **Требования:** FR-638, AC-819…AC-822, AC-827, AC-828 в OpenSpec change `start-fulfillment-and-pay-before-kitchen`.
+
+## Acceptance
+
+Executable-сценарии: [`startfulfillment.feature`](acceptance/startfulfillment.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../README.md#use-cases).

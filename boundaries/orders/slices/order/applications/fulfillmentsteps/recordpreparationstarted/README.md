@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Реализация
 
-Handler: [`recordpreparationstarted.go`](recordpreparationstarted.go), unit-тесты: [`recordpreparationstarted_test.go`](recordpreparationstarted_test.go).
+Handler: [`recordpreparationstarted.go`](recordpreparationstarted.go), сценарии: [`acceptance_test.go`](acceptance_test.go), остальные случаи: [`inbox_test.go`](inbox_test.go).
 
 - **Поведение:** `Input{EventID, OrderID, OccurredAt}` → `Order.RecordPreparationStarted`: монотонный переход в `preparing`.
 - **Порты:** `application.UnitOfWork`, `application.Inbox`, `order.Repository`, `fulfillment.Notifier`; поток входящего сигнала — [`fulfillment`](../../fulfillment/README.md#поток-входящего-сигнала).
@@ -43,6 +43,6 @@ Handler: [`recordpreparationstarted.go`](recordpreparationstarted.go), unit-те
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/recordpreparationstarted.feature` после утверждения acceptance criteria в SDD.
+Executable-сценарии: [`recordpreparationstarted.feature`](acceptance/recordpreparationstarted.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers). Сбои уведомления, транзакции и конкурентные изменения (AC-113, AC-114, AC-130) остаются обычными тестами.
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).
