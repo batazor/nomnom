@@ -22,6 +22,6 @@
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/advance_assignment.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/advance.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Delivery use cases](../../../../../README.md#use-cases).

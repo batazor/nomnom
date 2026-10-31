@@ -1,7 +1,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     CourierPosition, CourierPositionPublisher,
 };
 

@@ -20,7 +20,7 @@ use crate::slices::courier::applications::assignment::{CourierAssignment, Courie
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPositionPublisher,
 };
 use crate::slices::courier::di::{CourierDependencies, CourierPorts, CourierSettings};
@@ -30,7 +30,7 @@ use crate::slices::courier::domains::courier::{
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
-use crate::slices::delivery::applications::duration::record_delivery_duration::{
+use crate::slices::delivery::applications::duration::record::{
     DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;

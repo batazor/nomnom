@@ -202,9 +202,9 @@ pub(crate) fn build_over_store(
 mod tests {
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::pkg::authz::Subject;
-    use crate::slices::courier::applications::register_courier;
+    use crate::slices::courier::applications::register;
     use crate::slices::delivery::applications::{
-        assignment::create_delivery, execution::get_courier_current_delivery,
+        assignment::create, execution::get_courier_current,
     };
 
     use super::*;
@@ -230,7 +230,7 @@ mod tests {
         couriers
             .register_courier(
                 &operator(),
-                register_courier::Input {
+                register::Input {
                     courier_id: "courier-1".to_owned(),
                     name: "Timur".to_owned(),
                     market_id: "berlin".to_owned(),
@@ -240,7 +240,7 @@ mod tests {
         let current = deliveries
             .get_courier_current_delivery(
                 &operator(),
-                get_courier_current_delivery::Input {
+                get_courier_current::Input {
                     courier_id: "courier-1".to_owned(),
                 },
             )
@@ -250,7 +250,7 @@ mod tests {
         let created = deliveries
             .create_delivery(
                 &operator(),
-                create_delivery::Input {
+                create::Input {
                     order_id: "order-1".to_owned(),
                     market_id: "berlin".to_owned(),
                 },
@@ -269,7 +269,7 @@ mod tests {
                 .couriers()
                 .register_courier(
                     &operator(),
-                    register_courier::Input {
+                    register::Input {
                         courier_id: "courier-1".to_owned(),
                         name: "Timur".to_owned(),
                         market_id: "berlin".to_owned(),
@@ -282,7 +282,7 @@ mod tests {
                 .deliveries()
                 .create_delivery(
                     &operator(),
-                    create_delivery::Input {
+                    create::Input {
                         order_id: "order-1".to_owned(),
                         market_id: "berlin".to_owned(),
                     },

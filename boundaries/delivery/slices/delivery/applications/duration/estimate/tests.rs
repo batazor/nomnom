@@ -1,7 +1,7 @@
 use super::*;
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::slices::courier::domains::courier::MarketIdError;
-use crate::slices::delivery::applications::duration::record_delivery_duration::DeliveryDurationStatistics;
+use crate::slices::delivery::applications::duration::record::DeliveryDurationStatistics;
 use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
 use crate::slices::delivery::applications::test_support::{World, berlin, hamburg, service};
 use crate::slices::delivery::domains::delivery::DeliveryId;

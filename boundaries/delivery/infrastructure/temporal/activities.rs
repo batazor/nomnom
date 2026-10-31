@@ -14,10 +14,10 @@ use temporalio_common::error::ApplicationFailure;
 use temporalio_macros::activities;
 use temporalio_sdk::activities::{ActivityContext, ActivityError};
 
-use crate::slices::delivery::applications::assignment::advance_assignment;
+use crate::slices::delivery::applications::assignment::advance;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 
-/// What the workflow waits for after a step: [`advance_assignment::Output`]
+/// What the workflow waits for after a step: [`advance::Output`]
 /// as the Activity payload.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Step {
@@ -30,19 +30,19 @@ pub enum Step {
     Finished,
 }
 
-impl From<advance_assignment::Output> for Step {
-    fn from(output: advance_assignment::Output) -> Self {
+impl From<advance::Output> for Step {
+    fn from(output: advance::Output) -> Self {
         match output {
-            advance_assignment::Output::Offered {
+            advance::Output::Offered {
                 offer_id,
                 expires_at_epoch_seconds,
             } => Self::Offered {
                 offer_id: offer_id.as_str().to_owned(),
                 expires_at_epoch_seconds,
             },
-            advance_assignment::Output::NoCandidate => Self::NoCandidate,
-            advance_assignment::Output::Assigned => Self::Assigned,
-            advance_assignment::Output::Finished => Self::Finished,
+            advance::Output::NoCandidate => Self::NoCandidate,
+            advance::Output::Assigned => Self::Assigned,
+            advance::Output::Finished => Self::Finished,
         }
     }
 }

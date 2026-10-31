@@ -48,12 +48,12 @@ use crate::pkg::lifecycle::Worker;
 use crate::pkg::persistence::RepositoryError;
 use crate::pkg::usecase::Clock;
 use crate::slices::courier::applications::error::CourierApplicationError;
-use crate::slices::courier::applications::update_courier_location;
+use crate::slices::courier::applications::update_location;
 use crate::slices::courier::domains::courier::{CourierId, Location};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    execution::confirm_delivery, execution::confirm_pickup, execution::report_delivery_failure,
-    offer::accept_delivery_offer, offer::reject_delivery_offer,
+    execution::confirm_delivery, execution::confirm_pickup, execution::report_failure,
+    offer::accept, offer::reject,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureCode, DeliveryId, DeliveryOfferId, VirtualCity,
@@ -212,7 +212,7 @@ impl CourierActions for UseCaseCourierActions {
             .deliveries()
             .accept_delivery_offer(
                 &courier_subject(courier),
-                accept_delivery_offer::Input {
+                accept::Input {
                     offer_id: offer.as_str().to_owned(),
                     courier_id: courier.as_str().to_owned(),
                     expected_pickup_at_epoch_seconds: Some(expected_pickup_at_epoch_seconds),
@@ -230,7 +230,7 @@ impl CourierActions for UseCaseCourierActions {
             .deliveries()
             .reject_delivery_offer(
                 &courier_subject(courier),
-                reject_delivery_offer::Input {
+                reject::Input {
                     offer_id: offer.as_str().to_owned(),
                     courier_id: courier.as_str().to_owned(),
                 },
@@ -284,11 +284,9 @@ impl CourierActions for UseCaseCourierActions {
             .deliveries()
             .report_delivery_failure(
                 &courier_subject(courier),
-                report_delivery_failure::Input {
+                report_failure::Input {
                     delivery_id: delivery.as_str().to_owned(),
-                    reporter: report_delivery_failure::Reporter::Courier(
-                        courier.as_str().to_owned(),
-                    ),
+                    reporter: report_failure::Reporter::Courier(courier.as_str().to_owned()),
                     reason: reason.as_str().to_owned(),
                     detail: None,
                 },
@@ -305,7 +303,7 @@ impl CourierActions for UseCaseCourierActions {
             .couriers()
             .update_courier_location(
                 &courier_subject(courier),
-                update_courier_location::Input {
+                update_location::Input {
                     courier_id: courier.as_str().to_owned(),
                     latitude: location.latitude(),
                     longitude: location.longitude(),

@@ -23,10 +23,10 @@ use delivery::pkg::persistence::RepositoryError;
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus,
 };
-use delivery::slices::delivery::applications::assignment::advance_assignment;
+use delivery::slices::delivery::applications::assignment::advance;
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::error::DeliveryApplicationError;
-use delivery::slices::delivery::applications::offer::accept_delivery_offer::{Handler, Input};
+use delivery::slices::delivery::applications::offer::accept::{Handler, Input};
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::domains::delivery::{
@@ -263,7 +263,7 @@ fn concurrent_steps_offer_the_delivery_once() {
                     distance_to_pickup_meters: 1_000,
                     active_assignments: 0,
                 }]);
-                advance_assignment::Handler {
+                advance::Handler {
                     unit_of_work: &*store,
                     deliveries: &deliveries,
                     couriers: &*store,
@@ -279,7 +279,7 @@ fn concurrent_steps_offer_the_delivery_once() {
                         offer_ttl_seconds: 60,
                     },
                 }
-                .execute(advance_assignment::Input { delivery_id })
+                .execute(advance::Input { delivery_id })
             })
         })
         .collect();
@@ -291,7 +291,7 @@ fn concurrent_steps_offer_the_delivery_once() {
     assert_eq!(
         outcomes
             .iter()
-            .filter(|outcome| matches!(outcome, Ok(advance_assignment::Output::Offered { .. })))
+            .filter(|outcome| matches!(outcome, Ok(advance::Output::Offered { .. })))
             .count(),
         1
     );

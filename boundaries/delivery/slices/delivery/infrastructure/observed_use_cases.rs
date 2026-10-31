@@ -18,13 +18,12 @@ use crate::pkg::authz::Subject;
 use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    assignment::advance_assignment, assignment::create_delivery, assignment::find_courier,
-    assignment::reassign_courier, duration::estimate_delivery_duration,
-    duration::record_delivery_duration, execution::cancel_delivery, execution::confirm_delivery,
-    execution::confirm_pickup, execution::get_courier_current_delivery,
-    execution::report_delivery_failure, get_courier_pool, offer::accept_delivery_offer,
-    offer::expire_delivery_offer, offer::list_available_delivery_offers, offer::offer_delivery,
-    offer::offer_delivery_to_courier, offer::reject_delivery_offer, tracking::get_order_delivery,
+    assignment::advance, assignment::create, assignment::find_courier,
+    assignment::reassign_courier, duration::estimate, duration::record, execution::cancel,
+    execution::confirm_delivery, execution::confirm_pickup, execution::get_courier_current,
+    execution::report_failure, get_courier_pool, offer::accept, offer::expire,
+    offer::list_available, offer::offer_delivery, offer::reject, offer::to_courier,
+    tracking::get_by_order,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 
@@ -118,8 +117,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn create_delivery(
         &self,
         subject: &Subject,
-        input: create_delivery::Input,
-    ) -> Result<create_delivery::Output, DeliveryApplicationError> {
+        input: create::Input,
+    ) -> Result<create::Output, DeliveryApplicationError> {
         self.observe(CREATE_DELIVERY, || {
             self.inner.create_delivery(subject, input)
         })
@@ -144,7 +143,7 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn offer_delivery_to_courier(
         &self,
         subject: &Subject,
-        input: offer_delivery_to_courier::Input,
+        input: to_courier::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
         self.observe(OFFER_DELIVERY_TO_COURIER, || {
             self.inner.offer_delivery_to_courier(subject, input)
@@ -154,8 +153,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn list_available_delivery_offers(
         &self,
         subject: &Subject,
-        input: list_available_delivery_offers::Input,
-    ) -> Result<list_available_delivery_offers::Output, DeliveryApplicationError> {
+        input: list_available::Input,
+    ) -> Result<list_available::Output, DeliveryApplicationError> {
         self.observe(LIST_AVAILABLE_DELIVERY_OFFERS, || {
             self.inner.list_available_delivery_offers(subject, input)
         })
@@ -164,8 +163,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn get_courier_current_delivery(
         &self,
         subject: &Subject,
-        input: get_courier_current_delivery::Input,
-    ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError> {
+        input: get_courier_current::Input,
+    ) -> Result<get_courier_current::Output, DeliveryApplicationError> {
         self.observe(GET_COURIER_CURRENT_DELIVERY, || {
             self.inner.get_courier_current_delivery(subject, input)
         })
@@ -184,8 +183,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn get_order_delivery(
         &self,
         subject: &Subject,
-        input: get_order_delivery::Input,
-    ) -> Result<get_order_delivery::Output, DeliveryApplicationError> {
+        input: get_by_order::Input,
+    ) -> Result<get_by_order::Output, DeliveryApplicationError> {
         self.observe(GET_ORDER_DELIVERY, || {
             self.inner.get_order_delivery(subject, input)
         })
@@ -194,8 +193,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn accept_delivery_offer(
         &self,
         subject: &Subject,
-        input: accept_delivery_offer::Input,
-    ) -> Result<accept_delivery_offer::Output, DeliveryApplicationError> {
+        input: accept::Input,
+    ) -> Result<accept::Output, DeliveryApplicationError> {
         self.observe(ACCEPT_DELIVERY_OFFER, || {
             self.inner.accept_delivery_offer(subject, input)
         })
@@ -204,8 +203,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn reject_delivery_offer(
         &self,
         subject: &Subject,
-        input: reject_delivery_offer::Input,
-    ) -> Result<reject_delivery_offer::Output, DeliveryApplicationError> {
+        input: reject::Input,
+    ) -> Result<reject::Output, DeliveryApplicationError> {
         self.observe(REJECT_DELIVERY_OFFER, || {
             self.inner.reject_delivery_offer(subject, input)
         })
@@ -242,8 +241,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn report_delivery_failure(
         &self,
         subject: &Subject,
-        input: report_delivery_failure::Input,
-    ) -> Result<report_delivery_failure::Output, DeliveryApplicationError> {
+        input: report_failure::Input,
+    ) -> Result<report_failure::Output, DeliveryApplicationError> {
         self.observe(REPORT_DELIVERY_FAILURE, || {
             self.inner.report_delivery_failure(subject, input)
         })
@@ -252,8 +251,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn cancel_delivery(
         &self,
         subject: &Subject,
-        input: cancel_delivery::Input,
-    ) -> Result<cancel_delivery::Output, DeliveryApplicationError> {
+        input: cancel::Input,
+    ) -> Result<cancel::Output, DeliveryApplicationError> {
         self.observe(CANCEL_DELIVERY, || {
             self.inner.cancel_delivery(subject, input)
         })
@@ -261,15 +260,15 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
 
     fn advance_assignment(
         &self,
-        input: advance_assignment::Input,
-    ) -> Result<advance_assignment::Output, DeliveryApplicationError> {
+        input: advance::Input,
+    ) -> Result<advance::Output, DeliveryApplicationError> {
         self.observe(ADVANCE_ASSIGNMENT, || self.inner.advance_assignment(input))
     }
 
     fn expire_delivery_offer(
         &self,
-        input: expire_delivery_offer::Input,
-    ) -> Result<expire_delivery_offer::Output, DeliveryApplicationError> {
+        input: expire::Input,
+    ) -> Result<expire::Output, DeliveryApplicationError> {
         self.observe(EXPIRE_DELIVERY_OFFER, || {
             self.inner.expire_delivery_offer(input)
         })
@@ -278,8 +277,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
     fn estimate_delivery_duration(
         &self,
         subject: &Subject,
-        input: estimate_delivery_duration::Input,
-    ) -> Result<estimate_delivery_duration::Output, DeliveryApplicationError> {
+        input: estimate::Input,
+    ) -> Result<estimate::Output, DeliveryApplicationError> {
         self.observe(ESTIMATE_DELIVERY_DURATION, || {
             self.inner.estimate_delivery_duration(subject, input)
         })
@@ -287,8 +286,8 @@ impl DeliveryUseCases for ObservedDeliveryUseCases {
 
     fn record_delivery_duration(
         &self,
-        input: record_delivery_duration::Input,
-    ) -> Result<record_delivery_duration::Output, DeliveryApplicationError> {
+        input: record::Input,
+    ) -> Result<record::Output, DeliveryApplicationError> {
         self.observe(RECORD_DELIVERY_DURATION, || {
             self.inner.record_delivery_duration(input)
         })

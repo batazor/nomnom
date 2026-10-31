@@ -22,6 +22,6 @@
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/expire_delivery_offer.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/expire.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Delivery use cases](../../../../../README.md#use-cases).

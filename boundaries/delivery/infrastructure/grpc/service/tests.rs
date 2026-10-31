@@ -10,14 +10,13 @@ use super::super::v1::delivery_service_client::DeliveryServiceClient;
 use super::*;
 use crate::infrastructure::memory::StaticCourierLocator;
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::slices::courier::applications::{register_courier, set_courier_availability};
+use crate::slices::courier::applications::{register, set_availability};
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::courier_locator::CourierCandidate;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::{
-    assignment::advance_assignment, execution::confirm_pickup, offer::accept_delivery_offer,
-    offer::list_available_delivery_offers,
+    assignment::advance, execution::confirm_pickup, offer::accept, offer::list_available,
 };
 
 struct StaticSubjectResolver;
@@ -97,7 +96,7 @@ async fn start_with_courier(courier: &str) -> Running {
     couriers
         .register_courier(
             &Subject::User("operator-1".to_owned()),
-            register_courier::Input {
+            register::Input {
                 courier_id: courier.to_owned(),
                 name: "Timur".to_owned(),
                 market_id: "berlin".to_owned(),
@@ -153,7 +152,7 @@ async fn assigned_over_grpc(running: &mut Running, order: &str, courier: &str) -
     running
         .module
         .deliveries()
-        .advance_assignment(advance_assignment::Input {
+        .advance_assignment(advance::Input {
             delivery_id: delivery_id.clone(),
         })
         .expect("offered");
@@ -163,7 +162,7 @@ async fn assigned_over_grpc(running: &mut Running, order: &str, courier: &str) -
     let offers = deliveries
         .list_available_delivery_offers(
             &courier_subject,
-            list_available_delivery_offers::Input {
+            list_available::Input {
                 courier_id: courier.to_owned(),
             },
         )
@@ -172,7 +171,7 @@ async fn assigned_over_grpc(running: &mut Running, order: &str, courier: &str) -
     deliveries
         .accept_delivery_offer(
             &courier_subject,
-            accept_delivery_offer::Input {
+            accept::Input {
                 offer_id: offer.offer_id.as_str().to_owned(),
                 courier_id: courier.to_owned(),
                 expected_pickup_at_epoch_seconds: None,
@@ -324,9 +323,9 @@ async fn cancel_assigned_delivery_releases_courier_and_repeat_succeeds() {
     let availability = couriers
         .set_courier_availability(
             &Subject::User("courier-1".to_owned()),
-            set_courier_availability::Input {
+            set_availability::Input {
                 courier_id: "courier-1".to_owned(),
-                availability: set_courier_availability::Availability::Available,
+                availability: set_availability::Availability::Available,
             },
         )
         .expect("courier released");

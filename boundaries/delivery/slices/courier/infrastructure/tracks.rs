@@ -14,7 +14,7 @@ use serde_json::json;
 use crate::infrastructure::repository::blocking;
 use crate::pkg::persistence::RepositoryError;
 use crate::pkg::telemetry::log::rfc3339;
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     CourierPosition, CourierPositionPublisher,
 };
 

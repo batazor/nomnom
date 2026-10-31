@@ -41,7 +41,7 @@ sequenceDiagram
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/accept_delivery_offer.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/accept.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Delivery use cases](../../../../../README.md#use-cases).
 

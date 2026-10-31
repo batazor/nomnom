@@ -2,9 +2,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::slices::delivery::applications::duration::estimate_delivery_duration::{
-    self, DeliveryDurationSamples,
-};
+use crate::slices::delivery::applications::duration::estimate::{self, DeliveryDurationSamples};
 use crate::slices::delivery::applications::test_support::{World, berlin, hamburg, service};
 use crate::slices::delivery::domains::delivery::{Delivery, OrderId};
 
@@ -96,14 +94,14 @@ fn completed_deliveries_fill_the_sample_and_give_the_median() {
             .expect("handover recorded");
     }
 
-    let estimate = estimate_delivery_duration::Handler {
+    let estimate = estimate::Handler {
         authorization: &world.authorization,
         samples: &world.store,
         policy: policy(),
     }
     .execute(
         &service(),
-        estimate_delivery_duration::Input {
+        estimate::Input {
             market_id: "berlin".to_owned(),
         },
     )

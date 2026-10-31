@@ -18,15 +18,15 @@ use delivery::infrastructure::repository::{
 use delivery::pkg::config::database;
 use delivery::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use delivery::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
-use delivery::slices::courier::applications::update_courier_location::{
+use delivery::slices::courier::applications::update_location::{
     CourierLocationStore, CourierPosition,
 };
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository, CourierStatus, Location,
 };
 use delivery::slices::delivery::applications::assignment_process::CandidateDeliveries;
-use delivery::slices::delivery::applications::execution::get_courier_current_delivery::CourierCurrentDeliveryReadModel;
-use delivery::slices::delivery::applications::offer::list_available_delivery_offers::PendingDeliveryOffersReadModel;
+use delivery::slices::delivery::applications::execution::get_courier_current::CourierCurrentDeliveryReadModel;
+use delivery::slices::delivery::applications::offer::list_available::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
 use delivery::slices::delivery::domains::delivery::{

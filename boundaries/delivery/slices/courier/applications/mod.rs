@@ -2,11 +2,11 @@ pub mod assignment;
 pub mod authorization;
 pub mod candidate_wake;
 pub mod error;
-pub mod register_courier;
+pub mod register;
 pub mod relationships;
-pub mod retire_courier;
-pub mod set_courier_availability;
-pub mod update_courier_location;
+pub mod retire;
+pub mod set_availability;
+pub mod update_location;
 
 use crate::pkg::usecase::required_identifier;
 use crate::slices::courier::domains::courier::{CourierId, MarketId};

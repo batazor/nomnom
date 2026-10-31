@@ -8,7 +8,7 @@ use crate::pkg::authz::Subject;
 use crate::slices::simulator::applications::authorization::SimulatorAuthorization;
 use crate::slices::simulator::applications::error::SimulatorApplicationError;
 use crate::slices::simulator::applications::work::SimulatorWork;
-use crate::slices::simulator::applications::{get_simulator, set_simulator_enabled};
+use crate::slices::simulator::applications::{get, set_enabled};
 use crate::slices::simulator::domains::simulator::SimulatorStateRepository;
 
 /// Роль хранилища слайса: переключатель и выборка работы Simulator.
@@ -26,16 +26,13 @@ pub trait SimulatorPorts: Interface {
 pub trait SimulatorDependencies: HasComponent<dyn SimulatorPorts> {}
 
 pub trait SimulatorUseCases: Interface {
-    fn get_simulator(
-        &self,
-        subject: &Subject,
-    ) -> Result<get_simulator::Output, SimulatorApplicationError>;
+    fn get_simulator(&self, subject: &Subject) -> Result<get::Output, SimulatorApplicationError>;
 
     fn set_simulator_enabled(
         &self,
         subject: &Subject,
-        input: set_simulator_enabled::Input,
-    ) -> Result<set_simulator_enabled::Output, SimulatorApplicationError>;
+        input: set_enabled::Input,
+    ) -> Result<set_enabled::Output, SimulatorApplicationError>;
 }
 
 #[derive(Component)]
@@ -46,11 +43,8 @@ pub struct SimulatorUseCasesImpl {
 }
 
 impl SimulatorUseCases for SimulatorUseCasesImpl {
-    fn get_simulator(
-        &self,
-        subject: &Subject,
-    ) -> Result<get_simulator::Output, SimulatorApplicationError> {
-        get_simulator::Handler {
+    fn get_simulator(&self, subject: &Subject) -> Result<get::Output, SimulatorApplicationError> {
+        get::Handler {
             authorization: self.ports.authorization(),
             state: self.ports.store(),
         }
@@ -60,9 +54,9 @@ impl SimulatorUseCases for SimulatorUseCasesImpl {
     fn set_simulator_enabled(
         &self,
         subject: &Subject,
-        input: set_simulator_enabled::Input,
-    ) -> Result<set_simulator_enabled::Output, SimulatorApplicationError> {
-        set_simulator_enabled::Handler {
+        input: set_enabled::Input,
+    ) -> Result<set_enabled::Output, SimulatorApplicationError> {
+        set_enabled::Handler {
             authorization: self.ports.authorization(),
             state: self.ports.store(),
         }

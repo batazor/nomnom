@@ -16,18 +16,16 @@ use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
-use crate::slices::delivery::applications::duration::estimate_delivery_duration::{
-    self, DeliveryDurationSamples,
-};
-use crate::slices::delivery::applications::duration::record_delivery_duration::{
+use crate::slices::delivery::applications::duration::estimate::{self, DeliveryDurationSamples};
+use crate::slices::delivery::applications::duration::record::{
     self, DeliveryDurationStatistics, DeliveryInbox,
 };
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
-use crate::slices::delivery::applications::execution::get_courier_current_delivery::{
+use crate::slices::delivery::applications::execution::get_courier_current::{
     self, CourierCurrentDeliveryReadModel,
 };
 use crate::slices::delivery::applications::get_courier_pool::{self, CourierPoolReadModel};
-use crate::slices::delivery::applications::offer::list_available_delivery_offers::{
+use crate::slices::delivery::applications::offer::list_available::{
     self, PendingDeliveryOffersReadModel,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
@@ -35,15 +33,12 @@ use crate::slices::delivery::applications::outbox::DeliveryOutbox;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
-use crate::slices::delivery::applications::tracking::get_order_delivery::{
-    self, OrderDeliveryReadModel,
-};
+use crate::slices::delivery::applications::tracking::get_by_order::{self, OrderDeliveryReadModel};
 use crate::slices::delivery::applications::{
-    assignment::advance_assignment, assignment::create_delivery, assignment::find_courier,
-    assignment::reassign_courier, execution::cancel_delivery, execution::confirm_delivery,
-    execution::confirm_pickup, execution::report_delivery_failure, offer::accept_delivery_offer,
-    offer::expire_delivery_offer, offer::offer_delivery, offer::offer_delivery_to_courier,
-    offer::reject_delivery_offer,
+    assignment::advance, assignment::create, assignment::find_courier,
+    assignment::reassign_courier, execution::cancel, execution::confirm_delivery,
+    execution::confirm_pickup, execution::report_failure, offer::accept, offer::expire,
+    offer::offer_delivery, offer::reject, offer::to_courier,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryOfferRepository, DeliveryRepository, VirtualCity,
@@ -143,8 +138,8 @@ pub trait DeliveryUseCases: Interface {
     fn create_delivery(
         &self,
         subject: &Subject,
-        input: create_delivery::Input,
-    ) -> Result<create_delivery::Output, DeliveryApplicationError>;
+        input: create::Input,
+    ) -> Result<create::Output, DeliveryApplicationError>;
 
     fn find_courier(
         &self,
@@ -161,20 +156,20 @@ pub trait DeliveryUseCases: Interface {
     fn offer_delivery_to_courier(
         &self,
         subject: &Subject,
-        input: offer_delivery_to_courier::Input,
+        input: to_courier::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError>;
 
     fn list_available_delivery_offers(
         &self,
         subject: &Subject,
-        input: list_available_delivery_offers::Input,
-    ) -> Result<list_available_delivery_offers::Output, DeliveryApplicationError>;
+        input: list_available::Input,
+    ) -> Result<list_available::Output, DeliveryApplicationError>;
 
     fn get_courier_current_delivery(
         &self,
         subject: &Subject,
-        input: get_courier_current_delivery::Input,
-    ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError>;
+        input: get_courier_current::Input,
+    ) -> Result<get_courier_current::Output, DeliveryApplicationError>;
 
     fn get_courier_pool(
         &self,
@@ -185,20 +180,20 @@ pub trait DeliveryUseCases: Interface {
     fn get_order_delivery(
         &self,
         subject: &Subject,
-        input: get_order_delivery::Input,
-    ) -> Result<get_order_delivery::Output, DeliveryApplicationError>;
+        input: get_by_order::Input,
+    ) -> Result<get_by_order::Output, DeliveryApplicationError>;
 
     fn accept_delivery_offer(
         &self,
         subject: &Subject,
-        input: accept_delivery_offer::Input,
-    ) -> Result<accept_delivery_offer::Output, DeliveryApplicationError>;
+        input: accept::Input,
+    ) -> Result<accept::Output, DeliveryApplicationError>;
 
     fn reject_delivery_offer(
         &self,
         subject: &Subject,
-        input: reject_delivery_offer::Input,
-    ) -> Result<reject_delivery_offer::Output, DeliveryApplicationError>;
+        input: reject::Input,
+    ) -> Result<reject::Output, DeliveryApplicationError>;
 
     fn reassign_courier(
         &self,
@@ -221,38 +216,38 @@ pub trait DeliveryUseCases: Interface {
     fn report_delivery_failure(
         &self,
         subject: &Subject,
-        input: report_delivery_failure::Input,
-    ) -> Result<report_delivery_failure::Output, DeliveryApplicationError>;
+        input: report_failure::Input,
+    ) -> Result<report_failure::Output, DeliveryApplicationError>;
 
     fn cancel_delivery(
         &self,
         subject: &Subject,
-        input: cancel_delivery::Input,
-    ) -> Result<cancel_delivery::Output, DeliveryApplicationError>;
+        input: cancel::Input,
+    ) -> Result<cancel::Output, DeliveryApplicationError>;
 
     fn estimate_delivery_duration(
         &self,
         subject: &Subject,
-        input: estimate_delivery_duration::Input,
-    ) -> Result<estimate_delivery_duration::Output, DeliveryApplicationError>;
+        input: estimate::Input,
+    ) -> Result<estimate::Output, DeliveryApplicationError>;
 
     /// Consumer of the Delivery's own facts: no caller subject.
     fn record_delivery_duration(
         &self,
-        input: record_delivery_duration::Input,
-    ) -> Result<record_delivery_duration::Output, DeliveryApplicationError>;
+        input: record::Input,
+    ) -> Result<record::Output, DeliveryApplicationError>;
 
     /// Step of the Assignment Workflow: no caller subject.
     fn advance_assignment(
         &self,
-        input: advance_assignment::Input,
-    ) -> Result<advance_assignment::Output, DeliveryApplicationError>;
+        input: advance::Input,
+    ) -> Result<advance::Output, DeliveryApplicationError>;
 
     /// Offer timer of the Assignment Workflow: no caller subject.
     fn expire_delivery_offer(
         &self,
-        input: expire_delivery_offer::Input,
-    ) -> Result<expire_delivery_offer::Output, DeliveryApplicationError>;
+        input: expire::Input,
+    ) -> Result<expire::Output, DeliveryApplicationError>;
 }
 
 #[derive(Component)]
@@ -274,9 +269,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn create_delivery(
         &self,
         subject: &Subject,
-        input: create_delivery::Input,
-    ) -> Result<create_delivery::Output, DeliveryApplicationError> {
-        create_delivery::Handler {
+        input: create::Input,
+    ) -> Result<create::Output, DeliveryApplicationError> {
+        create::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
@@ -330,9 +325,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn offer_delivery_to_courier(
         &self,
         subject: &Subject,
-        input: offer_delivery_to_courier::Input,
+        input: to_courier::Input,
     ) -> Result<offer_delivery::Output, DeliveryApplicationError> {
-        offer_delivery_to_courier::Handler {
+        to_courier::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
@@ -351,9 +346,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn list_available_delivery_offers(
         &self,
         subject: &Subject,
-        input: list_available_delivery_offers::Input,
-    ) -> Result<list_available_delivery_offers::Output, DeliveryApplicationError> {
-        list_available_delivery_offers::Handler {
+        input: list_available::Input,
+    ) -> Result<list_available::Output, DeliveryApplicationError> {
+        list_available::Handler {
             authorization: self.ports.authorization(),
             pending_offers: self.ports.read_models(),
             clock: self.ports.clock(),
@@ -364,9 +359,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn get_courier_current_delivery(
         &self,
         subject: &Subject,
-        input: get_courier_current_delivery::Input,
-    ) -> Result<get_courier_current_delivery::Output, DeliveryApplicationError> {
-        get_courier_current_delivery::Handler {
+        input: get_courier_current::Input,
+    ) -> Result<get_courier_current::Output, DeliveryApplicationError> {
+        get_courier_current::Handler {
             authorization: self.ports.courier_authorization(),
             couriers: self.ports.store(),
             current_deliveries: self.ports.read_models(),
@@ -390,9 +385,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn get_order_delivery(
         &self,
         subject: &Subject,
-        input: get_order_delivery::Input,
-    ) -> Result<get_order_delivery::Output, DeliveryApplicationError> {
-        get_order_delivery::Handler {
+        input: get_by_order::Input,
+    ) -> Result<get_by_order::Output, DeliveryApplicationError> {
+        get_by_order::Handler {
             authorization: self.ports.authorization(),
             deliveries: self.ports.read_models(),
             city: self.ports.city(),
@@ -403,9 +398,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn accept_delivery_offer(
         &self,
         subject: &Subject,
-        input: accept_delivery_offer::Input,
-    ) -> Result<accept_delivery_offer::Output, DeliveryApplicationError> {
-        accept_delivery_offer::Handler {
+        input: accept::Input,
+    ) -> Result<accept::Output, DeliveryApplicationError> {
+        accept::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             offers: self.ports.store(),
@@ -425,9 +420,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn reject_delivery_offer(
         &self,
         subject: &Subject,
-        input: reject_delivery_offer::Input,
-    ) -> Result<reject_delivery_offer::Output, DeliveryApplicationError> {
-        reject_delivery_offer::Handler {
+        input: reject::Input,
+    ) -> Result<reject::Output, DeliveryApplicationError> {
+        reject::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             offers: self.ports.store(),
@@ -492,9 +487,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn report_delivery_failure(
         &self,
         subject: &Subject,
-        input: report_delivery_failure::Input,
-    ) -> Result<report_delivery_failure::Output, DeliveryApplicationError> {
-        report_delivery_failure::Handler {
+        input: report_failure::Input,
+    ) -> Result<report_failure::Output, DeliveryApplicationError> {
+        report_failure::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
@@ -510,9 +505,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn cancel_delivery(
         &self,
         subject: &Subject,
-        input: cancel_delivery::Input,
-    ) -> Result<cancel_delivery::Output, DeliveryApplicationError> {
-        cancel_delivery::Handler {
+        input: cancel::Input,
+    ) -> Result<cancel::Output, DeliveryApplicationError> {
+        cancel::Handler {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
@@ -528,9 +523,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
     fn estimate_delivery_duration(
         &self,
         subject: &Subject,
-        input: estimate_delivery_duration::Input,
-    ) -> Result<estimate_delivery_duration::Output, DeliveryApplicationError> {
-        estimate_delivery_duration::Handler {
+        input: estimate::Input,
+    ) -> Result<estimate::Output, DeliveryApplicationError> {
+        estimate::Handler {
             authorization: self.ports.authorization(),
             samples: self.ports.read_models(),
             policy: self.settings.estimate_policy(),
@@ -540,9 +535,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
 
     fn record_delivery_duration(
         &self,
-        input: record_delivery_duration::Input,
-    ) -> Result<record_delivery_duration::Output, DeliveryApplicationError> {
-        record_delivery_duration::Handler {
+        input: record::Input,
+    ) -> Result<record::Output, DeliveryApplicationError> {
+        record::Handler {
             unit_of_work: &self.unit_of_work(),
             inbox: self.ports.store(),
             statistics: self.ports.store(),
@@ -554,9 +549,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
 
     fn advance_assignment(
         &self,
-        input: advance_assignment::Input,
-    ) -> Result<advance_assignment::Output, DeliveryApplicationError> {
-        advance_assignment::Handler {
+        input: advance::Input,
+    ) -> Result<advance::Output, DeliveryApplicationError> {
+        advance::Handler {
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
             couriers: self.ports.store(),
@@ -573,9 +568,9 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
 
     fn expire_delivery_offer(
         &self,
-        input: expire_delivery_offer::Input,
-    ) -> Result<expire_delivery_offer::Output, DeliveryApplicationError> {
-        expire_delivery_offer::Handler {
+        input: expire::Input,
+    ) -> Result<expire::Output, DeliveryApplicationError> {
+        expire::Handler {
             unit_of_work: &self.unit_of_work(),
             offers: self.ports.store(),
             outbox: self.ports.store(),

@@ -10,7 +10,7 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::applications::update_courier_location::CourierPosition;
+use crate::slices::courier::applications::update_location::CourierPosition;
 use crate::slices::courier::domains::courier::{CourierId, CourierName, Location};
 use crate::slices::delivery::domains::delivery::{
     Intersection, OrderId, TrackingChannel, VirtualCity,

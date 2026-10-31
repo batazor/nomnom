@@ -11,9 +11,7 @@ use std::sync::Arc;
 use crate::pkg::authz::Subject;
 use crate::pkg::telemetry::usecase::{Failure, UseCase, UseCaseTelemetry};
 use crate::slices::courier::applications::error::CourierApplicationError;
-use crate::slices::courier::applications::{
-    register_courier, retire_courier, set_courier_availability, update_courier_location,
-};
+use crate::slices::courier::applications::{register, retire, set_availability, update_location};
 use crate::slices::courier::di::CourierUseCases;
 
 pub const REGISTER_COURIER: UseCase = UseCase::command("register_courier");
@@ -56,8 +54,8 @@ impl CourierUseCases for ObservedCourierUseCases {
     fn register_courier(
         &self,
         subject: &Subject,
-        input: register_courier::Input,
-    ) -> Result<register_courier::Output, CourierApplicationError> {
+        input: register::Input,
+    ) -> Result<register::Output, CourierApplicationError> {
         self.telemetry.observe(REGISTER_COURIER, classify, || {
             self.inner.register_courier(subject, input)
         })
@@ -66,8 +64,8 @@ impl CourierUseCases for ObservedCourierUseCases {
     fn set_courier_availability(
         &self,
         subject: &Subject,
-        input: set_courier_availability::Input,
-    ) -> Result<set_courier_availability::Output, CourierApplicationError> {
+        input: set_availability::Input,
+    ) -> Result<set_availability::Output, CourierApplicationError> {
         self.telemetry
             .observe(SET_COURIER_AVAILABILITY, classify, || {
                 self.inner.set_courier_availability(subject, input)
@@ -77,8 +75,8 @@ impl CourierUseCases for ObservedCourierUseCases {
     fn retire_courier(
         &self,
         subject: &Subject,
-        input: retire_courier::Input,
-    ) -> Result<retire_courier::Output, CourierApplicationError> {
+        input: retire::Input,
+    ) -> Result<retire::Output, CourierApplicationError> {
         self.telemetry.observe(RETIRE_COURIER, classify, || {
             self.inner.retire_courier(subject, input)
         })
@@ -87,8 +85,8 @@ impl CourierUseCases for ObservedCourierUseCases {
     fn update_courier_location(
         &self,
         subject: &Subject,
-        input: update_courier_location::Input,
-    ) -> Result<update_courier_location::Output, CourierApplicationError> {
+        input: update_location::Input,
+    ) -> Result<update_location::Output, CourierApplicationError> {
         self.telemetry
             .observe(UPDATE_COURIER_LOCATION, classify, || {
                 self.inner.update_courier_location(subject, input)

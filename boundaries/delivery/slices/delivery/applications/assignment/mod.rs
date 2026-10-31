@@ -3,8 +3,8 @@
 //! Delivery, Confirm Delivery and Report Delivery Failure. The caller runs
 //! the delivery transition and saves the delivery in its Unit of Work.
 
-pub mod advance_assignment;
-pub mod create_delivery;
+pub mod advance;
+pub mod create;
 pub mod find_courier;
 pub mod reassign_courier;
 

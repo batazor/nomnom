@@ -7,7 +7,7 @@ use crate::infrastructure::memory::{
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::authz::{RelationshipWriteError, Subject};
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{

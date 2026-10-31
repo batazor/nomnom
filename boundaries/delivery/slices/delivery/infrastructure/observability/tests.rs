@@ -11,7 +11,7 @@ use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::courier::domains::courier::CourierId;
-use crate::slices::delivery::applications::assignment::create_delivery;
+use crate::slices::delivery::applications::assignment::create;
 use crate::slices::delivery::domains::delivery::{
     DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOfferId, OrderId,
 };
@@ -454,7 +454,7 @@ fn idempotent_repeat_is_recorded_once() {
         .expect("virtual city");
     let random = crate::infrastructure::memory::FixedRandomSource::repeating(7);
     let assignment = crate::infrastructure::memory::RecordingAssignment::new();
-    let handler = create_delivery::Handler {
+    let handler = create::Handler {
         authorization: &authorization,
         unit_of_work: &unit_of_work,
         deliveries: &store,
@@ -465,7 +465,7 @@ fn idempotent_repeat_is_recorded_once() {
         random: &random,
         assignment: &assignment,
     };
-    let input = || create_delivery::Input {
+    let input = || create::Input {
         order_id: "order-1".to_owned(),
         market_id: "berlin".to_owned(),
     };

@@ -21,7 +21,7 @@
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/list_available_delivery_offers.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/list_available.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Delivery use cases](../../../../../README.md#use-cases).
 

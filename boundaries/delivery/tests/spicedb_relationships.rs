@@ -31,7 +31,7 @@ use delivery::pkg::persistence::AuthorizationRevision;
 use delivery::slices::courier::applications::authorization::{
     CourierAuthorization, CourierPermission, CourierResource,
 };
-use delivery::slices::courier::applications::register_courier;
+use delivery::slices::courier::applications::register;
 use delivery::slices::courier::domains::courier::{
     Courier, CourierId, CourierName, CourierRepository,
 };
@@ -41,8 +41,8 @@ use delivery::slices::delivery::applications::authorization::{
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::applications::{
-    assignment::reassign_courier, execution::cancel_delivery, execution::confirm_delivery,
-    execution::confirm_pickup, execution::report_delivery_failure, offer::accept_delivery_offer,
+    assignment::reassign_courier, execution::cancel, execution::confirm_delivery,
+    execution::confirm_pickup, execution::report_failure, offer::accept,
 };
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
@@ -206,7 +206,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
         active_assignments: 0,
     }]);
     let authorization = StaticAuthorization::allow_all();
-    accept_delivery_offer::Handler {
+    accept::Handler {
         authorization: &authorization,
         unit_of_work: &*store,
         offers: &*store,
@@ -226,7 +226,7 @@ fn assigned_in(client: &SpiceDbClient, tag: &str, database: &database::Config) -
     }
     .execute(
         &user(&courier),
-        accept_delivery_offer::Input {
+        accept::Input {
             offer_id: offer,
             courier_id: courier.clone(),
             expected_pickup_at_epoch_seconds: None,
@@ -250,14 +250,14 @@ fn registered_courier_acts_for_itself() {
     let writer = SpiceDbRelationships::new(Arc::new(client.clone()));
     let courier = unique("courier");
 
-    register_courier::Handler {
+    register::Handler {
         authorization: &StaticAuthorization::allow_all(),
         couriers: &*store,
         relationships: &writer,
     }
     .execute(
         &user("operator-1"),
-        register_courier::Input {
+        register::Input {
             courier_id: courier.clone(),
             name: "Timur".to_owned(),
             market_id: "berlin".to_owned(),
@@ -320,7 +320,7 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
     let world = assigned(&client, "t");
     acts_as_courier(&world, &client, true);
 
-    cancel_delivery::Handler {
+    cancel::Handler {
         authorization: &StaticAuthorization::allow_all(),
         unit_of_work: &*world.store,
         deliveries: &*world.store,
@@ -332,7 +332,7 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
     }
     .execute(
         &Subject::Service("orders-worker".to_owned()),
-        cancel_delivery::Input {
+        cancel::Input {
             order_id: world.order.clone(),
             reason: String::new(),
         },
@@ -406,7 +406,7 @@ fn failed_delivery_courier_loses_act_as_courier() {
     let world = assigned(&client, "t");
     acts_as_courier(&world, &client, true);
 
-    report_delivery_failure::Handler {
+    report_failure::Handler {
         authorization: &StaticAuthorization::allow_all(),
         unit_of_work: &*world.store,
         deliveries: &*world.store,
@@ -418,9 +418,9 @@ fn failed_delivery_courier_loses_act_as_courier() {
     }
     .execute(
         &user("dispatcher-1"),
-        report_delivery_failure::Input {
+        report_failure::Input {
             delivery_id: world.delivery.clone(),
-            reporter: report_delivery_failure::Reporter::Dispatcher,
+            reporter: report_failure::Reporter::Dispatcher,
             reason: "customer_unreachable".to_owned(),
             detail: None,
         },

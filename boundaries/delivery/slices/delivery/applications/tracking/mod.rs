@@ -2,7 +2,7 @@
 //! of the Virtual City as pickup and dropoff points and a random Tracking
 //! Channel.
 
-pub mod get_order_delivery;
+pub mod get_by_order;
 
 use std::error::Error;
 use std::fmt::{Display, Formatter};

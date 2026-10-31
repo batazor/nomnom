@@ -43,7 +43,7 @@ use crate::pkg::config::{
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::courier::infrastructure::tracks::ValkeyPositionPublisher;
-use crate::slices::delivery::applications::duration::record_delivery_duration::CONSUMER;
+use crate::slices::delivery::applications::duration::record::CONSUMER;
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryRepository, DurationKind, InvalidEstimatePolicy, VirtualCity,
 };
@@ -516,11 +516,9 @@ mod tests {
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::authz::Subject;
     use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
-    use crate::slices::courier::applications::{
-        register_courier, set_courier_availability, update_courier_location,
-    };
+    use crate::slices::courier::applications::{register, set_availability, update_location};
     use crate::slices::delivery::applications::{
-        assignment::advance_assignment, assignment::create_delivery, assignment::find_courier,
+        assignment::advance, assignment::create, assignment::find_courier,
     };
 
     use super::super::infrastructure::local_authorization;
@@ -567,12 +565,12 @@ mod tests {
         ))
     }
 
-    fn create(process: &ServiceModule, order: &str) -> create_delivery::Output {
+    fn create(process: &ServiceModule, order: &str) -> create::Output {
         process
             .deliveries()
             .create_delivery(
                 &operator(),
-                create_delivery::Input {
+                create::Input {
                     order_id: order.to_owned(),
                     market_id: "berlin".to_owned(),
                 },
@@ -601,7 +599,7 @@ mod tests {
         couriers
             .register_courier(
                 &operator(),
-                register_courier::Input {
+                register::Input {
                     courier_id: "courier-1".to_owned(),
                     name: "Timur".to_owned(),
                     market_id: "berlin".to_owned(),
@@ -611,16 +609,16 @@ mod tests {
         couriers
             .set_courier_availability(
                 &operator(),
-                set_courier_availability::Input {
+                set_availability::Input {
                     courier_id: "courier-1".to_owned(),
-                    availability: set_courier_availability::Availability::Available,
+                    availability: set_availability::Availability::Available,
                 },
             )
             .expect("courier available");
         couriers
             .update_courier_location(
                 &operator(),
-                update_courier_location::Input {
+                update_location::Input {
                     courier_id: "courier-1".to_owned(),
                     latitude: 52.37,
                     longitude: 4.89,
@@ -656,7 +654,7 @@ mod tests {
         couriers
             .register_courier(
                 &operator(),
-                register_courier::Input {
+                register::Input {
                     courier_id: "courier-1".to_owned(),
                     name: "Timur".to_owned(),
                     market_id: "berlin".to_owned(),
@@ -666,7 +664,7 @@ mod tests {
         couriers
             .update_courier_location(
                 &operator(),
-                update_courier_location::Input {
+                update_location::Input {
                     courier_id: "courier-1".to_owned(),
                     latitude: 52.37,
                     longitude: 4.89,
@@ -677,12 +675,12 @@ mod tests {
 
         let output = process
             .deliveries()
-            .advance_assignment(advance_assignment::Input {
+            .advance_assignment(advance::Input {
                 delivery_id: created.delivery_id.as_str().to_owned(),
             })
             .expect("advanced");
 
-        let advance_assignment::Output::Offered { offer_id, .. } = output else {
+        let advance::Output::Offered { offer_id, .. } = output else {
             panic!("the courier on line is offered the delivery, got {output:?}");
         };
         let offer = crate::slices::delivery::domains::delivery::DeliveryOfferRepository::get(

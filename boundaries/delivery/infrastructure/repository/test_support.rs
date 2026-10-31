@@ -21,27 +21,27 @@ use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::config::database;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, MarketId};
 use crate::slices::delivery::applications::assignment_process::CandidateDeliveries;
-use crate::slices::delivery::applications::duration::estimate_delivery_duration::DeliveryDurationSamples;
-use crate::slices::delivery::applications::duration::record_delivery_duration::{
+use crate::slices::delivery::applications::duration::estimate::DeliveryDurationSamples;
+use crate::slices::delivery::applications::duration::record::{
     DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
 };
-use crate::slices::delivery::applications::execution::get_courier_current_delivery::{
+use crate::slices::delivery::applications::execution::get_courier_current::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
 };
 use crate::slices::delivery::applications::get_courier_pool::{
     CourierPoolReadModel, PoolCourierView,
 };
-use crate::slices::delivery::applications::offer::list_available_delivery_offers::{
+use crate::slices::delivery::applications::offer::list_available::{
     AvailableDeliveryOfferView, PendingDeliveryOffersReadModel,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
-use crate::slices::delivery::applications::tracking::get_order_delivery::{
+use crate::slices::delivery::applications::tracking::get_by_order::{
     OrderDeliveryReadModel, OrderDeliveryRecord,
 };
 use crate::slices::delivery::domains::delivery::{

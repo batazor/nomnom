@@ -36,9 +36,7 @@ use crate::pkg::telemetry::{self, Telemetry};
 use crate::pkg::unit_of_work::ScopedUnitOfWork;
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
-use crate::slices::delivery::applications::{
-    assignment::advance_assignment, offer::expire_delivery_offer,
-};
+use crate::slices::delivery::applications::{assignment::advance, offer::expire};
 use crate::slices::delivery::infrastructure::DeliveryIntegrationEvents;
 use crate::slices::delivery::infrastructure::observed_use_cases::{
     ADVANCE_ASSIGNMENT, EXPIRE_DELIVERY_OFFER, classify,
@@ -76,7 +74,7 @@ impl AssignmentSteps for UseCaseSteps {
 
 impl UseCaseSteps {
     fn advance_step(&self, delivery_id: String) -> Result<Step, DeliveryApplicationError> {
-        advance_assignment::Handler {
+        advance::Handler {
             unit_of_work: &ScopedUnitOfWork::new(&self.store),
             deliveries: &self.store,
             couriers: &self.store,
@@ -88,18 +86,18 @@ impl UseCaseSteps {
             clock: &self.clock,
             policy: self.policy,
         }
-        .execute(advance_assignment::Input { delivery_id })
+        .execute(advance::Input { delivery_id })
         .map(Step::from)
     }
 
     fn expire_step(&self, offer_id: String) -> Result<(), DeliveryApplicationError> {
-        expire_delivery_offer::Handler {
+        expire::Handler {
             unit_of_work: &ScopedUnitOfWork::new(&self.store),
             offers: &self.store,
             outbox: &self.store,
             clock: &self.clock,
         }
-        .execute(expire_delivery_offer::Input { offer_id })
+        .execute(expire::Input { offer_id })
         .map(drop)
     }
 }

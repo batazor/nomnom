@@ -88,7 +88,7 @@ mod tests {
     use crate::infrastructure::memory::{AssignmentCall, RecordingAssignment, StaticAuthorization};
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::slices::courier::applications::authorization::CourierResource;
-    use crate::slices::courier::applications::update_courier_location::{
+    use crate::slices::courier::applications::update_location::{
         CourierLocationStore, CourierPosition,
     };
     use crate::slices::courier::domains::courier::MarketId;

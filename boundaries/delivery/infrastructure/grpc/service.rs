@@ -11,21 +11,18 @@ use super::tracing::GrpcTraceLayer;
 use crate::di::ServiceModule;
 use crate::pkg::authz::Subject;
 use crate::pkg::lifecycle::{Worker, wait_for_stop};
-use crate::slices::courier::applications::{
-    register_courier, retire_courier, set_courier_availability, update_courier_location,
-};
+use crate::slices::courier::applications::{register, retire, set_availability, update_location};
 use crate::slices::courier::di::CourierUseCases;
 use crate::slices::courier::domains::courier::{CourierStatus as DomainCourierStatus, Location};
 use crate::slices::delivery::applications::{
-    assignment::create_delivery, duration::estimate_delivery_duration, execution::cancel_delivery,
-    execution::confirm_delivery, execution::confirm_pickup,
-    execution::get_courier_current_delivery, execution::report_delivery_failure, get_courier_pool,
-    offer::accept_delivery_offer, offer::list_available_delivery_offers,
-    offer::offer_delivery_to_courier, offer::reject_delivery_offer, tracking::get_order_delivery,
+    assignment::create, duration::estimate, execution::cancel, execution::confirm_delivery,
+    execution::confirm_pickup, execution::get_courier_current, execution::report_failure,
+    get_courier_pool, offer::accept, offer::list_available, offer::reject, offer::to_courier,
+    tracking::get_by_order,
 };
 use crate::slices::delivery::di::DeliveryUseCases;
 use crate::slices::delivery::domains::delivery::State;
-use crate::slices::simulator::applications::set_simulator_enabled;
+use crate::slices::simulator::applications::set_enabled;
 use crate::slices::simulator::di::SimulatorUseCases;
 
 use super::v1::delivery_service_server::{DeliveryService, DeliveryServiceServer};
@@ -86,7 +83,7 @@ impl DeliveryService for DeliveryGrpcService {
         let enabled = request.into_inner().enabled;
         let output = self
             .simulator()
-            .set_simulator_enabled(&subject, set_simulator_enabled::Input { enabled })
+            .set_simulator_enabled(&subject, set_enabled::Input { enabled })
             .map_err(simulator_transport_error)?;
         Ok(Response::new(SetSimulatorEnabledResponse {
             enabled: output.enabled,
@@ -101,10 +98,7 @@ impl DeliveryService for DeliveryGrpcService {
         let courier_id = request.into_inner().courier_id;
         let output = self
             .deliveries()
-            .get_courier_current_delivery(
-                &subject,
-                get_courier_current_delivery::Input { courier_id },
-            )
+            .get_courier_current_delivery(&subject, get_courier_current::Input { courier_id })
             .map_err(delivery_transport_error)?;
 
         let delivery = output.current_delivery.map(|view| Delivery {
@@ -128,7 +122,7 @@ impl DeliveryService for DeliveryGrpcService {
         let order_id = request.into_inner().order_id;
         let output = self
             .deliveries()
-            .get_order_delivery(&subject, get_order_delivery::Input { order_id })
+            .get_order_delivery(&subject, get_by_order::Input { order_id })
             .map_err(delivery_transport_error)?;
         Ok(Response::new(GetOrderDeliveryResponse {
             courier: output.courier.map(|courier| OrderCourier {
@@ -149,7 +143,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .create_delivery(
                 &subject,
-                create_delivery::Input {
+                create::Input {
                     order_id: request.order_id,
                     market_id: request.market_id,
                 },
@@ -169,7 +163,7 @@ impl DeliveryService for DeliveryGrpcService {
         let market_id = request.into_inner().market_id;
         let estimate = self
             .deliveries()
-            .estimate_delivery_duration(&subject, estimate_delivery_duration::Input { market_id })
+            .estimate_delivery_duration(&subject, estimate::Input { market_id })
             .map_err(delivery_transport_error)?;
         Ok(Response::new(EstimateDeliveryDurationResponse {
             courier_lead: Some(proto_duration(estimate.courier_lead)?),
@@ -187,7 +181,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .cancel_delivery(
                 &subject,
-                cancel_delivery::Input {
+                cancel::Input {
                     order_id: request.order_id,
                     reason: request.reason,
                 },
@@ -195,8 +189,8 @@ impl DeliveryService for DeliveryGrpcService {
             .map_err(delivery_transport_error)?;
         // A business rejection is a successful response, not a gRPC error.
         let (cancelled, rejection_reason) = match output.outcome {
-            cancel_delivery::Outcome::Cancelled { .. } => (true, String::new()),
-            cancel_delivery::Outcome::Rejected(rejection) => (false, rejection.as_str().to_owned()),
+            cancel::Outcome::Cancelled { .. } => (true, String::new()),
+            cancel::Outcome::Rejected(rejection) => (false, rejection.as_str().to_owned()),
         };
         Ok(Response::new(CancelDeliveryResponse {
             delivery_id: output.delivery_id.as_str().to_owned(),
@@ -215,7 +209,7 @@ impl DeliveryService for DeliveryGrpcService {
             .couriers()
             .register_courier(
                 &subject,
-                register_courier::Input {
+                register::Input {
                     courier_id: request.courier_id,
                     name: request.name,
                     market_id: request.market_id,
@@ -237,7 +231,7 @@ impl DeliveryService for DeliveryGrpcService {
         let courier_id = request.into_inner().courier_id;
         let output = self
             .couriers()
-            .retire_courier(&subject, retire_courier::Input { courier_id })
+            .retire_courier(&subject, retire::Input { courier_id })
             .map_err(courier_transport_error)?;
         Ok(Response::new(RetireCourierResponse {
             courier_id: output.courier_id.as_str().to_owned(),
@@ -300,7 +294,7 @@ impl DeliveryService for DeliveryGrpcService {
             .couriers()
             .update_courier_location(
                 &subject,
-                update_courier_location::Input {
+                update_location::Input {
                     courier_id: request.courier_id,
                     latitude: request.latitude,
                     longitude: request.longitude,
@@ -323,10 +317,8 @@ impl DeliveryService for DeliveryGrpcService {
         let subject = self.subjects.resolve(request.metadata())?;
         let request = request.into_inner();
         let availability = match CourierAvailability::try_from(request.availability) {
-            Ok(CourierAvailability::Available) => set_courier_availability::Availability::Available,
-            Ok(CourierAvailability::Unavailable) => {
-                set_courier_availability::Availability::Unavailable
-            }
+            Ok(CourierAvailability::Available) => set_availability::Availability::Available,
+            Ok(CourierAvailability::Unavailable) => set_availability::Availability::Unavailable,
             Ok(CourierAvailability::Unspecified) | Err(_) => {
                 return Err(Status::invalid_argument(
                     "invalid request: availability must be available or unavailable",
@@ -337,7 +329,7 @@ impl DeliveryService for DeliveryGrpcService {
             .couriers()
             .set_courier_availability(
                 &subject,
-                set_courier_availability::Input {
+                set_availability::Input {
                     courier_id: request.courier_id,
                     availability,
                 },
@@ -358,10 +350,7 @@ impl DeliveryService for DeliveryGrpcService {
         let courier_id = request.into_inner().courier_id;
         let output = self
             .deliveries()
-            .list_available_delivery_offers(
-                &subject,
-                list_available_delivery_offers::Input { courier_id },
-            )
+            .list_available_delivery_offers(&subject, list_available::Input { courier_id })
             .map_err(delivery_transport_error)?;
         Ok(Response::new(ListAvailableDeliveryOffersResponse {
             courier_id: output.courier_id.as_str().to_owned(),
@@ -388,7 +377,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .accept_delivery_offer(
                 &subject,
-                accept_delivery_offer::Input {
+                accept::Input {
                     offer_id: request.offer_id,
                     courier_id: request.courier_id,
                     expected_pickup_at_epoch_seconds: request.expected_pickup_at.map(epoch_seconds),
@@ -414,7 +403,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .offer_delivery_to_courier(
                 &subject,
-                offer_delivery_to_courier::Input {
+                to_courier::Input {
                     order_id: request.order_id,
                     courier_id: request.courier_id,
                 },
@@ -442,7 +431,7 @@ impl DeliveryService for DeliveryGrpcService {
             .deliveries()
             .reject_delivery_offer(
                 &subject,
-                reject_delivery_offer::Input {
+                reject::Input {
                     offer_id: request.offer_id,
                     courier_id: request.courier_id,
                 },
@@ -512,15 +501,15 @@ impl DeliveryService for DeliveryGrpcService {
         let request = request.into_inner();
         // No courier in the request: an authorized dispatcher reports.
         let reporter = if request.courier_id.trim().is_empty() {
-            report_delivery_failure::Reporter::Dispatcher
+            report_failure::Reporter::Dispatcher
         } else {
-            report_delivery_failure::Reporter::Courier(request.courier_id)
+            report_failure::Reporter::Courier(request.courier_id)
         };
         let output = self
             .deliveries()
             .report_delivery_failure(
                 &subject,
-                report_delivery_failure::Input {
+                report_failure::Input {
                     delivery_id: request.delivery_id,
                     reporter,
                     reason: request.reason,
@@ -646,7 +635,7 @@ fn geo_point(location: Location) -> GeoPoint {
     }
 }
 
-fn order_tracking(tracking: get_order_delivery::OrderTrackingView) -> OrderTracking {
+fn order_tracking(tracking: get_by_order::OrderTrackingView) -> OrderTracking {
     OrderTracking {
         tracking_channel: tracking.channel.as_str().to_owned(),
         city: Some(VirtualCity {

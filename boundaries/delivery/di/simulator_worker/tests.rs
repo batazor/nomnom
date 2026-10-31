@@ -5,11 +5,9 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use super::*;
 use crate::infrastructure::memory::RecordingRelationships;
 use crate::infrastructure::repository::test_support::TestStore;
-use crate::slices::courier::applications::update_courier_location::CourierLocationStore;
-use crate::slices::courier::applications::{register_courier, update_courier_location};
-use crate::slices::delivery::applications::{
-    assignment::advance_assignment, assignment::create_delivery,
-};
+use crate::slices::courier::applications::update_location::CourierLocationStore;
+use crate::slices::courier::applications::{register, update_location};
+use crate::slices::delivery::applications::{assignment::advance, assignment::create};
 use crate::slices::delivery::domains::delivery::{ExpectedTime, Intersection, State};
 use crate::slices::simulator::applications::work::{
     ActiveDeliveryWork, DeliveryPoints, PendingOfferWork, SimulatorWork,
@@ -504,7 +502,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
     couriers
         .register_courier(
             &operator(),
-            register_courier::Input {
+            register::Input {
                 courier_id: "courier-1".to_owned(),
                 name: "Timur".to_owned(),
                 market_id: "berlin".to_owned(),
@@ -514,7 +512,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
     couriers
         .update_courier_location(
             &operator(),
-            update_courier_location::Input {
+            update_location::Input {
                 courier_id: "courier-1".to_owned(),
                 latitude: 52.37,
                 longitude: 4.89,
@@ -525,7 +523,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
         .deliveries()
         .create_delivery(
             &operator(),
-            create_delivery::Input {
+            create::Input {
                 order_id: "order-1".to_owned(),
                 market_id: "berlin".to_owned(),
             },
@@ -533,7 +531,7 @@ fn accepts_a_dispatched_offer_through_the_use_case() {
         .expect("delivery created");
     use_cases
         .deliveries()
-        .advance_assignment(advance_assignment::Input {
+        .advance_assignment(advance::Input {
             delivery_id: created.delivery_id.as_str().to_owned(),
         })
         .expect("offered");

@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use crate::pkg::persistence::RepositoryError;
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{CourierId, MarketId};

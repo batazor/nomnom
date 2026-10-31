@@ -2,7 +2,7 @@
 //! optimistic concurrency by `version`.
 
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     CourierLocationStore, CourierPosition,
 };
 use crate::slices::courier::domains::courier::{Courier, CourierId, CourierRepository, Location};

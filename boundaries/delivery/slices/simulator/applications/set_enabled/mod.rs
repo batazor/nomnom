@@ -42,7 +42,7 @@ mod tests {
     use super::*;
     use crate::infrastructure::memory::StaticAuthorization;
     use crate::infrastructure::repository::test_support::TestStore;
-    use crate::slices::simulator::applications::get_simulator;
+    use crate::slices::simulator::applications::get;
 
     fn operator() -> Subject {
         Subject::User("operator-1".to_owned())
@@ -58,8 +58,8 @@ mod tests {
         authorization: &StaticAuthorization,
         store: &TestStore,
         subject: &Subject,
-    ) -> Result<get_simulator::Output, SimulatorApplicationError> {
-        get_simulator::Handler {
+    ) -> Result<get::Output, SimulatorApplicationError> {
+        get::Handler {
             authorization,
             state: store,
         }

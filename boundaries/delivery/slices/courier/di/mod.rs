@@ -12,12 +12,10 @@ use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::applications::error::CourierApplicationError;
 use crate::slices::courier::applications::relationships::CourierRelationshipWriter;
-use crate::slices::courier::applications::update_courier_location::{
+use crate::slices::courier::applications::update_location::{
     self, ActiveTrackingChannel, CourierLocationStore, CourierPositionPublisher,
 };
-use crate::slices::courier::applications::{
-    register_courier, retire_courier, set_courier_availability,
-};
+use crate::slices::courier::applications::{register, retire, set_availability};
 use crate::slices::courier::domains::courier::CourierRepository;
 
 /// Внешние порты слайса. Порты не требуют `Send + Sync`, поэтому shaku
@@ -50,26 +48,26 @@ pub trait CourierUseCases: Interface {
     fn register_courier(
         &self,
         subject: &Subject,
-        input: register_courier::Input,
-    ) -> Result<register_courier::Output, CourierApplicationError>;
+        input: register::Input,
+    ) -> Result<register::Output, CourierApplicationError>;
 
     fn set_courier_availability(
         &self,
         subject: &Subject,
-        input: set_courier_availability::Input,
-    ) -> Result<set_courier_availability::Output, CourierApplicationError>;
+        input: set_availability::Input,
+    ) -> Result<set_availability::Output, CourierApplicationError>;
 
     fn retire_courier(
         &self,
         subject: &Subject,
-        input: retire_courier::Input,
-    ) -> Result<retire_courier::Output, CourierApplicationError>;
+        input: retire::Input,
+    ) -> Result<retire::Output, CourierApplicationError>;
 
     fn update_courier_location(
         &self,
         subject: &Subject,
-        input: update_courier_location::Input,
-    ) -> Result<update_courier_location::Output, CourierApplicationError>;
+        input: update_location::Input,
+    ) -> Result<update_location::Output, CourierApplicationError>;
 }
 
 #[derive(Component)]
@@ -85,9 +83,9 @@ impl CourierUseCases for CourierUseCasesImpl {
     fn register_courier(
         &self,
         subject: &Subject,
-        input: register_courier::Input,
-    ) -> Result<register_courier::Output, CourierApplicationError> {
-        register_courier::Handler {
+        input: register::Input,
+    ) -> Result<register::Output, CourierApplicationError> {
+        register::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
             relationships: self.ports.relationships(),
@@ -98,9 +96,9 @@ impl CourierUseCases for CourierUseCasesImpl {
     fn set_courier_availability(
         &self,
         subject: &Subject,
-        input: set_courier_availability::Input,
-    ) -> Result<set_courier_availability::Output, CourierApplicationError> {
-        set_courier_availability::Handler {
+        input: set_availability::Input,
+    ) -> Result<set_availability::Output, CourierApplicationError> {
+        set_availability::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
             wake: self.ports.wake(),
@@ -111,9 +109,9 @@ impl CourierUseCases for CourierUseCasesImpl {
     fn retire_courier(
         &self,
         subject: &Subject,
-        input: retire_courier::Input,
-    ) -> Result<retire_courier::Output, CourierApplicationError> {
-        retire_courier::Handler {
+        input: retire::Input,
+    ) -> Result<retire::Output, CourierApplicationError> {
+        retire::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
             clock: self.ports.clock(),
@@ -124,9 +122,9 @@ impl CourierUseCases for CourierUseCasesImpl {
     fn update_courier_location(
         &self,
         subject: &Subject,
-        input: update_courier_location::Input,
-    ) -> Result<update_courier_location::Output, CourierApplicationError> {
-        update_courier_location::Handler {
+        input: update_location::Input,
+    ) -> Result<update_location::Output, CourierApplicationError> {
+        update_location::Handler {
             authorization: self.ports.authorization(),
             couriers: self.ports.couriers(),
             locations: self.ports.locations(),

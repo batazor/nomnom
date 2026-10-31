@@ -18,7 +18,7 @@ use delivery::infrastructure::temporal::{AssignmentWorkflow, TemporalAssignment,
 use delivery::pkg::authz::Subject;
 use delivery::pkg::lifecycle::Worker;
 use delivery::slices::courier::applications::candidate_wake::CandidateWake;
-use delivery::slices::courier::applications::update_courier_location::{
+use delivery::slices::courier::applications::update_location::{
     CourierLocationStore, CourierPosition,
 };
 use delivery::slices::courier::domains::courier::{
@@ -28,9 +28,7 @@ use delivery::slices::delivery::applications::assignment_process::AssignmentProc
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
-use delivery::slices::delivery::applications::{
-    execution::confirm_pickup, offer::accept_delivery_offer,
-};
+use delivery::slices::delivery::applications::{execution::confirm_pickup, offer::accept};
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferRepository, DeliveryRepository, OfferState,
     OrderId, State,
@@ -200,7 +198,7 @@ async fn workflow_searches_a_courier_until_pickup() {
         let offer_id = offer.id().as_str().to_owned();
         let process = &process;
         tokio::task::block_in_place(|| {
-            accept_delivery_offer::Handler {
+            accept::Handler {
                 authorization: &authorization,
                 unit_of_work: &*store,
                 offers: &*store,
@@ -226,7 +224,7 @@ async fn workflow_searches_a_courier_until_pickup() {
             }
             .execute(
                 &Subject::User(third.as_str().to_owned()),
-                accept_delivery_offer::Input {
+                accept::Input {
                     offer_id,
                     courier_id: third.as_str().to_owned(),
                     expected_pickup_at_epoch_seconds: None,
