@@ -298,7 +298,7 @@ Histograms в секундах получают явные границы `SECON
 
 ### Stripe test mode
 
-`PROVIDER__KIND=stripe` подключает настоящий API Stripe в тестовом режиме: пример реального провайдера без реальных денег. `fake` остаётся провайдером kind e2e и CI: там нет ключа и выхода в интернет. Адаптер — `slices/payment/infrastructure/provider/stripe_gateway.py`, разбор webhook — `stripe_webhook.py`.
+`PROVIDER__KIND=stripe` подключает настоящий API Stripe в тестовом режиме: пример реального провайдера без реальных денег. `fake` остаётся провайдером kind по умолчанию: `make kind-deploy` и e2e работают без ключа и обращений к Stripe. Адаптер — `slices/payment/infrastructure/provider/stripe_gateway.py`, разбор webhook — `stripe_webhook.py`.
 
 | Операция | Вызов Stripe | Успех | Ссылка провайдера |
 | --- | --- | --- | --- |
