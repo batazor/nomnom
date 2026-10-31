@@ -18,7 +18,7 @@ SKAFFOLD_FLAGS := --kube-context kind-$(KIND_CLUSTER_NAME)
 # kind-deploy — full (нужен make kind-test).
 skaffold_app_flags = --module apps $(SKAFFOLD_FLAGS) $(if $(filter core,$(or $(KIND_STAND),$(1))),-p core) $(if $(GRAFANA_CLOUD),-p grafana-cloud)
 
-.PHONY: buf-check buf-breaking buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop kind-console kind-console-down
+.PHONY: buf-check buf-breaking buf-generate kind-cluster kind-up kind-local-ca kind-deploy kind-dev kind-test kind-policies kind-policies-delete kind-diagnostics kind-down kind-e2e kind-grafana-cloud-stop kind-console kind-console-down kind-stripe-listen
 buf-check: buf-breaking ## проверить формат, lint, компилируемость и совместимость всех Protobuf-модулей
 	@buf format --diff --exit-code
 	@buf lint
@@ -69,6 +69,11 @@ kind-console: ## Redpanda Console (Kafka UI) на http://localhost:$(KAFKA_CONSO
 	@kubectl --context kind-$(KIND_CLUSTER_NAME) -n nomnom-infra port-forward svc/console $(KAFKA_CONSOLE_PORT):8080
 kind-console-down: ## удалить Redpanda Console
 	@kubectl --context kind-$(KIND_CLUSTER_NAME) delete -f ops/kind/manifests/messaging/console.yaml --ignore-not-found
+kind-stripe-listen: ## доставлять webhooks Stripe test mode в payments; ключ — из Secret payments-stripe (boundaries/payments/README.md)
+	@key="$$(kubectl --context kind-$(KIND_CLUSTER_NAME) -n nomnom-payments get secret payments-stripe -o jsonpath='{.data.api-key}' | base64 -d)"; \
+	test -n "$$key" || { echo "secret payments-stripe with api-key is required" >&2; exit 1; }; \
+	STRIPE_API_KEY="$$key" exec stripe listen --all-snapshot --skip-verify \
+	  --forward-to https://webhooks.nomnom.localhost:$(WEBHOOKS_HOST_PORT)/webhooks/provider
 kind-e2e: ## полный неинтерактивный прогон для CI; KIND_KEEP=1 сохраняет кластер
 	@$(KIND_SCRIPTS)/e2e.sh
 

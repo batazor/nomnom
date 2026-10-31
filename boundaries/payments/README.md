@@ -321,10 +321,10 @@ Histograms в секундах получают явные границы `SECON
 | `PROVIDER__STRIPE_TIMEOUT` | Deadline одного запроса, `<int>(ms\|s\|m)`, по умолчанию `10s`. |
 | `PROVIDER__WEBHOOK_SECRET` | `whsec_...` от `stripe listen` или endpoint в Dashboard. |
 
-Запуск в kind: Stripe не достучится до кластера, webhooks доставляет Stripe CLI. Без `stripe login` CLI берёт ключ из `STRIPE_API_KEY`. Секрет печатает `stripe listen --print-secret`, порт — `WEBHOOKS_HOST_PORT` (`18085`):
+Запуск в kind: Stripe не достучится до кластера, webhooks доставляет Stripe CLI. Без `stripe login` CLI берёт ключ из `STRIPE_API_KEY`, он же печатает секрет подписи:
 
 ```bash
-stripe listen --all-snapshot --skip-verify --forward-to https://webhooks.nomnom.localhost:18085/webhooks/provider
+export STRIPE_WEBHOOK_SECRET="$(stripe listen --print-secret)"
 ```
 
 ```bash
@@ -333,6 +333,12 @@ kubectl -n nomnom-payments create secret generic payments-stripe --from-literal=
 
 ```bash
 helm upgrade payments boundaries/payments/ops/helm -n nomnom-payments --reuse-values -f ops/kind/values/payments-stripe.yaml
+```
+
+Доставка webhooks работает, пока запущена цель; ключ она берёт из Secret, порт — `WEBHOOKS_HOST_PORT`:
+
+```bash
+make kind-stripe-listen
 ```
 
 Выход на `api.stripe.com` разрешает `CiliumNetworkPolicy allow-stripe-egress` из `ops/kind/manifests/netpol/app-infrastructure.yaml`. Следующий `make kind-deploy` возвращает `fake`.
