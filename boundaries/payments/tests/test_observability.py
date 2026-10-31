@@ -43,16 +43,16 @@ from pkg.telemetry.propagation import create_propagator
 from pkg.telemetry.rpc import ClientTelemetryInterceptor, ServerTelemetryInterceptor
 from pkg.telemetry.usecase import UseCases
 from slices.payment.applications.apply_provider_callback import ApplyProviderCallbackHandler
-from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
+from slices.payment.applications.authorize import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
-from slices.payment.applications.capture_payment import CapturePaymentHandler
-from slices.payment.applications.create_payment import CreatePaymentHandler
-from slices.payment.applications.get_payment_status import GetPaymentStatusHandler
+from slices.payment.applications.capture import CapturePaymentHandler
+from slices.payment.applications.create import CreatePaymentHandler
+from slices.payment.applications.get_status import GetPaymentStatusHandler
 from slices.payment.applications.ports import (
     ProviderOperationRequest,
     ProviderUnavailableError,
 )
-from slices.payment.applications.refund_payment import RefundPaymentHandler
+from slices.payment.applications.refund import RefundPaymentHandler
 from slices.payment.domains.payment import (
     Money,
     OperationId,

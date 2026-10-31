@@ -8,13 +8,13 @@ from payment_fakes import OPERATOR, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
 from pkg.authz import PermissionDeniedError
-from slices.payment.applications.authorize_payment import (
+from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
-from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
+from slices.payment.applications.capture import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import PaymentNotFoundError
-from slices.payment.applications.list_payment_operations import (
+from slices.payment.applications.list_operations import (
     ListPaymentOperationsHandler,
     ListPaymentOperationsInput,
     PaymentOperationView,

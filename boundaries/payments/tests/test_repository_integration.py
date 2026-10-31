@@ -35,7 +35,7 @@ from infrastructure.repository import (
     outbox_event_id,
 )
 from pkg.outbox import AggregateRef
-from slices.payment.applications.authorize_payment import (
+from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )

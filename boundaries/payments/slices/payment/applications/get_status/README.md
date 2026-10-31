@@ -19,7 +19,7 @@ Handler `GetPaymentStatusHandler` в [`handler.py`](handler.py), требова�
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/get_payment_status.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/get_status.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Payments use cases](../../../../README.md#use-cases).
 

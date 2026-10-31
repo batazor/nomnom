@@ -8,7 +8,7 @@ from infrastructure.grpc.errors import application_errors
 from infrastructure.grpc.generated import payments_pb2, service_pb2, service_pb2_grpc
 from infrastructure.grpc.identity import SubjectResolver
 from pkg.usecase import Handler
-from slices.payment.applications.authorize_payment import (
+from slices.payment.applications.authorize import (
     AuthorizePaymentInput,
     AuthorizePaymentResult,
 )
@@ -16,15 +16,15 @@ from slices.payment.applications.cancel_authorization import (
     CancelAuthorizationInput,
     CancelAuthorizationResult,
 )
-from slices.payment.applications.capture_payment import (
+from slices.payment.applications.capture import (
     CapturePaymentInput,
     CapturePaymentResult,
 )
-from slices.payment.applications.create_payment import (
+from slices.payment.applications.create import (
     CreatePaymentInput,
     CreatePaymentResult,
 )
-from slices.payment.applications.get_payment_status import (
+from slices.payment.applications.get_status import (
     GetPaymentStatusInput,
     GetPaymentStatusResult,
 )
@@ -32,7 +32,7 @@ from slices.payment.applications.operation_flow import (
     OperationStatus,
     PaymentOperationResult,
 )
-from slices.payment.applications.refund_payment import (
+from slices.payment.applications.refund import (
     RefundPaymentInput,
     RefundPaymentResult,
 )

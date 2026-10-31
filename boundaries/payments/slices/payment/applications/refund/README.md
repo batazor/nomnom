@@ -38,7 +38,7 @@ Handler `RefundPaymentHandler` в [`handler.py`](handler.py), требовани
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/refund_payment.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/refund.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Payments use cases](../../../../README.md#use-cases).
 

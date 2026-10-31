@@ -9,7 +9,7 @@ from slices.payment.applications.apply_provider_operation_result import (
     ApplyProviderOperationResultHandler,
     ApplyProviderOperationResultInput,
 )
-from slices.payment.applications.authorize_payment import (
+from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )

@@ -36,7 +36,7 @@ Handler `CreatePaymentHandler` в [`handler.py`](handler.py), требовани
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/create_payment.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/create.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Payments use cases](../../../../README.md#use-cases).
 

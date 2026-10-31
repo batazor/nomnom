@@ -38,7 +38,7 @@ Handler `AuthorizePaymentHandler` в [`handler.py`](handler.py), требова�
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/authorize_payment.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/authorize.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Payments use cases](../../../../README.md#use-cases).
 

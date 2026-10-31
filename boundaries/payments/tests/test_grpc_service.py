@@ -18,13 +18,13 @@ from infrastructure.grpc.service import (
 )
 from infrastructure.repository import Database
 from pkg.authz import Subject, SubjectKind
-from slices.payment.applications.authorize_payment import AuthorizePaymentHandler
+from slices.payment.applications.authorize import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
-from slices.payment.applications.capture_payment import CapturePaymentHandler
-from slices.payment.applications.create_payment import CreatePaymentHandler
-from slices.payment.applications.get_payment_status import GetPaymentStatusHandler
+from slices.payment.applications.capture import CapturePaymentHandler
+from slices.payment.applications.create import CreatePaymentHandler
+from slices.payment.applications.get_status import GetPaymentStatusHandler
 from slices.payment.applications.ports import PaymentPermission, ProviderOperationOutcome
-from slices.payment.applications.refund_payment import RefundPaymentHandler
+from slices.payment.applications.refund import RefundPaymentHandler
 from slices.payment.domains.payment import OperationKind, PaymentState
 
 ORDERS_WORKER = Subject(SubjectKind.SERVICE, "orders-worker")

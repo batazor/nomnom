@@ -17,7 +17,7 @@ from psycopg.types.json import Jsonb
 
 from infrastructure.repository import Database
 from pkg.usecase import ConcurrencyConflictError
-from slices.payment.applications.authorize_payment import (
+from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )

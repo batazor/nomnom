@@ -5,7 +5,7 @@ import pytest
 from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 
 from infrastructure.repository import Database
-from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
+from slices.payment.applications.capture import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
 from slices.payment.applications.ports import ProviderOperationOutcome

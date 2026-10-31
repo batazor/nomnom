@@ -19,7 +19,7 @@ Handler `ListPaymentOperationsHandler` в [`handler.py`](handler.py), требо
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/list_payment_operations.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/list_operations.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Payments use cases](../../../../README.md#use-cases).
 

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from infrastructure.repository.database import Database
-from slices.payment.applications.get_payment_status import GetPaymentStatusResult
-from slices.payment.applications.list_payment_operations import PaymentOperationView
+from slices.payment.applications.get_status import GetPaymentStatusResult
+from slices.payment.applications.list_operations import PaymentOperationView
 from slices.payment.domains.payment import (
     MarketId,
     OperationId,

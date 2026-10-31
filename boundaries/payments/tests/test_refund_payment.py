@@ -9,7 +9,7 @@ from pkg.authz import PermissionDeniedError
 from slices.payment.applications.errors import PaymentStateConflictError
 from slices.payment.applications.operation_flow import OperationStatus
 from slices.payment.applications.ports import PaymentPermission, ProviderOperationOutcome
-from slices.payment.applications.refund_payment import RefundPaymentHandler, RefundPaymentInput
+from slices.payment.applications.refund import RefundPaymentHandler, RefundPaymentInput
 from slices.payment.domains.payment import (
     Money,
     OperationKind,

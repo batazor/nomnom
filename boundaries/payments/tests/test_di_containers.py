@@ -35,7 +35,7 @@ from infrastructure.repository.migrate import _LOCK_KEY
 from pkg.authz import Subject, SubjectKind
 from pkg.config import database
 from pkg.lifecycle import HttpWorker, WorkerGroup
-from slices.payment.applications.create_payment import CreatePaymentInput
+from slices.payment.applications.create import CreatePaymentInput
 from slices.payment.di.payment import SpiceDBConfigurationError
 from slices.payment.domains.payment import OperationKind, OperationState, PaymentState
 from slices.payment.infrastructure.authorization import SpiceDBPermissionChecker

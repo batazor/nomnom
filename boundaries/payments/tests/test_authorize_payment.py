@@ -7,11 +7,11 @@ from payment_fakes import MARKET, ORCHESTRATOR, PaymentsTestKit
 from infrastructure.repository import Database
 from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
 from pkg.outbox import AggregateRef
-from slices.payment.applications.authorize_payment import (
+from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
-from slices.payment.applications.capture_payment import CapturePaymentHandler, CapturePaymentInput
+from slices.payment.applications.capture import CapturePaymentHandler, CapturePaymentInput
 from slices.payment.applications.errors import (
     IdempotencyKeyConflictError,
     InvalidPaymentRequestError,

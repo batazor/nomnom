@@ -38,7 +38,7 @@ Handler `CapturePaymentHandler` в [`handler.py`](handler.py), требован�
 
 ## Acceptance
 
-BDD-сценарии размещаются в `acceptance/capture_payment.feature` после утверждения acceptance criteria в SDD.
+BDD-сценарии размещаются в `acceptance/capture.feature` после утверждения acceptance criteria в SDD.
 
 Общий каталог: [Payments use cases](../../../../README.md#use-cases).
 
