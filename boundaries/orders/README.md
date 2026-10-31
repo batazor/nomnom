@@ -499,8 +499,7 @@ use cases не пишут. Place Order, Record Courier Assignment (новая De
 состоянию, а не по событию, поэтому повтор, опоздание и redrive из DLQ сходятся к тем же связям; Inbox не
 нужен. До первой синхронизации Customer читает и отменяет свой заказ по `customer_id` без SpiceDB. После
 потери данных SpiceDB связи всех заказов восстанавливает `orders-admin authz resync`. Query handlers зарегистрированы в DI и доступны
-через gRPC. `.feature` сценарии `confirmorder` и
-`recordcourierassignment` покрыты unit-тестами handlers; Gherkin runner не подключён.
+через gRPC. `.feature` юзкейсов исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 ## Запуск
 

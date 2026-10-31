@@ -39,16 +39,16 @@ Place Order SHALL принимать idempotency key клиента. Повто�
 - **WHEN** Customer повторяет оформление с тем же idempotency key
 - **THEN** система возвращает прежний `order_id`, не создаёт новый `Order` и Outbox record и повторяет идемпотентный запрос старта fulfillment
 
-### Requirement: Связь Customer и Order записывается до commit
+### Requirement: Изменение связей Order фиксируется вместе с Order
 **ID:** FR-102
 
-Place Order SHALL записывать creation relationship Customer → `Order` в authorization store до локальной транзакции с заранее сгенерированным `order_id`. Ошибка записи MUST отменять оформление (fail closed).
+Place Order SHALL записывать `RelationshipsChanged` в той же локальной транзакции, что и `Order`; связи в authorization store после commit приводит к состоянию `Order` `orders-consumer`. Ошибка записи `RelationshipsChanged` MUST откатывать оформление.
 
-#### Scenario: Authorization store недоступен
+#### Scenario: Изменение связей не записано
 **ID:** AC-104
 
-- **WHEN** запись relationship завершается ошибкой
-- **THEN** система не сохраняет `Order`, не пишет Outbox и не запускает fulfillment
+- **WHEN** запись `RelationshipsChanged` завершается ошибкой
+- **THEN** транзакция откатывается: `Order` не сохранён, Outbox не записан и fulfillment не запускается
 
 ### Requirement: Входящий бизнес-факт применяется не более одного раза
 **ID:** FR-104
@@ -84,38 +84,38 @@ Confirm Order SHALL переводить `Order` из `placed` в `confirmed` п
 - **WHEN** событие Order Acceptance с `OccurredAt = 12:03` подтверждает `Order`
 - **THEN** `GetOrder` возвращает переход `confirm` с моментом `12:03`
 
-### Requirement: Отказ ресторана сохраняется без финализации Order
+### Requirement: Отказ ресторана фиксируется без финализации Order
 **ID:** FR-106
 
-Reject Order SHALL сохранять в `Order` факт отказа ресторана и доступную причину не более одного раза, не меняя Order State. Отрицательный итог MUST фиксироваться только через Fail or Cancel Order после решения workflow.
+Reject Order SHALL не более одного раза записывать в историю `Order` переход `reject` с моментом события и переводить `Order` в промежуточное состояние `rejected`; доступную причину SHALL получать workflow, в `Order` она не хранится. Отрицательный итог MUST фиксироваться только через Fail or Cancel Order после решения workflow.
 
 #### Scenario: Ресторан отклонил заказ
 **ID:** AC-109
 
 - **WHEN** незавершённый `Order` получает событие отказа ресторана с причиной
-- **THEN** `Order` сохраняет факт отказа и причину, остаётся в прежнем состоянии, а workflow получает факт отказа
+- **THEN** `Order` записывает переход `reject` и переходит в `rejected`, а workflow получает факт отказа с причиной
 
 ### Requirement: Факты Preparation и Delivery отражаются один раз
 **ID:** FR-107
 
-Record Preparation Started, Record Order Ready, Record Courier Assignment, Record Pickup и Record Delivery Completion SHALL сохранять в незавершённом `Order` соответствующий факт со временем события не более одного раза, не меняя Order State и не навязывая порядок фактов, принадлежащий соседним контекстам.
+Record Preparation Started, Record Order Ready, Record Pickup и Record Delivery Completion SHALL не более одного раза записывать в историю незавершённого `Order` соответствующий переход со временем события и продвигать Order State монотонно: пройденный шаг состояние не откатывает, порядок фактов соседним контекстам не навязывается. Record Courier Assignment SHALL сохранять назначение не более одного раза, не меняя Order State.
 
 #### Scenario: Отражение факта fulfillment
 **ID:** AC-110
 
 - **WHEN** незавершённый `Order` получает событие начала Preparation, готовности к Pickup, Courier Assignment, Pickup или Delivery Completion
-- **THEN** `Order` сохраняет соответствующий факт со временем события, состояние не меняется, а workflow получает факт с исходным `event_id`
+- **THEN** `Order` сохраняет соответствующий факт со временем события, состояние продвигается по правилам FR-107, а workflow получает факт с исходным `event_id`
 
-### Requirement: Неудача доставки сохраняется с причиной
+### Requirement: Неудача доставки фиксируется без финализации
 **ID:** FR-108
 
-Record Delivery Failure SHALL сохранять в незавершённом `Order` факт неудачи Delivery и доступную причину не более одного раза, не финализируя `Order`.
+Record Delivery Failure SHALL не более одного раза записывать в историю незавершённого `Order` переход `fail_delivery` и переводить `Order` в промежуточное состояние `delivery_failed`, не финализируя его; доступную причину SHALL получать workflow, в `Order` она не хранится.
 
 #### Scenario: Доставка не удалась
 **ID:** AC-111
 
 - **WHEN** незавершённый `Order` получает событие неудачи Delivery с причиной
-- **THEN** `Order` сохраняет факт и причину, состояние не меняется, а workflow получает факт неудачи
+- **THEN** `Order` записывает переход `fail_delivery` и переходит в `delivery_failed`, а workflow получает факт неудачи с причиной
 
 ### Requirement: Позднее событие для финализированного Order диагностируемо игнорируется
 **ID:** FR-109
@@ -148,7 +148,7 @@ Record Delivery Failure SHALL сохранять в незавершённом `
 ### Requirement: Cancellation Request требует authorization
 **ID:** FR-111
 
-Request Order Cancellation SHALL выполнять authoritative check права `cancel` verified subject над `Order` до загрузки доменного состояния. Отказ или ошибка проверки MUST приводить к отказу без передачи запроса workflow.
+Request Order Cancellation SHALL пропускать Customer к собственному `Order` по `customer_id`, а для любого другого subject и для отсутствующего `Order` выполнять authoritative check права `cancel` до ответа. Отказ или ошибка проверки MUST приводить к отказу без передачи запроса workflow и без раскрытия существования и состояния `Order`.
 
 #### Scenario: Subject не имеет права
 **ID:** AC-115
@@ -185,15 +185,15 @@ Request Order Cancellation SHALL выполнять authoritative check прав
 - **WHEN** запрашивается отмена `Order` в `cancelled`
 - **THEN** система возвращает результат «уже отменён» без ошибки и без нового запроса workflow
 
-### Requirement: Complete Order финализирует подтверждённый Order один раз
+### Requirement: Complete Order финализирует доставленный Order один раз
 **ID:** FR-113
 
-Complete Order SHALL переводить `Order` из `confirmed` в `completed` и атомарно записывать `OrderCompleted` в Outbox. Повтор после успешного commit MUST быть no-op без второй записи Outbox; переход из другого состояния MUST отклоняться конфликтом состояния без изменений.
+Complete Order SHALL переводить `Order` из `delivered` в `completed` и атомарно записывать `OrderCompleted` в Outbox. Повтор после успешного commit MUST быть no-op без второй записи Outbox; переход из другого состояния MUST отклоняться конфликтом состояния без изменений.
 
 #### Scenario: Успешная финализация
 **ID:** AC-120
 
-- **WHEN** workflow вызывает Complete Order для `Order` в `confirmed`
+- **WHEN** workflow вызывает Complete Order для `Order` в `delivered`
 - **THEN** `Order` переходит в `completed`, а `OrderCompleted` записывается в Outbox той же транзакции
 
 #### Scenario: Повтор Activity после commit
@@ -234,7 +234,7 @@ Fail or Cancel Order SHALL переводить незавершённый `Orde
 ### Requirement: Get Order возвращает доступное представление
 **ID:** FR-115
 
-Get Order SHALL проверять право `view` verified subject над `Order` до чтения read model и возвращать представление заказа без изменения состояния. Отказ доступа MUST возвращаться независимо от существования `Order`. Для `Order`, Order State которого допускает Order Cancellation, представление SHALL содержать окно отмены `opens_at`/`closes_at` из той же cancellation policy, что использует Request Order Cancellation; для `cancelled` и `completed` окно MUST отсутствовать.
+Get Order SHALL пропускать Customer к собственному `Order` по `customer_id`, а для любого другого subject и для отсутствующего `Order` проверять право `view` до ответа, и возвращать представление заказа без изменения состояния. Отказ доступа MUST возвращаться независимо от существования `Order`. Для `Order`, Order State которого допускает Order Cancellation, представление SHALL содержать окно отмены `opens_at`/`closes_at` из той же cancellation policy, что использует Request Order Cancellation; для `cancelled` и `completed` окно MUST отсутствовать.
 
 #### Scenario: Авторизованное чтение
 **ID:** AC-126
