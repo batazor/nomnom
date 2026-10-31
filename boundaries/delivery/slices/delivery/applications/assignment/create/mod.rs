@@ -10,8 +10,8 @@
 
 use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use crate::slices::courier::domains::courier::MarketId;
-use crate::slices::delivery::applications::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryRepository, OrderId, VirtualCity,

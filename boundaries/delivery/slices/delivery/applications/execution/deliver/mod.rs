@@ -8,9 +8,9 @@
 //! (FR-706).
 
 use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
-use crate::slices::delivery::applications::unit_of_work::UnitOfWork;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryRepository, State, TransitionError,
 };
@@ -106,11 +106,11 @@ mod tests {
         RecordingRelationships, RelationshipWrite, StaticAuthorization,
     };
     use crate::infrastructure::repository::test_support::TestStore;
+    use crate::pkg::unit_of_work::UnitOfWorkError;
     use crate::slices::courier::domains::courier::MarketId;
     use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{World, subject};
-    use crate::slices::delivery::applications::unit_of_work::UnitOfWorkError;
     use crate::slices::delivery::domains::delivery::{DomainEvent, OrderId, Trigger};
 
     fn handler(world: &World) -> Handler<'_, TestStore> {

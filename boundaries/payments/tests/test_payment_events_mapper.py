@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, override
 
 from infrastructure.repository import EVENT_ID_NAMESPACE, PAYMENT_EVENTS_TOPIC, outbox_event_id
-from slices.payment.applications.outbox import AggregateRef
+from pkg.outbox import AggregateRef
 from slices.payment.domains.payment import (
     MarketId,
     Money,

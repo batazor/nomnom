@@ -16,9 +16,11 @@ use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::runners::SyncRunner;
 use testcontainers_modules::testcontainers::{Container, ImageExt};
 
+use crate::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::config::database;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
+use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use crate::slices::courier::applications::update_location::{
     ActiveTrackingChannel, CourierLocationStore, CourierPosition,
 };
@@ -42,12 +44,10 @@ use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessag
 use crate::slices::delivery::applications::tracking::get_by_order::{
     OrderDeliveryReadModel, OrderDeliveryRecord,
 };
-use crate::slices::delivery::applications::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, DeliveryTracking, DurationKind, Intersection, OrderId, TrackingChannel,
 };
-use crate::slices::delivery::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::slices::simulator::applications::work::{
     ActiveDeliveryWork, PendingOfferWork, SimulatorWork,
 };

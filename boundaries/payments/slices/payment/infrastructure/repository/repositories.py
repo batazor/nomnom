@@ -13,8 +13,8 @@ from psycopg import errors
 
 from infrastructure.repository.database import Database
 from infrastructure.repository.outbox import OutboxEventMapper, outbox_event_id, outbox_traceparent
+from pkg.outbox import AggregateRef
 from slices.payment.applications.errors import ConcurrencyConflictError
-from slices.payment.applications.outbox import AggregateRef
 from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     DuplicatePaymentError,

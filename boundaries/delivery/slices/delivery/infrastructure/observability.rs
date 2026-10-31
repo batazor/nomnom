@@ -45,8 +45,8 @@ use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Histogram, Meter};
 
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::unit_of_work::{TransactionScope, UnitOfWorkError};
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
-use crate::slices::delivery::applications::unit_of_work::{TransactionScope, UnitOfWorkError};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository, DomainEvent, OfferState, OrderId, State, applied_offer_transition,

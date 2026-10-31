@@ -7,10 +7,10 @@
 //! Work.
 
 use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
-use crate::slices::delivery::applications::unit_of_work::UnitOfWork;
 use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,

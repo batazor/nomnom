@@ -2,6 +2,7 @@ package di
 
 import (
 	"nomnom/orders/pkg/telemetry"
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/confirm"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
@@ -16,7 +17,6 @@ import (
 	"nomnom/orders/slices/order/applications/relaypreparationissue"
 	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/applications/syncrelationships"
-	"nomnom/orders/slices/order/applications/unitofwork"
 	"nomnom/orders/slices/order/domains/order"
 	ordermessaging "nomnom/orders/slices/order/infrastructure/messaging"
 	"nomnom/orders/slices/order/infrastructure/observability"

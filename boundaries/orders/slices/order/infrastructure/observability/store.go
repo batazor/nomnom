@@ -3,7 +3,7 @@ package observability
 import (
 	"context"
 
-	"nomnom/orders/slices/order/applications/unitofwork"
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/domains/order"
 )
 

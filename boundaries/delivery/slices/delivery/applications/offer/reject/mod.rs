@@ -5,8 +5,8 @@
 //! woken and offers it to the next courier (FR-311, FR-707).
 
 use crate::pkg::authz::Subject;
+use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::delivery::applications::Clock;
-use crate::slices::delivery::applications::unit_of_work::UnitOfWork;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, OfferState,
 };

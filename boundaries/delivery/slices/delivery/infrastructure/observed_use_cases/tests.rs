@@ -1,5 +1,5 @@
 use super::*;
-use crate::slices::delivery::applications::unit_of_work::UnitOfWorkError;
+use crate::pkg::unit_of_work::UnitOfWorkError;
 use crate::slices::delivery::domains::delivery::DeliveryId;
 
 #[test]

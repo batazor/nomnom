@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"time"
 
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/syncrelationships"
-	"nomnom/orders/slices/order/applications/unitofwork"
 	"nomnom/orders/slices/order/domains/order"
 )
 

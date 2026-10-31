@@ -15,14 +15,9 @@ from opentelemetry.sdk.metrics.export import (
 )
 from pydantic import ValidationError
 
+from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings, load_settings
 from slices.payment.applications.access import require_permission
-from slices.payment.applications.authz import (
-    AuthorizationUnavailableError,
-    PermissionDeniedError,
-    Subject,
-    SubjectKind,
-)
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.di.payment import SpiceDBConfigurationError, create_permission_checker
 from slices.payment.domains.payment import OrderId, PaymentId

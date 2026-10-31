@@ -16,8 +16,8 @@ from typing import NoReturn, Protocol
 import grpc
 import jwt
 
+from pkg.authz import Subject, SubjectKind
 from pkg.config import IdentitySettings
-from slices.payment.applications.authz import Subject, SubjectKind
 
 from .identity_tokens import (
     ALLOWED_ALGORITHMS,

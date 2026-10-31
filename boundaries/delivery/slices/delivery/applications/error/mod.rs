@@ -3,10 +3,10 @@ use std::fmt::{Display, Formatter};
 
 use crate::pkg::authz::{AuthorizationError, RelationshipWriteError};
 use crate::pkg::persistence::RepositoryError;
+use crate::pkg::unit_of_work::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::applications::candidate_wake::CandidateWakeError;
 use crate::slices::courier::domains::courier::{CourierError, CourierId, MarketId, MarketIdError};
-use crate::slices::delivery::applications::unit_of_work::UnitOfWorkError;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryId, DeliveryOfferError, DeliveryOfferId, DeliveryValidationError,
     OrderId, TransitionError,

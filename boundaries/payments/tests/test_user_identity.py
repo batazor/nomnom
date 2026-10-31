@@ -41,8 +41,8 @@ from infrastructure.grpc.service import (
     service_pb2_grpc,
 )
 from infrastructure.repository import Database
+from pkg.authz import Subject, SubjectKind
 from pkg.config import IdentitySettings, load_settings
-from slices.payment.applications.authz import Subject, SubjectKind
 from slices.payment.domains.payment import PaymentState
 
 # Shared vectors of ADR 32: user assertions are checked with the clock fixed on ``now``.

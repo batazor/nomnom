@@ -25,6 +25,8 @@ use std::time::{Duration, Instant};
 use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, module};
 
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
+use crate::infrastructure::ids::UuidIdGenerator;
+use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::messaging::{EventConsumer, MessageHandler};
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::repository::{OUTBOX_TOPIC, Store, migrate};
@@ -45,8 +47,6 @@ use crate::slices::delivery::applications::duration::record::CONSUMER;
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryRepository, DurationKind, InvalidEstimatePolicy, VirtualCity,
 };
-use crate::slices::delivery::infrastructure::ids::UuidIdGenerator;
-use crate::slices::delivery::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::slices::delivery::infrastructure::random::SystemRandomSource;
 use crate::slices::delivery::infrastructure::{
     DeliveryIntegrationEvents, duration_input, handling_error,

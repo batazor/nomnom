@@ -12,7 +12,6 @@ pub mod outbox;
 pub mod policy;
 pub mod relationships;
 pub mod tracking;
-pub mod unit_of_work;
 
 #[cfg(test)]
 mod test_support;

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/authz"
+	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/syncrelationships"
-	"nomnom/orders/slices/order/applications/unitofwork"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )

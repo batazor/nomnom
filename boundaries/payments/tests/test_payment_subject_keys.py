@@ -14,11 +14,11 @@ from payment_fakes import NOW, SUBJECT_KEK, SUBJECT_REF_KEY, PaymentsTestKit
 
 from entrypoints.payments_admin import main as admin
 from infrastructure.repository import Database
+from pkg.authz import Subject, SubjectKind
 from slices.payment.applications.authorize import (
     AuthorizePaymentHandler,
     AuthorizePaymentInput,
 )
-from slices.payment.applications.authz import Subject, SubjectKind
 from slices.payment.domains.payment import (
     OperationId,
     OperationKind,

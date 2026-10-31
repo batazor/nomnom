@@ -34,16 +34,16 @@ UoW не является distributed transaction. Kafka, Temporal, SpiceDB, gRP
 
 UoW — application port. Он нужен нескольким слайсам одного boundary с одинаковой формой, поэтому, в отличие от портов конкретных интеграций ([ADR 6](adr/0006-ddd-structure-inside-vertical-slices.md#направление-зависимостей)), объявляется один раз в shared application-уровне boundary, а не дублируется по слайсам:
 
-| Boundary | Port (application-уровень) | Реализация (shared infrastructure boundary) |
+| Boundary | Port (shared application-уровень) | Реализация (shared infrastructure boundary) |
 | --- | --- | --- |
-| `orders` (Go) | `slices/order/applications/unitofwork` | `slices/<slice>/infrastructure/repository` |
+| `orders` (Go) | `pkg/unitofwork` | `slices/<slice>/infrastructure/repository` |
 | `restaurants` (TypeScript) | `pkg/unit-of-work` | `infrastructure/repository` |
-| `payments` (Python) | `slices/payment/applications/unit_of_work` | `infrastructure/repository` |
-| `delivery` (Rust) | `slices/delivery/applications/unit_of_work` | `infrastructure/repository` |
+| `payments` (Python) | `pkg/unit_of_work` | `infrastructure/repository` |
+| `delivery` (Rust) | `pkg/unit_of_work` | `infrastructure/repository` |
 
 Пути реализации задаются относительно корня boundary так же, как `infrastructure/grpc` и `infrastructure/temporal`. Port и реализация появляются вместе с первым слайсом, которому нужна атомарность нескольких persistence operations; заранее не создаются.
 
-В `payments` port реализован в `slices/payment/applications/unit_of_work/__init__.py` как синхронный `UnitOfWork.run(work)`: runtime синхронный; переход на async меняет только сигнатуры ([design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md)).
+В `payments` port реализован в `pkg/unit_of_work/__init__.py` как синхронный `UnitOfWork.run(work)`: runtime синхронный; переход на async меняет только сигнатуры ([design.md change `implement-payments-application-layer`](../openspec/changes/archive/2026-10-25-implement-payments-application-layer/design.md)).
 
 Port — интерфейс из одного метода. Реализация одна на хранилище boundary и общая для всех слайсов: она же владеет механизмом propagation транзакции, которым пользуются репозитории, Inbox и Outbox этого boundary. Сборка — в composition root каждого процесса (API, consumer, Temporal worker) по [ADR 5](adr/0005-dependency-injection-strategy.md).
 
@@ -61,7 +61,7 @@ begin → execute application operation → commit
 Форма в Go:
 
 ```go
-// slices/order/applications/unitofwork
+// pkg/unitofwork
 type UnitOfWork interface {
 	Do(ctx context.Context, fn func(ctx context.Context) error) error
 }

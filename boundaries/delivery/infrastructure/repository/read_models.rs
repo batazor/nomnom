@@ -1,6 +1,7 @@
 //! Query read models, the courier positions of the locator and the
 //! reconciliation reads of [`Store`].
 
+use crate::infrastructure::locator::{CourierPositions, LocatedCourier};
 use crate::infrastructure::reconcile::ReconciliationStore;
 use crate::pkg::persistence::{AuthorizationRevision, RepositoryError};
 use crate::slices::courier::applications::update_location::{
@@ -24,7 +25,6 @@ use crate::slices::delivery::applications::tracking::get_by_order::{
 use crate::slices::delivery::domains::delivery::{
     CompoundState, DeliveryId, DeliveryOfferId, OfferState, OrderId, State,
 };
-use crate::slices::delivery::infrastructure::locator::{CourierPositions, LocatedCourier};
 
 use super::rows::{
     active_assignment_states, courier_name, courier_status, delivery_state, delivery_tracking,

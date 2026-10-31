@@ -9,8 +9,8 @@ import unittest
 import pytest
 from conftest import SPICEDB_PRESHARED_KEY
 
+from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
-from slices.payment.applications.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.domains.payment import OrderId, PaymentId
 from slices.payment.infrastructure.authorization import (

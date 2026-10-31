@@ -141,7 +141,7 @@ pub fn build_over(
     service(infrastructure(
         stores,
         AssignmentAdapters {
-            ids: Box::new(crate::slices::delivery::infrastructure::ids::UuidIdGenerator),
+            ids: Box::new(crate::infrastructure::ids::UuidIdGenerator),
             locator: Box::new(StaticCourierLocator::new(Vec::new())),
             process: Arc::new(RecordingAssignment::new()),
         },
@@ -186,11 +186,9 @@ pub(crate) fn build_over_store(
         ProcessStores::over(store),
         AssignmentAdapters {
             ids: Box::new(SequentialIdGenerator::new("delivery")),
-            locator: Box::new(
-                crate::slices::delivery::infrastructure::locator::StoredCourierLocator::new(
-                    Arc::clone(store) as _,
-                ),
-            ),
+            locator: Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
+                Arc::clone(store) as _,
+            )),
             process: Arc::new(RecordingAssignment::new()),
         },
         authorization,

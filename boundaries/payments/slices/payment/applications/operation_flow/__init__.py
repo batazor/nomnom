@@ -13,9 +13,9 @@ repeats the provider call with the same key, which the provider deduplicates.
 
 from dataclasses import dataclass
 
-from slices.payment.applications.authz import Subject
+from pkg.authz import Subject
+from pkg.unit_of_work import UnitOfWork
 from slices.payment.applications.ports import Clock
-from slices.payment.applications.unit_of_work import UnitOfWork
 from slices.payment.domains.payment import (
     AlreadyInStateError,
     DuplicateIdempotencyKeyError,

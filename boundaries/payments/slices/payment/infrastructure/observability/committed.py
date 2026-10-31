@@ -15,7 +15,7 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from contextvars import ContextVar
 from typing import Protocol, TypeVar
 
-from slices.payment.applications.unit_of_work import UnitOfWork
+from pkg.unit_of_work import UnitOfWork
 
 T = TypeVar("T")
 

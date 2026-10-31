@@ -4,6 +4,7 @@ use super::*;
 use crate::infrastructure::memory::StaticAuthorization;
 use crate::infrastructure::memory::{RecordingRelationships, RelationshipWrite};
 use crate::infrastructure::repository::test_support::TestStore;
+use crate::pkg::unit_of_work::UnitOfWorkError;
 use crate::slices::courier::applications::assignment::CourierAssignmentError;
 use crate::slices::courier::domains::courier::{CourierError, CourierStatus, MarketId};
 use crate::slices::delivery::applications::authorization::DeliveryResource;
@@ -12,7 +13,6 @@ use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{
     NOW, OFFER_TTL, ObservingRelationships, World, candidate, hamburg, subject,
 };
-use crate::slices::delivery::applications::unit_of_work::UnitOfWorkError;
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryOfferError, DeliveryOfferReason, DeliveryValidationError, DomainEvent,
     ExpectedTime, OfferTrigger, OrderId, State, TransitionError,

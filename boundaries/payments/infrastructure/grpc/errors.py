@@ -6,7 +6,7 @@ from typing import NoReturn
 
 import grpc
 
-from slices.payment.applications.authz import AuthorizationUnavailableError, PermissionDeniedError
+from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError
 from slices.payment.applications.errors import (
     ConcurrencyConflictError,
     IdempotencyKeyConflictError,

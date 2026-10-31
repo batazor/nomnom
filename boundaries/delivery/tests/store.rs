@@ -10,12 +10,14 @@ use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use delivery::di;
+use delivery::infrastructure::locator::{CourierPositions, LocatedCourier};
 use delivery::infrastructure::reconcile::ReconciliationStore;
 use delivery::infrastructure::repository::{
     MIGRATION_SETS, OutboxMapper, OutboxRecord, Store, event_id, migrate,
 };
 use delivery::pkg::config::database;
 use delivery::pkg::persistence::{AuthorizationRevision, RepositoryError};
+use delivery::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use delivery::slices::courier::applications::update_location::{
     CourierLocationStore, CourierPosition,
 };
@@ -27,13 +29,11 @@ use delivery::slices::delivery::applications::execution::get_courier_current::Co
 use delivery::slices::delivery::applications::offer::list_available::PendingDeliveryOffersReadModel;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
-use delivery::slices::delivery::applications::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use delivery::slices::delivery::domains::delivery::{
     Delivery, DeliveryFailureCode, DeliveryFailureReason, DeliveryId, DeliveryOffer,
     DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, DomainEvent, ExpectedTime,
     FailureReporter, OfferState, OrderId, State,
 };
-use delivery::slices::delivery::infrastructure::locator::{CourierPositions, LocatedCourier};
 
 fn config() -> database::Config {
     support::database()
