@@ -145,15 +145,15 @@ Sequence diagram в README используется для нетривиаль�
         order/
           order.go
       applications/
-        placeorder/
+        place/
           README.md
-        requestordercancellation/
+        requestcancellation/
           README.md
-        completeorder/
+        complete/
           README.md
 ```
 
-Например, use cases `placeorder`, `requestordercancellation` и `completeorder` используют один `Order` из `slices/order/domains/order/order.go`. Они остаются отдельными packages внутри `slices/order/applications/`.
+Например, use cases `order/place`, `order/requestcancellation` и `order/complete` используют один `Order` из `slices/order/domains/order/order.go`. Они остаются отдельными packages внутри `slices/order/applications/`.
 
 Каждый bounded context самостоятельно владеет своей моделью. Совпадение названий сущностей или value objects в разных контекстах само по себе не является основанием для общей библиотеки.
 

@@ -30,7 +30,7 @@
 #### Scenario: Доставка OrderPlaced
 **ID:** AC-470
 
-- **WHEN** `placeorder` зафиксировал заказ
+- **WHEN** `order/place` зафиксировал заказ
 - **THEN** Forwarder публикует `nomnom.orders.v1.OrderPlaced` с envelope `event_id`, `event_type` и ключом `order_id`
 
 ### Requirement: Процессы orders используют общий store

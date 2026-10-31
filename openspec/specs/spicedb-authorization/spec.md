@@ -53,7 +53,7 @@
 ### Requirement: orders записывает customer relationship при оформлении
 **ID:** FR-436
 
-`placeorder` SHALL выполнять `TOUCH order:<id>#customer@user:<customer_id>` до commit, а последующие checks этого `Order` SHALL использовать ZedToken записи.
+`order/place` SHALL выполнять `TOUCH order:<id>#customer@user:<customer_id>` до commit, а последующие checks этого `Order` SHALL использовать ZedToken записи.
 
 #### Scenario: Клиент видит свой заказ сразу после оформления
 **ID:** AC-467

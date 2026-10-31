@@ -12,7 +12,7 @@ Router проверяет access token, а [plugin BFF](../boundaries/bff/plugin
 
 ## 2. `orders` создаёт заказ
 
-Use case [Place Order](../boundaries/orders/slices/order/applications/placeorder/README.md) читает каталог `restaurants` через gateway, а затем одной транзакцией пишет `Order`, запись для синхронизации связей SpiceDB и `OrderPlaced` в Outbox ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md)). Клиент получает ответ. Весь дальнейший процесс идёт асинхронно.
+Use case [Place Order](../boundaries/orders/slices/order/applications/place/README.md) читает каталог `restaurants` через gateway, а затем одной транзакцией пишет `Order`, запись для синхронизации связей SpiceDB и `OrderPlaced` в Outbox ([ADR 13](adr/0013-transactional-outbox-for-integration-event-publishing.md)). Клиент получает ответ. Весь дальнейший процесс идёт асинхронно.
 
 ## 3. Событие запускает Fulfillment
 

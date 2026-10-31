@@ -307,7 +307,7 @@ authorize (CheckPermission)
 - optimistic concurrency по `version`;
 - idempotent commands: idempotency key или ожидаемая `aggregate_version` в той же транзакции.
 
-CQRS queries (`getorder`, `listcustomerorders`) выполняются без UoW: одиночные read statements в autocommit.
+CQRS queries (`order/get`, `order/listforcustomer`) выполняются без UoW: одиночные read statements в autocommit.
 
 ### `payments`
 
@@ -414,63 +414,63 @@ UoW всех четырёх boundaries реализован поверх их х
 
 | Use case | UoW | Состав транзакции |
 | --- | --- | --- |
-| `placeorder` | Да | `Order` + idempotency key + `RelationshipsChanged` + Outbox(`OrderPlaced`); Temporal не вызывает |
+| `order/place` | Да | `Order` + idempotency key + `RelationshipsChanged` + Outbox(`OrderPlaced`); Temporal не вызывает |
 | `startfulfillment` | Да | Inbox + чтение `Order`; `SignalWithStart` workflow после commit, в том числе на Inbox duplicate |
-| `requestordercancellation` | Если сохраняется запрос отмены вместе с Outbox | `Order` + [Outbox]; Signal workflow после commit. Реализован без UoW: запрос отмены не сохраняется локально и передаётся workflow после authorization и проверки `CheckCancellation` ([design.md change `implement-orders-application-layer`](../openspec/changes/archive/2026-10-25-implement-orders-application-layer/design.md)) |
-| `confirmorder`, `rejectorder` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
-| `recordpreparationstarted`, `recordorderready` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
+| `order/requestcancellation` | Если сохраняется запрос отмены вместе с Outbox | `Order` + [Outbox]; Signal workflow после commit. Реализован без UoW: запрос отмены не сохраняется локально и передаётся workflow после authorization и проверки `CheckCancellation` ([design.md change `implement-orders-application-layer`](../openspec/changes/archive/2026-10-25-implement-orders-application-layer/design.md)) |
+| `order/confirm`, `order/reject` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
+| `recordpreparationstarted`, `order/recordready` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierassignment`, `recordpickup`, `recorddeliverycompletion`, `recorddeliveryfailure` | Да | Inbox + `Order` + [Outbox]; Signal после commit |
 | `recordcourierrelease` | Да | Inbox + назначение курьера в `orders` + DELETE relationships SpiceDB до commit; `Order` и workflow не меняются |
 | `recordpaymentauthorization` | Да | `Order` (переход `authorize_payment`) + `order_details` + Change Notification, без Integration Event; повтор Activity — `already_recorded` |
-| `completeorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
-| `failorcancelorder` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
+| `order/complete` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
+| `order/failorcancel` | Да | `Order` + Outbox; идемпотентность по ожидаемой `version` или ключу шага |
 | `fulfillment` (Temporal-адаптер) | Нет | Workflow; Activities вызывают handlers |
-| `getorder`, `listcustomerorders` | Нет | CQRS queries |
+| `order/get`, `order/listforcustomer` | Нет | CQRS queries |
 
 ### `restaurants`
 
 | Slice | UoW | Состав транзакции |
 | --- | --- | --- |
-| `accept-order`, `reject-order`, `start-preparation`, `mark-ready-for-pickup` | Да | `Restaurant Order` + Outbox |
-| `open-restaurant`, `close-restaurant`, `set-menu-item-availability` | Если публикуют бизнес-факт | Документ + Outbox |
-| `receive-order-request` | Если публикует событие или хранит idempotency key отдельно | `Kitchen Order` + [idempotency] + [Outbox] |
-| `register-restaurant`, `update-restaurant`, `create-menu`, `add-menu-item`, `update-menu-item`, `cancel-restaurant-order` | Нет по умолчанию | Single-document; UoW, только если document boundaries потребуют нескольких документов или Outbox |
-| `get-restaurant`, `list-restaurants`, `get-menu` | Нет | Queries |
+| `restaurantorder/accept`, `restaurantorder/reject`, `restaurantorder/start`, `mark-ready-for-pickup` | Да | `Restaurant Order` + Outbox |
+| `restaurant/open`, `restaurant/close`, `menu/set-item-availability` | Если публикуют бизнес-факт | Документ + Outbox |
+| `restaurantorder/receive-request` | Если публикует событие или хранит idempotency key отдельно | `Kitchen Order` + [idempotency] + [Outbox] |
+| `restaurant/register`, `restaurant/update`, `menu/create`, `menu/add-item`, `menu/update-item`, `restaurantorder/cancel` | Нет по умолчанию | Single-document; UoW, только если document boundaries потребуют нескольких документов или Outbox |
+| `restaurant/get`, `restaurant/list`, `menu/get` | Нет | Queries |
 
 Реализация application-слоя `restaurants` ([design.md change `implement-restaurants-application-layer`](../openspec/changes/archive/2026-10-25-implement-restaurants-application-layer/design.md)) уточняет таблицу:
 
-- `open-restaurant`, `close-restaurant`, `set-menu-item-availability` публикуют бизнес-факт (`RestaurantOpened`, `RestaurantClosed`, `MenuItemAvailabilityChanged`) и используют UoW;
-- `update-menu-item` выполняется в UoW: при изменении названия, описания или цены записывает `MenuItemUpdated`, при изменении доступности — тот же `MenuItemAvailabilityChanged` в Outbox вместе с `Menu`;
-- `add-menu-item` выполняется в UoW и записывает `MenuItemAdded` вместе с `Menu`;
-- `report-preparation-delay` и `report-preparation-failure` — UoW: `Kitchen Order` + Outbox;
-- `cancel-restaurant-order` — UoW: `Kitchen Order` + Outbox (`RestaurantOrderCancelled`);
-- `receive-order-request`, `queue-restaurant-order` и `mark-assembled` — без UoW: один save, факты `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled` локальные; идемпотентность Receive — через уникальность `orderId` в repository. В MVP `accept-order` ставит заказ в Kitchen Queue в своей UoW, а `queue-restaurant-order` покрывает заказы, оставшиеся в `ACCEPTED`.
+- `restaurant/open`, `restaurant/close`, `menu/set-item-availability` публикуют бизнес-факт (`RestaurantOpened`, `RestaurantClosed`, `MenuItemAvailabilityChanged`) и используют UoW;
+- `menu/update-item` выполняется в UoW: при изменении названия, описания или цены записывает `MenuItemUpdated`, при изменении доступности — тот же `MenuItemAvailabilityChanged` в Outbox вместе с `Menu`;
+- `menu/add-item` выполняется в UoW и записывает `MenuItemAdded` вместе с `Menu`;
+- `restaurantorder/report-delay` и `restaurantorder/report-failure` — UoW: `Kitchen Order` + Outbox;
+- `restaurantorder/cancel` — UoW: `Kitchen Order` + Outbox (`RestaurantOrderCancelled`);
+- `restaurantorder/receive-request`, `restaurantorder/queue` и `mark-assembled` — без UoW: один save, факты `RestaurantOrderReceived`, `RestaurantOrderQueued`, `RestaurantOrderAssembled` локальные; идемпотентность Receive — через уникальность `orderId` в repository. В MVP `restaurantorder/accept` ставит заказ в Kitchen Queue в своей UoW, а `restaurantorder/queue` покрывает заказы, оставшиеся в `ACCEPTED`.
 
 ### `payments`
 
 | Slice | UoW | Состав транзакции |
 | --- | --- | --- |
-| `authorize_payment`, `capture_payment`, `cancel_authorization`, `refund_payment` | Да, вокруг provider call | Событие запроса операции → provider → события результата + проекции + снапшот по границе + Outbox |
+| `payment/authorize`, `payment/capture`, `cancel_authorization`, `payment/refund` | Да, вокруг provider call | Событие запроса операции → provider → события результата + проекции + снапшот по границе + Outbox |
 | `apply_provider_callback` | Да | Webhook dedup + события `Payment` с проекциями + Outbox |
 | `apply_provider_operation_result` | Да | События `Payment` с проекциями + Outbox |
-| `create_payment` | Если idempotency key хранится отдельно от `Payment` | `Payment` + idempotency |
-| `get_payment_status`, `list_payment_operations` | Нет | Queries |
+| `payment/create` | Если idempotency key хранится отдельно от `Payment` | `Payment` + idempotency |
+| `payment/get_status`, `payment/list_operations` | Нет | Queries |
 
 ### `delivery`
 
 | Slice | UoW | Состав транзакции |
 | --- | --- | --- |
-| `accept_delivery_offer` | Да | `Delivery Offer` + `Courier Assignment` + резервирование курьера и доставки + Outbox; контроль конкуренции. В текущей реализации дополнительно withdraw остальных pending offers этой `Delivery` |
+| `delivery/accept` | Да | `Delivery Offer` + `Courier Assignment` + резервирование курьера и доставки + Outbox; контроль конкуренции. В текущей реализации дополнительно withdraw остальных pending offers этой `Delivery` |
 | `reassign_courier` | Да | Завершение текущего назначения + `Delivery` + освобождение курьера + [Outbox] |
-| `advance_assignment` | Да | Шаг Assignment Workflow: [истечение просроченного pending offer] + выбор кандидата + `Delivery` с прочитанной версией + offer + Outbox |
-| `expire_delivery_offer` | Да | `Delivery Offer` (`expired`) + Outbox |
+| `delivery/advance` | Да | Шаг Assignment Workflow: [истечение просроченного pending offer] + выбор кандидата + `Delivery` с прочитанной версией + offer + Outbox |
+| `delivery/expire` | Да | `Delivery Offer` (`expired`) + Outbox |
 | `confirm_pickup` | Да | `Delivery` + Outbox |
-| `confirm_delivery`, `report_delivery_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md)) |
-| `cancel_delivery` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |
-| `create_delivery`, `offer_delivery` | Если публикуют событие или хранят idempotency key отдельно | Запись + [idempotency] + [Outbox] |
-| `register_courier`, `set_courier_availability`, `reject_delivery_offer`, `find_courier` | Нет по умолчанию | Одиночное изменение |
-| `update_courier_location` | Нет | Высокочастотная одиночная запись; транзакция не нужна |
-| `get_courier_current_delivery`, `list_available_delivery_offers` | Нет | Queries |
+| `confirm_delivery`, `delivery/report_failure` | Да | `Delivery` + освобождение `Courier` и DELETE `delivery#courier` до commit + Outbox. Освобождение курьера при failure — текущее допущение реализации ([design.md change `implement-delivery-application-layer`](../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md)) |
+| `delivery/cancel` | Да | `Delivery` (`waiting\|assigned → cancelled`) + освобождение `Courier`, если он был назначен + Outbox |
+| `delivery/create`, `offer_delivery` | Если публикуют событие или хранят idempotency key отдельно | Запись + [idempotency] + [Outbox] |
+| `courier/register`, `courier/set_availability`, `delivery/reject`, `find_courier` | Нет по умолчанию | Одиночное изменение |
+| `courier/update_location` | Нет | Высокочастотная одиночная запись; транзакция не нужна |
+| `delivery/get_courier_current`, `delivery/list_available` | Нет | Queries |
 
 #### Исключение: offer, `Delivery` и `Courier` в одной транзакции
 
