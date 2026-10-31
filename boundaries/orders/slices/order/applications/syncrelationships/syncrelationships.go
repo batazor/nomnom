@@ -13,7 +13,7 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -75,7 +75,7 @@ func NewHandler(uow unitofwork.UnitOfWork, reader Reader, relationships Relation
 // event is redelivered and the sync repeats.
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if in.OrderID == "" {
-		return Result{}, usecase.InvalidInput("order_id", "is required")
+		return Result{}, failure.InvalidInput("order_id", "is required")
 	}
 	var result Result
 	err := h.uow.Do(ctx, func(ctx context.Context) error {

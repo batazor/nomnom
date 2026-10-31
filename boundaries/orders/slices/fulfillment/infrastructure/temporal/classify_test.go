@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/orders"
 )
 
@@ -18,7 +17,7 @@ func TestClassifyKeepsErrorTypes(t *testing.T) {
 		err      error
 		wantType string
 	}{
-		{usecase.InvalidInput("step", "x"), ErrTypeInvalidInput},
+		{invalidStep("x"), ErrTypeInvalidInput},
 		{fmt.Errorf("get order: %w", orders.ErrOrderNotFound), ErrTypeOrderNotFound},
 		{fmt.Errorf("complete order: %w", orders.ErrStepRefused), ErrTypeInvalidTransition},
 	}
@@ -30,7 +29,7 @@ func TestClassifyKeepsErrorTypes(t *testing.T) {
 		assert.ErrorIs(t, classify(tt.err), tt.err)
 	}
 
-	for _, err := range []error{usecase.ErrConcurrencyConflict, usecase.ErrDependencyUnavailable, errors.New("reset")} {
+	for _, err := range []error{errors.New("reset")} {
 		var applicationErr *temporal.ApplicationError
 		assert.False(t, errors.As(classify(err), &applicationErr), err)
 	}

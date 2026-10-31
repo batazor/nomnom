@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/planschedule"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -48,5 +48,5 @@ func TestPlanScheduleRequiresOrderID(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), planschedule.Input{})
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 }

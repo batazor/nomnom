@@ -16,7 +16,7 @@ import (
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/testfixture"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
@@ -115,7 +115,7 @@ func TestSyncFailsAsUnavailable(t *testing.T) {
 	_, err := a.SyncOrderRelationships(context.Background(), "order-1", syncrelationships.Subjects{CustomerID: "customer-1", RestaurantID: "restaurant-1"})
 
 	require.ErrorIs(t, err, spicedb.ErrUnavailable)
-	require.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
+	require.ErrorIs(t, err, failure.ErrDependencyUnavailable)
 }
 
 // The relationship sync and the freshness of checks by the stored ZedToken

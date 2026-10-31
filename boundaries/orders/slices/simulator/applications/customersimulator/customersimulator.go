@@ -13,7 +13,6 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/orderdetails"
@@ -52,12 +51,17 @@ type Keys interface {
 	NewKey() string
 }
 
+// useCase is the inbound port of one use case.
+type useCase[In, Out any] interface {
+	Handle(ctx context.Context, in In) (Out, error)
+}
+
 type Dependencies struct {
 	Switch              Switch
 	Catalog             Catalog
-	PlaceOrder          usecase.Handler[place.Input, place.Result]
-	GetOrder            usecase.Handler[get.Query, orderdetails.View]
-	RequestCancellation usecase.Handler[requestcancellation.Input, requestcancellation.Result]
+	PlaceOrder          useCase[place.Input, place.Result]
+	GetOrder            useCase[get.Query, orderdetails.View]
+	RequestCancellation useCase[requestcancellation.Input, requestcancellation.Result]
 	Random              Random
 	Keys                Keys
 	CustomerID          string

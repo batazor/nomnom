@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -31,13 +31,13 @@ type Input struct {
 func (in Input) validate() error {
 	switch {
 	case in.EventID == "":
-		return usecase.InvalidInput("event_id", "is required")
+		return failure.InvalidInput("event_id", "is required")
 	case in.OrderID == "":
-		return usecase.InvalidInput("order_id", "is required")
+		return failure.InvalidInput("order_id", "is required")
 	case in.OccurredAt.IsZero():
-		return usecase.InvalidInput("occurred_at", "is required")
+		return failure.InvalidInput("occurred_at", "is required")
 	case in.DeliveryWindowStart.IsZero() != in.DeliveryWindowEnd.IsZero():
-		return usecase.InvalidInput("delivery_window", "requires start and end")
+		return failure.InvalidInput("delivery_window", "requires start and end")
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 
 	err = h.workflow.Start(ctx, fulfillment.StartRequest{OrderID: in.OrderID, RestaurantID: restaurant, EventID: in.EventID, OccurredAt: in.OccurredAt, DeliveryWindow: window})
 	if err != nil {
-		return Result{Outcome: outcome}, fmt.Errorf("%w: start order fulfillment workflow: %w", usecase.ErrDependencyUnavailable, err)
+		return Result{Outcome: outcome}, fmt.Errorf("%w: start order fulfillment workflow: %w", failure.ErrDependencyUnavailable, err)
 	}
 	return Result{Outcome: outcome, WorkflowNotified: true}, nil
 }

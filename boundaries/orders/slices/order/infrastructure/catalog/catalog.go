@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -172,10 +172,10 @@ func mapError(call string, restaurantID order.RestaurantID, err error) error {
 	case code == codes.NotFound:
 		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, place.ErrUnknownRestaurant, err)
 	case code == codes.InvalidArgument:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, usecase.ErrInvalidInput, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, failure.ErrInvalidInput, err)
 	case code == codes.Canceled || errors.Is(err, context.Canceled):
 		return fmt.Errorf("%s %q: %w", call, restaurantID, err)
 	default:
-		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, usecase.ErrDependencyUnavailable, err)
+		return fmt.Errorf("%s %q: %w: %w", call, restaurantID, failure.ErrDependencyUnavailable, err)
 	}
 }

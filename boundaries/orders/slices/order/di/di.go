@@ -14,7 +14,6 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/applications/place"
@@ -117,7 +116,7 @@ func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.I
 }
 
 // NewClock — системные часы use cases.
-func NewClock() usecase.Clock { return system.Clock{} }
+func NewClock() Clock { return system.Clock{} }
 
 // NewOrderIDs — генератор UUIDv7 идентификаторов Order.
 func NewOrderIDs() place.IDGenerator { return system.OrderIDs{} }

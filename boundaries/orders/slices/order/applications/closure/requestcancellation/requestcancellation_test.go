@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -96,7 +96,7 @@ func TestRequestCancellationReportsWorkflowRefusalAndInvalidInput(t *testing.T) 
 	_, err = e.handler.Handle(context.Background(), noRequestID)
 	// The authorizer has no expectation: the Customer is not checked; invalid
 	// input is rejected before any read.
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 }
 
 // fixedWindow is the production cancellation policy with the given window.

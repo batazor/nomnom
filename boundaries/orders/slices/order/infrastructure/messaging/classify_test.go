@@ -9,13 +9,14 @@ import (
 
 	"nomnom/orders/infrastructure/messaging"
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/errorkind"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// AC-635: the consumer table classifies every usecase.ErrorKind.
+// AC-635: the consumer table classifies every errorkind.Kind.
 func TestClassTableCoversEveryKind(t *testing.T) {
-	for _, kind := range usecase.ErrorKinds() {
+	for _, kind := range errorkind.All() {
 		_, ok := classByKind[kind]
 		assert.True(t, ok, kind)
 	}
@@ -27,13 +28,13 @@ func TestClassifyApplicationErrors(t *testing.T) {
 		err  error
 		want messaging.Class
 	}{
-		{"invalid input", usecase.InvalidInput("order_id", "is required"), messaging.ClassPermanent},
+		{"invalid input", failure.InvalidInput("order_id", "is required"), messaging.ClassPermanent},
 		{"unknown order", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), messaging.ClassPermanent},
 		{"permission denied", authz.ErrPermissionDenied, messaging.ClassPermanent},
 		{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), messaging.ClassBusiness},
 		{"order exists", order.ErrOrderAlreadyExists, messaging.ClassBusiness},
-		{"concurrency conflict", usecase.ErrConcurrencyConflict, messaging.ClassTransient},
-		{"dependency unavailable", usecase.ErrDependencyUnavailable, messaging.ClassTransient},
+		{"concurrency conflict", failure.ErrConcurrencyConflict, messaging.ClassTransient},
+		{"dependency unavailable", failure.ErrDependencyUnavailable, messaging.ClassTransient},
 		{"infrastructure", errors.New("connection reset"), messaging.ClassTransient},
 	}
 	for _, tt := range tests {

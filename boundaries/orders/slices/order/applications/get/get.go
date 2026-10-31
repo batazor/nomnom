@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -51,7 +51,7 @@ func (h Handler) Handle(ctx context.Context, q Query) (orderdetails.View, error)
 		return orderdetails.View{}, err
 	}
 	if q.OrderID == "" {
-		return orderdetails.View{}, usecase.InvalidInput("order_id", "is required")
+		return orderdetails.View{}, failure.InvalidInput("order_id", "is required")
 	}
 	details, readErr := h.reader.OrderDetails(ctx, q.OrderID)
 	missing := errors.Is(readErr, order.ErrOrderNotFound)

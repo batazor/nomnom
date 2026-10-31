@@ -5,7 +5,7 @@ import (
 	"context"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -68,7 +68,7 @@ type Authorizer interface {
 }
 
 // Reader pages the OrderDetails projection filtered by CustomerID and MarketID and returns
-// usecase.ErrInvalidInput for a malformed cursor.
+// failure.ErrInvalidInput for a malformed cursor.
 type Reader interface {
 	ListCustomerOrders(ctx context.Context, request PageRequest) (Rows, error)
 }
@@ -88,21 +88,21 @@ func (h Handler) Handle(ctx context.Context, q Query) (Page, error) {
 		return Page{}, err
 	}
 	if q.CustomerID == "" {
-		return Page{}, usecase.InvalidInput("customer_id", "is required")
+		return Page{}, failure.InvalidInput("customer_id", "is required")
 	}
 	if q.MarketID == "" {
-		return Page{}, usecase.InvalidInput("market_id", "is required")
+		return Page{}, failure.InvalidInput("market_id", "is required")
 	}
 	marketID, err := vo.NewMarketID(q.MarketID)
 	if err != nil {
-		return Page{}, usecase.InvalidInput("market_id", "must match ^[a-z][a-z0-9-]{1,31}$")
+		return Page{}, failure.InvalidInput("market_id", "must match ^[a-z][a-z0-9-]{1,31}$")
 	}
 	limit := q.Limit
 	switch {
 	case limit == 0:
 		limit = DefaultLimit
 	case limit < 0 || limit > MaxLimit:
-		return Page{}, usecase.InvalidInput("limit", "must be between 1 and 100")
+		return Page{}, failure.InvalidInput("limit", "must be between 1 and 100")
 	}
 
 	// The owner is known to domain storage, so the Customer's own history is

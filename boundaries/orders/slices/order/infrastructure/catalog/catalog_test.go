@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -146,7 +146,7 @@ func TestSnapshotRefusesRestaurantWithoutMarket(t *testing.T) {
 
 			_, err := newCatalog(t, server).Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
 			require.ErrorIs(t, err, catalog.ErrInvalidRestaurant)
-			assert.NotErrorIs(t, err, usecase.ErrInvalidInput)
+			assert.NotErrorIs(t, err, failure.ErrInvalidInput)
 			assert.NotErrorIs(t, err, vo.ErrInvalidValue)
 		})
 	}
@@ -188,10 +188,10 @@ func TestSnapshotMapsErrors(t *testing.T) {
 		"restaurant not found": {restaurantErr: status.Error(codes.NotFound, "no restaurant"), want: place.ErrUnknownRestaurant},
 		"menu not found":       {menuErr: status.Error(codes.NotFound, "no menu"), want: place.ErrUnknownRestaurant},
 		"empty menu":           {want: place.ErrUnknownRestaurant},
-		"invalid argument":     {restaurantErr: status.Error(codes.InvalidArgument, "bad id"), want: usecase.ErrInvalidInput},
-		"unavailable":          {restaurantErr: status.Error(codes.Unavailable, "down"), want: usecase.ErrDependencyUnavailable},
-		"unauthenticated":      {restaurantErr: status.Error(codes.Unauthenticated, "who"), want: usecase.ErrDependencyUnavailable},
-		"route not registered": {menuErr: status.Error(codes.Unimplemented, "404"), want: usecase.ErrDependencyUnavailable},
+		"invalid argument":     {restaurantErr: status.Error(codes.InvalidArgument, "bad id"), want: failure.ErrInvalidInput},
+		"unavailable":          {restaurantErr: status.Error(codes.Unavailable, "down"), want: failure.ErrDependencyUnavailable},
+		"unauthenticated":      {restaurantErr: status.Error(codes.Unauthenticated, "who"), want: failure.ErrDependencyUnavailable},
+		"route not registered": {menuErr: status.Error(codes.Unimplemented, "404"), want: failure.ErrDependencyUnavailable},
 		"mixed currencies": {items: []*restaurantsv1.MenuItem{
 			item("pizza", "12.50", "EUR", true), item("soup", "4", "USD", true),
 		}, want: vo.ErrInvalidValue},
@@ -239,7 +239,7 @@ func TestSnapshotTimeoutIsUnavailable(t *testing.T) {
 	adapter := catalog.New(dial(t, server), limits, 50*time.Millisecond)
 
 	_, err := adapter.Snapshot(context.Background(), "restaurant-1", []order.MenuItemID{"pizza"})
-	require.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
+	require.ErrorIs(t, err, failure.ErrDependencyUnavailable)
 	assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
 }
 

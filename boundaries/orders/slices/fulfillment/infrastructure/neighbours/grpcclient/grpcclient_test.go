@@ -18,8 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
+	"nomnom/orders/slices/fulfillment/applications/orders"
 	"nomnom/orders/slices/fulfillment/infrastructure/neighbours/grpcclient"
 
 	"buf.build/gen/go/nomnom/delivery/grpc/go/nomnom/delivery/v1/deliveryv1grpc"
@@ -110,7 +110,7 @@ func TestPaymentsPendingIsRetryable(t *testing.T) {
 	_, err := grpcclient.NewPayments(conn).Authorize(context.Background(), payment)
 
 	require.ErrorIs(t, err, grpcclient.ErrOperationPending)
-	assert.NotErrorIs(t, err, usecase.ErrInvalidInput)
+	assert.NotErrorIs(t, err, orders.ErrInvalidInput)
 }
 
 func TestPaymentsDeclinedCompensationIsError(t *testing.T) {
@@ -153,7 +153,7 @@ func TestErrorsMapToRetryability(t *testing.T) {
 			err := grpcclient.NewDelivery(conn).Cancel(context.Background(), neighbours.DeliveryRequest{OrderID: "order-1"})
 
 			require.Error(t, err)
-			assert.Equal(t, tt.permanent, errors.Is(err, usecase.ErrInvalidInput))
+			assert.Equal(t, tt.permanent, errors.Is(err, orders.ErrInvalidInput))
 		})
 	}
 }

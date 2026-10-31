@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/orders"
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
 	"nomnom/orders/slices/order/applications/closure/complete"
@@ -101,22 +100,22 @@ func negativeOutcome(outcome fulfillment.Outcome) (order.NegativeOutcome, error)
 	case fulfillment.OutcomeFailure:
 		return order.OutcomeFailure, nil
 	default:
-		return "", fmt.Errorf("%w: outcome %q is not negative", usecase.ErrInvalidInput, outcome)
+		return "", fmt.Errorf("%w: outcome %q is not negative", orders.ErrInvalidInput, outcome)
 	}
 }
 
-// portErrorByKind покрывает каждый usecase.ErrorKind: ретрай не исправит
+// portErrorByKind покрывает каждый errorkind.Kind: ретрай не исправит
 // невалидный ввод, отсутствующий Order и отказ домена. Для остальных видов у
 // порта нет своей ошибки, и она остаётся как есть, поэтому Activity её ретраит.
-var portErrorByKind = map[usecase.ErrorKind]error{
-	usecase.KindInvalidInput:  usecase.ErrInvalidInput,
-	usecase.KindNotFound:      orders.ErrOrderNotFound,
-	usecase.KindDomainRule:    orders.ErrStepRefused,
-	usecase.KindAlreadyExists: nil,
-	usecase.KindConflict:      nil,
-	usecase.KindUnavailable:   nil,
-	usecase.KindPermission:    nil,
-	usecase.KindInternal:      nil,
+var portErrorByKind = map[errorkind.Kind]error{
+	errorkind.InvalidInput:  orders.ErrInvalidInput,
+	errorkind.NotFound:      orders.ErrOrderNotFound,
+	errorkind.DomainRule:    orders.ErrStepRefused,
+	errorkind.AlreadyExists: nil,
+	errorkind.Conflict:      nil,
+	errorkind.Unavailable:   nil,
+	errorkind.Permission:    nil,
+	errorkind.Internal:      nil,
 }
 
 // portError переводит ошибку use case слайса order в ошибку порта.

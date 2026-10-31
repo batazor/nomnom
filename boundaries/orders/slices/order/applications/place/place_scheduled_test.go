@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -91,9 +91,9 @@ func TestPlaceOrderRefusalOfTheReservationStoresNothing(t *testing.T) {
 			},
 		},
 		"window off the grid": {
-			err: fmt.Errorf("restaurants.ReserveScheduledSlot: %w", usecase.ErrInvalidInput),
+			err: fmt.Errorf("restaurants.ReserveScheduledSlot: %w", failure.ErrInvalidInput),
 			check: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, usecase.ErrInvalidInput)
+				require.ErrorIs(t, err, failure.ErrInvalidInput)
 			},
 		},
 	} {

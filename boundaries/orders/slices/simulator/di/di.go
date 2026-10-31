@@ -13,7 +13,7 @@ import (
 
 	gatewayclient "nomnom/orders/infrastructure/gateway"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/orderdetails"
@@ -41,9 +41,9 @@ type Module struct {
 // Use cases слайса order раздаёт composition root.
 func NewModule(cfg config.SimulatorConfig, gateway config.InternalGatewayConfig, identity config.IdentityConfig,
 	catalog config.CatalogConfig, pool *pgxpool.Pool, authorizer switchsimulator.Authorizer,
-	placeOrder usecase.Handler[place.Input, place.Result],
-	getOrder usecase.Handler[get.Query, orderdetails.View],
-	requestCancellation usecase.Handler[requestcancellation.Input, requestcancellation.Result],
+	placeOrder telemetry.Instrumented[place.Input, place.Result],
+	getOrder telemetry.Instrumented[get.Query, orderdetails.View],
+	requestCancellation telemetry.Instrumented[requestcancellation.Input, requestcancellation.Result],
 ) (*Module, func(), error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err

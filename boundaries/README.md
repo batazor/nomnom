@@ -98,7 +98,7 @@ Value object выделяется для понятия с доменным см
 
 Handler управляет выполнением сценария. Правила допустимого изменения доменного состояния остаются в доменной модели.
 
-Общее для нескольких use cases слайса получает собственный каталог по ответственности (`applications/permission/`, `applications/errorkind/`): файлов прямо в `applications/` нет.
+Общее для нескольких use cases слайса получает собственный каталог по ответственности (`applications/permission/`, `applications/failure/`, `applications/errorkind/`): файлов прямо в `applications/` нет.
 
 В большом слайсе сценарии одной части бизнес-процесса объединяются в группу `applications/<group>/<usecase>/` с именем из Ubiquitous Language. Вложенных групп и своих `domains`, `infrastructure` и `di` у группы нет, а общий код нескольких групп остаётся на верхнем уровне `applications/` ([ADR 6](../docs/adr/0006-ddd-structure-inside-vertical-slices.md)).
 

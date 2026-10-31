@@ -1,11 +1,12 @@
 package di
 
 import (
+	"context"
+
 	gatewayclient "nomnom/orders/infrastructure/gateway"
 	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/complete"
 	"nomnom/orders/slices/order/applications/closure/failorcancel"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpaymentauthorization"
@@ -16,14 +17,19 @@ import (
 	"nomnom/orders/slices/order/infrastructure/observability"
 )
 
+// useCase — входной порт одного use case.
+type useCase[In, Out any] interface {
+	Handle(ctx context.Context, in In) (Out, error)
+}
+
 // FulfillmentModule — use cases слайса order, которые вызывают Activities Order
 // Fulfillment. Слайс fulfillment получает их собранными и не знает их портов.
 type FulfillmentModule struct {
-	GetForFulfillment usecase.Handler[getforfulfillment.Query, getforfulfillment.View]
-	RecordPayment     usecase.Handler[recordpaymentauthorization.Input, recordpaymentauthorization.Result]
-	Complete          usecase.Handler[complete.Input, complete.Result]
-	Finalize          usecase.Handler[failorcancel.Input, failorcancel.Result]
-	Plan              usecase.Handler[planschedule.Input, order.SchedulePlan]
+	GetForFulfillment useCase[getforfulfillment.Query, getforfulfillment.View]
+	RecordPayment     useCase[recordpaymentauthorization.Input, recordpaymentauthorization.Result]
+	Complete          useCase[complete.Input, complete.Result]
+	Finalize          useCase[failorcancel.Input, failorcancel.Result]
+	Plan              useCase[planschedule.Input, order.SchedulePlan]
 }
 
 // FulfillmentStore — роль хранилища FulfillmentModule: чтение Order, Unit of Work,

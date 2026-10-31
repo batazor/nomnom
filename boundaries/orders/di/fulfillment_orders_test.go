@@ -9,15 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/orders"
+	"nomnom/orders/slices/order/applications/errorkind"
+	"nomnom/orders/slices/order/applications/failure"
 	orderdi "nomnom/orders/slices/order/di"
 	"nomnom/orders/slices/order/domains/order"
 )
 
-// AC-635: the table of the port decides for every usecase.ErrorKind.
+// AC-635: the table of the port decides for every errorkind.Kind.
 func TestPortErrorTableCoversEveryKind(t *testing.T) {
-	for _, kind := range usecase.ErrorKinds() {
+	for _, kind := range errorkind.All() {
 		_, ok := portErrorByKind[kind]
 		assert.True(t, ok, kind)
 	}
@@ -29,7 +30,7 @@ func TestPortErrorTranslatesUseCaseErrors(t *testing.T) {
 		err  error
 		want error
 	}{
-		{"invalid input", usecase.InvalidInput("order_id", "is required"), usecase.ErrInvalidInput},
+		{"invalid input", failure.InvalidInput("order_id", "is required"), orders.ErrInvalidInput},
 		{"missing order", order.ErrOrderNotFound, orders.ErrOrderNotFound},
 		{"invalid transition", order.InvalidTransition{}, orders.ErrStepRefused},
 		{"failed guard", order.GuardFailed{Reason: "completed_at_required"}, orders.ErrStepRefused},
@@ -47,7 +48,7 @@ func TestPortErrorTranslatesUseCaseErrors(t *testing.T) {
 
 // A kind without an error of the port stays as is: the Activity retries it.
 func TestPortErrorKeepsRetryableErrors(t *testing.T) {
-	for _, cause := range []error{usecase.ErrConcurrencyConflict, usecase.ErrDependencyUnavailable, errors.New("reset")} {
+	for _, cause := range []error{failure.ErrConcurrencyConflict, failure.ErrDependencyUnavailable, errors.New("reset")} {
 		assert.Equal(t, cause, portError(cause))
 	}
 }
@@ -59,5 +60,5 @@ func TestFailOrCancelRefusesOutcomeThatIsNotNegative(t *testing.T) {
 
 	err := port.FailOrCancel(context.Background(), orders.FinalDecision{OrderID: "order-1", Outcome: "completed", DecidedAt: time.Now()})
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, orders.ErrInvalidInput)
 }

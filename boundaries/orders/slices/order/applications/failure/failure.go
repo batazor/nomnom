@@ -1,13 +1,10 @@
-// Package usecase contains the technical contract of a use case shared by the
-// slices of the orders boundary: its inbound port and errors. It holds no
-// business rules.
-package usecase
+// Package failure contains the errors shared by the use cases and adapters of
+// the order slice. It holds no business rules.
+package failure
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"time"
 )
 
 var (
@@ -23,15 +20,4 @@ var (
 // InvalidInput wraps ErrInvalidInput with the offending field.
 func InvalidInput(field, reason string) error {
 	return fmt.Errorf("%w: %s: %s", ErrInvalidInput, field, reason)
-}
-
-// Handler is the inbound port of one use case. Adapters depend on it instead of
-// the concrete handler, so the composition root can decorate use cases.
-type Handler[In, Out any] interface {
-	Handle(ctx context.Context, in In) (Out, error)
-}
-
-// Clock supplies the current time to use cases; domain code never reads it.
-type Clock interface {
-	Now() time.Time
 }

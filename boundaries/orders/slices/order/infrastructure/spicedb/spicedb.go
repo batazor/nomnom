@@ -23,13 +23,13 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/config"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 )
 
 // ErrUnavailable means SpiceDB did not answer; use cases fail closed on it.
-var ErrUnavailable = fmt.Errorf("authorization service: %w", usecase.ErrDependencyUnavailable)
+var ErrUnavailable = fmt.Errorf("authorization service: %w", failure.ErrDependencyUnavailable)
 
 const (
 	resourceOrder      = "order"

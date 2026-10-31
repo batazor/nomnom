@@ -2,9 +2,10 @@ package di
 
 import (
 	"context"
+	"time"
+
 	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
 	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/listforcustomer"
@@ -17,10 +18,10 @@ import (
 
 // Module — собранный слайс order, который получает composition root процесса.
 type Module struct {
-	PlaceOrder               usecase.Handler[place.Input, place.Result]
-	RequestOrderCancellation usecase.Handler[requestcancellation.Input, requestcancellation.Result]
-	GetOrder                 usecase.Handler[get.Query, orderdetails.View]
-	ListCustomerOrders       usecase.Handler[listforcustomer.Query, listforcustomer.Page]
+	PlaceOrder               telemetry.Instrumented[place.Input, place.Result]
+	RequestOrderCancellation telemetry.Instrumented[requestcancellation.Input, requestcancellation.Result]
+	GetOrder                 telemetry.Instrumented[get.Query, orderdetails.View]
+	ListCustomerOrders       telemetry.Instrumented[listforcustomer.Query, listforcustomer.Page]
 }
 
 // PlacementStore — роль хранилища command use cases API: Unit of Work,
@@ -41,6 +42,11 @@ type ReadModels interface {
 	CountByState(ctx context.Context) (map[order.State]int64, error)
 }
 
+// Clock — текущее время для use cases.
+type Clock interface {
+	Now() time.Time
+}
+
 // Dependencies — порты use cases Module. Wire заполняет все поля
 // (wire.Struct) одним store процесса во всех ролях, тесты передают in-memory
 // реализации литералом.
@@ -52,7 +58,7 @@ type Dependencies struct {
 	Catalog    place.Catalog
 	Slots      place.SlotReservations
 	Workflow   Workflow
-	Clock      usecase.Clock
+	Clock      Clock
 	IDs        place.IDGenerator
 	Telemetry  *telemetry.UseCases
 	Metrics    *observability.DomainMetrics

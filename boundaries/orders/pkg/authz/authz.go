@@ -5,12 +5,14 @@ package authz
 import (
 	"errors"
 	"fmt"
-
-	"nomnom/orders/pkg/usecase"
 )
 
-// ErrPermissionDenied marks a denied or failed authoritative authorization check.
-var ErrPermissionDenied = errors.New("permission denied")
+var (
+	// ErrPermissionDenied marks a denied or failed authoritative authorization check.
+	ErrPermissionDenied = errors.New("permission denied")
+	// ErrInvalidSubject marks a malformed caller identity.
+	ErrInvalidSubject = errors.New("invalid input: subject")
+)
 
 // FailClosed normalizes an authorization result: any failure of the check
 // denies the operation while keeping the original cause for diagnostics.
@@ -36,10 +38,10 @@ type Subject struct {
 
 func (s Subject) Validate() error {
 	if s.Kind != SubjectUser && s.Kind != SubjectService {
-		return usecase.InvalidInput("subject", "unknown kind")
+		return fmt.Errorf("%w: unknown kind", ErrInvalidSubject)
 	}
 	if s.ID == "" {
-		return usecase.InvalidInput("subject", "id is required")
+		return fmt.Errorf("%w: id is required", ErrInvalidSubject)
 	}
 	return nil
 }

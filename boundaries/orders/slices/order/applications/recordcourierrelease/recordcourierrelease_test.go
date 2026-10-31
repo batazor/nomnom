@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordcourierassignment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
@@ -287,7 +287,7 @@ func TestInvalidInput(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := w.release.Handle(context.Background(), in)
-			require.ErrorIs(t, err, usecase.ErrInvalidInput)
+			require.ErrorIs(t, err, failure.ErrInvalidInput)
 		})
 	}
 }

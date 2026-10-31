@@ -41,7 +41,6 @@ linters:
             - $gostd
             - nomnom/orders/pkg/authz
             - nomnom/orders/pkg/unitofwork
-            - nomnom/orders/pkg/usecase
             - nomnom/orders/pkg/telemetry
             - nomnom/orders/slices/order/domains
             - nomnom/orders/slices/fulfillment/domains

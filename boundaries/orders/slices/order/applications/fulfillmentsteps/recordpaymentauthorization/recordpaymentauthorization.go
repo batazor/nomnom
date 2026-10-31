@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -47,9 +47,9 @@ func NewHandler(uow unitofwork.UnitOfWork, orders order.Repository) Handler {
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	switch {
 	case in.OrderID == "":
-		return Result{}, usecase.InvalidInput("order_id", "is required")
+		return Result{}, failure.InvalidInput("order_id", "is required")
 	case in.AuthorizedAt.IsZero():
-		return Result{}, usecase.InvalidInput("authorized_at", "is required")
+		return Result{}, failure.InvalidInput("authorized_at", "is required")
 	}
 
 	var result Result

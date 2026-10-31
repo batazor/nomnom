@@ -13,7 +13,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
@@ -267,7 +267,7 @@ func (s *Store) ListCustomerOrders(ctx context.Context, request listforcustomer.
 	if request.Cursor != "" {
 		placedAt, id, err := decodeCursor(request.Cursor)
 		if err != nil {
-			return listforcustomer.Rows{}, usecase.InvalidInput("cursor", "is malformed")
+			return listforcustomer.Rows{}, failure.InvalidInput("cursor", "is malformed")
 		}
 		query = query.Where("(placed_at, order_id) < (?, ?)", placedAt, id)
 	}

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -81,7 +81,7 @@ func TestPlaceOrderRequiresMarketOfRestaurant(t *testing.T) {
 	_, err := e.handler.Handle(context.Background(), input)
 
 	require.ErrorContains(t, err, "no market_id")
-	assert.NotErrorIs(t, err, usecase.ErrInvalidInput)
+	assert.NotErrorIs(t, err, failure.ErrInvalidInput)
 	assert.NotErrorIs(t, err, vo.ErrInvalidValue)
 	assert.Empty(t, e.store.OutboxRecords())
 	assert.Empty(t, e.store.RelationshipChanges())
@@ -95,8 +95,8 @@ func TestPlaceOrderValidatesInputBeforeCatalog(t *testing.T) {
 		mutate  func(*place.Input)
 		wantErr error
 	}{
-		{name: "no idempotency key", mutate: func(in *place.Input) { in.IdempotencyKey = "" }, wantErr: usecase.ErrInvalidInput},
-		{name: "no restaurant", mutate: func(in *place.Input) { in.RestaurantID = "" }, wantErr: usecase.ErrInvalidInput},
+		{name: "no idempotency key", mutate: func(in *place.Input) { in.IdempotencyKey = "" }, wantErr: failure.ErrInvalidInput},
+		{name: "no restaurant", mutate: func(in *place.Input) { in.RestaurantID = "" }, wantErr: failure.ErrInvalidInput},
 		{
 			name: "service subject",
 			mutate: func(in *place.Input) {
@@ -241,7 +241,7 @@ func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
 
 	_, err := e.handlerWithKeys(keys).Handle(context.Background(), validInput())
 
-	require.ErrorIs(t, err, usecase.ErrConcurrencyConflict)
+	require.ErrorIs(t, err, failure.ErrConcurrencyConflict)
 }
 
 func TestPlaceOrderReturnsConcurrentlyPlacedOrder(t *testing.T) {
@@ -313,7 +313,7 @@ func TestPlaceOrderRefusesUnknownPriority(t *testing.T) {
 
 	_, err := e.handler.Handle(context.Background(), input)
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 	assertNothingPlaced(t, e)
 }
 

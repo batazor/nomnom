@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 )
 
@@ -49,10 +49,10 @@ func NewHandler(uow unitofwork.UnitOfWork, orders order.Repository, outbox Outbo
 
 func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 	if in.OrderID == "" {
-		return Result{}, usecase.InvalidInput("order_id", "is required")
+		return Result{}, failure.InvalidInput("order_id", "is required")
 	}
 	if in.DecidedAt.IsZero() {
-		return Result{}, usecase.InvalidInput("decided_at", "is required")
+		return Result{}, failure.InvalidInput("decided_at", "is required")
 	}
 	reason, err := order.NewCancellationReason(in.Outcome, in.ReasonCode)
 	if err != nil {

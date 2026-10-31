@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"nomnom/orders/pkg/usecase"
 )
 
 func TestSubjectValidate(t *testing.T) {
@@ -27,7 +25,7 @@ func TestSubjectValidate(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			require.ErrorIs(t, err, usecase.ErrInvalidInput)
+			require.ErrorIs(t, err, ErrInvalidSubject)
 		})
 	}
 }

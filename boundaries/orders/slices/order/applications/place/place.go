@@ -11,7 +11,7 @@ import (
 
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/unitofwork"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/syncrelationships"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
@@ -127,6 +127,11 @@ type Outbox interface {
 	Append(ctx context.Context, aggregateID order.ID, aggregateVersion uint64, events []order.DomainEvent) error
 }
 
+// Clock supplies the current time; domain code never reads it.
+type Clock interface {
+	Now() time.Time
+}
+
 type Dependencies struct {
 	UnitOfWork      unitofwork.UnitOfWork
 	Orders          order.Repository
@@ -141,7 +146,7 @@ type Dependencies struct {
 	// own Order by customer_id before that.
 	Relationships syncrelationships.Changes
 	IDs           IDGenerator
-	Clock         usecase.Clock
+	Clock         Clock
 }
 
 type Handler struct {
@@ -252,7 +257,7 @@ func (h Handler) replayConcurrent(ctx context.Context, customerID order.Customer
 		return Result{}, fmt.Errorf("find idempotency key: %w", err)
 	}
 	if !found {
-		return Result{}, fmt.Errorf("%w: idempotency key %q is being placed concurrently", usecase.ErrConcurrencyConflict, key)
+		return Result{}, fmt.Errorf("%w: idempotency key %q is being placed concurrently", failure.ErrConcurrencyConflict, key)
 	}
 	return Result{OrderID: existing, Replayed: true}, nil
 }
@@ -277,16 +282,16 @@ func validate(in Input) (order.CustomerID, placementRequest, error) {
 		return "", placementRequest{}, fmt.Errorf("%w: only a customer places an order", authz.ErrPermissionDenied)
 	}
 	if in.IdempotencyKey == "" {
-		return "", placementRequest{}, usecase.InvalidInput("idempotency_key", "is required")
+		return "", placementRequest{}, failure.InvalidInput("idempotency_key", "is required")
 	}
 	if in.RestaurantID == "" {
-		return "", placementRequest{}, usecase.InvalidInput("restaurant_id", "is required")
+		return "", placementRequest{}, failure.InvalidInput("restaurant_id", "is required")
 	}
 	priority := order.PriorityStandard
 	if in.Priority != "" {
 		parsed, err := order.ParsePriority(in.Priority)
 		if err != nil {
-			return "", placementRequest{}, usecase.InvalidInput("priority", "must be STANDARD or PREMIUM")
+			return "", placementRequest{}, failure.InvalidInput("priority", "must be STANDARD or PREMIUM")
 		}
 		priority = parsed
 	}
@@ -298,7 +303,7 @@ func validate(in Input) (order.CustomerID, placementRequest, error) {
 	seen := make(map[order.MenuItemID]struct{}, len(in.Items))
 	for _, item := range in.Items {
 		if item.MenuItemID == "" {
-			return "", placementRequest{}, usecase.InvalidInput("menu_item_id", "is required")
+			return "", placementRequest{}, failure.InvalidInput("menu_item_id", "is required")
 		}
 		if _, duplicate := seen[item.MenuItemID]; duplicate {
 			return "", placementRequest{}, fmt.Errorf("%w: %q", order.ErrDuplicateMenuItem, item.MenuItemID)

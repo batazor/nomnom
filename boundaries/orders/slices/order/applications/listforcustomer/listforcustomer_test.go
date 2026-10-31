@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -67,7 +67,7 @@ func TestListCustomerOrdersValidatesQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := handler.Handle(context.Background(), tt.query)
-			require.ErrorIs(t, err, usecase.ErrInvalidInput)
+			require.ErrorIs(t, err, failure.ErrInvalidInput)
 		})
 	}
 }

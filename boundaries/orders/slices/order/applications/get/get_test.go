@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/orderdetails"
 	"nomnom/orders/slices/order/domains/order"
@@ -47,7 +46,7 @@ func TestGetOrderRequiresASubject(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), get.Query{Subject: authz.Subject{}, OrderID: "order-1"})
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, authz.ErrInvalidSubject)
 }
 
 func TestGetOrderFailsClosed(t *testing.T) {

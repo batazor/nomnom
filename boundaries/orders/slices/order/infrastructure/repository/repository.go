@@ -9,7 +9,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/vo"
 )
@@ -68,7 +68,7 @@ func (s *Store) Add(ctx context.Context, created *order.Order) error {
 }
 
 // Save updates the Order only if its stored version is the loaded Version();
-// otherwise usecase.ErrConcurrencyConflict.
+// otherwise failure.ErrConcurrencyConflict.
 func (s *Store) Save(ctx context.Context, changed *order.Order) error {
 	snap := changed.Snapshot()
 	outcome, code := cancellation(snap.CancellationReason)
@@ -94,7 +94,7 @@ func (s *Store) Save(ctx context.Context, changed *order.Order) error {
 		if !exists {
 			return fmt.Errorf("%w: %q", order.ErrOrderNotFound, snap.ID)
 		}
-		return fmt.Errorf("%w: order %s version %d", usecase.ErrConcurrencyConflict, snap.ID, snap.Version)
+		return fmt.Errorf("%w: order %s version %d", failure.ErrConcurrencyConflict, snap.ID, snap.Version)
 	}
 	if err := s.saveTransitions(ctx, snap); err != nil {
 		return err

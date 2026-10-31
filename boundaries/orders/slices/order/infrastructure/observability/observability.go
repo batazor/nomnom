@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"nomnom/orders/pkg/telemetry"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
@@ -62,17 +61,17 @@ func rejected(errorType string) telemetry.Failure {
 	return telemetry.Failure{Outcome: telemetry.OutcomeRejected, ErrorType: errorType}
 }
 
-// failureByKind reports every usecase.ErrorKind: refusals by the rules of
+// failureByKind reports every errorkind.Kind: refusals by the rules of
 // a use case are rejected, technical failures are errors.
-var failureByKind = map[usecase.ErrorKind]telemetry.Failure{
-	usecase.KindInvalidInput:  rejected(ErrorTypeInvalidInput),
-	usecase.KindNotFound:      rejected(ErrorTypeNotFound),
-	usecase.KindAlreadyExists: rejected(ErrorTypeAlreadyExists),
-	usecase.KindDomainRule:    rejected(ErrorTypeDomainRule),
-	usecase.KindPermission:    rejected(ErrorTypePermissionDenied),
-	usecase.KindConflict:      {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeConcurrencyConflict},
-	usecase.KindUnavailable:   {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeDependencyUnavailable},
-	usecase.KindInternal:      {Outcome: telemetry.OutcomeError, ErrorType: telemetry.ErrorTypeInternal},
+var failureByKind = map[errorkind.Kind]telemetry.Failure{
+	errorkind.InvalidInput:  rejected(ErrorTypeInvalidInput),
+	errorkind.NotFound:      rejected(ErrorTypeNotFound),
+	errorkind.AlreadyExists: rejected(ErrorTypeAlreadyExists),
+	errorkind.DomainRule:    rejected(ErrorTypeDomainRule),
+	errorkind.Permission:    rejected(ErrorTypePermissionDenied),
+	errorkind.Conflict:      {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeConcurrencyConflict},
+	errorkind.Unavailable:   {Outcome: telemetry.OutcomeError, ErrorType: ErrorTypeDependencyUnavailable},
+	errorkind.Internal:      {Outcome: telemetry.OutcomeError, ErrorType: telemetry.ErrorTypeInternal},
 }
 
 // Classify reports a use case error by its kind (errorkind.Classify). A domain

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/fulfillmentsteps/recordpreparationstarted"
 	"nomnom/orders/slices/order/domains/order"
@@ -74,7 +74,7 @@ func TestRejectsInvalidInputAndUnknownOrder(t *testing.T) {
 		{EventID: "event-1", OrderID: "order-1"},
 	} {
 		_, err := handler.Handle(context.Background(), in)
-		require.ErrorIs(t, err, usecase.ErrInvalidInput)
+		require.ErrorIs(t, err, failure.ErrInvalidInput)
 	}
 
 	_, err := handler.Handle(context.Background(), recordpreparationstarted.Input{EventID: "event-1", OrderID: "missing", OccurredAt: occurredAt})

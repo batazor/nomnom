@@ -11,9 +11,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/complete"
 	"nomnom/orders/slices/order/applications/closure/failorcancel"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/observability"
@@ -111,7 +111,7 @@ func TestObservedStoreCountsTransitionOfRetriedAttemptOnce(t *testing.T) {
 
 	require.NoError(t, confirm("order-1", func(attempt int) error {
 		if attempt == 1 {
-			return fmt.Errorf("stale read: %w", usecase.ErrConcurrencyConflict)
+			return fmt.Errorf("stale read: %w", failure.ErrConcurrencyConflict)
 		}
 		return nil
 	}))

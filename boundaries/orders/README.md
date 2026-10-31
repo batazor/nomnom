@@ -83,10 +83,10 @@ Temporal workflow относится к прикладному процессу 
 
 Адаптер генерирует серверные Go stubs из локальной схемы и преобразует request messages в commands/queries, а прикладные результаты — в response messages. Protobuf-типы остаются в `infrastructure` и не используются моделями `Order`, handlers или Temporal workflow. Клиенты других контекстов получают схему только из BSR по закреплённому commit ref.
 
-Маппинг ошибок API. Вид ошибки (`application.ErrorKind`: invalid input, not found, already exists,
+Маппинг ошибок API. Вид ошибки (`errorkind.Kind`: invalid input, not found, already exists,
 conflict, domain rule, unavailable, permission, internal) определяет одна функция
-[`errorkind.Classify`](slices/order/applications/errorkind/errorkind.go); gRPC, Kafka consumer,
-Temporal Activities и телеметрия переводят вид своими таблицами, тест каждой проверяет полноту.
+[`errorkind.Classify`](slices/order/applications/errorkind/errorkind.go) слайса `order`; gRPC, Kafka consumer,
+порт Order слайса `fulfillment` и телеметрия переводят вид своими таблицами, тест каждой проверяет полноту.
 Уточнения этого API (`RESTAURANT_*`, `INVALID_ORDER`, metadata `ORDER_NOT_ORDERABLE`, правило окна
 отмены) остаются в gRPC-адаптере.
 
@@ -429,7 +429,7 @@ Workflow Stage публикуется низкокардинальным Search 
 OpenSpec change `implement-orders-application-layer` добавил application-слой (FR-100…FR-117, AC-100…AC-130):
 
 - handlers всех 12 Commands и 2 Queries в `slices/order/applications/<usecase>`; `OrderItemsOrderable` подключена в `order.Place`, `WithinCancellationWindow` — в `Order.CheckCancellation`;
-- shared порты `UnitOfWork`, `Inbox`, `Clock`, verified `Subject` и application errors в `pkg/unitofwork`, `pkg/usecase` и `pkg/authz`; контракт `order.Repository` в `domains/order`; порт Order Fulfillment Workflow и общий Inbox-поток входящих фактов в [`slices/order/applications/fulfillment`](slices/order/applications/fulfillment/README.md); узкие порты authorization, catalog snapshot, cancellation policy, Outbox, idempotency и read models — рядом с use case;
+- shared порты `UnitOfWork`, `Inbox` и verified `Subject` в `pkg/unitofwork` и `pkg/authz`; общих application errors нет: у слайса `order` они в `applications/failure` и `applications/errorkind`, у `fulfillment` — в порте `applications/orders`; `Clock` объявляет use case, которому нужно время; контракт `order.Repository` в `domains/order`; порт Order Fulfillment Workflow и общий Inbox-поток входящих фактов в [`slices/order/applications/fulfillment`](slices/order/applications/fulfillment/README.md); узкие порты authorization, catalog snapshot, cancellation policy, Outbox, idempotency и read models — рядом с use case;
 - тесты handlers работают против настоящего PostgreSQL ([`slices/order/infrastructure/repository/repositorytest`](slices/order/infrastructure/repository/repositorytest): testcontainers, отдельная база на тест из мигрированного template); внешние системы (SpiceDB, catalog, Temporal workflow, sync связей) подменяются mockery-моками, сгенерированными в тестовый пакет потребителя (`mocks*_test.go`), часы, генератор id и окно отмены — stand-ins из `slices/order/infrastructure/fake`; fixtures агрегата — `domains/order/ordertest`. In-memory адаптеров хранения нет.
 
 Контракт Temporal-адаптера за портом `fulfillment` зафиксирован в [ADR 5](docs/adr/0005-order-fulfillment-orchestration.md) и разделе [Order Fulfillment Workflow](#order-fulfillment-workflow). OpenSpec change `implement-order-fulfillment-temporal-adapter` реализовал его на `go.temporal.io/sdk` v1.50.0: workflow с deadlines из `Policy`, Saga и Update `CancellationRequested`; Activities поверх `order/complete`, `order/failorcancel` и client-портов `Payments`, `Restaurants`, `Delivery`; реализацию порта `fulfillment` на Temporal client. Значения `DefaultPolicy` — placeholders до продуктовых решений. OpenSpec change `extract-order-fulfillment-slice` выделил процесс в слайс [`fulfillment`](slices/fulfillment/README.md): правила — в доменной модели `domains/fulfillment` с табличными unit-тестами, workflow — тонкий адаптер [`infrastructure/temporal`](slices/fulfillment/infrastructure/temporal/README.md) с прежними именами workflow, Signals, Update, Activities, task queue, Search Attribute и idempotency key шагов.

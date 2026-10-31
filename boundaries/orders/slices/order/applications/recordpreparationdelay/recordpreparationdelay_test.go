@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/recordpreparationdelay"
 )
 
@@ -20,5 +20,5 @@ func delay(eventID string, readyAt time.Time) recordpreparationdelay.Input {
 func TestDelayRequiresExpectedReadyTime(t *testing.T) {
 	_, err := recordpreparationdelay.NewHandler(nil, nil, nil, NewMockNotifier(t)).Handle(context.Background(), delay("event-1", time.Time{}))
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 }

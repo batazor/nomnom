@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/startfulfillment"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -42,7 +42,7 @@ func TestStartFailureIsUnavailable(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), input())
 
-	require.ErrorIs(t, err, usecase.ErrDependencyUnavailable)
+	require.ErrorIs(t, err, failure.ErrDependencyUnavailable)
 
 	result, err := handler.Handle(context.Background(), input())
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestRequiresEvent(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), in)
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 }
 
 func TestRejectsHalfOfADeliveryWindow(t *testing.T) {
@@ -67,6 +67,6 @@ func TestRejectsHalfOfADeliveryWindow(t *testing.T) {
 
 	_, err := handler.Handle(context.Background(), in)
 
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 	assert.Zero(t, store.InboxSize())
 }

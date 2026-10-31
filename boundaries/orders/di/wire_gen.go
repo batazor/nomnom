@@ -87,10 +87,10 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	module := di.NewModule(dependencies)
 	simulatorConfig := cfg.Simulator
 	pool := NewDatabasePool(store)
-	handler := module.PlaceOrder
-	usecaseHandler := module.GetOrder
-	handler2 := module.RequestOrderCancellation
-	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, pool, authorizer, handler, usecaseHandler, handler2)
+	instrumented := module.PlaceOrder
+	telemetryInstrumented := module.GetOrder
+	instrumented2 := module.RequestOrderCancellation
+	diModule, cleanup6, err := di2.NewModule(simulatorConfig, internalGatewayConfig, identityConfig, catalogConfig, pool, authorizer, instrumented, telemetryInstrumented, instrumented2)
 	if err != nil {
 		cleanup5()
 		cleanup4()

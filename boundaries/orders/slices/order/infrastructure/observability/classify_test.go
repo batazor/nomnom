@@ -5,12 +5,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/errorkind"
 )
 
-// AC-635: the telemetry table reports every usecase.ErrorKind.
+// AC-635: the telemetry table reports every errorkind.Kind.
 func TestFailureTableCoversEveryKind(t *testing.T) {
-	for _, kind := range usecase.ErrorKinds() {
+	for _, kind := range errorkind.All() {
 		failure, ok := failureByKind[kind]
 		assert.True(t, ok, kind)
 		assert.NotEmpty(t, failure.Outcome, kind)

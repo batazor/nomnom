@@ -3,10 +3,10 @@ package temporal
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"go.temporal.io/sdk/temporal"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/fulfillment/applications/neighbours"
 	"nomnom/orders/slices/fulfillment/applications/orders"
 )
@@ -74,7 +74,7 @@ func (a *Activities) RequestRestaurantOrder(ctx context.Context, in StepInput) (
 		return RestaurantOrderRequested{}, err
 	}
 	if request.Schedule != nil && request.Schedule.PlannedReadyAt.IsZero() {
-		return RestaurantOrderRequested{}, classify(usecase.InvalidInput("step", "planned_ready_at is required for a scheduled order"))
+		return RestaurantOrderRequested{}, classify(invalidStep("planned_ready_at is required for a scheduled order"))
 	}
 	id, err := a.Restaurants.RequestOrder(ctx, request)
 	return RestaurantOrderRequested{RestaurantOrderID: id}, classify(err)
@@ -84,7 +84,7 @@ func (a *Activities) RequestRestaurantOrder(ctx context.Context, in StepInput) (
 // Order to the Kitchen Queue at start_at (FR-224).
 func (a *Activities) QueueRestaurantOrder(ctx context.Context, in StepInput) error {
 	if in.OrderID == "" || in.IdempotencyKey == "" || in.RestaurantOrderID == "" {
-		return classify(usecase.InvalidInput("step", "order_id, idempotency_key and restaurant_order_id are required"))
+		return classify(invalidStep("order_id, idempotency_key and restaurant_order_id are required"))
 	}
 	return classify(a.Restaurants.QueueOrder(ctx, neighbours.QueueRequest{
 		OrderID:           in.OrderID,
@@ -97,7 +97,7 @@ func (a *Activities) QueueRestaurantOrder(ctx context.Context, in StepInput) err
 // reads nothing from delivery.
 func (a *Activities) RecordRestaurantPickup(ctx context.Context, in StepInput) error {
 	if in.OrderID == "" || in.IdempotencyKey == "" || in.DecidedAt.IsZero() {
-		return classify(usecase.InvalidInput("step", "order_id, idempotency_key and decided_at are required"))
+		return classify(invalidStep("order_id, idempotency_key and decided_at are required"))
 	}
 	return classify(a.Restaurants.RecordPickup(ctx, neighbours.RestaurantPickupRequest{
 		OrderID:    in.OrderID,
@@ -129,7 +129,7 @@ func (a *Activities) ReleaseSlotReservation(ctx context.Context, in StepInput) e
 // passes the planned_ready_at of the first plan, which does not move.
 func (a *Activities) PlanSchedule(ctx context.Context, in StepInput) (Plan, error) {
 	if in.OrderID == "" || in.IdempotencyKey == "" {
-		return Plan{}, classify(usecase.InvalidInput("step", "order_id and idempotency_key are required"))
+		return Plan{}, classify(invalidStep("order_id and idempotency_key are required"))
 	}
 	plan, err := a.Orders.PlanSchedule(ctx, in.OrderID, in.PlannedReadyAt)
 	if err != nil {
@@ -171,7 +171,7 @@ func (a *Activities) CancelDelivery(ctx context.Context, in StepInput) error {
 // decision moment is the workflow time in the input and is required.
 func (a *Activities) RecordPaymentAuthorization(ctx context.Context, in StepInput) error {
 	if in.DecidedAt.IsZero() {
-		return classify(usecase.InvalidInput("step", "decided_at is required"))
+		return classify(invalidStep("decided_at is required"))
 	}
 	return classify(a.Orders.RecordPaymentAuthorization(ctx, in.OrderID, in.DecidedAt))
 }
@@ -181,7 +181,7 @@ func (a *Activities) RecordPaymentAuthorization(ctx context.Context, in StepInpu
 // every attempt, and is required.
 func (a *Activities) CompleteOrder(ctx context.Context, in StepInput) error {
 	if in.DecidedAt.IsZero() {
-		return classify(usecase.InvalidInput("step", "decided_at is required"))
+		return classify(invalidStep("decided_at is required"))
 	}
 	return classify(a.Orders.Complete(ctx, in.OrderID, in.DecidedAt))
 }
@@ -206,7 +206,7 @@ func (a *Activities) FailOrCancelOrder(ctx context.Context, in FinalizeInput) er
 func request[R any](ctx context.Context, port orders.Orders, in StepInput, build func(orders.Order, string) R) (R, error) {
 	var zero R
 	if in.OrderID == "" || in.IdempotencyKey == "" {
-		return zero, classify(usecase.InvalidInput("step", "order_id and idempotency_key are required"))
+		return zero, classify(invalidStep("order_id and idempotency_key are required"))
 	}
 	current, err := port.Get(ctx, in.OrderID)
 	if err != nil {
@@ -227,6 +227,11 @@ func (a *Activities) delivery(ctx context.Context, in StepInput) (neighbours.Del
 	return request(ctx, a.Orders, in, neighbours.NewDeliveryRequest)
 }
 
+// invalidStep wraps orders.ErrInvalidInput with what the step lacks.
+func invalidStep(reason string) error {
+	return fmt.Errorf("%w: step: %s", orders.ErrInvalidInput, reason)
+}
+
 // classify reports an error that a retry cannot fix as a non-retryable
 // application error of its type: invalid input, a missing Order or a step the
 // Order refuses. Everything else, including transport failures of neighbours,
@@ -235,7 +240,7 @@ func classify(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, usecase.ErrInvalidInput):
+	case errors.Is(err, orders.ErrInvalidInput):
 		return temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeInvalidInput, err)
 	case errors.Is(err, orders.ErrOrderNotFound):
 		return temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeOrderNotFound, err)

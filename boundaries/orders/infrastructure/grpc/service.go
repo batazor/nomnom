@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/get"
 	"nomnom/orders/slices/order/applications/listforcustomer"
 	"nomnom/orders/slices/order/applications/orderdetails"
@@ -26,13 +26,18 @@ type SimulatorSwitch interface {
 	Set(ctx context.Context, command switchsimulator.SetCommand) (bool, error)
 }
 
+// useCase is the inbound port of one use case.
+type useCase[In, Out any] interface {
+	Handle(ctx context.Context, in In) (Out, error)
+}
+
 // OrderHandlers are the order use cases the API serves. The composition root
 // fills them from the assembled order slice.
 type OrderHandlers struct {
-	PlaceOrder               usecase.Handler[place.Input, place.Result]
-	RequestOrderCancellation usecase.Handler[requestcancellation.Input, requestcancellation.Result]
-	GetOrder                 usecase.Handler[get.Query, orderdetails.View]
-	ListCustomerOrders       usecase.Handler[listforcustomer.Query, listforcustomer.Page]
+	PlaceOrder               useCase[place.Input, place.Result]
+	RequestOrderCancellation useCase[requestcancellation.Input, requestcancellation.Result]
+	GetOrder                 useCase[get.Query, orderdetails.View]
+	ListCustomerOrders       useCase[listforcustomer.Query, listforcustomer.Page]
 }
 
 type Service struct {
@@ -124,7 +129,7 @@ func (s *Service) PlaceOrder(ctx context.Context, request *ordersv1.PlaceOrderRe
 	var windowStart time.Time
 	if request.GetDeliveryWindowStart() != nil {
 		if err := request.GetDeliveryWindowStart().CheckValid(); err != nil {
-			return nil, transportError(usecase.InvalidInput("delivery_window_start", "is not a valid timestamp"))
+			return nil, transportError(failure.InvalidInput("delivery_window_start", "is not a valid timestamp"))
 		}
 		windowStart = request.GetDeliveryWindowStart().AsTime()
 	}

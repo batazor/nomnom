@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -53,11 +53,16 @@ type CancellationPolicy interface {
 	Window(ctx context.Context, placedAt time.Time, delivery order.DeliveryWindow) (order.CancellationWindow, error)
 }
 
+// Clock supplies the current time; domain code never reads it.
+type Clock interface {
+	Now() time.Time
+}
+
 type Dependencies struct {
 	Authorizer Authorizer
 	Orders     Orders
 	Policy     CancellationPolicy
-	Clock      usecase.Clock
+	Clock      Clock
 	Workflow   fulfillment.CancellationRequester
 }
 
@@ -74,10 +79,10 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, err
 	}
 	if in.OrderID == "" {
-		return Result{}, usecase.InvalidInput("order_id", "is required")
+		return Result{}, failure.InvalidInput("order_id", "is required")
 	}
 	if in.RequestID == "" {
-		return Result{}, usecase.InvalidInput("request_id", "is required")
+		return Result{}, failure.InvalidInput("request_id", "is required")
 	}
 
 	// The Customer cancels the own Order by customer_id: order#customer is

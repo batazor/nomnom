@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/errorkind"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/place"
 	"nomnom/orders/slices/order/domains/order"
@@ -21,29 +21,29 @@ import (
 var cases = []struct {
 	Name string
 	Err  error
-	Kind usecase.ErrorKind
+	Kind errorkind.Kind
 }{
-	{"invalid input", usecase.InvalidInput("order_id", "is required"), usecase.KindInvalidInput},
-	{"invalid value", vo.ErrInvalidQuantity, usecase.KindInvalidInput},
-	{"order not found", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), usecase.KindNotFound},
-	{"unknown restaurant", place.ErrUnknownRestaurant, usecase.KindNotFound},
-	{"order exists", order.ErrOrderAlreadyExists, usecase.KindAlreadyExists},
-	{"concurrency conflict", usecase.ErrConcurrencyConflict, usecase.KindConflict},
-	{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), usecase.KindDomainRule},
-	{"guard failed", order.GuardFailed{Reason: "occurred_at_required"}, usecase.KindDomainRule},
-	{"not orderable", order.NotOrderable{}, usecase.KindDomainRule},
-	{"cancellation not allowed", order.CancellationNotAllowed{}, usecase.KindDomainRule},
-	{"no items", order.ErrOrderRequiresItems, usecase.KindDomainRule},
-	{"duplicate item", order.ErrDuplicateMenuItem, usecase.KindDomainRule},
-	{"cancellation reason", order.ErrInvalidCancellationReason, usecase.KindDomainRule},
-	{"restaurant closed", place.ErrRestaurantNotAcceptingOrders, usecase.KindDomainRule},
-	{"cancellation refused", fulfillment.ErrCancellationRefused, usecase.KindDomainRule},
-	{"permission denied", authz.ErrPermissionDenied, usecase.KindPermission},
-	{"dependency unavailable", usecase.ErrDependencyUnavailable, usecase.KindUnavailable},
-	{"workflow not found", fulfillment.ErrWorkflowNotFound, usecase.KindUnavailable},
-	{"fail-closed unavailable", authz.FailClosed(fmt.Errorf("spicedb: %w", usecase.ErrDependencyUnavailable)), usecase.KindUnavailable},
-	{"fail-closed other", authz.FailClosed(errors.New("boom")), usecase.KindPermission},
-	{"infrastructure", errors.New("connection reset"), usecase.KindInternal},
+	{"invalid input", failure.InvalidInput("order_id", "is required"), errorkind.InvalidInput},
+	{"invalid value", vo.ErrInvalidQuantity, errorkind.InvalidInput},
+	{"order not found", fmt.Errorf("%w: %q", order.ErrOrderNotFound, "order-1"), errorkind.NotFound},
+	{"unknown restaurant", place.ErrUnknownRestaurant, errorkind.NotFound},
+	{"order exists", order.ErrOrderAlreadyExists, errorkind.AlreadyExists},
+	{"concurrency conflict", failure.ErrConcurrencyConflict, errorkind.Conflict},
+	{"invalid transition", fmt.Errorf("apply: %w", order.InvalidTransition{}), errorkind.DomainRule},
+	{"guard failed", order.GuardFailed{Reason: "occurred_at_required"}, errorkind.DomainRule},
+	{"not orderable", order.NotOrderable{}, errorkind.DomainRule},
+	{"cancellation not allowed", order.CancellationNotAllowed{}, errorkind.DomainRule},
+	{"no items", order.ErrOrderRequiresItems, errorkind.DomainRule},
+	{"duplicate item", order.ErrDuplicateMenuItem, errorkind.DomainRule},
+	{"cancellation reason", order.ErrInvalidCancellationReason, errorkind.DomainRule},
+	{"restaurant closed", place.ErrRestaurantNotAcceptingOrders, errorkind.DomainRule},
+	{"cancellation refused", fulfillment.ErrCancellationRefused, errorkind.DomainRule},
+	{"permission denied", authz.ErrPermissionDenied, errorkind.Permission},
+	{"dependency unavailable", failure.ErrDependencyUnavailable, errorkind.Unavailable},
+	{"workflow not found", fulfillment.ErrWorkflowNotFound, errorkind.Unavailable},
+	{"fail-closed unavailable", authz.FailClosed(fmt.Errorf("spicedb: %w", failure.ErrDependencyUnavailable)), errorkind.Unavailable},
+	{"fail-closed other", authz.FailClosed(errors.New("boom")), errorkind.Permission},
+	{"infrastructure", errors.New("connection reset"), errorkind.Internal},
 }
 
 func TestClassify(t *testing.T) {
@@ -55,11 +55,11 @@ func TestClassify(t *testing.T) {
 }
 
 func TestCasesCoverEveryKind(t *testing.T) {
-	seen := map[usecase.ErrorKind]bool{}
+	seen := map[errorkind.Kind]bool{}
 	for _, tt := range cases {
 		seen[tt.Kind] = true
 	}
-	for _, kind := range usecase.ErrorKinds() {
+	for _, kind := range errorkind.All() {
 		assert.True(t, seen[kind], kind)
 	}
 }

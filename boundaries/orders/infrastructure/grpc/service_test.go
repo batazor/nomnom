@@ -23,8 +23,8 @@ import (
 	grpcadapter "nomnom/orders/infrastructure/grpc"
 	ordersv1 "nomnom/orders/infrastructure/grpc/gen/nomnom/orders/v1"
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/requestcancellation"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/place"
 	orderdi "nomnom/orders/slices/order/di"
@@ -409,7 +409,7 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 func TestPlaceOrderUnavailableCatalogIsUnavailable(t *testing.T) {
 	catalog := NewMockCatalog(t)
 	catalog.EXPECT().Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza"}).
-		Return(place.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", usecase.ErrDependencyUnavailable)).Once()
+		Return(place.CatalogSnapshot{}, fmt.Errorf("restaurants menu: %w", failure.ErrDependencyUnavailable)).Once()
 	subjects := NewMockSubjectResolver(t)
 	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Once()
 	client := newClientWithPorts(t, subjects, repositorytest.Open(t), NewMockAuthorizer(t), commandPorts{

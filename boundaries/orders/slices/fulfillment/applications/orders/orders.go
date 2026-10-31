@@ -13,9 +13,10 @@ import (
 	"nomnom/orders/slices/fulfillment/domains/fulfillment"
 )
 
-// A retry cannot fix these errors of the port, nor usecase.ErrInvalidInput. Any
-// other error stays retryable.
+// A retry cannot fix these errors of the port. Any other error stays retryable.
 var (
+	// ErrInvalidInput is returned when a step or the answer to it is malformed.
+	ErrInvalidInput = errors.New("invalid input")
 	// ErrOrderNotFound is returned when the Order does not exist.
 	ErrOrderNotFound = errors.New("order not found")
 	// ErrStepRefused is returned when the Order refuses a step of the process in

@@ -6,7 +6,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/infrastructure/repository"
 	"nomnom/orders/slices/order/infrastructure/system"
 	simulatordi "nomnom/orders/slices/simulator/di"
@@ -23,7 +22,7 @@ func NewDatabasePool(store *repository.Store) *pgxpool.Pool { return store.Pool(
 type SimulatorRunner struct {
 	tick     func(ctx context.Context, now time.Time)
 	interval time.Duration
-	clock    usecase.Clock
+	clock    interface{ Now() time.Time }
 	ctx      context.Context
 	cancel   context.CancelFunc
 	done     chan struct{}

@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"nomnom/orders/pkg/usecase"
 	"nomnom/orders/slices/order/applications/closure/complete"
+	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
@@ -27,10 +27,10 @@ func TestCompleteOrderInputAndMissingOrder(t *testing.T) {
 	handler, _ := setup(t, order.StateDelivered)
 
 	_, err := handler.Handle(context.Background(), complete.Input{CompletedAt: completedAt})
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 
 	_, err = handler.Handle(context.Background(), complete.Input{OrderID: "order-1"})
-	require.ErrorIs(t, err, usecase.ErrInvalidInput)
+	require.ErrorIs(t, err, failure.ErrInvalidInput)
 
 	_, err = handler.Handle(context.Background(), complete.Input{OrderID: "missing", CompletedAt: completedAt})
 	require.ErrorIs(t, err, order.ErrOrderNotFound)
