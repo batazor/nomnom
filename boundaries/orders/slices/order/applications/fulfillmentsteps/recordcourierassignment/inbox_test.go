@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,48 +16,6 @@ import (
 	"nomnom/orders/slices/order/domains/order/ordertest"
 	"nomnom/orders/slices/order/infrastructure/repository/repositorytest"
 )
-
-// AC-106: the same event_id changes nothing and re-notifies the workflow.
-func TestDuplicateEventIsNoOpAndNotifiesAgain(t *testing.T) {
-	store := repositorytest.Open(t)
-	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	workflow := NewMockNotifier(t)
-	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt}).Return(nil).Times(2)
-	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
-
-	first, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 1, occurredAt))
-	require.NoError(t, err)
-	second, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 1, occurredAt))
-	require.NoError(t, err)
-
-	assert.Equal(t, recordcourierassignment.Result{Outcome: fulfillment.OutcomeApplied, WorkflowNotified: true}, first)
-	assert.Equal(t, recordcourierassignment.Result{Outcome: fulfillment.OutcomeDuplicate, WorkflowNotified: true}, second)
-	snapshot, _ := store.Snapshot("order-1")
-	assert.Equal(t, uint64(2), snapshot.Version, "the duplicate must not save the Order")
-	assert.Equal(t, 1, store.InboxSize())
-}
-
-// AC-112: a signal for a final Order is recorded in the Inbox and ignored; the
-// workflow of a final Order is closed.
-func TestLateSignalForFinalOrderIsIgnored(t *testing.T) {
-	for _, state := range []order.State{order.StateCompleted, order.StateCancelled} {
-		t.Run(string(state), func(t *testing.T) {
-			store := repositorytest.Open(t)
-			require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(state))))
-			workflow := NewMockNotifier(t)
-			workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt}).Return(fulfillment.ErrWorkflowNotFound).Once()
-
-			result, err := recordcourierassignment.NewHandler(store, store, store, workflow, store, store).Handle(context.Background(), assignment("event-1", "courier-1", 1, occurredAt))
-
-			require.NoError(t, err)
-			assert.Equal(t, recordcourierassignment.Result{Outcome: fulfillment.OutcomeIgnoredLate}, result)
-			snapshot, _ := store.Snapshot("order-1")
-			assert.Empty(t, snapshot.Transitions)
-			assert.Equal(t, uint64(1), snapshot.Version)
-			assert.Equal(t, 1, store.InboxSize(), "redelivery must become a duplicate")
-		})
-	}
-}
 
 // AC-113: a failed notification keeps the commit and is repaired by redelivery.
 func TestFailedNotificationIsReturnedAndRepairedByRedelivery(t *testing.T) {
@@ -101,46 +58,6 @@ func TestFailedSaveRollsBackWithoutNotification(t *testing.T) {
 	_, err := recordcourierassignment.NewHandler(store, store, orders, workflow, store, store).Handle(context.Background(), assignment("event-1", "courier-1", 1, occurredAt))
 
 	require.ErrorIs(t, err, saveFailure)
-	after, _ := store.Snapshot("order-1")
-	assert.Equal(t, before, after)
-	assert.Zero(t, store.InboxSize())
-}
-
-// AC-130: a concurrent change of the Order rolls every attempt back.
-func TestConcurrentChangeRollsBackWithoutNotification(t *testing.T) {
-	store := repositorytest.Open(t)
-	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	before, _ := store.Snapshot("order-1")
-	orders := NewMockRepository(t)
-	// The same Order is changed between load and save of the handler in every
-	// attempt: the unit of work repeats the conflict three times.
-	orders.EXPECT().
-		Get(mock.Anything, order.ID("order-1")).
-		RunAndReturn(func(ctx context.Context, id order.ID) (*order.Order, error) {
-			loaded, err := store.Get(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			other, err := store.Get(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := other.Confirm(ordertest.PlacedAt.Add(time.Minute)); err != nil {
-				return nil, err
-			}
-			return loaded, store.Save(ctx, other)
-		}).
-		Times(3)
-	orders.EXPECT().
-		Save(mock.Anything, mock.MatchedBy(func(o *order.Order) bool { return o.ID() == "order-1" })).
-		RunAndReturn(store.Save).
-		Times(3)
-	// The notifier has no expectation: a notification fails the test.
-	workflow := NewMockNotifier(t)
-
-	_, err := recordcourierassignment.NewHandler(store, store, orders, workflow, store, store).Handle(context.Background(), assignment("event-1", "courier-1", 1, occurredAt))
-
-	require.ErrorIs(t, err, usecase.ErrConcurrencyConflict)
 	after, _ := store.Snapshot("order-1")
 	assert.Equal(t, before, after)
 	assert.Zero(t, store.InboxSize())

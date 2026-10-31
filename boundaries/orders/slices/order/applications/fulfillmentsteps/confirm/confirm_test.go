@@ -30,56 +30,6 @@ func input(eventID string) confirm.Input {
 	return confirm.Input{EventID: eventID, OrderID: "order-1", OccurredAt: occurredAt}
 }
 
-// AC-108: acceptance of an Order past placed changes nothing; the placed Order is
-// the scenario @AC-001 of confirm.feature.
-func TestConfirmOrderByState(t *testing.T) {
-	tests := []struct {
-		name      string
-		state     order.State
-		outcome   fulfillment.Outcome
-		wantState order.State
-	}{
-		{name: "confirmed stays confirmed", state: order.StateConfirmed, outcome: fulfillment.OutcomeAlreadyApplied, wantState: order.StateConfirmed},
-		{name: "cancelled is late", state: order.StateCancelled, outcome: fulfillment.OutcomeIgnoredLate, wantState: order.StateCancelled},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler, store, workflow := setup(t, tt.state)
-			workflow.EXPECT().
-				Notify(mock.Anything, fulfillment.Notification{
-					OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
-				}).
-				Return(nil).
-				Once()
-
-			result, err := handler.Handle(context.Background(), input("event-1"))
-
-			require.NoError(t, err)
-			assert.Equal(t, confirm.Result{Outcome: tt.outcome, WorkflowNotified: true}, result)
-			snapshot, _ := store.Snapshot("order-1")
-			assert.Equal(t, tt.wantState, snapshot.State)
-			assert.Empty(t, store.OutboxRecords())
-		})
-	}
-}
-
-// AC-563: the moment of Order Acceptance is kept in the history as the confirm transition.
-func TestConfirmOrderRecordsAcceptanceMoment(t *testing.T) {
-	handler, store, workflow := setup(t, order.StatePlaced)
-	workflow.EXPECT().
-		Notify(mock.Anything, fulfillment.Notification{
-			OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
-		}).
-		Return(nil).
-		Once()
-
-	_, err := handler.Handle(context.Background(), input("event-1"))
-
-	require.NoError(t, err)
-	snapshot, _ := store.Snapshot("order-1")
-	assert.Equal(t, []order.AppliedTransition{{Trigger: order.TriggerConfirm, OccurredAt: occurredAt}}, snapshot.Transitions)
-}
-
 // FR-611: acceptance stores the ready time named by the restaurant.
 func TestConfirmOrderStoresExpectedReadyTime(t *testing.T) {
 	handler, store, workflow := setup(t, order.StatePlaced)

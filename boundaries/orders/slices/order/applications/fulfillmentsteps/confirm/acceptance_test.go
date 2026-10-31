@@ -29,10 +29,16 @@ func TestAcceptance(t *testing.T) {
 				result      confirm.Result
 				redelivered confirm.Result
 				republished confirm.Result
+				state       order.State
 			)
 
 			sc.Given(`^an order is waiting for restaurant confirmation$`, func(ctx context.Context) {
 				handler, store, workflow = setup(t, order.StatePlaced)
+				workflow.Test(godog.T(ctx))
+			})
+			sc.Given(`^an order is (completed|cancelled)$`, func(ctx context.Context, final string) {
+				state = order.State(final)
+				handler, store, workflow = setup(t, state)
 				workflow.Test(godog.T(ctx))
 			})
 			sc.Given(`^an order has already recorded the restaurant's acceptance$`, func(ctx context.Context) {
@@ -80,6 +86,18 @@ func TestAcceptance(t *testing.T) {
 				require.NoError(godog.T(ctx), err)
 			})
 
+			sc.When(`^an acceptance arrives after order fulfillment is closed$`, func(ctx context.Context) {
+				workflow.EXPECT().
+					Notify(mock.Anything, fulfillment.Notification{
+						OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindRestaurantAccepted, OccurredAt: occurredAt,
+					}).
+					Return(fulfillment.ErrWorkflowNotFound).
+					Once()
+				var err error
+				result, err = handler.Handle(ctx, input("event-1"))
+				require.NoError(godog.T(ctx), err)
+			})
+
 			sc.Then(`^the order records the restaurant's acceptance$`, func(ctx context.Context) {
 				assert.Equal(godog.T(ctx), fulfillment.OutcomeApplied, result.Outcome)
 				snapshot, _ := store.Snapshot("order-1")
@@ -100,6 +118,17 @@ func TestAcceptance(t *testing.T) {
 				assert.Equal(godog.T(ctx), fulfillment.OutcomeAlreadyApplied, republished.Outcome)
 				snapshot, _ := store.Snapshot("order-1")
 				assert.Equal(godog.T(ctx), uint64(2), snapshot.Version, "only the first event saves the Order")
+				assert.Equal(godog.T(ctx), 2, store.InboxSize(), "one record per event_id")
+			})
+			sc.Then(`^the order does not change$`, func(ctx context.Context) {
+				snapshot, _ := store.Snapshot("order-1")
+				assert.Equal(godog.T(ctx), state, snapshot.State)
+				assert.Empty(godog.T(ctx), snapshot.Transitions)
+				assert.Equal(godog.T(ctx), uint64(1), snapshot.Version)
+			})
+			sc.Then(`^it counts as processed late$`, func(ctx context.Context) {
+				assert.Equal(godog.T(ctx), confirm.Result{Outcome: fulfillment.OutcomeIgnoredLate}, result)
+				assert.Equal(godog.T(ctx), 1, store.InboxSize(), "redelivery must become a duplicate")
 			})
 		},
 		Options: &godog.Options{

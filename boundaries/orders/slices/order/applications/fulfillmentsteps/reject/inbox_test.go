@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -59,46 +58,6 @@ func TestFailedSaveRollsBackWithoutNotification(t *testing.T) {
 	_, err := reject.NewHandler(store, store, orders, workflow).Handle(context.Background(), input("event-1"))
 
 	require.ErrorIs(t, err, saveFailure)
-	after, _ := store.Snapshot("order-1")
-	assert.Equal(t, before, after)
-	assert.Zero(t, store.InboxSize())
-}
-
-// AC-130: a concurrent change of the Order rolls every attempt back.
-func TestConcurrentChangeRollsBackWithoutNotification(t *testing.T) {
-	store := repositorytest.Open(t)
-	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1")))
-	before, _ := store.Snapshot("order-1")
-	orders := NewMockRepository(t)
-	// The same Order is changed between load and save of the handler in every
-	// attempt: the unit of work repeats the conflict three times.
-	orders.EXPECT().
-		Get(mock.Anything, order.ID("order-1")).
-		RunAndReturn(func(ctx context.Context, id order.ID) (*order.Order, error) {
-			loaded, err := store.Get(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			other, err := store.Get(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := other.Confirm(ordertest.PlacedAt.Add(time.Minute)); err != nil {
-				return nil, err
-			}
-			return loaded, store.Save(ctx, other)
-		}).
-		Times(3)
-	orders.EXPECT().
-		Save(mock.Anything, mock.MatchedBy(func(o *order.Order) bool { return o.ID() == "order-1" })).
-		RunAndReturn(store.Save).
-		Times(3)
-	// The notifier has no expectation: a notification fails the test.
-	workflow := NewMockNotifier(t)
-
-	_, err := reject.NewHandler(store, store, orders, workflow).Handle(context.Background(), input("event-1"))
-
-	require.ErrorIs(t, err, usecase.ErrConcurrencyConflict)
 	after, _ := store.Snapshot("order-1")
 	assert.Equal(t, before, after)
 	assert.Zero(t, store.InboxSize())

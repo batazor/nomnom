@@ -39,8 +39,8 @@ Handler: [`confirm.go`](confirm.go), сценарии: [`acceptance_test.go`](ac
 - **Inbox consumer:** `orders.confirmorder`; повтор `event_id` даёт outcome `duplicate` и повторное уведомление workflow с тем же `event_id`.
 - **Outcomes:** `applied`, `already_applied` (повтор шага под новым `event_id`), `ignored_late` (`Order` в `completed`/`cancelled`, `event_id` фиксируется), `duplicate`. Закрытый workflow не является ошибкой (`WorkflowNotified=false`); прочая ошибка уведомления возвращается, чтобы событие было доставлено повторно.
 - **Outbox:** не пишется — исходящее Integration Event для этого сценария не определено.
-- **Требования:** FR-104, FR-105, FR-109, FR-110; AC-106…AC-108, AC-112…AC-114 в OpenSpec change `implement-orders-application-layer`.
-- **`.feature`:** сценарии `@AC-001` и `@AC-003` исполняются `godog` под `go test` против PostgreSQL (testcontainers).
+- **Требования:** FR-104, FR-105, FR-109, FR-110, FR-117; AC-106…AC-108, AC-112…AC-114, AC-130 (этот тест представляет все входящие сигналы) в OpenSpec change `implement-orders-application-layer`.
+- **`.feature`:** сценарии `@AC-001`, `@AC-003` и `@AC-112` исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 ## Acceptance
 

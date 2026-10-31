@@ -26,3 +26,11 @@ Feature: Record courier release
       | the removal of the courier from another delivery |
       | a removal older than the assignment              |
       | the cancellation of another delivery             |
+
+  @AC-106
+  Scenario: The same cancellation is delivered again
+    Given a courier is assigned to the delivery of an order
+    When delivery cancels the delivery
+    And the same cancellation is delivered again
+    Then the repeated cancellation counts as a duplicate
+    And the relationships of the order change once

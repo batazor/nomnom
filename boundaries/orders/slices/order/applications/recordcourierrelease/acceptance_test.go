@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"nomnom/orders/slices/order/applications/fulfillment"
 	"nomnom/orders/slices/order/applications/recordcourierrelease"
 	"nomnom/orders/slices/order/domains/order"
 )
@@ -58,6 +59,10 @@ func TestAcceptance(t *testing.T) {
 				handle(ctx, cancelled("event-1", "delivery-2", 3))
 			})
 
+			sc.When(`^the same cancellation is delivered again$`, func(ctx context.Context) {
+				handle(ctx, cancelled("event-1", "delivery-1", 3))
+			})
+
 			sc.Then(`^the order has no courier$`, func(ctx context.Context) {
 				assert.Equal(godog.T(ctx), recordcourierrelease.OutcomeReleased, result.Outcome)
 				assert.Empty(godog.T(ctx), w.stored(t).CourierID)
@@ -75,6 +80,12 @@ func TestAcceptance(t *testing.T) {
 				assert.Empty(godog.T(ctx), w.linkedDelivery())
 				assert.Len(godog.T(ctx), w.store.RelationshipChanges(), 2)
 				assert.Equal(godog.T(ctx), order.CourierAssignment{AssignedAt: releasedAt, DeliveryVersion: 3}, w.stored(t))
+			})
+			sc.Then(`^the repeated cancellation counts as a duplicate$`, func(ctx context.Context) {
+				assert.Equal(godog.T(ctx), fulfillment.OutcomeDuplicate, result.Outcome)
+			})
+			sc.Then(`^the relationships of the order change once$`, func(ctx context.Context) {
+				assert.Len(godog.T(ctx), w.store.RelationshipChanges(), 2, "the assignment and the first cancellation")
 			})
 			sc.Then(`^the order keeps its courier and its delivery$`, func(ctx context.Context) {
 				assert.Equal(godog.T(ctx), recordcourierrelease.OutcomeIgnoredStale, result.Outcome)

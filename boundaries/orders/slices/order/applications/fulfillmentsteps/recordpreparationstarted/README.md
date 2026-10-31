@@ -43,6 +43,6 @@ Handler: [`recordpreparationstarted.go`](recordpreparationstarted.go), сцен�
 
 ## Acceptance
 
-Executable-сценарии: [`recordpreparationstarted.feature`](acceptance/recordpreparationstarted.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers). Сбои уведомления, транзакции и конкурентные изменения (AC-113, AC-114, AC-130) остаются обычными тестами.
+Executable-сценарии: [`recordpreparationstarted.feature`](acceptance/recordpreparationstarted.feature) исполняются `godog` под `go test` против PostgreSQL (testcontainers). Сбои уведомления и транзакции (AC-113, AC-114) остаются обычными тестами; конкурентное изменение (AC-130) проверяется на [Confirm Order](../confirm/README.md).
 
 Общий каталог и место сценария в fulfillment process: [Orders use cases](../../../../../README.md#use-cases).

@@ -28,14 +28,30 @@ func TestAcceptance(t *testing.T) {
 				store    *repositorytest.Store
 				workflow *MockNotifier
 				result   recordcourierassignment.Result
+				state    order.State
 			)
-
-			sc.Given(`^an order is waiting for courier assignment$`, func(ctx context.Context) {
+			given := func(ctx context.Context, options ...ordertest.Option) {
 				store = repositorytest.Open(t)
 				workflow = NewMockNotifier(t)
 				workflow.Test(godog.T(ctx))
-				require.NoError(godog.T(ctx), store.Add(ctx, ordertest.New(t, "order-1")))
+				require.NoError(godog.T(ctx), store.Add(ctx, ordertest.New(t, "order-1", options...)))
 				handler = recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
+			}
+
+			sc.Given(`^an order is waiting for courier assignment$`, func(ctx context.Context) {
+				given(ctx)
+			})
+			sc.Given(`^an order has recorded a courier assignment$`, func(ctx context.Context) {
+				given(ctx)
+				workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+					OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+				}).Return(nil).Once()
+				_, err := handler.Handle(ctx, assignment("event-1", "courier-1", 1, occurredAt))
+				require.NoError(godog.T(ctx), err)
+			})
+			sc.Given(`^an order is (completed|cancelled)$`, func(ctx context.Context, final string) {
+				state = order.State(final)
+				given(ctx, ordertest.WithState(state))
 			})
 
 			sc.When(`^a courier is assigned to the delivery$`, func(ctx context.Context) {
@@ -44,6 +60,23 @@ func TestAcceptance(t *testing.T) {
 				}).Return(nil).Once()
 				var err error
 				result, err = handler.Handle(ctx, assignment("event-1", "courier-1", 2, occurredAt))
+				require.NoError(godog.T(ctx), err)
+			})
+
+			sc.When(`^the same assignment is delivered again$`, func(ctx context.Context) {
+				workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+					OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+				}).Return(nil).Once()
+				var err error
+				result, err = handler.Handle(ctx, assignment("event-1", "courier-1", 1, occurredAt))
+				require.NoError(godog.T(ctx), err)
+			})
+			sc.When(`^an assignment arrives after order fulfillment is closed$`, func(ctx context.Context) {
+				workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
+					OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
+				}).Return(fulfillment.ErrWorkflowNotFound).Once()
+				var err error
+				result, err = handler.Handle(ctx, assignment("event-1", "courier-1", 1, occurredAt))
 				require.NoError(godog.T(ctx), err)
 			})
 
@@ -61,6 +94,26 @@ func TestAcceptance(t *testing.T) {
 				snapshot, _ := store.Snapshot("order-1")
 				assert.Equal(godog.T(ctx), order.StatePlaced, snapshot.State)
 				assert.Empty(godog.T(ctx), snapshot.Transitions)
+			})
+			sc.Then(`^the order does not change again$`, func(ctx context.Context) {
+				assert.Equal(godog.T(ctx), fulfillment.OutcomeDuplicate, result.Outcome)
+				snapshot, _ := store.Snapshot("order-1")
+				assert.Equal(godog.T(ctx), uint64(2), snapshot.Version, "the duplicate must not save the Order")
+				assert.Equal(godog.T(ctx), 1, store.InboxSize())
+			})
+			sc.Then(`^order fulfillment is told of the assignment again$`, func(ctx context.Context) {
+				assert.True(godog.T(ctx), result.WorkflowNotified)
+				workflow.AssertNumberOfCalls(godog.T(ctx), "Notify", 2)
+			})
+			sc.Then(`^the order does not change$`, func(ctx context.Context) {
+				snapshot, _ := store.Snapshot("order-1")
+				assert.Equal(godog.T(ctx), state, snapshot.State)
+				assert.Empty(godog.T(ctx), snapshot.Transitions)
+				assert.Equal(godog.T(ctx), uint64(1), snapshot.Version)
+			})
+			sc.Then(`^it counts as processed late$`, func(ctx context.Context) {
+				assert.Equal(godog.T(ctx), recordcourierassignment.Result{Outcome: fulfillment.OutcomeIgnoredLate}, result)
+				assert.Equal(godog.T(ctx), 1, store.InboxSize(), "redelivery must become a duplicate")
 			})
 		},
 		Options: &godog.Options{

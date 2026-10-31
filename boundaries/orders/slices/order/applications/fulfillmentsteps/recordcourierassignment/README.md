@@ -41,7 +41,7 @@ Handler: [`recordcourierassignment.go`](recordcourierassignment.go), сцена�
 - **Outcomes:** `applied`, `already_applied` (повтор шага под новым `event_id`), `ignored_late` (`Order` в `completed`/`cancelled`, `event_id` фиксируется), `duplicate`. Закрытый workflow не является ошибкой (`WorkflowNotified=false`); прочая ошибка уведомления возвращается, чтобы событие было доставлено повторно.
 - **Outbox:** только `RelationshipsChanged` во внутренний стрим `orders.v1.order-relationships`; исходящее Integration Event для этого сценария не определено.
 - **Требования:** FR-104, FR-107, FR-109, FR-110; AC-106, AC-107, AC-110, AC-112…AC-114 в OpenSpec change `implement-orders-application-layer`; FR-469, AC-518…AC-521 в change `add-order-command-rpcs-and-relationships`, в редакции change `scope-courier-access-to-assignment` (только `order#delivery`).
-- **`.feature`:** сценарии `@AC-002` исполняются `godog` под `go test` против PostgreSQL (testcontainers).
+- **`.feature`:** сценарии `@AC-002`, `@AC-106` и `@AC-112` исполняются `godog` под `go test` против PostgreSQL (testcontainers).
 
 ## Acceptance
 

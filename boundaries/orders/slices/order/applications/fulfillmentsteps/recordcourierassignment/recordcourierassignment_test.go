@@ -23,27 +23,6 @@ func input(eventID string) recordcourierassignment.Input {
 	return recordcourierassignment.Input{EventID: eventID, OrderID: "order-1", OccurredAt: occurredAt}
 }
 
-// AC-110: a final Order ignores the assignment as late; the placed Order is the
-// scenario @AC-002 of recordcourierassignment.feature.
-func TestHandleIgnoresCancelledOrderAsLate(t *testing.T) {
-	store := repositorytest.Open(t)
-	workflow := NewMockNotifier(t)
-	workflow.EXPECT().Notify(mock.Anything, fulfillment.Notification{
-		OrderID: "order-1", EventID: "event-1", Kind: fulfillment.KindCourierAssigned, OccurredAt: occurredAt,
-	}).Return(nil).Once()
-	require.NoError(t, store.Add(context.Background(), ordertest.New(t, "order-1", ordertest.WithState(order.StateCancelled))))
-	handler := recordcourierassignment.NewHandler(store, store, store, workflow, store, store)
-
-	result, err := handler.Handle(context.Background(), assignment("event-1", "courier-1", 2, occurredAt))
-
-	require.NoError(t, err)
-	assert.Equal(t, recordcourierassignment.Result{Outcome: fulfillment.OutcomeIgnoredLate, WorkflowNotified: true}, result)
-	snapshot, _ := store.Snapshot("order-1")
-	assert.Equal(t, order.StateCancelled, snapshot.State)
-	assert.Empty(t, snapshot.Transitions)
-	assert.Equal(t, 1, store.InboxSize())
-}
-
 // An event without names reaches the workflow and changes nothing in the Order.
 func TestHandleWithoutNamesChangesNothing(t *testing.T) {
 	store := repositorytest.Open(t)

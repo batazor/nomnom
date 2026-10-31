@@ -253,23 +253,6 @@ func TestNewerAssignmentAfterRememberedReleaseLinksDelivery(t *testing.T) {
 	assert.Equal(t, "courier-2", w.stored(t).CourierID)
 }
 
-func TestRedeliveryIsDuplicate(t *testing.T) {
-	workflow := NewMockNotifier(t)
-	workflow.EXPECT().Notify(mock.Anything, assignedNotification).Return(nil).Once()
-	w := newWorld(t, workflow)
-	in := cancelled("event-1", "delivery-1", 3)
-	// The redelivery is a duplicate: only the first delivery records the change.
-	w.changes.EXPECT().RelationshipsChanged(mock.Anything, order.ID("order-1")).RunAndReturn(w.store.RelationshipsChanged).Once()
-
-	_, err := w.release.Handle(context.Background(), in)
-	require.NoError(t, err)
-	result, err := w.release.Handle(context.Background(), in)
-
-	require.NoError(t, err)
-	assert.Equal(t, fulfillment.OutcomeDuplicate, result.Outcome)
-	assert.Len(t, w.store.RelationshipChanges(), 2)
-}
-
 // AC-537: RelationshipsChanged commits with the release: a failure rolls the
 // Inbox record and the release back.
 func TestRelationshipFailureRollsBack(t *testing.T) {

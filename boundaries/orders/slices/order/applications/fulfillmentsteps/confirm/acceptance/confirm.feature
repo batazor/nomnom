@@ -13,3 +13,15 @@ Feature: Confirm order
     When the restaurant accepts the order again
     Then the order still records one restaurant acceptance
     And no additional business effect occurs
+
+  @AC-112
+  Scenario Outline: An acceptance about a final order changes nothing
+    Given an order is <state>
+    When an acceptance arrives after order fulfillment is closed
+    Then the order does not change
+    And it counts as processed late
+
+    Examples:
+      | state     |
+      | completed |
+      | cancelled |
