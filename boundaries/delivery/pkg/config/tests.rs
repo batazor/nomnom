@@ -382,6 +382,31 @@ fn worker_loads_its_sections_only() {
     );
 }
 
+/// `delivery-admin` reads only the Kafka section of the shared file.
+#[test]
+fn admin_loads_the_kafka_section_only() {
+    let path =
+        std::env::temp_dir().join(format!("nomnom-delivery-admin-{}.toml", std::process::id()));
+    fs::write(
+        &path,
+        "[server]\nport = 8083\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://registry:8081\"\n",
+    )
+    .expect("write config");
+    let config = load_kafka_from(Some(&path));
+    fs::write(&path, "[kafka]\nbrokers = \"kafka:9092\"\n").expect("write config");
+    let missing = load_kafka_from(Some(&path));
+    fs::remove_file(path).expect("remove config");
+
+    assert_eq!(
+        config.expect("load kafka config").consumer_group,
+        "delivery"
+    );
+    assert!(
+        missing.is_err(),
+        "an incomplete section must fail the command"
+    );
+}
+
 #[test]
 fn loads_reconciler_from_toml_and_validates() {
     let config = load_toml(

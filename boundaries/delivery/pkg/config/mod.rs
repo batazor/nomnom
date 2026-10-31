@@ -25,9 +25,9 @@ pub use kafka::{
 use load::{
     configure_delivery_estimate, configure_identity, configure_kafka, configure_reconciler,
     configure_settings, configure_simulator, configure_spicedb, configure_temporal,
-    configure_tracking, load_from, load_worker_from,
+    configure_tracking, load_from, load_kafka_from, load_worker_from,
 };
-pub use load::{load, load_worker};
+pub use load::{load, load_kafka, load_worker};
 pub use simulator::{
     SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV,
     SIMULATOR_TRACK_INTERVAL_ENV, SimulatorConfig,

@@ -26,7 +26,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     find lib.rs cmd di infrastructure pkg slices -name '*.rs' -exec touch {} + && \
     CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --release --locked && \
     cp target/release/delivery /out-delivery && \
-    cp target/release/delivery-worker /out-delivery-worker
+    cp target/release/delivery-worker /out-delivery-worker && \
+    cp target/release/delivery-admin /out-delivery-admin
 
 FROM debian:12.12-slim AS runtime
 
@@ -39,6 +40,8 @@ RUN apt-get update && \
 COPY --from=build --chown=app:app /out-delivery /usr/local/bin/delivery
 # Temporal worker Assignment Workflow (FR-708): тот же образ, command /usr/local/bin/delivery-worker.
 COPY --from=build --chown=app:app /out-delivery-worker /usr/local/bin/delivery-worker
+# Разбор DLQ (docs/dlq.md): разово через kubectl exec в pod delivery.
+COPY --from=build --chown=app:app /out-delivery-admin /usr/local/bin/delivery-admin
 
 EXPOSE 8083 9083
 USER app:app

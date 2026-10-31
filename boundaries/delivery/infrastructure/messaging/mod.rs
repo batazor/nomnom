@@ -19,6 +19,7 @@
 //! The dead letter topic is declared in advance (kind: Job
 //! `dead-letter-topics`); the consumer never creates it.
 
+mod dead_letters;
 mod envelope;
 mod schemas;
 
@@ -34,6 +35,7 @@ use tokio::task::JoinError;
 
 use crate::pkg::config::{InitialOffset, KafkaConfig};
 
+pub use dead_letters::{DeadLetter, DeadLetters, REDRIVEN_FROM, Through};
 pub use envelope::{Envelope, EnvelopeError};
 pub use schemas::{SchemaLookupError, SchemaRegistry, WireFrame, parse_wire_frame};
 

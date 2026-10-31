@@ -394,7 +394,7 @@ Application handler загружает `Delivery` и `DeliveryOffer`, меняе
 
 Ресурсы: клиент SpiceDB, пул PostgreSQL, resolver identity и MeterProvider создаёт `compose` один раз на процесс, ими владеет модуль; транзакция живёт один use case (Unit of Work хранилища); worker создаётся provider'ом один раз после открытия технического порта, поэтому бизнес-порт открывается последним. Shaku-компоненты собираются синхронно и без ошибок, поэтому подключение к инфраструктуре (fail fast) выполняет `compose`, а не компонент. `Lifecycle` (технический порт, сигналы, drain) остаётся в `cmd`: это runtime contract процесса, а не зависимость use cases.
 
-Shaku импортируют только модули `di`; `domains/`, `applications/`, `infrastructure/` и `cmd/` от него не зависят. Shaku требует `Send + Sync` от интерфейсов и создаёт отдельный экземпляр на каждый компонент, поэтому порты, которые обслуживает одно хранилище, собраны в интерфейс-агрегатор слайса. Generic `UnitOfWork` передаётся через object-safe `TransactionScope` и адаптер `ScopedUnitOfWork` из `slices/delivery/applications/unit_of_work`.
+Shaku импортируют только модули `di`; `domains/`, `applications/`, `infrastructure/` и `cmd/` от него не зависят. Shaku требует `Send + Sync` от интерфейсов и создаёт отдельный экземпляр на каждый компонент, поэтому порты, которые обслуживает одно хранилище, собраны в интерфейс-агрегатор слайса. Generic `UnitOfWork` передаётся через object-safe `TransactionScope` и адаптер `ScopedUnitOfWork` из `pkg/unit_of_work`.
 
 Решение зафиксировано в общесистемном [ADR 5](../../docs/adr/0005-dependency-injection-strategy.md).
 
@@ -421,7 +421,7 @@ Consumers интеграционных событий `delivery` использ�
 - нет `event_id`, `event_type`, `occurred_at` (RFC 3339 UTC) или payload, value не в wire format Schema Registry, id схемы неизвестен или её subjects не содержат `event_type`, payload не декодируется, permanent-ошибка или panic use case — сообщение уходит в `<stream>.dlq` с ключом, payload, исходными заголовками и `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned` (как у `orders` и `restaurants`, [разбор DLQ](../../docs/dlq.md)), затем commit;
 - transient-ошибка (Schema Registry или PostgreSQL недоступен, исход commit неизвестен, конкурентное изменение) — повтор с backoff 1s…30s, partition ждёт зависимость; при остановке процесса offset не подтверждается.
 
-Inbox `delivery_inbox` (`consumer`, `event_id`) общий для consumers процесса; запись удаляется через семь дней тем же statement, что пишет новую. Команды разбора DLQ группы `delivery` (`dlq list/redrive/discard`) пока нет.
+Inbox `delivery_inbox` (`consumer`, `event_id`) общий для consumers процесса; запись удаляется через семь дней тем же statement, что пишет новую. Разбор DLQ группы `delivery` — `delivery-admin dlq list|redrive|discard` разово в pod `delivery` ([Разбор DLQ](../../docs/dlq.md)); что разобрано, хранит группа `delivery.dlq`.
 
 ### Delivery Duration Statistics
 
@@ -506,11 +506,11 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_tracing
 - `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
 - `Store` (`infrastructure/repository`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox по контракту ADR 37 (retention при записи), встроенные миграции при старте процесса;
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`), публикует коннектор Debezium `delivery-outbox` (CDC, ADR 37, Helm `cdc.*`);
-- `UuidIdGenerator` (`slices/delivery/infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
-- `StoredCourierLocator` (`slices/delivery/infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Delivery не хранит место pickup, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
+- `UuidIdGenerator` (`infrastructure/ids.rs`): UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
+- `StoredCourierLocator` (`infrastructure/locator.rs`): кандидаты — доступные курьеры с последней позицией из `CourierLocationStore` (роль `CourierPositions`, FR-542). Delivery не хранит место pickup, поэтому курьер с известной позицией считается в зоне на расстоянии 0, и среди равных выбор решает id курьера;
 - тестовые адаптеры не-storage портов в `infrastructure/memory` (статическая authorization, запись relationships, управляемые clock и id generator, статический locator) — только для тестов; хранилище в тестах — PostgreSQL (testcontainers, `TestStore`).
 
-Не реализованы: команда разбора DLQ группы `delivery`, расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы все use cases, кроме Find Courier, Offer Delivery и Reassign Courier (шаги процесса назначения) и шагов Assignment Workflow Advance Assignment и Expire Delivery Offer.
+Не реализованы: расчёт геопозиции/зон, BDD `.feature`. По gRPC опубликованы все use cases, кроме Find Courier, Offer Delivery и Reassign Courier (шаги процесса назначения) и шагов Assignment Workflow Advance Assignment и Expire Delivery Offer.
 
 Момент начала поиска курьера — запуск Assignment Workflow из Create Delivery (см. «Assignment Workflow»). Допущения по остальным открытым продуктовым вопросам (retryability причин неудачи, параметры позиции и политики назначения) зафиксированы в [design.md](../../openspec/changes/archive/2026-10-25-implement-delivery-application-layer/design.md#допущения-по-открытым-вопросам) change.
 

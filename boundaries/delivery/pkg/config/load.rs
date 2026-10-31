@@ -7,7 +7,7 @@ use config::{Config as ConfigLoader, ConfigError, File};
 use config::{ConfigBuilder, builder::DefaultState};
 
 use super::estimate::DELIVERY_ESTIMATE_SETTINGS;
-use super::kafka::KAFKA_SETTINGS;
+use super::kafka::{KAFKA_SETTINGS, KafkaConfig};
 use super::simulator::SIMULATOR_SETTINGS;
 use super::temporal::TEMPORAL_SETTINGS;
 use super::tracking::TRACKING_SETTINGS;
@@ -29,6 +29,28 @@ pub fn load() -> Result<AppConfig, ConfigError> {
 pub fn load_worker() -> Result<WorkerConfig, ConfigError> {
     let config_file = std::env::var("CONFIG_FILE").ok();
     load_worker_from(config_file.as_deref().map(Path::new))
+}
+
+/// Секция Kafka для `delivery-admin` из того же `CONFIG_FILE` и переменных
+/// окружения; остальным секциям команда не обращается.
+pub fn load_kafka() -> Result<KafkaConfig, ConfigError> {
+    let config_file = std::env::var("CONFIG_FILE").ok();
+    load_kafka_from(config_file.as_deref().map(Path::new))
+}
+
+pub(super) fn load_kafka_from(config_file: Option<&Path>) -> Result<KafkaConfig, ConfigError> {
+    let mut builder = ConfigLoader::builder();
+
+    if let Some(path) = config_file {
+        builder = builder.add_source(File::from(path).required(true));
+    }
+
+    builder = configure_kafka(builder, |name| std::env::var(name).ok())?;
+
+    let config: KafkaConfig = builder.build()?.get("kafka")?;
+    config.validate()?;
+
+    Ok(config)
 }
 
 pub(super) fn load_worker_from(config_file: Option<&Path>) -> Result<WorkerConfig, ConfigError> {

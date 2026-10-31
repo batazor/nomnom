@@ -14,6 +14,10 @@ path = "cmd/delivery/main.rs"
 name = "delivery-worker"
 path = "cmd/delivery-worker/main.rs"
 
+[[bin]]
+name = "delivery-admin"
+path = "cmd/delivery-admin/main.rs"
+
 [features]
 # Test doubles infrastructure::memory и di::build_over для tests/: в боевой сборке их нет.
 test-support = []
