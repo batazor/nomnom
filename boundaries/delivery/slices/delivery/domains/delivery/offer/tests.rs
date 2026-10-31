@@ -44,24 +44,6 @@ fn conditions(now: i64) -> OfferAcceptanceConditions {
 }
 
 #[test]
-fn offer_transition_table_is_complete() {
-    for state in ALL_OFFER_STATES {
-        for trigger in ALL_OFFER_TRIGGERS {
-            assert!(
-                OFFER_TRANSITION_TABLE
-                    .iter()
-                    .any(|rule| rule.from == state && rule.trigger == trigger),
-                "missing outcome for {state:?} x {trigger:?}"
-            );
-        }
-    }
-    assert_eq!(
-        OFFER_TRANSITION_TABLE.len(),
-        ALL_OFFER_STATES.len() * ALL_OFFER_TRIGGERS.len()
-    );
-}
-
-#[test]
 fn closed_offers_reject_other_triggers_and_repeats_are_explicit() {
     for (state, repeated) in [
         (OfferState::Accepted, OfferTrigger::Accept),

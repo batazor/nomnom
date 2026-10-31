@@ -1,4 +1,5 @@
 mod acceptance;
+mod machine;
 mod transitions;
 
 use std::error::Error;
@@ -8,10 +9,10 @@ use super::{DeliveryId, DomainEvent};
 use crate::slices::courier::domains::courier::CourierId;
 
 pub use acceptance::*;
+pub use machine::{OfferState, OfferTransitionResult, OfferTrigger, applied_offer_transition};
 use transitions::offer_transition;
 #[cfg(test)]
-use transitions::{ALL_OFFER_STATES, ALL_OFFER_TRIGGERS, OFFER_TRANSITION_TABLE};
-pub use transitions::{OfferState, OfferTransitionResult, OfferTrigger, applied_offer_transition};
+use transitions::{ALL_OFFER_STATES, ALL_OFFER_TRIGGERS};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DeliveryOfferId(String);

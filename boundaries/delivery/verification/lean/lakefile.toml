@@ -1,0 +1,13 @@
+name = "offer_machine"
+defaultTargets = ["Proofs"]
+packagesDir = ".aeneas/backends/lean/.lake/packages"
+
+[[require]]
+name = "aeneas"
+path = ".aeneas/backends/lean"
+
+[[lean_lib]]
+name = "OfferMachine"
+
+[[lean_lib]]
+name = "Proofs"

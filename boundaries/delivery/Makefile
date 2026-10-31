@@ -20,6 +20,25 @@ run:
 test:
 	$(CARGO) test
 
+# Доказательства инвариантов FSM оффера в Lean: Charon и Aeneas извлекают
+# offer/machine.rs, lake проверяет verification/lean/Proofs.lean (verification/README.md).
+AENEAS_COMMIT := ab34bd28458a
+AENEAS_HOME ?= $(HOME)/.cache/nomnom-aeneas/aeneas
+AENEAS_OPAM_SWITCH ?= nomnom-aeneas
+
+verify-lean:
+	cd verification && PATH="$(AENEAS_HOME)/charon/bin:$$PATH" charon cargo --preset=aeneas --dest-file offer_machine.llbc
+	cd verification && "$(AENEAS_HOME)/bin/aeneas" -backend lean -dest lean offer_machine.llbc
+	ln -sfn "$(AENEAS_HOME)" verification/lean/.aeneas
+	cd verification/lean && lake build
+
+verify-lean-setup:
+	test -d "$(AENEAS_HOME)" || git clone https://github.com/AeneasVerif/aeneas.git "$(AENEAS_HOME)"
+	git -C "$(AENEAS_HOME)" checkout $(AENEAS_COMMIT)
+	opam switch list --short | grep -qx "$(AENEAS_OPAM_SWITCH)" || opam switch create "$(AENEAS_OPAM_SWITCH)" 5.3.0
+	cd "$(AENEAS_HOME)" && eval "$$(opam env --switch=$(AENEAS_OPAM_SWITCH) --set-switch)" && opam install ./src --deps-only --with-test -y && gmake setup-charon && gmake
+	cd "$(AENEAS_HOME)/backends/lean" && lake exe cache get && lake build
+
 # Integration-тесты против SpiceDB из testcontainers с authorization/bootstrap.yaml.
 test-spicedb:
 	$(CARGO) test --test spicedb_authorization --test spicedb_relationships

@@ -87,24 +87,24 @@ Shared step definitions на уровне boundary содержат общие �
 
 | Кандидат | Владелец / размещение | Режим | Основание и статус SDD |
 | --- | --- | --- | --- |
-| Создание Order | `orders/slices/order/applications/placeorder/acceptance/placeorder.feature` | Application | Place Order читает внешние сведения через port и запускает fulfillment; конкретные acceptance criteria ещё должны быть закреплены в SDD |
-| Недоступный Menu Item нельзя включить в Order | тот же `placeorder` | Application | Availability поступает через test port; само правило оформления в текущем SDD не закреплено, поэтому `@pending` до отдельного AC |
-| Order Cancellation допустима или запрещена текущим состоянием | `orders/slices/order/applications/closure/requestordercancellation/acceptance/requestordercancellation.feature` | Application | Команда является trigger и проходит authorization/handler; стадии запрета остаются открытым продуктовым вопросом, поэтому конкретные варианты — `@pending` до AC |
+| Создание Order | `orders/slices/order/applications/place/acceptance/place.feature` | Application | Place Order читает внешние сведения через port и запускает fulfillment; конкретные acceptance criteria ещё должны быть закреплены в SDD |
+| Недоступный Menu Item нельзя включить в Order | тот же `order/place` | Application | Availability поступает через test port; само правило оформления в текущем SDD не закреплено, поэтому `@pending` до отдельного AC |
+| Order Cancellation допустима или запрещена текущим состоянием | `orders/slices/order/applications/closure/requestcancellation/acceptance/requestcancellation.feature` | Application | Команда является trigger и проходит authorization/handler; стадии запрета остаются открытым продуктовым вопросом, поэтому конкретные варианты — `@pending` до AC |
 | Итог отмены с компенсациями до/после Order Confirmation | `orders/acceptance/<journey>.feature` | Boundary journey | Проверяет несколько slices и workflow; существующий orchestration SDD задаёт общий branching, но точные стадии и compensation policy ещё открыты |
 | Невозможный переход `Order` без отдельной команды-триггера | `orders/acceptance/<invariant>.feature` | Domain-only | Boundary-level invariant; конкретный переход должен существовать в SDD, иначе `@pending` |
-| Order Completion только из допустимого состояния | `orders/slices/order/applications/closure/completeorder/acceptance/completeorder.feature` | Domain-only | Команда владеет поведением, а правило выражается агрегатом `Order`; README фиксирует completion только подтверждённого Order |
-| Повторное применение одного restaurant/delivery/payment business result не создаёт второго эффекта | соответствующий use-case package `confirmorder` или `record…` | Application | Handler и test port проверяют business idempotency; `confirmorder` связан с `AC-003`, остальные результаты требуют своих AC; Inbox duplicate detection и атомарность остаются integration tests |
-| Restaurant принимает Kitchen Order | `restaurants/slices/restaurantorder/applications/acceptance/accept-order/acceptance/accept-order.feature` | Application | Handler загружает Restaurant, menu и Kitchen Order; домен проверяет открытость и availability |
-| Restaurant отклоняет Kitchen Order | `restaurants/slices/restaurantorder/applications/acceptance/reject-order/acceptance/reject-order.feature` | Domain-only | Разрешённый переход выражается состоянием Kitchen Order; причины отклонения требуют SDD, если входят в scenario |
+| Order Completion только из допустимого состояния | `orders/slices/order/applications/closure/complete/acceptance/complete.feature` | Domain-only | Команда владеет поведением, а правило выражается агрегатом `Order`; README фиксирует completion только подтверждённого Order |
+| Повторное применение одного restaurant/delivery/payment business result не создаёт второго эффекта | соответствующий use-case package `order/confirm` или `record…` | Application | Handler и test port проверяют business idempotency; `order/confirm` связан с `AC-003`, остальные результаты требуют своих AC; Inbox duplicate detection и атомарность остаются integration tests |
+| Restaurant принимает Kitchen Order | `restaurants/slices/restaurantorder/applications/acceptance/accept/acceptance/accept.feature` | Application | Handler загружает Restaurant, menu и Kitchen Order; домен проверяет открытость и availability |
+| Restaurant отклоняет Kitchen Order | `restaurants/slices/restaurantorder/applications/acceptance/reject/acceptance/reject.feature` | Domain-only | Разрешённый переход выражается состоянием Kitchen Order; причины отклонения требуют SDD, если входят в scenario |
 | Kitchen Order становится ready только из допустимого состояния | `restaurants/slices/restaurantorder/applications/preparation/mark-ready-for-pickup/acceptance/mark-ready-for-pickup.feature` | Domain-only | README фиксирует переход `accepted → preparing → ready` |
-| Второй Courier последовательно принимает уже назначенную Delivery | `delivery/slices/delivery/applications/offer/accept_delivery_offer/acceptance/accept_delivery_offer.feature` | Application | Команда координирует Courier и Delivery; sequential rejection — acceptance, race двух записей — integration |
+| Второй Courier последовательно принимает уже назначенную Delivery | `delivery/slices/delivery/applications/offer/accept/acceptance/accept.feature` | Application | Команда координирует Courier и Delivery; sequential rejection — acceptance, race двух записей — integration |
 | Pickup подтверждает только назначенный Courier | `delivery/slices/delivery/applications/execution/confirm_pickup/acceptance/confirm_pickup.feature` | Application | Actor и принадлежность проверяются на application seam; точный AC должен быть добавлен в SDD |
 | Завершённая Delivery не возвращается в active без отдельной trigger command | `delivery/acceptance/<invariant>.feature` | Domain-only | README фиксирует терминальность delivered; при появлении команды перехода ownership переносится в её slice |
-| Capture не превышает Authorization | `payments/slices/payment/applications/capture_payment/acceptance/capture_payment.feature` | Application | Provider — test port; текущая модель поддерживает только полный Capture, поэтому amount-варианты требуют нового AC и до него `@pending` |
-| Refund не превышает Capture | `payments/slices/payment/applications/refund_payment/acceptance/refund_payment.feature` | Application | Provider — test port; partial refund сейчас открытый вопрос, поэтому amount-варианты требуют нового AC и до него `@pending` |
-| Повтор Authorize/Capture/Refund не создаёт второго финансового эффекта | соответствующий `authorize_payment`, `capture_payment` или `refund_payment` | Application | Проверяется business effect через test provider port; provider callback deduplication и durable storage проверяются integration tests |
+| Capture не превышает Authorization | `payments/slices/payment/applications/capture/acceptance/capture.feature` | Application | Provider — test port; текущая модель поддерживает только полный Capture, поэтому amount-варианты требуют нового AC и до него `@pending` |
+| Refund не превышает Capture | `payments/slices/payment/applications/refund/acceptance/refund.feature` | Application | Provider — test port; partial refund сейчас открытый вопрос, поэтому amount-варианты требуют нового AC и до него `@pending` |
+| Повтор Authorize/Capture/Refund не создаёт второго финансового эффекта | соответствующий `payment/authorize`, `payment/capture` или `payment/refund` | Application | Проверяется business effect через test provider port; provider callback deduplication и durable storage проверяются integration tests |
 
-Если naming package отличается между языками, сохраняется принятая конвенция (`accept-order`, `accept_delivery_offer`, `capture_payment`); имя `.feature` буквально совпадает с package use case. Placeholder `<journey>`/`<invariant>` получает business name только после SDD, а не имя технологии или слоя.
+Если naming package отличается между языками, сохраняется принятая конвенция (`restaurantorder/accept`, `delivery/accept`, `payment/capture`); имя `.feature` буквально совпадает с package use case. Placeholder `<journey>`/`<invariant>` получает business name только после SDD, а не имя технологии или слоя.
 
 ## Язык и уровень абстракции
 
@@ -216,6 +216,10 @@ func TestMain(m *testing.M) {
 | BFF | `bff` | Выбрать по фактическому runtime harness |
 
 В `orders` `godog` исполняет все `.feature` под `go test`. Runner и его зависимости добавляются только вместе с первым executable scenario соответствующего boundary. Версии фиксируются на момент реализации. Отчёты runner могут публиковаться как living documentation, если генерируются из успешно выполненных сценариев и сохраняют ссылки на `AC-*`.
+
+## Формальные доказательства
+
+Чистые доменные инварианты Rust (`delivery`), которые не являются юзкейсами, доказываются в Lean 4 на всех входах, а не проверяются примерами: Aeneas извлекает production-код в Lean. Адаптеры, async и хранилище в извлечение не входят. Первая цель — FSM оффера, запуск и ограничения — в [`boundaries/delivery/verification`](../boundaries/delivery/verification/README.md). `make verify-lean` не входит в `make check`, потому что требует отдельного toolchain.
 
 ## Performance Testing
 

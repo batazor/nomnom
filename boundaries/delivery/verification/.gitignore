@@ -1,0 +1,6 @@
+/target/
+/offer_machine.llbc
+/lean/.lake/
+/lean/.aeneas
+/lean/lake-manifest.json
+/lean/OfferMachine.lean
