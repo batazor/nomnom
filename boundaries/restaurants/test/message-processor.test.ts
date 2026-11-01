@@ -78,6 +78,8 @@ const scripted = (
   return { handler, calls };
 };
 
+const IGNORED_EVENT_TYPE = ["nomnom.orders.v1.OrderCompleted"];
+
 const setup = async (handler: EventHandler, maxRetries = 2) => {
   const { db, unitOfWork } = await createTestDatabase();
   const inbox = new DatabaseInbox(db, unitOfWork);
@@ -86,6 +88,7 @@ const setup = async (handler: EventHandler, maxRetries = 2) => {
   const deadLetters: IntegrationMessage[] = [];
   const metrics = new Recorder();
   const processor = new MessageProcessor({
+    ignoredEventTypes: IGNORED_EVENT_TYPE,
     consumer: "restaurants.order-placed",
     group: "restaurants",
     handlers: [handler],
@@ -151,6 +154,32 @@ test("ADR 11: a redelivered event_id is a duplicate and the handler runs once", 
   ]);
 });
 
+test("an unknown event type is a dead letter, not a silent acknowledgement", async () => {
+  const { handler, calls } = scripted([async () => {}]);
+  const { processor, deadLetters } = await setup(handler);
+
+  const outcome = await processor.process(
+    message({ event_type: "nomnom.restaurants.v2.RestaurantOrderAccepted" }),
+  );
+
+  assert.equal(outcome, "dead-lettered");
+  assert.equal(calls.length, 0);
+  assert.equal(deadLetters.length, 1);
+});
+
+test("a defect of the handler is a dead letter without retries", async () => {
+  const { handler, calls } = scripted([
+    async () => {
+      throw new TypeError("cannot read properties of undefined");
+    },
+  ]);
+  const { processor, deadLetters } = await setup(handler);
+
+  assert.equal(await processor.process(message()), "dead-lettered");
+  assert.equal(calls.length, 1);
+  assert.equal(deadLetters.length, 1);
+});
+
 test("an event type the consumer does not handle is acknowledged without the Inbox", async () => {
   const { handler, calls } = scripted([async () => {}]);
   const { processor, inboxRecords } = await setup(handler);
@@ -211,6 +240,7 @@ test("AC-978: a schema whose subjects lack the event_type goes to <stream>.dlq",
   const { db, unitOfWork } = await createTestDatabase();
   const deadLetters: IntegrationMessage[] = [];
   const processor = new MessageProcessor({
+    ignoredEventTypes: IGNORED_EVENT_TYPE,
     consumer: "restaurants.order-placed",
     group: "restaurants",
     handlers: [handler],
@@ -241,6 +271,7 @@ test("AC-979: an unavailable Schema Registry rejects without a dead letter", asy
   const { db, unitOfWork } = await createTestDatabase();
   const deadLetters: IntegrationMessage[] = [];
   const processor = new MessageProcessor({
+    ignoredEventTypes: IGNORED_EVENT_TYPE,
     consumer: "restaurants.order-placed",
     group: "restaurants",
     handlers: [handler],
@@ -372,6 +403,7 @@ test("a failed dead letter publish rejects, so the message is not lost", async (
   const { handler } = scripted([async () => {}]);
   const { db, unitOfWork } = await createTestDatabase();
   const processor = new MessageProcessor({
+    ignoredEventTypes: IGNORED_EVENT_TYPE,
     consumer: "restaurants.order-placed",
     group: "restaurants",
     handlers: [handler],

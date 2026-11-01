@@ -10,6 +10,10 @@ import { type AwilixContainer, asFunction, asValue } from "awilix";
 import type { Valkey } from "iovalkey";
 import type { Db, MongoClient } from "mongodb";
 import {
+  PreparationDelayedSchema,
+  RestaurantOrderRejectedSchema,
+} from "../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
+import {
   type ConsumerClient,
   KafkaConsumerWorker,
 } from "../infrastructure/kafka/consumer.ts";
@@ -70,6 +74,7 @@ import {
   createWaitTimeHandlers,
   WAIT_TIME_CONSUMER,
 } from "../slices/restaurant/infrastructure/integration/wait-time-facts.ts";
+import { DatabaseClosedPreparations } from "../slices/restaurant/infrastructure/repository/closed-preparations.ts";
 import {
   createRestaurantCollection,
   DatabaseRestaurantCatalog,
@@ -196,6 +201,7 @@ export const createConsumerContainer = (
           store: new DatabaseRestaurantWaitTimes(
             createRestaurantCollection(db, unitOfWork),
           ),
+          closed: new DatabaseClosedPreparations(db, unitOfWork),
           policy: waitTimePolicy,
           outbox: new DatabaseOutbox(db, unitOfWork, {
             mapper: restaurantWaitTimeEventMapper,
@@ -222,6 +228,11 @@ export const createConsumerContainer = (
           consumer: WAIT_TIME_CONSUMER,
           group: consumerConfig.groupId,
           handlers: createWaitTimeHandlers({ recordWaitTime }),
+          // Facts of the stream that do not change the statistics.
+          ignoredEventTypes: [
+            RestaurantOrderRejectedSchema.typeName,
+            PreparationDelayedSchema.typeName,
+          ],
           inbox,
           deadLetters,
           schemas,

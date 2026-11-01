@@ -1,6 +1,11 @@
 // Event Envelope Integration Event (ADR 25, ADR 28): Kafka headers того же
 // формата, что Debezium собирает из записей Outbox контекстов (ADR 37). Payload
 // — Protobuf контракта; event_type — полное имя сообщения.
+import {
+  type DescMessage,
+  fromBinary,
+  type MessageShape,
+} from "@bufbuild/protobuf";
 
 /** Kafka message, прочитанное consumer'ом, без зависимостей от клиента Kafka. */
 export type InboundMessage = Readonly<{
@@ -56,6 +61,22 @@ export class PermanentMessageError extends Error {
     this.errorClass = errorClass;
   }
 }
+
+/** Payload of the record by its schema: a failure is not fixed by a retry. */
+export const decodeEvent = <Desc extends DescMessage>(
+  schema: Desc,
+  payload: Uint8Array,
+): MessageShape<Desc> => {
+  try {
+    return fromBinary(schema, payload);
+  } catch (error) {
+    throw new PermanentMessageError(
+      `${schema.name} payload is not a valid Protobuf message`,
+      "deserialization",
+      { cause: error },
+    );
+  }
+};
 
 const required = (headers: Readonly<Record<string, string>>, name: string) => {
   const value = headers[name]?.trim() ?? "";

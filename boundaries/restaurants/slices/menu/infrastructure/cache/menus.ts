@@ -3,14 +3,14 @@
 // restaurant id. MenuItemAdded, MenuItemUpdated and
 // MenuItemAvailabilityChanged refresh the menu right after the commit. Batch
 // Get Menus reads the same keys in one MGET.
-import { fromBinary } from "@bufbuild/protobuf";
-import type { Valkey } from "iovalkey";
 
+import type { Valkey } from "iovalkey";
 import {
   MenuItemAddedSchema,
   MenuItemAvailabilityChangedSchema,
   MenuItemUpdatedSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
+import { decodeEvent } from "../../../../infrastructure/messaging/envelope.ts";
 import {
   type CacheMetrics,
   ReadCache,
@@ -73,11 +73,11 @@ export const menuCacheRefreshes = (
   menus: CachedMenuReader,
 ): CacheRefreshes => ({
   [MenuItemAddedSchema.typeName]: (payload) =>
-    menus.refresh(fromBinary(MenuItemAddedSchema, payload).restaurantId),
+    menus.refresh(decodeEvent(MenuItemAddedSchema, payload).restaurantId),
   [MenuItemUpdatedSchema.typeName]: (payload) =>
-    menus.refresh(fromBinary(MenuItemUpdatedSchema, payload).restaurantId),
+    menus.refresh(decodeEvent(MenuItemUpdatedSchema, payload).restaurantId),
   [MenuItemAvailabilityChangedSchema.typeName]: (payload) =>
     menus.refresh(
-      fromBinary(MenuItemAvailabilityChangedSchema, payload).restaurantId,
+      decodeEvent(MenuItemAvailabilityChangedSchema, payload).restaurantId,
     ),
 });

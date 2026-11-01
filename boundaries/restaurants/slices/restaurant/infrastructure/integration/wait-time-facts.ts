@@ -6,11 +6,7 @@
 // with its queued_at (a repeat for an already open order changes nothing).
 // Ready records the duration, Cancelled and PreparationFailed drop the order.
 // Events published before they carried restaurant_id (FR-656) change nothing.
-import {
-  type DescMessage,
-  fromBinary,
-  type MessageShape,
-} from "@bufbuild/protobuf";
+import type { DescMessage, MessageShape } from "@bufbuild/protobuf";
 import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -21,6 +17,7 @@ import {
   RestaurantOrderReadySchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
 import {
+  decodeEvent,
   type Envelope,
   PermanentMessageError,
 } from "../../../../infrastructure/messaging/envelope.ts";
@@ -52,16 +49,7 @@ const handlerOf = <Desc extends DescMessage>(
   eventType: schema.typeName,
 
   async handle(envelope: Envelope, payload: Uint8Array): Promise<void> {
-    let event: MessageShape<Desc>;
-    try {
-      event = fromBinary(schema, payload);
-    } catch (error) {
-      throw new PermanentMessageError(
-        `${schema.name} payload is not a valid Protobuf message`,
-        "deserialization",
-        { cause: error },
-      );
-    }
+    const event = decodeEvent(schema, payload);
     const fact = event as unknown as OrderFact;
     if (fact.restaurantId === "") return;
     if (fact.orderId === "") {
@@ -73,6 +61,7 @@ const handlerOf = <Desc extends DescMessage>(
       restaurantId: fact.restaurantId,
       orderId: fact.orderId,
       ...recorded,
+      factAt: envelope.occurredAt,
     });
   },
 

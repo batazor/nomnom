@@ -79,7 +79,7 @@ Kafka → Watermill Subscriber → EventProcessor → Watermill handler (infrast
 | Класс | Источник | Действие handler'а |
 | --- | --- | --- |
 | Deserialization (битый record, невалидный envelope) | subscriber unmarshaler | `<stream>.dlq` + ack до любого handler |
-| Unknown `event_type`, permanent | infrastructure | `<stream>.dlq` + ack |
+| Unknown `event_type`, permanent | infrastructure | `<stream>.dlq` + ack. Тип контракта стрима, который consumer не использует, перечислен явно и подтверждается без обработки |
 | Panic handler'а | application / infrastructure | `<stream>.dlq` + ack без retry: дефект кода, а повтор на той же записи остановил бы partition до выхода исправления и не дал бы сигнала `kafka-poison` |
 | Transient (DB, network) | infrastructure / application | Retry middleware с backoff и лимитом; после исчерпания — nack: partition ждёт, Kafka доставляет повторно |
 | Business error | domain / application | ack; результат — через outbox-событие или лог, не retry |

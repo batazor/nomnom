@@ -15,6 +15,7 @@ import {
   parseEnvelope,
 } from "../messaging/envelope.ts";
 import {
+  isDefect,
   type ProcessOutcome,
   payloadOf,
   type RetryPolicy,
@@ -25,6 +26,21 @@ import type { SchemaSubjects } from "../messaging/schema-registry.ts";
 export type CacheRefreshes = Readonly<
   Record<string, (payload: Uint8Array) => Promise<void>>
 >;
+
+/** A defect fails the same way on every repeat: it must not stop the partition. */
+const refreshOnce = async (
+  refresh: (payload: Uint8Array) => Promise<void>,
+  payload: Uint8Array,
+): Promise<void> => {
+  try {
+    await refresh(payload);
+  } catch (error) {
+    if (!isDefect(error)) throw error;
+    throw new PermanentMessageError(String(error), "permanent", {
+      cause: error,
+    });
+  }
+};
 
 export class CacheRefreshHandler implements MessageHandler {
   readonly #refreshes: CacheRefreshes;
@@ -64,7 +80,12 @@ export class CacheRefreshHandler implements MessageHandler {
     let intervalMs = this.#retry.initialIntervalMs;
     for (;;) {
       try {
-        await refresh(await payloadOf(message.value, eventType, this.#schemas));
+        const payload = await payloadOf(
+          message.value,
+          eventType,
+          this.#schemas,
+        );
+        await refreshOnce(refresh, payload);
         return "processed";
       } catch (error) {
         if (error instanceof PermanentMessageError) {

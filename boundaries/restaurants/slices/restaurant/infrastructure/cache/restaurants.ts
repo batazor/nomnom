@@ -6,14 +6,14 @@
 // expected wait in minutes computed when read. List pages are keyed and generated
 // per Market (ADR 41), so the pages of two Markets never mix and an opening
 // change drops only the pages of the restaurant's Market.
-import { fromBinary } from "@bufbuild/protobuf";
-import type { Valkey } from "iovalkey";
 
+import type { Valkey } from "iovalkey";
 import {
   RestaurantClosedSchema,
   RestaurantOpenedSchema,
   RestaurantWaitLevelChangedSchema,
 } from "../../../../infrastructure/grpc/gen/nomnom/restaurants/v1/events_pb.js";
+import { decodeEvent } from "../../../../infrastructure/messaging/envelope.ts";
 import {
   type CacheMetrics,
   ReadCache,
@@ -115,11 +115,11 @@ export const restaurantCacheRefreshes = (
   catalog: CachedRestaurantCatalog,
 ): CacheRefreshes => ({
   [RestaurantOpenedSchema.typeName]: (payload) =>
-    catalog.refresh(fromBinary(RestaurantOpenedSchema, payload).restaurantId),
+    catalog.refresh(decodeEvent(RestaurantOpenedSchema, payload).restaurantId),
   [RestaurantClosedSchema.typeName]: (payload) =>
-    catalog.refresh(fromBinary(RestaurantClosedSchema, payload).restaurantId),
+    catalog.refresh(decodeEvent(RestaurantClosedSchema, payload).restaurantId),
   [RestaurantWaitLevelChangedSchema.typeName]: (payload) =>
     catalog.refresh(
-      fromBinary(RestaurantWaitLevelChangedSchema, payload).restaurantId,
+      decodeEvent(RestaurantWaitLevelChangedSchema, payload).restaurantId,
     ),
 });

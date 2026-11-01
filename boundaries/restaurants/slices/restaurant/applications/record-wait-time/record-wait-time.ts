@@ -26,15 +26,29 @@ export interface WaitTimeStatisticsStore {
 }
 
 /**
+ * Restaurant Orders that became ready or were dropped. A redriven fact arrives
+ * after newer ones (ADR 11, ADR 28): the record keeps its `queued` from opening
+ * an order nothing would close. Writes join the active Unit of Work; records
+ * expire with the DLQ retention.
+ */
+export interface ClosedPreparations {
+  has(orderId: string): Promise<boolean>;
+  add(orderId: string, closedAt: Date): Promise<void>;
+}
+
+/**
  * A fact of a Restaurant Order that changes the statistics: `queued` at the
  * moment the order joined the Kitchen Queue, `ready` at the moment it became
- * ready, `dropped` when it was cancelled or failed.
+ * ready, `dropped` when it was cancelled or failed. `factAt` is when the fact
+ * was published: the level is the one at that moment, so a backlog of facts
+ * does not read as a long wait.
  */
 export type RecordWaitTime = Readonly<{
   restaurantId: string;
   orderId: string;
   fact: "queued" | "ready" | "dropped";
   occurredAt: Date;
+  factAt: Date;
 }>;
 
 /**
@@ -45,6 +59,7 @@ export type RecordWaitTime = Readonly<{
 export class RecordWaitTimeHandler {
   readonly #unitOfWork: UnitOfWork;
   readonly #store: WaitTimeStatisticsStore;
+  readonly #closed: ClosedPreparations;
   readonly #policy: WaitTimePolicy;
   readonly #outbox: Outbox;
   readonly #clock: Clock;
@@ -52,12 +67,14 @@ export class RecordWaitTimeHandler {
   constructor(dependencies: {
     unitOfWork: UnitOfWork;
     store: WaitTimeStatisticsStore;
+    closed: ClosedPreparations;
     policy: WaitTimePolicy;
     outbox: Outbox;
     clock: Clock;
   }) {
     this.#unitOfWork = dependencies.unitOfWork;
     this.#store = dependencies.store;
+    this.#closed = dependencies.closed;
     this.#policy = dependencies.policy;
     this.#outbox = dependencies.outbox;
     this.#clock = dependencies.clock;
@@ -69,11 +86,15 @@ export class RecordWaitTimeHandler {
       if (stored === undefined) {
         throw new NotFoundError("Restaurant", command.restaurantId);
       }
+      if (command.fact !== "queued") {
+        await this.#closed.add(command.orderId, this.#clock.now());
+      } else if (await this.#closed.has(command.orderId)) {
+        return;
+      }
       const current = stored.statistics;
       const recorded = this.#apply(current, command);
       if (recorded === current) return;
-      const now = this.#clock.now();
-      const level = this.#policy.level(recorded, now);
+      const level = this.#policy.level(recorded, command.factAt);
       if (level === current.level) {
         await this.#store.save(command.restaurantId, recorded);
         return;
@@ -85,7 +106,7 @@ export class RecordWaitTimeHandler {
         restaurantId: command.restaurantId,
         marketId: stored.marketId,
         elevated: level === "ELEVATED",
-        occurredAt: now,
+        occurredAt: this.#clock.now(),
       };
       await this.#outbox.add(
         {

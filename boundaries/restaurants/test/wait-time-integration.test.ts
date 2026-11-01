@@ -20,6 +20,7 @@ import {
 } from "../slices/restaurant/applications/record-wait-time/record-wait-time.ts";
 import { restaurantWaitTimeEventMapper } from "../slices/restaurant/infrastructure/integration/restaurant-events.ts";
 import { createWaitTimeHandlers } from "../slices/restaurant/infrastructure/integration/wait-time-facts.ts";
+import { DatabaseClosedPreparations } from "../slices/restaurant/infrastructure/repository/closed-preparations.ts";
 import {
   DatabaseRestaurantWaitTimes,
   type RestaurantDocument,
@@ -39,6 +40,7 @@ const worldOf = async () => {
   const recordWaitTime = new RecordWaitTimeHandler({
     unitOfWork: world.unitOfWork,
     store,
+    closed: new DatabaseClosedPreparations(world.db, world.unitOfWork),
     policy: testWaitTimePolicy(),
     outbox: world.outbox,
     clock: world.clock,
@@ -128,6 +130,40 @@ test("AC-839 a cancelled order leaves without a duration", async () => {
   const waitTime = await world.waitTimeOf(restaurantId);
   assert.deepEqual(waitTime?.open, []);
   assert.deepEqual(waitTime?.completed, []);
+});
+
+test("a redriven queued fact does not reopen a closed order", async () => {
+  const world = await worldOf();
+  const restaurantId = await world.givenRestaurant("Pho");
+  const fact = { orderId: "order-1", restaurantId };
+  const queued = {
+    ...fact,
+    queuedAt: timestampFromDate(world.clock.now()),
+  };
+
+  await world.deliver(RestaurantOrderCancelledSchema, fact, world.clock.now());
+  await world.deliver(RestaurantOrderAcceptedSchema, queued, world.clock.now());
+
+  assert.equal((await world.waitTimeOf(restaurantId))?.open, undefined);
+});
+
+test("a backlog of facts does not read as a long wait", async () => {
+  const world = await worldOf();
+  const restaurantId = await world.givenRestaurant("Pho");
+  const queuedAt = world.clock.now();
+  world.clock.advance(120 * MINUTE);
+
+  await world.deliver(
+    RestaurantOrderAcceptedSchema,
+    {
+      orderId: "order-1",
+      restaurantId,
+      queuedAt: timestampFromDate(queuedAt),
+    },
+    queuedAt,
+  );
+
+  assert.equal((await world.waitTimeOf(restaurantId))?.level, "NORMAL");
 });
 
 test("FR-656 a fact without restaurant_id changes nothing", async () => {
@@ -237,6 +273,7 @@ test("FR-646 RestaurantWaitLevelChanged keeps distinct Outbox records per change
   const recordWaitTime = new RecordWaitTimeHandler({
     unitOfWork: world.unitOfWork,
     store: world.store,
+    closed: new DatabaseClosedPreparations(world.db, world.unitOfWork),
     policy: testWaitTimePolicy(),
     outbox,
     clock: world.clock,
@@ -247,6 +284,7 @@ test("FR-646 RestaurantWaitLevelChanged keeps distinct Outbox records per change
       orderId,
       fact: kind,
       occurredAt: world.clock.now(),
+      factAt: world.clock.now(),
     });
   await fact("late", "queued");
   world.clock.advance(35 * MINUTE);

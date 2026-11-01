@@ -117,6 +117,7 @@ export class MessageProcessor {
   readonly #group: string;
   readonly #handlers: ReadonlyMap<string, EventHandler>;
   readonly #inbox: Inbox;
+  readonly #ignoredEventTypes: ReadonlySet<string>;
   readonly #deadLetters: MessagePublisher;
   readonly #schemas: SchemaSubjects;
   readonly #retry: RetryPolicy;
@@ -131,6 +132,8 @@ export class MessageProcessor {
     /** Consumer group Kafka, записывается в dead letters. */
     group: string;
     handlers: readonly EventHandler[];
+    /** Types of the stream this consumer has no use for; any other unknown type is a dead letter. */
+    ignoredEventTypes: readonly string[];
     inbox: Inbox;
     deadLetters: MessagePublisher;
     /** Subjects id схемы записи: subject должен быть её event_type. */
@@ -148,6 +151,7 @@ export class MessageProcessor {
       options.handlers.map((handler) => [handler.eventType, handler]),
     );
     this.#inbox = options.inbox;
+    this.#ignoredEventTypes = new Set(options.ignoredEventTypes);
     this.#deadLetters = options.deadLetters;
     this.#schemas = options.schemas;
     this.#retry = options.retry;
@@ -178,7 +182,13 @@ export class MessageProcessor {
     }
     const labels = this.#labels(message, envelope.eventType);
     const handler = this.#handlers.get(envelope.eventType);
-    if (handler === undefined) return "ignored";
+    if (handler === undefined) {
+      if (this.#ignoredEventTypes.has(envelope.eventType)) return "ignored";
+      const error = new Error(`unknown event_type "${envelope.eventType}"`);
+      await this.#deadLetter(message, labels, error, "permanent");
+      this.#metrics.processed(labels, elapsed(), "permanent");
+      return "dead-lettered";
+    }
     let payload: Uint8Array;
     try {
       payload = await payloadOf(
@@ -308,9 +318,16 @@ export async function payloadOf(
   return frame.payload;
 }
 
+/** A defect of the code or the data: a redelivery fails the same way (ADR 28). */
+export const isDefect = (error: unknown): boolean =>
+  error instanceof TypeError ||
+  error instanceof RangeError ||
+  error instanceof ReferenceError ||
+  error instanceof SyntaxError;
+
 const classify = (handler: EventHandler, error: unknown): ErrorClass => {
   if (error instanceof PermanentMessageError) return error.errorClass;
-  return handler.classify(error) ?? "transient";
+  return handler.classify(error) ?? (isDefect(error) ? "permanent" : "transient");
 };
 
 const describe = (error: unknown): string =>
