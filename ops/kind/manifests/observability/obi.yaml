@@ -1,4 +1,4 @@
-# OpenTelemetry eBPF Instrumentation, пилот (ADR 9): один pod на узел, OTLP метрик в Alloy.
+# OpenTelemetry eBPF Instrumentation (ADR 9): один pod на узел, OTLP метрик в Alloy.
 # Конфигурация — obi/obi.yaml через configMapGenerator kustomization.yaml. Набор capabilities
 # — непривилегированный вариант документации OBI без SYS_ADMIN и NET_ADMIN: propagation
 # выключен, трафик приложений не меняется.

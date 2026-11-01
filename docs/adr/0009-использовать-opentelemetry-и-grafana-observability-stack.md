@@ -36,6 +36,7 @@ Grafana предоставляет data sources, dashboards, Explore и пере
 | Traces | OpenTelemetry SDK → OTLP → Alloy → OTLP → Tempo |
 | Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
 | Метрики инфраструктуры | exporter или `/metrics` → Alloy scrape → remote write → Grafana Cloud Metrics |
+| Метрики компонентов без SDK (Temporal server) | OBI → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
 | Logs | JSON stdout → Alloy → Loki |
 | Profiles | Pyroscope SDK → Alloy `pyroscope.receive_http` → `pyroscope.write` → Pyroscope |
 
@@ -46,6 +47,12 @@ Profiles имеют отдельный путь, потому что Pyroscope S
 Инструментирование транспорта, БД, Kafka и внешних клиентов относится к `infrastructure/`. Use cases наблюдаются через декораторы и application ports. SDK providers/exporters, logger и profiler собираются через принятый DI в composition root, а process-level lifecycle находится в bootstrap. `domains/`, включая `vo/`, остаются независимыми от observability SDK.
 
 Подробные правила потоков, tracing, cardinality, redaction, correlations и эксплуатации описаны в [документе observability](../observability.md).
+
+### eBPF-инструментирование
+
+OpenTelemetry eBPF Instrumentation (OBI) дополняет SDK и не заменяет его: propagation через Outbox, Temporal spans и бизнес-метрики снаружи процесса не наблюдаются. OBI выбирает только перечисленные компоненты без SDK, сервисы с SDK не инструментирует. Сейчас это Temporal server: RED-метрики gRPC и связи между сервисами. Режим — только метрики, без traces и propagation, без агента в процессе и без `SYS_ADMIN`.
+
+Компонент добавляется, только если он даёт данные, которых нет в его метриках, и окупает series квоты. Замер на kind (2026-11-01, стенд без нагрузки): Temporal — 651 series; с SQL-метриками было больше 1400 при СУБД `other_sql`, поэтому SQL выключен. Kafka Connect не включён: процесс подхватывается, но метрик нет ни без `SYS_ADMIN`, ни с ним; причина не найдена.
 
 ### Поддержка языков
 
@@ -67,6 +74,8 @@ OpenTelemetry и profiling-интеграции выбираются и пров
 Появляется единый сквозной контекст и согласованный путь каждого сигнала. Grafana сможет связывать logs с traces, exemplars с traces и service/time range с profiles. Специализированные backend сохраняют подходящие модели хранения и запросов, а Alloy централизует сбор без отдельного Prometheus server.
 
 Стек требует эксплуатации Alloy, Tempo, Loki, Pyroscope и Grafana, а метрики хранит Grafana Cloud, контроля совместимости протоколов, собственных метрик pipeline, ограничения очередей и осознанной cardinality. Отказ экспорта не должен останавливать бизнес-запросы, поэтому при заполнении ограниченных буферов возможна контролируемая потеря telemetry.
+
+OBI требует DaemonSet с расширенными правами: `hostPID`, hostPath и capabilities, в том числе `BPF`, `PERFMON`, `SYS_PTRACE`, поэтому агент видит процессы всего узла. Ему нужны Linux с BTF, ядро 5.8+ и память на всплеск при старте (пик около 317 МБ при рабочих 100 МБ). Совместимость propagation OBI с eBPF-программами Cilium не проверена: перед включением propagation её нужно проверить отдельно.
 
 Разная зрелость SDK и profilers по языкам ограничивает единообразие. Trace/profile correlation включается только там, где она документирована и проверена. Head sampling не гарантирует сохранение всех ошибочных traces; tail sampling, если понадобится, потребует отдельного решения и дополнительных ресурсов.
 

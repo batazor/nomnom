@@ -1,4 +1,4 @@
-# Пилот OBI (ADR 9): метрики Temporal server, компонента без OTel SDK. Kafka Connect проверен и
+# OBI (ADR 9): метрики Temporal server, компонента без OTel SDK. Kafka Connect проверен и
 # не включён: процесс JVM подключается, но метрик нет ни без SYS_ADMIN, ни с ним (замер 2026-11-01).
 # Сервисы с SDK не выбираются: их spans и метрики уже идут в Alloy. Правила заменяют встроенные
 # исключения OBI, поэтому при default_action exclude попадает только перечисленное.
@@ -10,7 +10,7 @@ resource:
     - name: service.namespace
       value: nomnom
 
-# tracer_provider нет: пилот только про метрики, traces этих компонентов не экспортируются.
+# tracer_provider нет: только метрики, traces не экспортируются.
 meter_provider:
   readers:
     - periodic:

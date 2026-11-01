@@ -25,10 +25,13 @@ Observability разделяется на четыре независимые о
 | Traces | OpenTelemetry SDK → OTLP → Alloy → OTLP → Tempo |
 | Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
 | Метрики инфраструктуры | Prometheus-compatible exporter или `/metrics` → Alloy scrape → remote write → Grafana Cloud Metrics |
+| Метрики компонентов без SDK (Temporal server) | OBI → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
 | Logs | Структурированный JSON в stdout → Alloy → Loki |
 | Profiles | Pyroscope SDK → Alloy `pyroscope.receive_http` → `pyroscope.write` → Pyroscope |
 
 Для одного источника метрик или логов выбирается один основной путь доставки. Например, одна и та же метрика приложения не экспортируется одновременно через OTLP и `/metrics`, а один поток логов не отправляется одновременно напрямую и через stdout. Это предотвращает двойной подсчёт, дублирование записей и неочевидное владение retry-буферами.
+
+OBI (OpenTelemetry eBPF Instrumentation) дополняет SDK: он выбирает только перечисленные компоненты без SDK и работает в режиме метрик, без traces и propagation. Правила и замеры — в [ADR 9](adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md#ebpf-инструментирование), конфигурация — [`ops/kind/manifests/observability/obi`](../ops/kind/manifests/observability/obi/obi.yaml).
 
 Базовый путь логов — stdout. OTLP Logs можно оценить отдельно для конкретного runtime и SDK, если он даёт необходимую зрелость и эксплуатационное преимущество; его нельзя включать параллельно для тех же записей без явного разделения источников.
 
