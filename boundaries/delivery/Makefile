@@ -40,15 +40,18 @@ verify-lean-setup:
 	cd "$(AENEAS_HOME)/backends/lean" && lake exe cache get && lake build
 
 # Модель протокола назначения в Quint: сценарии и симуляция инвариантов (verification/README.md).
-QUINT := npx -y @informalsystems/quint@0.33.1
+QUINT_PACKAGE := @informalsystems/quint@0.33.1
+QUINT := npx -y $(QUINT_PACKAGE)
 QUINT_INVARIANTS := oneWinner assignedCourierBusy courierHasOneDelivery assignedHasGrant noOpenOfferOfAssigned \
 	noOpenOfferOfClosed oneOpenOfferOfPair noForeignGrant
 
+# Трассы модели также проигрываются на настоящих use cases (tests/assignment_model.rs).
 verify-quint:
 	cd verification/quint && $(QUINT) test assignment.qnt --main=assignment
 	cd verification/quint && for invariant in $(QUINT_INVARIANTS); do \
 		$(QUINT) run assignment.qnt --max-samples=50000 --max-steps=40 --invariant=$$invariant || exit 1; \
 	done
+	npx -y -p $(QUINT_PACKAGE) -c '$(CARGO) test --test assignment_model -- --ignored --nocapture'
 
 # Integration-тесты против SpiceDB из testcontainers с authorization/bootstrap.yaml.
 test-spicedb:

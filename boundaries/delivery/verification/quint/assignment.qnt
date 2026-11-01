@@ -143,7 +143,17 @@ module assignment {
       if (delivery.state != Waiting)
         s' = woken
       else if (openOffersOf(d) != Set())
-        s' = { ...woken, timers: s.timers.union(Set(smallest(openOffersOf(d)))) }
+        // The step walks the offers in order: it expires those past their deadline
+        // until it meets the first open one.
+        s' = {
+          ...woken,
+          timers: s.timers.union(Set(smallest(openOffersOf(d)))),
+          offers: closeOffers(
+            s.offers,
+            closes.filter(pair => pair._1 < smallest(openOffersOf(d))),
+            Expired
+          ),
+        }
       else if (candidates(d) == Set())
         s' = { ...woken, offers: closeOffers(s.offers, closes, Expired) }
       else {
@@ -370,8 +380,8 @@ module assignment {
     }
   }
 
-  // Pickup and Confirm Delivery, as one step: the courier keeps the grant of the
-  // delivery and the courier id stays on it.
+  // Pickup and Confirm Delivery, as one step: the grant follows the active assignment
+  // (FR-444), the courier id stays on the delivery as the fact of who carried it.
   action complete(d: int): bool = {
     val delivery = s.deliveries.get(d)
     all {
@@ -381,6 +391,7 @@ module assignment {
         ...s,
         deliveries: s.deliveries.set(d, { ...delivery, state: Closed, version: delivery.version + 1 }),
         couriers: s.couriers.setBy(delivery.courier, c => { status: Available, version: c.version + 1 }),
+        grants: s.grants.exclude(Set((d, delivery.courier))),
         wakes: s.wakes.union(Set(d)),
         candidateWakes: s.candidateWakes.union(Set(delivery.courier)),
       },
@@ -408,7 +419,7 @@ module assignment {
     s' = {
       ...s,
       grants: DELIVERIES
-        .filter(d => s.deliveries.get(d).courier != NO_COURIER)
+        .filter(d => s.deliveries.get(d).state == Assigned)
         .map(d => (d, s.deliveries.get(d).courier)),
     },
   }
@@ -446,6 +457,44 @@ module assignment {
         timerFires(o),
         reject(o),
         nondet a = oneOf(CALLERS) acceptBegin(a, o),
+      },
+    },
+  }
+
+  // One use case at a time: what tests/assignment_model.rs replays on the real use cases,
+  // which run a transaction as one call.
+  action sequentialStep: bool = any {
+    all {
+      s.txs.keys() != Set(),
+      any {
+        advanceCommit,
+        offerCommit("caller1"),
+        acceptCommit("caller1"),
+        releaseRevoke("caller1"),
+        releaseCommit("caller1"),
+      },
+    },
+    all {
+      s.txs.keys() == Set(),
+      any {
+        reconcile,
+        nondet c = oneOf(COURIERS) candidateWake(c),
+        nondet d = oneOf(DELIVERIES) any {
+          cancelWaiting(d),
+          complete(d),
+          nondet closing = oneOf(Set(true, false)) releaseBegin("caller1", d, closing),
+          all { s.nextOffer < MAX_OFFERS, advanceBegin(d) },
+          all { s.nextOffer < MAX_OFFERS, nondet c = oneOf(COURIERS) offerBegin("caller1", d, c) },
+        },
+        all {
+          s.offers.keys() != Set(),
+          nondet o = oneOf(s.offers.keys()) any {
+            deadlinePasses(o),
+            timerFires(o),
+            reject(o),
+            acceptBegin("caller1", o),
+          },
+        },
       },
     },
   }
