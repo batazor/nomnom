@@ -26,6 +26,8 @@ type Input struct {
 	OccurredAt time.Time
 	// ExpectedReadyAt is the new ready time named by the restaurant; required.
 	ExpectedReadyAt time.Time
+	// RestaurantOrderVersion is the aggregate_version of the event.
+	RestaurantOrderVersion uint64
 }
 
 type Result struct {
@@ -109,7 +111,7 @@ func (h Handler) replace(ctx context.Context, in Input) (fulfillment.Outcome, er
 	if err != nil {
 		return "", err
 	}
-	_, err = current.ExpectReadyAt(in.OccurredAt, in.ExpectedReadyAt)
+	_, err = current.ExpectReadyAt(in.OccurredAt, in.ExpectedReadyAt, in.RestaurantOrderVersion)
 	outcome, err := fulfillment.ClassifySignal(current, err)
 	if err != nil || outcome != fulfillment.OutcomeApplied {
 		return outcome, err

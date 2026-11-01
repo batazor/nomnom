@@ -347,7 +347,7 @@ func TestEventsCarryExpectedTimesIntoOrder(t *testing.T) {
 	})
 
 	snapshot, _ := c.store.Snapshot("order-1")
-	assert.Equal(t, order.ExpectedTimes{ReadyAt: delayedAt, PickupAt: secondPickup, DeliveredAt: deliveredAt}, snapshot.Expected)
+	assert.Equal(t, order.ExpectedTimes{ReadyVersion: 1, ReadyAt: delayedAt, PickupAt: secondPickup, DeliveredAt: deliveredAt}, snapshot.Expected)
 	c.noPoison(t)
 }
 

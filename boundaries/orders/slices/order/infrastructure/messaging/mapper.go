@@ -39,10 +39,11 @@ func expectedTime(at *timestamppb.Timestamp) time.Time {
 
 func toConfirmOrder(e messaging.Envelope, event *restaurantsv1.RestaurantOrderAccepted) confirm.Input {
 	return confirm.Input{
-		EventID:         e.EventID,
-		OrderID:         order.ID(event.GetOrderId()),
-		OccurredAt:      e.OccurredAt,
-		ExpectedReadyAt: expectedTime(event.GetExpectedReadyAt()),
+		EventID:                e.EventID,
+		OrderID:                order.ID(event.GetOrderId()),
+		OccurredAt:             e.OccurredAt,
+		ExpectedReadyAt:        expectedTime(event.GetExpectedReadyAt()),
+		RestaurantOrderVersion: e.AggregateVersion,
 	}
 }
 
@@ -60,10 +61,11 @@ func toRecordOrderReady(e messaging.Envelope, event *restaurantsv1.RestaurantOrd
 
 func toRecordPreparationDelay(e messaging.Envelope, event *restaurantsv1.PreparationDelayed) recordpreparationdelay.Input {
 	return recordpreparationdelay.Input{
-		EventID:         e.EventID,
-		OrderID:         order.ID(event.GetOrderId()),
-		OccurredAt:      e.OccurredAt,
-		ExpectedReadyAt: expectedTime(event.GetExpectedReadyAt()),
+		EventID:                e.EventID,
+		OrderID:                order.ID(event.GetOrderId()),
+		OccurredAt:             e.OccurredAt,
+		ExpectedReadyAt:        expectedTime(event.GetExpectedReadyAt()),
+		RestaurantOrderVersion: e.AggregateVersion,
 	}
 }
 

@@ -78,6 +78,7 @@ func (s *Store) Save(ctx context.Context, changed *order.Order) error {
 		Set("negative_outcome", outcome).
 		Set("cancellation_code", code).
 		Set("expected_ready_at", nullTime(snap.Expected.ReadyAt)).
+		Set("expected_ready_version", snap.Expected.ReadyVersion).
 		Set("expected_pickup_at", nullTime(snap.Expected.PickupAt)).
 		Set("expected_delivered_at", nullTime(snap.Expected.DeliveredAt)).
 		Set("version", sq.Expr("version + 1")).
@@ -134,13 +135,13 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	err := s.queryRow(ctx, psql.
 		Select("customer_id", "restaurant_id", "market_id", "total_amount::text", "total_currency",
 			"state", "placed_at", "cancelled_at", "negative_outcome", "cancellation_code", "version",
-			"expected_ready_at", "expected_pickup_at", "expected_delivered_at",
+			"expected_ready_at", "expected_ready_version", "expected_pickup_at", "expected_delivered_at",
 			"priority", "premium_fee_amount::text", "premium_fee_currency",
 			"delivery_window_start", "delivery_window_end").
 		From("orders").Where(sq.Eq{"id": id}),
 		&snap.CustomerID, &snap.RestaurantID, &marketID, &amount, &currency,
 		&snap.State, &snap.PlacedAt, &cancelledAt, &outcome, &code, &snap.Version,
-		&readyAt, &pickupAt, &deliveredAt, &priority, &feeAmount, &feeCurrency,
+		&readyAt, &snap.Expected.ReadyVersion, &pickupAt, &deliveredAt, &priority, &feeAmount, &feeCurrency,
 		&windowStart, &windowEnd)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return order.Snapshot{}, fmt.Errorf("%w: %q", order.ErrOrderNotFound, id)
@@ -165,7 +166,7 @@ func (s *Store) load(ctx context.Context, id order.ID) (order.Snapshot, error) {
 	}
 	snap.PlacedAt = snap.PlacedAt.UTC()
 	snap.CancelledAt = utcTime(cancelledAt)
-	snap.Expected = order.ExpectedTimes{ReadyAt: utcTime(readyAt), PickupAt: utcTime(pickupAt), DeliveredAt: utcTime(deliveredAt)}
+	snap.Expected = order.ExpectedTimes{ReadyAt: utcTime(readyAt), ReadyVersion: snap.Expected.ReadyVersion, PickupAt: utcTime(pickupAt), DeliveredAt: utcTime(deliveredAt)}
 	if snap.DeliveryWindow, err = deliveryWindow(windowStart, windowEnd); err != nil {
 		return order.Snapshot{}, fmt.Errorf("order %s delivery window: %w", id, err)
 	}

@@ -8,19 +8,33 @@ import "time"
 // Order data reported by neighbouring contexts, not a schedule of orders: the
 // process deadlines of the workflow are separate.
 type ExpectedTimes struct {
-	ReadyAt     time.Time
-	PickupAt    time.Time
-	DeliveredAt time.Time
+	ReadyAt time.Time
+	// ReadyVersion is the Restaurant Order aggregate_version of the event that
+	// named ReadyAt; zero — named before versions were stored.
+	ReadyVersion uint64
+	PickupAt     time.Time
+	DeliveredAt  time.Time
 }
 
 // ExpectedTimes returns the latest named Fulfillment deadlines.
 func (o *Order) ExpectedTimes() ExpectedTimes { return o.expected }
 
 // ExpectReadyAt replaces the expected ready time with the one named at
-// occurredAt: on Acceptance and on every Preparation delay. changed is false
-// when the time is the stored one.
-func (o *Order) ExpectReadyAt(occurredAt, readyAt time.Time) (bool, error) {
-	return o.expect(occurredAt, &o.expected.ReadyAt, readyAt)
+// occurredAt: on Acceptance and on every Preparation delay. An event of an
+// older Restaurant Order version is out of order and changes nothing. changed is
+// false when the time stays.
+func (o *Order) ExpectReadyAt(occurredAt, readyAt time.Time, version uint64) (bool, error) {
+	stored := o.expected
+	changed, err := o.expect(occurredAt, &o.expected.ReadyAt, readyAt)
+	if err != nil {
+		return false, err
+	}
+	if version < stored.ReadyVersion {
+		o.expected = stored
+		return false, nil
+	}
+	o.expected.ReadyVersion = version
+	return changed, nil
 }
 
 // ExpectPickupAt replaces the expected pickup time with the one of the latest
