@@ -287,3 +287,65 @@ async fn workflow_searches_a_courier_until_pickup() {
     stop.send(true).expect("stop");
     running.await.expect("join").expect("worker stopped");
 }
+
+/// FR-706: the courier of an expired offer wakes another delivery that found
+/// no candidate. No other call wakes it: the wake comes from `delivery-worker`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn expired_offer_wakes_the_search_of_the_market() {
+    let store = store();
+    let temporal = support::off_runtime(support::temporal);
+    let worker = TemporalWorker::start(
+        &temporal,
+        assignment_steps(
+            Arc::clone(&store),
+            AssignmentPolicy {
+                maximum_distance_meters: 5_000,
+                maximum_active_assignments: 1,
+                offer_ttl_seconds: OFFER_TTL,
+            },
+            TemporalAssignment::connect(&temporal, Arc::clone(&store) as _).expect("candidates"),
+        ),
+    )
+    .expect("worker");
+    let (stop, stop_rx) = watch::channel(false);
+    let running = tokio::spawn(worker.run(stop_rx));
+    let process = TemporalAssignment::connect(&temporal, Arc::clone(&store) as _).expect("client");
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let market = MarketId::new(&format!("x{}", nanos % 1_000_000_000_000)).expect("market id");
+    let delivery_in = |store: &Store| {
+        let delivery = Delivery::new(
+            DeliveryId::new(unique("delivery")),
+            OrderId::new(unique("order")),
+            market.clone(),
+        );
+        DeliveryRepository::add(store, &delivery).expect("delivery");
+        delivery.id().clone()
+    };
+
+    // The older delivery finds nobody and waits for a wake.
+    let waiting = delivery_in(&store);
+    process.start(&waiting).expect("start");
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let courier = on_line(&store, &market, &unique("courier"));
+    let offered = delivery_in(&store);
+    process.start(&offered).expect("start");
+    eventually("the offer of the newer delivery", || {
+        pending_to(&store, &offered, &courier)
+    })
+    .await;
+    assert!(offers(&store, &waiting).is_empty());
+
+    eventually("the offer of the woken delivery", || {
+        pending_to(&store, &waiting, &courier)
+    })
+    .await;
+    assert_eq!(offers(&store, &offered)[0].state(), OfferState::Expired);
+
+    stop.send(true).expect("stop");
+    running.await.expect("join").expect("worker stopped");
+}

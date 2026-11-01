@@ -2,7 +2,7 @@
 //! настоящего PostgreSQL: Accept Delivery Offer занимает курьера через порт
 //! слайса `courier` в той же транзакции, что offer, `Delivery` и Outbox;
 //! конкурентные шаги Assignment Workflow предлагают доставку один раз
-//! (FR-704).
+//! (FR-704); оффер ждёт блокировку доставки и не проскакивает мимо принятия.
 //! PostgreSQL из testcontainers (`tests/support`); идентификаторы уникальны,
 //! поэтому база общая.
 
@@ -10,8 +10,8 @@ mod support;
 
 use delivery::slices::courier::domains::courier::MarketId;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Barrier, Mutex, mpsc};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use delivery::infrastructure::memory::{
     ManualClock, RecordingAssignment, RecordingRelationships, StaticAuthorization,
@@ -27,6 +27,7 @@ use delivery::slices::delivery::applications::assignment::advance;
 use delivery::slices::delivery::applications::courier_locator::CourierCandidate;
 use delivery::slices::delivery::applications::error::DeliveryApplicationError;
 use delivery::slices::delivery::applications::offer::accept::{Handler, Input};
+use delivery::slices::delivery::applications::offer::offer_delivery;
 use delivery::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use delivery::slices::delivery::applications::policy::AssignmentPolicy;
 use delivery::slices::delivery::domains::delivery::{
@@ -101,6 +102,15 @@ fn accept(
     seed: &Seed,
     relationships: &RecordingRelationships,
 ) -> Result<(), DeliveryApplicationError> {
+    accept_through(store, store, seed, relationships)
+}
+
+fn accept_through(
+    store: &Store,
+    deliveries: &dyn DeliveryRepository,
+    seed: &Seed,
+    relationships: &RecordingRelationships,
+) -> Result<(), DeliveryApplicationError> {
     let authorization = StaticAuthorization::allow_all();
     let locator = StaticCourierLocator::new(vec![CourierCandidate {
         courier_id: seed.courier_id.clone(),
@@ -115,7 +125,7 @@ fn accept(
         unit_of_work: store,
         offers: store,
         offers_of: store,
-        deliveries: store,
+        deliveries,
         couriers: store,
         outbox: store,
         locator: &locator,
@@ -312,4 +322,159 @@ fn concurrent_steps_offer_the_delivery_once() {
         .expect("offer");
     assert_eq!(offer.courier_id(), &courier_id);
     assert_eq!(offer.state(), OfferState::Pending);
+}
+
+/// Keeps the transaction open after the lock of the delivery is taken, so
+/// another transaction meets it.
+struct PausedHold<'a> {
+    store: &'a Store,
+    held: mpsc::Sender<()>,
+    release: Mutex<mpsc::Receiver<()>>,
+}
+
+impl DeliveryRepository for PausedHold<'_> {
+    fn get(&self, id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
+        DeliveryRepository::get(self.store, id)
+    }
+
+    fn find_by_order(&self, order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
+        self.store.find_by_order(order_id)
+    }
+
+    fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::add(self.store, delivery)
+    }
+
+    fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::save(self.store, delivery)
+    }
+
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::hold(self.store, delivery)?;
+        self.held.send(()).expect("held");
+        self.release
+            .lock()
+            .expect("release")
+            .recv()
+            .expect("release");
+        Ok(())
+    }
+}
+
+fn offer(
+    store: &Store,
+    deliveries: &dyn DeliveryRepository,
+    seed: &Seed,
+    courier_id: &CourierId,
+) -> Result<offer_delivery::Output, DeliveryApplicationError> {
+    offer_delivery::Handler {
+        authorization: &StaticAuthorization::allow_all(),
+        unit_of_work: store,
+        deliveries,
+        couriers: store,
+        offers: store,
+        offers_of: store,
+        outbox: store,
+        clock: &ManualClock::new(NOW),
+        policy: AssignmentPolicy {
+            maximum_distance_meters: 5_000,
+            maximum_active_assignments: 1,
+            offer_ttl_seconds: 60,
+        },
+    }
+    .execute(
+        &Subject::Service("dispatcher".to_owned()),
+        offer_delivery::Input {
+            delivery_id: seed.delivery_id.as_str().to_owned(),
+            courier_id: courier_id.as_str().to_owned(),
+        },
+    )
+}
+
+fn second_courier(store: &Store) -> CourierId {
+    let courier_id = CourierId::new(unique("courier"));
+    CourierRepository::add(
+        store,
+        &Courier::new(
+            courier_id.clone(),
+            CourierName::new("Timur").expect("courier name"),
+            MarketId::new("berlin").expect("market id"),
+        ),
+    )
+    .expect("courier");
+    courier_id
+}
+
+/// An offer made while an acceptance holds the delivery waits for its commit
+/// and fails: it cannot stay pending on an assigned delivery.
+#[test]
+fn offer_racing_an_acceptance_waits_and_fails() {
+    let store = store();
+    let seed = seed(&store);
+    let other = second_courier(&store);
+    let (held_tx, held) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel();
+    let paused = PausedHold {
+        store: &store,
+        held: held_tx,
+        release: Mutex::new(release_rx),
+    };
+
+    std::thread::scope(|scope| {
+        let accepting =
+            scope.spawn(|| accept_through(&store, &paused, &seed, &RecordingRelationships::new()));
+        held.recv().expect("acceptance holds the delivery");
+        let offering = scope.spawn(|| offer(&store, &store, &seed, &other));
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(!offering.is_finished(), "the offer waits for the lock");
+        release.send(()).expect("release");
+
+        accepting.join().expect("accept").expect("accepted");
+        assert_eq!(
+            offering.join().expect("offer").map(drop),
+            Err(DeliveryApplicationError::ConcurrentModification)
+        );
+    });
+
+    assert_eq!(delivery_state(&store, &seed), State::Assigned);
+    assert_eq!(
+        store.offer_ids_of(&seed.delivery_id).expect("read"),
+        vec![seed.offer_id.clone()]
+    );
+}
+
+/// Two offers to one courier: the second waits and returns the first.
+#[test]
+fn offers_racing_for_a_pair_make_one() {
+    let store = store();
+    let seed = seed(&store);
+    let other = second_courier(&store);
+    let (held_tx, held) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel();
+    let paused = PausedHold {
+        store: &store,
+        held: held_tx,
+        release: Mutex::new(release_rx),
+    };
+
+    let (first, second) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| offer(&store, &paused, &seed, &other));
+        held.recv().expect("first offer holds the delivery");
+        let second = scope.spawn(|| offer(&store, &store, &seed, &other));
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(!second.is_finished(), "the offer waits for the lock");
+        release.send(()).expect("release");
+        (
+            first.join().expect("first").expect("first offer"),
+            second.join().expect("second").expect("second offer"),
+        )
+    });
+
+    assert!(first.created);
+    assert!(!second.created);
+    assert_eq!(second.offer_id, first.offer_id);
+    assert_eq!(
+        store.offer_ids_of(&seed.delivery_id).expect("read").len(),
+        2
+    );
 }
