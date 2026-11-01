@@ -27,7 +27,7 @@ use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, m
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
 use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
-use crate::infrastructure::messaging::{EventConsumer, MessageHandler};
+use crate::infrastructure::messaging::{EventConsumer, Handled, MessageHandler};
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
 use crate::infrastructure::repository::{OUTBOX_TOPIC, Store, migrate};
 use crate::infrastructure::spicedb::{
@@ -43,7 +43,7 @@ use crate::pkg::config::{
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
 use crate::slices::courier::infrastructure::tracks::ValkeyPositionPublisher;
-use crate::slices::delivery::applications::duration::record::CONSUMER;
+use crate::slices::delivery::applications::duration::record::{self, CONSUMER};
 use crate::slices::delivery::domains::delivery::{
     DeliveryEstimatePolicy, DeliveryRepository, DurationKind, InvalidEstimatePolicy, VirtualCity,
 };
@@ -336,12 +336,15 @@ impl DurationStatistics for KafkaDurationStatistics {
         let use_cases = Arc::clone(&self.use_cases);
         let handler: MessageHandler = Arc::new(move |envelope, payload| {
             let Some(input) = duration_input(envelope, payload)? else {
-                return Ok(());
+                return Ok(Handled::Processed);
             };
             use_cases
                 .deliveries()
                 .record_delivery_duration(input)
-                .map(drop)
+                .map(|output| match output {
+                    record::Output::Recorded => Handled::Processed,
+                    record::Output::Duplicate => Handled::Duplicate,
+                })
                 .map_err(|error| handling_error(&error))
         });
         Ok((consumer, handler))

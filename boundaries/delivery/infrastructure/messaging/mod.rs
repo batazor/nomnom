@@ -22,12 +22,11 @@
 mod dead_letters;
 mod envelope;
 mod schemas;
+mod telemetry;
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use opentelemetry::KeyValue;
-use opentelemetry::metrics::{Counter, Meter};
 use rdkafka::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::message::{BorrowedMessage, Header, Headers, Message, OwnedHeaders};
@@ -36,6 +35,10 @@ use tokio::sync::watch;
 use tokio::task::JoinError;
 
 use crate::pkg::config::{InitialOffset, KafkaConfig};
+use telemetry::{
+    CLASS_DESERIALIZATION, CLASS_PERMANENT, ConsumerTelemetry, INSTRUMENTATION, MessageLabels,
+    Outcome,
+};
 
 pub use dead_letters::{DeadLetter, DeadLetters, REDRIVEN_FROM, Through};
 pub use envelope::{Envelope, EnvelopeError};
@@ -57,46 +60,13 @@ const RECEIVE_RETRY: Duration = Duration::from_secs(1);
 /// How long a dead letter may wait for space in the producer queue.
 const DEAD_LETTER_QUEUE_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Instrumentation scope of the consumer telemetry.
-const INSTRUMENTATION: &str = "nomnom.delivery.messaging";
-/// `nomnom.error.class` of a record that cannot be read or does not match its
-/// schema, before any handler.
-const CLASS_DESERIALIZATION: &str = "deserialization";
-/// `nomnom.error.class` of a permanent error or panic of the handler.
-const CLASS_PERMANENT: &str = "permanent";
-
-/// `nomnom.messaging.poison.messages` (registry ops/semconv/model/messaging.yaml):
-/// the signal of alert `<context>-kafka-poison`.
-struct PoisonMessages(Counter<u64>);
-
-impl PoisonMessages {
-    fn new(meter: &Meter) -> Self {
-        Self(
-            meter
-                .u64_counter("nomnom.messaging.poison.messages")
-                .with_unit("{message}")
-                .with_description("Messages sent to <stream>.dlq.")
-                .build(),
-        )
-    }
-
-    fn add(
-        &self,
-        handler: &'static str,
-        event_type: &str,
-        topic: &'static str,
-        class: &'static str,
-    ) {
-        self.0.add(
-            1,
-            &[
-                KeyValue::new("nomnom.messaging.handler", handler),
-                KeyValue::new("nomnom.event.type", event_type.to_owned()),
-                KeyValue::new("messaging.destination.name", topic),
-                KeyValue::new("nomnom.error.class", class),
-            ],
-        );
-    }
+/// What the handler did with a message; the offset may be committed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Handled {
+    /// Processed, or of a type the handler does not consume.
+    Processed,
+    /// The Inbox already has the event.
+    Duplicate,
 }
 
 /// Failure of a message handler.
@@ -111,14 +81,15 @@ pub enum HandlingError {
 
 /// Handler of one message: its envelope and Protobuf payload without the wire
 /// format. `Ok` — the offset may be committed. Runs on a blocking thread: the use cases are synchronous.
-pub type MessageHandler = Arc<dyn Fn(&Envelope, &[u8]) -> Result<(), HandlingError> + Send + Sync>;
+pub type MessageHandler =
+    Arc<dyn Fn(&Envelope, &[u8]) -> Result<Handled, HandlingError> + Send + Sync>;
 
 /// Consumer of one stream with the producer of its dead letters.
 pub struct EventConsumer {
     consumer: StreamConsumer,
     dead_letters: FutureProducer,
     schemas: SchemaRegistry,
-    poison: PoisonMessages,
+    telemetry: ConsumerTelemetry,
     group: String,
     topic: &'static str,
     /// Name of the handler in logs.
@@ -160,7 +131,7 @@ impl EventConsumer {
             consumer,
             dead_letters,
             schemas,
-            poison: PoisonMessages::new(&opentelemetry::global::meter(INSTRUMENTATION)),
+            telemetry: ConsumerTelemetry::new(&opentelemetry::global::meter(INSTRUMENTATION)),
             group: config.consumer_group.clone(),
             topic,
             name,
@@ -185,7 +156,19 @@ impl EventConsumer {
                     continue;
                 }
             };
-            if !self.process(&message, &handler, &mut stop).await {
+            self.telemetry.consumed(self.topic, &self.group);
+            let headers = headers(&message);
+            let labels = MessageLabels {
+                handler: self.name,
+                event_type: header_text(&headers, "event_type"),
+                topic: self.topic,
+            };
+            let started = Instant::now();
+            let outcome = self
+                .process(&message, &headers, &labels, &handler, &mut stop)
+                .await;
+            self.telemetry.finished(&labels, outcome, started.elapsed());
+            if outcome == Outcome::Stopped {
                 return;
             }
             if let Err(error) = self.consumer.commit_message(&message, CommitMode::Async) {
@@ -196,39 +179,33 @@ impl EventConsumer {
         }
     }
 
-    /// `false` — the process stops before the message was handled; its
-    /// offset is not committed.
     async fn process(
         &self,
         message: &BorrowedMessage<'_>,
+        headers: &[(String, Vec<u8>)],
+        labels: &MessageLabels,
         handler: &MessageHandler,
         stop: &mut watch::Receiver<bool>,
-    ) -> bool {
-        let headers = headers(message);
-        let envelope = match Envelope::parse(&headers) {
+    ) -> Outcome {
+        let envelope = match Envelope::parse(headers) {
             Ok(envelope) => envelope,
             Err(error) => {
-                self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &error.to_string())
-                    .await;
-                return true;
+                self.dead_letter(message, headers, &error.to_string()).await;
+                return Outcome::DeadLettered(CLASS_DESERIALIZATION);
             }
         };
+        self.telemetry
+            .message_age(labels, message_age(envelope.occurred_at_ms));
         let Some(payload) = message.payload() else {
-            self.dead_letter(
-                message,
-                &headers,
-                CLASS_DESERIALIZATION,
-                "message without payload",
-            )
-            .await;
-            return true;
+            self.dead_letter(message, headers, "message without payload")
+                .await;
+            return Outcome::DeadLettered(CLASS_DESERIALIZATION);
         };
         let frame = match parse_wire_frame(payload) {
             Ok(frame) => frame,
             Err(reason) => {
-                self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &reason)
-                    .await;
-                return true;
+                self.dead_letter(message, headers, &reason).await;
+                return Outcome::DeadLettered(CLASS_DESERIALIZATION);
             }
         };
         let mut retry = FIRST_RETRY;
@@ -240,15 +217,13 @@ impl EventConsumer {
                         "schema {} is not a schema of event_type {:?}",
                         frame.schema_id, envelope.event_type
                     );
-                    self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &reason)
-                        .await;
-                    return true;
+                    self.dead_letter(message, headers, &reason).await;
+                    return Outcome::DeadLettered(CLASS_DESERIALIZATION);
                 }
                 Err(SchemaLookupError::Unknown(id)) => {
                     let reason = format!("schema id {id} is unknown to the schema registry");
-                    self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &reason)
-                        .await;
-                    return true;
+                    self.dead_letter(message, headers, &reason).await;
+                    return Outcome::DeadLettered(CLASS_DESERIALIZATION);
                 }
                 Err(SchemaLookupError::Unavailable(reason)) => {
                     tracing::warn!(
@@ -260,8 +235,9 @@ impl EventConsumer {
                         error.message = %reason,
                         "schema registry unavailable, retrying"
                     );
+                    self.telemetry.retried(labels);
                     if pause(retry, stop).await {
-                        return false;
+                        return Outcome::Stopped;
                     }
                     retry = (retry * 2).min(LONGEST_RETRY);
                 }
@@ -278,11 +254,11 @@ impl EventConsumer {
             );
             let outcome = tokio::task::spawn_blocking(move || call(&event, &body)).await;
             match outcome.unwrap_or_else(|error| Err(join_failure(error))) {
-                Ok(()) => return true,
+                Ok(Handled::Processed) => return Outcome::Processed,
+                Ok(Handled::Duplicate) => return Outcome::Duplicate,
                 Err(HandlingError::Permanent(reason)) => {
-                    self.dead_letter(message, &headers, CLASS_PERMANENT, &reason)
-                        .await;
-                    return true;
+                    self.dead_letter(message, headers, &reason).await;
+                    return Outcome::DeadLettered(CLASS_PERMANENT);
                 }
                 Err(HandlingError::Transient(reason)) => {
                     tracing::warn!(
@@ -294,8 +270,9 @@ impl EventConsumer {
                         error.message = %reason,
                         "transient failure, retrying"
                     );
+                    self.telemetry.retried(labels);
                     if pause(retry, stop).await {
-                        return false;
+                        return Outcome::Stopped;
                     }
                     retry = (retry * 2).min(LONGEST_RETRY);
                 }
@@ -310,7 +287,6 @@ impl EventConsumer {
         &self,
         message: &BorrowedMessage<'_>,
         headers: &[(String, Vec<u8>)],
-        class: &'static str,
         reason: &str,
     ) {
         let topic = format!("{}{DEAD_LETTER_SUFFIX}", self.topic);
@@ -348,16 +324,6 @@ impl EventConsumer {
                 .await
             {
                 Ok(_) => {
-                    let event_type = headers
-                        .iter()
-                        .find(|(key, _)| key == "event_type")
-                        .map(|(_, value)| String::from_utf8_lossy(value));
-                    self.poison.add(
-                        self.name,
-                        event_type.as_deref().unwrap_or_default(),
-                        self.topic,
-                        class,
-                    );
                     tracing::warn!(
                         operation = "consume",
                         messaging.destination.name = self.topic,
@@ -413,6 +379,24 @@ fn headers(message: &BorrowedMessage<'_>) -> Vec<(String, Vec<u8>)> {
         .unwrap_or_default()
 }
 
+/// Value of a header; absent — empty.
+fn header_text(headers: &[(String, Vec<u8>)], name: &str) -> String {
+    headers
+        .iter()
+        .find(|(key, _)| key == name)
+        .map(|(_, value)| String::from_utf8_lossy(value).into_owned())
+        .unwrap_or_default()
+}
+
+/// `now − occurred_at`; an event from the future has no age.
+fn message_age(occurred_at_ms: i64) -> Duration {
+    let occurred_at =
+        UNIX_EPOCH + Duration::from_millis(u64::try_from(occurred_at_ms).unwrap_or_default());
+    SystemTime::now()
+        .duration_since(occurred_at)
+        .unwrap_or_default()
+}
+
 /// Waits `duration`; `true` when the process stops meanwhile.
 async fn pause(duration: Duration, stop: &mut watch::Receiver<bool>) -> bool {
     let stopped = tokio::select! {
@@ -425,55 +409,6 @@ async fn pause(duration: Duration, stop: &mut watch::Receiver<bool>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opentelemetry::metrics::MeterProvider as _;
-    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
-    use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
-
-    #[test]
-    fn a_dead_letter_is_counted_with_its_class() {
-        let exporter = InMemoryMetricExporter::default();
-        let provider = SdkMeterProvider::builder()
-            .with_reader(PeriodicReader::builder(exporter.clone()).build())
-            .build();
-        let poison = PoisonMessages::new(&provider.meter(INSTRUMENTATION));
-
-        poison.add(
-            "delivery.duration-statistics",
-            "nomnom.delivery.v1.DeliveryCompleted",
-            "delivery.v1.delivery-events",
-            CLASS_PERMANENT,
-        );
-        provider.force_flush().expect("flush metrics");
-
-        let exported = exporter.get_finished_metrics().expect("metrics");
-        let metric = exported
-            .iter()
-            .flat_map(|resource| resource.scope_metrics())
-            .flat_map(|scope| scope.metrics())
-            .find(|metric| metric.name() == "nomnom.messaging.poison.messages")
-            .expect("poison counter exported");
-        let AggregatedMetrics::U64(MetricData::Sum(sum)) = metric.data() else {
-            panic!("u64 sum");
-        };
-        let point = sum.data_points().next().expect("one data point");
-        assert_eq!(point.value(), 1);
-        let attributes: Vec<(String, String)> = point
-            .attributes()
-            .map(|kv| (kv.key.to_string(), kv.value.as_str().into_owned()))
-            .collect();
-        for expected in [
-            ("nomnom.messaging.handler", "delivery.duration-statistics"),
-            ("nomnom.event.type", "nomnom.delivery.v1.DeliveryCompleted"),
-            ("messaging.destination.name", "delivery.v1.delivery-events"),
-            ("nomnom.error.class", "permanent"),
-        ] {
-            assert!(
-                attributes.contains(&(expected.0.to_owned(), expected.1.to_owned())),
-                "{expected:?} in {attributes:?}"
-            );
-        }
-    }
-
     #[tokio::test]
     async fn a_panic_of_the_handler_is_permanent() {
         let literal = tokio::task::spawn_blocking(|| panic!("boom"))

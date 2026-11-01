@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 144; пар «метрика × сервис» со статусом «есть»: 150.
+Метрик в инвентаре: 144; пар «метрика × сервис» со статусом «есть»: 155.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -131,7 +131,7 @@ Kafka-клиенты: kafkajs (`restaurants`), confluent-kafka (`payments`), rdk
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `messaging_client_consumed_messages_total` | `messaging.client.consumed.messages` | counter | `messaging_system`, `messaging_destination_name`, `messaging_consumer_group_name`, `error_type` | `restaurants`: ожидается<br>`delivery`: ожидается | — |
+| `messaging_client_consumed_messages_total` | `messaging.client.consumed.messages` | counter | `messaging_system`, `messaging_destination_name`, `messaging_consumer_group_name`, `error_type` | `restaurants`: ожидается<br>`delivery`: есть | — |
 | `messaging_client_sent_messages_total` | `messaging.client.sent.messages` | counter | `messaging_system`, `messaging_destination_name`, `error_type` | `restaurants`: ожидается | — |
 | `messaging_client_operation_duration_seconds` | `messaging.client.operation.duration` | histogram | `messaging_system`, `messaging_operation_name`, `messaging_destination_name`, `error_type` | `restaurants`: ожидается | — |
 
@@ -143,11 +143,11 @@ Middleware в composition root поверх Watermill (и эквивалент �
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `nomnom_messaging_process_duration_seconds` | OTel middleware `nomnom.messaging.process.duration` | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name`, `nomnom_error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается | `error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group. |
-| `nomnom_messaging_retry_attempts_total` | OTel middleware `nomnom.messaging.retry.attempts` | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается | Ретраится только класс transient, поэтому `error_class` не пишется. |
+| `nomnom_messaging_process_duration_seconds` | OTel middleware `nomnom.messaging.process.duration` | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name`, `nomnom_error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: есть | `error_class` только при неуспехе: permanent | deserialization | business | transient; успешный retry — без класса. `handler_name` — handler group. |
+| `nomnom_messaging_retry_attempts_total` | OTel middleware `nomnom.messaging.retry.attempts` | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: есть | Ретраится только класс transient, поэтому `error_class` не пишется. |
 | `nomnom_messaging_poison_messages_total` | OTel middleware вокруг PoisonQueue | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name`, `nomnom_error_class` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: есть | Сообщения, отправленные в `<stream>.dlq`; `error_class`: permanent | deserialization. |
-| `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается | `now − occurred_at` в момент обработки. |
-| `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: ожидается | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
+| `nomnom_messaging_message_age_seconds` | OTel middleware | histogram | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: есть | `now − occurred_at` в момент обработки. |
+| `nomnom_inbox_duplicates_total` | OTel middleware / Inbox adapter | counter | `nomnom_messaging_handler`, `nomnom_event_type`, `messaging_destination_name` | `orders-consumer`: есть<br>`restaurants`: ожидается<br>`delivery`: есть | Outcome duplicate Inbox (`(consumer, event_id)` уже обработан). |
 | `kafka_consumergroup_lag` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается | Серверная метрика с job exporter'а; фильтр по `consumergroup` сервиса, без target_info join. |
 | `kafka_consumergroup_current_offset` | Alloy `prometheus.exporter.kafka` | gauge | `consumergroup`, `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается | Группы `<group>.dlq` на `<stream>.dlq`: первая неразобранная запись DLQ группы (docs/dlq.md); −1 — у partition нет commit. |
 | `kafka_topic_partition_current_offset` | Alloy `prometheus.exporter.kafka` | gauge | `topic`, `partition` | `orders-consumer`: ожидается<br>`restaurants`: ожидается<br>`delivery`: ожидается | Только `<stream>.dlq`: конец partition DLQ. |

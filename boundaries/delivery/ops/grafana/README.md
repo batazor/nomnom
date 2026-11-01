@@ -45,9 +45,9 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Request rate by entry | live | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Errors by class | live | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Technical error ratio | live | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Request rate by entry | live | — |
+| Errors by class | live | — |
+| Technical error ratio | live | — |
 | Latency p50 / p95 / p99 | live | — |
 | CPU | live | — |
 | Memory | live | — |
@@ -96,14 +96,14 @@ JSON — артефакт генератора: правки вносятся в
 
 | Панель | Статус | Недостающие метрики |
 | --- | --- | --- |
-| Consumed | TODO | [`messaging_client_consumed_messages_total`](../../../../docs/observability/metric-inventory.md#messaging-otel) |
+| Consumed | live | — |
 | Produced (Outbox, Debezium) | live | — |
-| Processing failures | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Processing failures | live | — |
 | Consumer lag | TODO | [`kafka_consumergroup_lag`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Retries and poison (DLQ) | live | [`nomnom_messaging_retry_attempts_total`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Processing duration p95 by event_type | TODO | [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Message age at processing p95 | TODO | [`nomnom_messaging_message_age_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
-| Inbox: processed / duplicates | TODO | [`nomnom_inbox_duplicates_total`](../../../../docs/observability/metric-inventory.md#messaging), [`nomnom_messaging_process_duration_seconds`](../../../../docs/observability/metric-inventory.md#messaging) |
+| Retries and poison (DLQ) | live | — |
+| Processing duration p95 by event_type | live | — |
+| Message age at processing p95 | live | — |
+| Inbox: processed / duplicates | live | — |
 | Outbox CDC lag | live | — |
 | Outbox connector tasks | live | — |
 
@@ -149,7 +149,7 @@ JSON — артефакт генератора: правки вносятся в
 | Errors and timeouts | TODO | [`nomnom_authz_checks_total`](../../../../docs/observability/metric-inventory.md#authz) |
 | Check latency | TODO | [`nomnom_authz_check_duration_seconds`](../../../../docs/observability/metric-inventory.md#authz) |
 
-Живых панелей: 30 из 53. TODO-панели нет в dashboard: она появляется после смены статуса метрик в инвентаре и регенерации.
+Живых панелей: 35 из 53. TODO-панели нет в dashboard: она появляется после смены статуса метрик в инвентаре и регенерации.
 
 ## Alerts
 
