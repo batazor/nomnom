@@ -18,7 +18,8 @@ use crate::slices::delivery::applications::duration::record::{Fact, Input};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 
 use super::integration_events::{
-    COURIER_ASSIGNED_TO_DELIVERY, COURIER_UNASSIGNED_FROM_DELIVERY, DELIVERY_CANCELLED, DELIVERY_COMPLETED, DELIVERY_FAILED, DELIVERY_PICKED_UP,
+    COURIER_ASSIGNED_TO_DELIVERY, COURIER_UNASSIGNED_FROM_DELIVERY, DELIVERY_CANCELLED,
+    DELIVERY_COMPLETED, DELIVERY_FAILED, DELIVERY_PICKED_UP,
 };
 
 /// Record Delivery Duration of a message; `None` — the type is not consumed.

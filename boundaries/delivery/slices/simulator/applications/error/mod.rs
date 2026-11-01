@@ -42,9 +42,7 @@ impl From<RepositoryError> for SimulatorApplicationError {
             RepositoryError::Unavailable(reason) => Self::DependencyUnavailable(reason),
             RepositoryError::Conflict
             | RepositoryError::ConcurrentModification
-            | RepositoryError::Corrupt(_) => {
-                Self::Internal(error.to_string())
-            }
+            | RepositoryError::Corrupt(_) => Self::Internal(error.to_string()),
         }
     }
 }

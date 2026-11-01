@@ -190,7 +190,10 @@ impl EventConsumer {
         let envelope = match Envelope::parse(headers) {
             Ok(envelope) => envelope,
             Err(error) => {
-                if !self.dead_letter(message, headers, &error.to_string(), stop).await {
+                if !self
+                    .dead_letter(message, headers, &error.to_string(), stop)
+                    .await
+                {
                     return Outcome::Stopped;
                 }
                 return Outcome::DeadLettered(CLASS_DESERIALIZATION);
@@ -199,7 +202,10 @@ impl EventConsumer {
         self.telemetry
             .message_age(labels, message_age(envelope.occurred_at_ms));
         let Some(payload) = message.payload() else {
-            if !self.dead_letter(message, headers, "message without payload", stop).await {
+            if !self
+                .dead_letter(message, headers, "message without payload", stop)
+                .await
+            {
                 return Outcome::Stopped;
             }
             return Outcome::DeadLettered(CLASS_DESERIALIZATION);
@@ -223,15 +229,15 @@ impl EventConsumer {
                         frame.schema_id, envelope.event_type
                     );
                     if !self.dead_letter(message, headers, &reason, stop).await {
-                    return Outcome::Stopped;
-                }
+                        return Outcome::Stopped;
+                    }
                     return Outcome::DeadLettered(CLASS_DESERIALIZATION);
                 }
                 Err(SchemaLookupError::Unknown(id)) => {
                     let reason = format!("schema id {id} is unknown to the schema registry");
                     if !self.dead_letter(message, headers, &reason, stop).await {
-                    return Outcome::Stopped;
-                }
+                        return Outcome::Stopped;
+                    }
                     return Outcome::DeadLettered(CLASS_DESERIALIZATION);
                 }
                 Err(SchemaLookupError::Unavailable(reason)) => {
@@ -267,8 +273,8 @@ impl EventConsumer {
                 Ok(Handled::Duplicate) => return Outcome::Duplicate,
                 Err(HandlingError::Permanent(reason)) => {
                     if !self.dead_letter(message, headers, &reason, stop).await {
-                    return Outcome::Stopped;
-                }
+                        return Outcome::Stopped;
+                    }
                     return Outcome::DeadLettered(CLASS_PERMANENT);
                 }
                 Err(HandlingError::Transient(reason)) => {
