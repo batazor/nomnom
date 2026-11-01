@@ -325,7 +325,7 @@ Workflow SHALL игнорировать повтор `event_id` и положи�
 **ID:** AC-441
 
 - **WHEN** `RestaurantOrderReady` приходит до `RestaurantOrderAccepted`
-- **THEN** workflow игнорирует его, и последующий маршрут ждёт повторной готовности
+- **THEN** workflow запоминает его и применяет после Acceptance, повторная готовность не требуется
 
 ### Requirement: Cancellation принимается Update до Pickup
 **ID:** FR-420

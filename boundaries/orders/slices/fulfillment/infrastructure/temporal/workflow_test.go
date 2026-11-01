@@ -181,6 +181,30 @@ func TestWorkflowCompletesOrder(t *testing.T) {
 	}
 }
 
+// AC-441: facts ahead of their step are not lost, whatever order the Signals
+// reach the workflow in.
+func TestWorkflowAppliesEarlySignals(t *testing.T) {
+	h := newHarness(t)
+	h.signalAt(time.Minute, temporal.SignalDeliveryCompleted, "delivered")
+	h.signalAt(2*time.Minute, temporal.SignalDeliveryPickedUp, "picked-up")
+	h.signalAt(3*time.Minute, temporal.SignalCourierAssignedToDelivery, "assigned")
+	h.signalAt(4*time.Minute, temporal.SignalRestaurantOrderReady, "ready")
+	h.signalAt(5*time.Minute, temporal.SignalRestaurantOrderAccepted, "accepted")
+
+	result := h.run(policy())
+
+	assert.Equal(t, temporal.Result{Outcome: temporal.OutcomeCompleted}, result)
+	assert.Equal(t, []string{
+		temporal.ActivityAuthorizePayment,
+		temporal.ActivityRecordPaymentAuthorization,
+		temporal.ActivityRequestRestaurantOrder,
+		temporal.ActivityCreateDelivery,
+		temporal.ActivityRecordRestaurantPickup,
+		temporal.ActivityCapturePayment,
+		temporal.ActivityCompleteOrder,
+	}, h.calls)
+}
+
 // The Workflow Stage is published as OrderFulfillmentStage once per change.
 func TestWorkflowPublishesStage(t *testing.T) {
 	h := newHarness(t)

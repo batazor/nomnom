@@ -52,6 +52,7 @@ type Process struct {
 	policy Policy
 
 	processed     map[string]bool
+	early         []earlySignal
 	cancellations map[string]bool
 	final         Stage
 

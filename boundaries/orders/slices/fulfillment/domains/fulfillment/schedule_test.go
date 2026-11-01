@@ -260,14 +260,16 @@ func TestScheduledProcessPlansCompensation(t *testing.T) {
 	}
 }
 
-// PreparationDelayed before QueueRestaurantOrder has no deadline to extend.
-func TestScheduledProcessRefusesDelayBeforeQueue(t *testing.T) {
+// PreparationDelayed before QueueRestaurantOrder has no deadline to extend yet:
+// it waits for the queue and moves nothing until then.
+func TestScheduledProcessRemembersDelayUntilQueue(t *testing.T) {
 	s := newScheduledProcess(t, windowPlan(), windowPlan())
 	s.now = windowPlan().ReplanAt.Add(-time.Hour)
 	s.accepted()
+	deadline := s.p.NextDeadline()
 
 	effect := s.p.Apply(fulfillment.Signal{Kind: fulfillment.SignalPreparationDelayed, EventID: "delay-1", ExpectedReadyAt: windowPlan().PlannedReadyAt}, s.now)
 
-	assert.Equal(t, fulfillment.Refused, effect.Verdict)
-	assert.Equal(t, "not queued", effect.Reason)
+	assert.Equal(t, fulfillment.Remembered, effect.Verdict)
+	assert.Equal(t, deadline, s.p.NextDeadline())
 }

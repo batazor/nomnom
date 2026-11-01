@@ -120,4 +120,5 @@ func (p *Process) Confirm(step Step, approved bool, at time.Time) {
 	case StepFailOrCancelOrder:
 		p.final = StageCancelled
 	}
+	p.admitEarly()
 }

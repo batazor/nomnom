@@ -1,6 +1,9 @@
 package fulfillment
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // SignalKind is a business signal of the Order or of a neighbouring context.
 type SignalKind string
@@ -43,6 +46,9 @@ const (
 	Closed
 	// Refused: the current state does not admit the signal; Effect.Reason says why.
 	Refused
+	// Remembered: the signal came before its step and is applied once the step
+	// is confirmed: neighbours repeat no fact, and Signals arrive in no order.
+	Remembered
 )
 
 // Effect is the result of applying a signal.
@@ -55,28 +61,71 @@ type Effect struct {
 // Changed reports that the process admitted the input and must re-evaluate its route.
 func (e Effect) Changed() bool { return e.Verdict == Applied }
 
-// Apply applies a signal received at the given time. Ids are deduplicated.
-func (p *Process) Apply(signal Signal, at time.Time) Effect {
-	return p.receive(signal.EventID, func() string { return p.admit(signal, at) })
+// earlySignal is a signal waiting for its step, with the time it was received.
+type earlySignal struct {
+	signal Signal
+	at     time.Time
 }
 
-// receive deduplicates by id, ignores input once the outcome is chosen and
-// reports every input the current state does not admit.
-func (p *Process) receive(id string, apply func() string) Effect {
-	if id == "" {
+// Apply applies a signal received at the given time. Ids are deduplicated,
+// input is ignored once the outcome is chosen, a signal ahead of its step is
+// remembered and every other input the current state does not admit is reported.
+func (p *Process) Apply(signal Signal, at time.Time) Effect {
+	if signal.EventID == "" {
 		return Effect{Verdict: MissingEventID}
 	}
-	if p.processed[id] {
+	if p.processed[signal.EventID] {
 		return Effect{Verdict: Duplicate}
 	}
-	p.processed[id] = true
+	p.processed[signal.EventID] = true
 	if p.closing() {
 		return Effect{Verdict: Closed}
 	}
-	if reason := apply(); reason != "" {
+	if p.ahead(signal) {
+		p.early = append(p.early, earlySignal{signal: signal, at: at})
+		return Effect{Verdict: Remembered}
+	}
+	if reason := p.admit(signal, at); reason != "" {
 		return Effect{Verdict: Refused, Reason: reason}
 	}
+	p.admitEarly()
 	return Effect{Verdict: Applied}
+}
+
+// ahead reports that the step the signal follows is not confirmed yet.
+func (p *Process) ahead(signal Signal) bool {
+	switch signal.Kind {
+	case SignalRestaurantOrderAccepted:
+		return !p.restaurantRequested
+	case SignalPreparationDelayed:
+		return !p.ready && (!p.accepted || (p.schedule != nil && !p.schedule.queued))
+	case SignalRestaurantOrderReady:
+		return !p.accepted
+	case SignalCourierAssignedToDelivery, SignalDeliveryFailed:
+		return !p.deliveryCreated
+	case SignalDeliveryPickedUp:
+		return !p.assigned
+	case SignalDeliveryCompleted:
+		return !p.pickedUp
+	default:
+		return false
+	}
+}
+
+// admitEarly applies the remembered signals whose step is now confirmed, in the
+// order of arrival, at the time they were received. One may unblock another, so
+// the scan restarts after each.
+func (p *Process) admitEarly() {
+	for i := 0; i < len(p.early) && !p.closing(); {
+		early := p.early[i]
+		if p.ahead(early.signal) {
+			i++
+			continue
+		}
+		p.early = slices.Delete(p.early, i, i+1)
+		p.admit(early.signal, early.at)
+		i = 0
+	}
 }
 
 // admit changes the process for an admitted signal; a non-empty result is the
@@ -110,10 +159,7 @@ func (p *Process) admit(signal Signal, at time.Time) string {
 }
 
 func (p *Process) onAccepted(at time.Time) string {
-	switch {
-	case !p.restaurantRequested:
-		return "restaurant order not requested"
-	case p.accepted:
+	if p.accepted {
 		return "already accepted"
 	}
 	p.accepted = true
@@ -149,10 +195,8 @@ func (p *Process) onPreparationStarted() string {
 
 func (p *Process) onPreparationDelayed(expectedReadyAt time.Time) string {
 	switch {
-	case !p.accepted || p.ready:
+	case p.ready:
 		return "not preparing"
-	case p.schedule != nil && !p.schedule.queued:
-		return "not queued"
 	case !expectedReadyAt.After(p.preparationDeadline):
 		return "no extension"
 	}
@@ -173,10 +217,7 @@ func (p *Process) onPreparationFailed() string {
 }
 
 func (p *Process) onReady(at time.Time) string {
-	switch {
-	case !p.accepted:
-		return "not accepted"
-	case p.ready:
+	if p.ready {
 		return "already ready"
 	}
 	p.ready = true
@@ -185,10 +226,7 @@ func (p *Process) onReady(at time.Time) string {
 }
 
 func (p *Process) onAssigned(at time.Time) string {
-	switch {
-	case !p.deliveryCreated:
-		return "delivery not created"
-	case p.assigned:
+	if p.assigned {
 		return "already assigned"
 	}
 	p.assigned = true
@@ -203,10 +241,7 @@ func (p *Process) armPickup(at time.Time) {
 }
 
 func (p *Process) onPickedUp(at time.Time) string {
-	switch {
-	case !p.assigned:
-		return "courier not assigned"
-	case p.pickedUp:
+	if p.pickedUp {
 		return "already picked up"
 	}
 	p.pickedUp = true
@@ -216,17 +251,11 @@ func (p *Process) onPickedUp(at time.Time) string {
 }
 
 func (p *Process) onDelivered() string {
-	if !p.pickedUp {
-		return "not picked up"
-	}
 	p.done = true
 	return ""
 }
 
 func (p *Process) onDeliveryFailed() string {
-	if !p.deliveryCreated {
-		return "delivery not created"
-	}
 	p.deliveryClosed = true
 	p.fail(OutcomeFailure, ReasonDeliveryFailed)
 	return ""

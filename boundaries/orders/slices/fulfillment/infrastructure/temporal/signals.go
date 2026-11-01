@@ -62,6 +62,8 @@ func (r *run) receive(ctx workflow.Context, signal, eventID string, effect fulfi
 		logger.Info("signal ignored after outcome chosen", "signal", signal, "event_id", eventID, "stage", r.process.Stage())
 	case fulfillment.Refused:
 		logger.Warn("signal ignored in current stage", "signal", signal, "event_id", eventID, "stage", r.process.Stage(), "reason", effect.Reason)
+	case fulfillment.Remembered:
+		logger.Info("signal remembered until its step", "signal", signal, "event_id", eventID, "stage", r.process.Stage())
 	case fulfillment.Applied:
 		r.changed = true
 	}
