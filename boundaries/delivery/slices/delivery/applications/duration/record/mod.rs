@@ -6,15 +6,15 @@
 //!
 //! | Fact | Change |
 //! | --- | --- |
-//! | Pickup | `courier_lead` = Pickup − creation of the Delivery; the transit of the Delivery opens at Pickup |
-//! | Completed | `transit` = handover − Pickup of the open transit, which closes |
-//! | Cancelled, Failed | the open transit closes without a duration |
+//! | Pickup | `courier_lead` = Pickup − creation of the Delivery; the transit of the Delivery opens at Pickup, or is measured by the end already remembered |
+//! | Completed | `transit` = handover − Pickup of the open transit, which closes; without one the handover is remembered |
+//! | Cancelled, Failed | the open transit closes without a duration; without one the end is remembered |
 //!
 //! A Delivery stored before its creation time was recorded has no
-//! `courier_lead`; a handover without an open transit (picked up before the
-//! statistics existed) has no `transit`. Facts of one Delivery arrive in
-//! order, the stream is keyed by the Delivery id, except a redrive: a Pickup
-//! handled after the Delivery ended opens no transit and has no `transit`.
+//! `courier_lead`. Facts of one Delivery arrive in order, the stream is keyed by
+//! the Delivery id, except a redrive: the Pickup may come after the end, which
+//! is why the end is remembered. A Pickup that never comes leaves no `transit`;
+//! its record expires with the DLQ retention.
 
 use std::time::Duration;
 
@@ -52,6 +52,13 @@ pub struct OpenTransit {
     pub picked_up_at_ms: i64,
 }
 
+/// End of a Delivery handled before its Pickup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ClosedTransit {
+    /// Handover, epoch milliseconds; `None` — cancelled or failed.
+    pub handed_over_at_ms: Option<i64>,
+}
+
 /// Delivery Duration Statistics of the Markets. Writes participate in the
 /// active Unit of Work.
 pub trait DeliveryDurationStatistics {
@@ -68,6 +75,21 @@ pub trait DeliveryDurationStatistics {
         &self,
         delivery_id: &DeliveryId,
     ) -> Result<Option<OpenTransit>, RepositoryError>;
+
+    /// Remembers the end of a Delivery without an open transit, for a Pickup
+    /// handled later: the handover, `None` — cancelled or failed.
+    fn remember_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+        handed_over_at_ms: Option<i64>,
+    ) -> Result<(), RepositoryError>;
+
+    /// Removes the remembered end of the Delivery and returns it: `None` — no
+    /// end was remembered.
+    fn take_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Option<ClosedTransit>, RepositoryError>;
 
     /// Adds the duration of a leg of the Delivery to the sample of its
     /// Market and keeps the latest `keep` durations of that leg; a second
@@ -130,9 +152,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
             match input.fact {
                 Fact::PickedUp => self.picked_up(&delivery_id, at)?,
                 Fact::Completed => self.completed(&delivery_id, at)?,
-                Fact::Dropped => {
-                    self.statistics.close_transit(&delivery_id)?;
-                }
+                Fact::Dropped => self.dropped(&delivery_id)?,
             }
             Ok(Output::Recorded)
         })
@@ -155,11 +175,28 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 lead,
             )?;
         }
-        // A Pickup redriven after the end of the Delivery has nothing to close
-        // its transit: no later fact arrives.
-        if !delivery.state().is_terminal() {
+        let Some(closed) = self.statistics.take_closed_transit(delivery_id)? else {
             self.statistics
                 .open_transit(delivery_id, delivery.market_id(), picked_up_at_ms)?;
+            return Ok(());
+        };
+        let transit = closed
+            .handed_over_at_ms
+            .and_then(|handed_over_at_ms| elapsed(picked_up_at_ms, handed_over_at_ms));
+        if let Some(transit) = transit {
+            self.record(
+                delivery.market_id(),
+                DurationKind::Transit,
+                delivery_id,
+                transit,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn dropped(&self, delivery_id: &DeliveryId) -> Result<(), DeliveryApplicationError> {
+        if self.statistics.close_transit(delivery_id)?.is_none() {
+            self.statistics.remember_closed_transit(delivery_id, None)?;
         }
         Ok(())
     }
@@ -170,6 +207,8 @@ impl<U: UnitOfWork> Handler<'_, U> {
         delivered_at_ms: i64,
     ) -> Result<(), DeliveryApplicationError> {
         let Some(open) = self.statistics.close_transit(delivery_id)? else {
+            self.statistics
+                .remember_closed_transit(delivery_id, Some(delivered_at_ms))?;
             return Ok(());
         };
         if let Some(transit) = elapsed(open.picked_up_at_ms, delivered_at_ms) {

@@ -141,10 +141,52 @@ fn delivery_cancelled_after_pickup_leaves_without_transit() {
     );
 }
 
-/// A Pickup redriven after the end of the Delivery opens no transit: nothing
-/// would close it.
+/// A Pickup redriven after the handover measures the transit by the
+/// remembered handover and leaves nothing behind.
 #[test]
-fn pickup_redriven_after_the_end_of_the_delivery_opens_no_transit() {
+fn pickup_redriven_after_the_handover_records_the_transit() {
+    let world = World::new();
+    created(&world, "delivery-1", &berlin());
+
+    handler(&world)
+        .execute(fact("completed", "delivery-1", Fact::Completed, at(40)))
+        .expect("handover recorded");
+    handler(&world)
+        .execute(fact("pickup", "delivery-1", Fact::PickedUp, at(10)))
+        .expect("pickup recorded");
+
+    assert_eq!(
+        latest(&world, &berlin(), DurationKind::Transit),
+        vec![minutes(30)]
+    );
+    let id = DeliveryId::new("delivery-1");
+    assert_eq!(world.store.close_transit(&id), Ok(None));
+    assert_eq!(world.store.take_closed_transit(&id), Ok(None));
+}
+
+/// A Pickup redriven after a cancellation has no transit and opens none.
+#[test]
+fn pickup_redriven_after_the_cancellation_opens_no_transit() {
+    let world = World::new();
+    created(&world, "delivery-1", &berlin());
+
+    handler(&world)
+        .execute(fact("cancelled", "delivery-1", Fact::Dropped, at(40)))
+        .expect("cancellation recorded");
+    handler(&world)
+        .execute(fact("pickup", "delivery-1", Fact::PickedUp, at(10)))
+        .expect("pickup recorded");
+
+    assert!(latest(&world, &berlin(), DurationKind::Transit).is_empty());
+    assert_eq!(
+        world.store.close_transit(&DeliveryId::new("delivery-1")),
+        Ok(None)
+    );
+}
+
+/// Consumer lag: the Delivery has ended, its facts still arrive in order.
+#[test]
+fn pickup_handled_behind_the_end_of_the_delivery_still_records_the_transit() {
     let world = World::new();
     let mut delivery = Delivery::create(
         DeliveryId::new("delivery-1"),
@@ -152,16 +194,19 @@ fn pickup_redriven_after_the_end_of_the_delivery_opens_no_transit() {
         berlin(),
         CREATED_AT,
     );
-    delivery.cancel(None).expect("cancel delivery");
+    delivery.cancel(None).expect("end the delivery");
     DeliveryRepository::add(&world.store, &delivery).expect("seed delivery");
 
     handler(&world)
         .execute(fact("pickup", "delivery-1", Fact::PickedUp, at(10)))
         .expect("pickup recorded");
+    handler(&world)
+        .execute(fact("completed", "delivery-1", Fact::Completed, at(40)))
+        .expect("handover recorded");
 
     assert_eq!(
-        world.store.close_transit(&DeliveryId::new("delivery-1")),
-        Ok(None)
+        latest(&world, &berlin(), DurationKind::Transit),
+        vec![minutes(30)]
     );
 }
 

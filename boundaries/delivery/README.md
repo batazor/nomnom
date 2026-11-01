@@ -431,9 +431,9 @@ Read model собственных фактов Delivery по образцу Wait
 
 | Событие | Изменение |
 | --- | --- |
-| `DeliveryPickedUp` | `courier_lead` = `occurred_at` − `deliveries.created_at`; transit доставки открыт с `occurred_at` (`delivery_open_transits`); Pickup после redrive по завершённой Delivery transit не открывает |
-| `DeliveryCompleted` | `transit` = `occurred_at` − Pickup открытого transit, transit закрыт |
-| `DeliveryCancelled`, `DeliveryFailed` | transit закрыт без длительности |
+| `DeliveryPickedUp` | `courier_lead` = `occurred_at` − `deliveries.created_at`; transit доставки открыт с `occurred_at` (`delivery_open_transits`); если конец Delivery уже запомнен (redrive Pickup), transit не открывается, а считается по нему |
+| `DeliveryCompleted` | `transit` = `occurred_at` − Pickup открытого transit, transit закрыт; без открытого transit время вручения запоминается (`delivery_closed_transits`, 30 дней — срок хранения DLQ) |
+| `DeliveryCancelled`, `DeliveryFailed` | transit закрыт без длительности; без открытого transit конец запоминается там же |
 | остальные | commit без обработки |
 
 Длительности хранятся по Market и виду в `delivery_duration_samples` (одна длительность вида на доставку); после вставки остаются последние `DELIVERY_ESTIMATE__SAMPLE_SIZE`. Доставка, сохранённая до появления `created_at`, не даёт `courier_lead`; вручение без открытого transit (Pickup до появления статистики) — `transit`; отрицательный интервал (часы процесса и базы разошлись) не записывается. Market берётся из доставки: у `Delivery` нет адресов, статистика общая по Market.

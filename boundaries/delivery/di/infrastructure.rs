@@ -32,7 +32,7 @@ use crate::slices::delivery::applications::assignment_process::AssignmentProcess
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
 use crate::slices::delivery::applications::duration::record::{
-    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
+    ClosedTransit, DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
 };
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
 use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessage};
@@ -415,6 +415,22 @@ impl DeliveryInbox for ObservedStore {
 }
 
 impl DeliveryDurationStatistics for ObservedStore {
+    fn remember_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+        handed_over_at_ms: Option<i64>,
+    ) -> Result<(), RepositoryError> {
+        self.inner
+            .remember_closed_transit(delivery_id, handed_over_at_ms)
+    }
+
+    fn take_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Option<ClosedTransit>, RepositoryError> {
+        self.inner.take_closed_transit(delivery_id)
+    }
+
     fn open_transit(
         &self,
         delivery_id: &DeliveryId,

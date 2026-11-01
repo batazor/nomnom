@@ -28,7 +28,7 @@ use crate::slices::courier::domains::courier::{Courier, CourierId, CourierReposi
 use crate::slices::delivery::applications::assignment_process::CandidateDeliveries;
 use crate::slices::delivery::applications::duration::estimate::DeliveryDurationSamples;
 use crate::slices::delivery::applications::duration::record::{
-    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
+    ClosedTransit, DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
 };
 use crate::slices::delivery::applications::execution::get_courier_current::{
     CourierCurrentDeliveryReadModel, CurrentDeliveryView,
@@ -354,6 +354,22 @@ impl DeliveryInbox for TestStore {
 }
 
 impl DeliveryDurationStatistics for TestStore {
+    fn remember_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+        handed_over_at_ms: Option<i64>,
+    ) -> Result<(), RepositoryError> {
+        self.available()?
+            .remember_closed_transit(delivery_id, handed_over_at_ms)
+    }
+
+    fn take_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Option<ClosedTransit>, RepositoryError> {
+        self.available()?.take_closed_transit(delivery_id)
+    }
+
     fn open_transit(
         &self,
         delivery_id: &DeliveryId,

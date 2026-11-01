@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH expired AS (\n                 DELETE FROM delivery_closed_transits WHERE delivery_id IN (\n                     SELECT delivery_id FROM delivery_closed_transits\n                     WHERE closed_at < now() - interval '30 days'\n                     FOR UPDATE SKIP LOCKED))\n             INSERT INTO delivery_closed_transits (delivery_id, handed_over_at_ms)\n             VALUES ($1, $2)\n             ON CONFLICT (delivery_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e28477df4fcf57c82c431b17de6257f2e7489478c5ec56351cfb579dff12a536"
+}

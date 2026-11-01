@@ -8,7 +8,7 @@ use crate::pkg::persistence::RepositoryError;
 use crate::slices::courier::domains::courier::MarketId;
 use crate::slices::delivery::applications::duration::estimate::DeliveryDurationSamples;
 use crate::slices::delivery::applications::duration::record::{
-    DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
+    ClosedTransit, DeliveryDurationStatistics, DeliveryInbox, OpenTransit,
 };
 use crate::slices::delivery::domains::delivery::{DeliveryId, DurationKind};
 
@@ -79,6 +79,44 @@ impl DeliveryDurationStatistics for Store {
             })
         })
         .transpose()
+    }
+
+    fn remember_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+        handed_over_at_ms: Option<i64>,
+    ) -> Result<(), RepositoryError> {
+        // The DLQ keeps a dead letter for 30 days (ADR 28): the Pickup cannot
+        // come later.
+        sql!(self, "INSERT", |connection| sqlx::query!(
+            "WITH expired AS (
+                 DELETE FROM delivery_closed_transits WHERE delivery_id IN (
+                     SELECT delivery_id FROM delivery_closed_transits
+                     WHERE closed_at < now() - interval '30 days'
+                     FOR UPDATE SKIP LOCKED))
+             INSERT INTO delivery_closed_transits (delivery_id, handed_over_at_ms)
+             VALUES ($1, $2)
+             ON CONFLICT (delivery_id) DO NOTHING",
+            delivery_id.as_str(),
+            handed_over_at_ms
+        )
+        .execute(connection))
+        .map(drop)
+    }
+
+    fn take_closed_transit(
+        &self,
+        delivery_id: &DeliveryId,
+    ) -> Result<Option<ClosedTransit>, RepositoryError> {
+        Ok(sql!(self, "DELETE", |connection| sqlx::query!(
+            "DELETE FROM delivery_closed_transits WHERE delivery_id = $1
+             RETURNING handed_over_at_ms",
+            delivery_id.as_str()
+        )
+        .fetch_optional(connection))?
+        .map(|row| ClosedTransit {
+            handed_over_at_ms: row.handed_over_at_ms,
+        }))
     }
 
     fn record_duration(

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM delivery_closed_transits WHERE delivery_id = $1\n             RETURNING handed_over_at_ms",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "handed_over_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "delivery_closed_transits",
+            "name": "handed_over_at_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0dc6f4323d89e1c7f8ac16a429351e34ae9b31a51a9c369aafef81de91c46e4a"
+}
