@@ -75,7 +75,9 @@ impl From<AuthorizationError> for CourierApplicationError {
 impl From<RepositoryError> for CourierApplicationError {
     fn from(error: RepositoryError) -> Self {
         match error {
-            RepositoryError::Conflict => Self::Internal(error.to_string()),
+            RepositoryError::Conflict | RepositoryError::Corrupt(_) => {
+                Self::Internal(error.to_string())
+            }
             RepositoryError::ConcurrentModification => Self::ConcurrentModification,
             RepositoryError::Unavailable(reason) => Self::DependencyUnavailable(reason),
         }

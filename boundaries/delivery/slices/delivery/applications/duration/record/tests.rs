@@ -141,6 +141,30 @@ fn delivery_cancelled_after_pickup_leaves_without_transit() {
     );
 }
 
+/// A Pickup redriven after the end of the Delivery opens no transit: nothing
+/// would close it.
+#[test]
+fn pickup_redriven_after_the_end_of_the_delivery_opens_no_transit() {
+    let world = World::new();
+    let mut delivery = Delivery::create(
+        DeliveryId::new("delivery-1"),
+        OrderId::new("order-of-delivery-1"),
+        berlin(),
+        CREATED_AT,
+    );
+    delivery.cancel(None).expect("cancel delivery");
+    DeliveryRepository::add(&world.store, &delivery).expect("seed delivery");
+
+    handler(&world)
+        .execute(fact("pickup", "delivery-1", Fact::PickedUp, at(10)))
+        .expect("pickup recorded");
+
+    assert_eq!(
+        world.store.close_transit(&DeliveryId::new("delivery-1")),
+        Ok(None)
+    );
+}
+
 /// FR-676: a repeated event changes nothing.
 #[test]
 fn repeated_events_do_not_change_the_statistics() {

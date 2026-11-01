@@ -251,6 +251,10 @@ fn storage_error(error: sqlx::Error) -> RepositoryError {
         match database.code().as_deref() {
             Some("23505") => return RepositoryError::Conflict,
             Some("40001" | "40P01") => return RepositoryError::ConcurrentModification,
+            // Data exception: the value is invalid, not the storage.
+            Some(code) if code.starts_with("22") => {
+                return RepositoryError::Corrupt(format!("database: {error}"));
+            }
             _ => {}
         }
     }
@@ -258,7 +262,7 @@ fn storage_error(error: sqlx::Error) -> RepositoryError {
 }
 
 fn corrupt(what: &str, detail: impl std::fmt::Display) -> RepositoryError {
-    RepositoryError::Unavailable(format!("corrupt {what} row: {detail}"))
+    RepositoryError::Corrupt(format!("corrupt {what} row: {detail}"))
 }
 
 fn db_version(version: u64) -> Result<i64, RepositoryError> {

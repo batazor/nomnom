@@ -7,7 +7,8 @@
 //! | `DeliveryPickedUp` | Pickup |
 //! | `DeliveryCompleted` | handover |
 //! | `DeliveryCancelled`, `DeliveryFailed` | leaves without a duration |
-//! | others | not consumed, committed without processing |
+//! | `CourierAssignedToDelivery`, `CourierUnassignedFromDelivery` | not consumed, committed without processing |
+//! | others | unknown to the contract: a dead letter |
 
 use prost::Message;
 
@@ -17,7 +18,7 @@ use crate::slices::delivery::applications::duration::record::{Fact, Input};
 use crate::slices::delivery::applications::error::DeliveryApplicationError;
 
 use super::integration_events::{
-    DELIVERY_CANCELLED, DELIVERY_COMPLETED, DELIVERY_FAILED, DELIVERY_PICKED_UP,
+    COURIER_ASSIGNED_TO_DELIVERY, COURIER_UNASSIGNED_FROM_DELIVERY, DELIVERY_CANCELLED, DELIVERY_COMPLETED, DELIVERY_FAILED, DELIVERY_PICKED_UP,
 };
 
 /// Record Delivery Duration of a message; `None` — the type is not consumed.
@@ -33,7 +34,12 @@ pub fn duration_input(envelope: &Envelope, payload: &[u8]) -> Result<Option<Inpu
             DELIVERY_FAILED => {
                 v1::DeliveryFailed::decode(payload).map(|event| (event.delivery_id, Fact::Dropped))
             }
-            _ => return Ok(None),
+            COURIER_ASSIGNED_TO_DELIVERY | COURIER_UNASSIGNED_FROM_DELIVERY => return Ok(None),
+            unknown => {
+                return Err(HandlingError::Permanent(format!(
+                    "unknown event_type {unknown:?}"
+                )));
+            }
         };
     let (delivery_id, fact) = decoded.map_err(|error| {
         HandlingError::Permanent(format!(
@@ -151,10 +157,10 @@ mod tests {
             duration_input(&envelope(COURIER_ASSIGNED_TO_DELIVERY), b"anything"),
             Ok(None)
         );
-        assert_eq!(
+        assert!(matches!(
             duration_input(&envelope("nomnom.orders.v1.OrderPlaced"), b""),
-            Ok(None)
-        );
+            Err(HandlingError::Permanent(_))
+        ));
     }
 
     #[test]

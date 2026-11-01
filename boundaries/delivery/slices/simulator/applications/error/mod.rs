@@ -40,7 +40,9 @@ impl From<RepositoryError> for SimulatorApplicationError {
     fn from(error: RepositoryError) -> Self {
         match error {
             RepositoryError::Unavailable(reason) => Self::DependencyUnavailable(reason),
-            RepositoryError::Conflict | RepositoryError::ConcurrentModification => {
+            RepositoryError::Conflict
+            | RepositoryError::ConcurrentModification
+            | RepositoryError::Corrupt(_) => {
                 Self::Internal(error.to_string())
             }
         }

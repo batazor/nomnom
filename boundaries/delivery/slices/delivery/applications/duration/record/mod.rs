@@ -13,7 +13,8 @@
 //! A Delivery stored before its creation time was recorded has no
 //! `courier_lead`; a handover without an open transit (picked up before the
 //! statistics existed) has no `transit`. Facts of one Delivery arrive in
-//! order: the stream is keyed by the Delivery id.
+//! order, the stream is keyed by the Delivery id, except a redrive: a Pickup
+//! handled after the Delivery ended opens no transit and has no `transit`.
 
 use std::time::Duration;
 
@@ -154,8 +155,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 lead,
             )?;
         }
-        self.statistics
-            .open_transit(delivery_id, delivery.market_id(), picked_up_at_ms)?;
+        // A Pickup redriven after the end of the Delivery has nothing to close
+        // its transit: no later fact arrives.
+        if !delivery.state().is_terminal() {
+            self.statistics
+                .open_transit(delivery_id, delivery.market_id(), picked_up_at_ms)?;
+        }
         Ok(())
     }
 

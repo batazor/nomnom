@@ -13,6 +13,8 @@ pub enum RepositoryError {
     ConcurrentModification,
     /// The storage could not be reached or failed transiently.
     Unavailable(String),
+    /// The stored or written data is invalid: a repeat fails the same way.
+    Corrupt(String),
 }
 
 impl Display for RepositoryError {
@@ -23,6 +25,7 @@ impl Display for RepositoryError {
                 formatter.write_str("aggregate was modified concurrently")
             }
             Self::Unavailable(reason) => write!(formatter, "storage unavailable: {reason}"),
+            Self::Corrupt(reason) => write!(formatter, "invalid data: {reason}"),
         }
     }
 }

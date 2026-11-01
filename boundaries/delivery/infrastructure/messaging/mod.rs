@@ -190,21 +190,26 @@ impl EventConsumer {
         let envelope = match Envelope::parse(headers) {
             Ok(envelope) => envelope,
             Err(error) => {
-                self.dead_letter(message, headers, &error.to_string()).await;
+                if !self.dead_letter(message, headers, &error.to_string(), stop).await {
+                    return Outcome::Stopped;
+                }
                 return Outcome::DeadLettered(CLASS_DESERIALIZATION);
             }
         };
         self.telemetry
             .message_age(labels, message_age(envelope.occurred_at_ms));
         let Some(payload) = message.payload() else {
-            self.dead_letter(message, headers, "message without payload")
-                .await;
+            if !self.dead_letter(message, headers, "message without payload", stop).await {
+                return Outcome::Stopped;
+            }
             return Outcome::DeadLettered(CLASS_DESERIALIZATION);
         };
         let frame = match parse_wire_frame(payload) {
             Ok(frame) => frame,
             Err(reason) => {
-                self.dead_letter(message, headers, &reason).await;
+                if !self.dead_letter(message, headers, &reason, stop).await {
+                    return Outcome::Stopped;
+                }
                 return Outcome::DeadLettered(CLASS_DESERIALIZATION);
             }
         };
@@ -217,12 +222,16 @@ impl EventConsumer {
                         "schema {} is not a schema of event_type {:?}",
                         frame.schema_id, envelope.event_type
                     );
-                    self.dead_letter(message, headers, &reason).await;
+                    if !self.dead_letter(message, headers, &reason, stop).await {
+                    return Outcome::Stopped;
+                }
                     return Outcome::DeadLettered(CLASS_DESERIALIZATION);
                 }
                 Err(SchemaLookupError::Unknown(id)) => {
                     let reason = format!("schema id {id} is unknown to the schema registry");
-                    self.dead_letter(message, headers, &reason).await;
+                    if !self.dead_letter(message, headers, &reason, stop).await {
+                    return Outcome::Stopped;
+                }
                     return Outcome::DeadLettered(CLASS_DESERIALIZATION);
                 }
                 Err(SchemaLookupError::Unavailable(reason)) => {
@@ -257,7 +266,9 @@ impl EventConsumer {
                 Ok(Handled::Processed) => return Outcome::Processed,
                 Ok(Handled::Duplicate) => return Outcome::Duplicate,
                 Err(HandlingError::Permanent(reason)) => {
-                    self.dead_letter(message, headers, &reason).await;
+                    if !self.dead_letter(message, headers, &reason, stop).await {
+                    return Outcome::Stopped;
+                }
                     return Outcome::DeadLettered(CLASS_PERMANENT);
                 }
                 Err(HandlingError::Transient(reason)) => {
@@ -283,12 +294,14 @@ impl EventConsumer {
     /// Publishes the message to `<stream>.dlq` with its key, payload and
     /// headers plus the dead letter headers. A failed publish is repeated:
     /// committing the offset without the dead letter would lose the message.
+    /// `false` when the process stops first: the offset stays uncommitted.
     async fn dead_letter(
         &self,
         message: &BorrowedMessage<'_>,
         headers: &[(String, Vec<u8>)],
         reason: &str,
-    ) {
+        stop: &mut watch::Receiver<bool>,
+    ) -> bool {
         let topic = format!("{}{DEAD_LETTER_SUFFIX}", self.topic);
         let mut retry = FIRST_RETRY;
         loop {
@@ -333,11 +346,13 @@ impl EventConsumer {
                         error.message = %reason,
                         "integration event sent to DLQ"
                     );
-                    return;
+                    return true;
                 }
                 Err((error, _)) => {
                     tracing::error!(operation = "dead_letter", messaging.destination.name = %topic, error.message = %error, "dead letter publish failed, retrying");
-                    tokio::time::sleep(retry).await;
+                    if pause(retry, stop).await {
+                        return false;
+                    }
                     retry = (retry * 2).min(LONGEST_RETRY);
                 }
             }
