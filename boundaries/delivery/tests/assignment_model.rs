@@ -608,6 +608,9 @@ impl Driver for AssignmentDriver {
         }
     }
 
+    // `reconcile` has no call: one use case at a time leaves no orphan to remove,
+    // and the state check proves the grants match the model.
+    #[allow(clippy::no_effect)]
     fn step(&mut self, step: &Step) -> Result {
         switch!(step {
             init => self.init()?,
