@@ -249,7 +249,7 @@ helm template bootstrap ops/kind/bootstrap -n nomnom-data \
 | `nomnom-outsider` | pod `net-probe` вне прикладного контура: ingress-проверки и внешний клиент BFF |
 | `nomnom-data` | один PostgreSQL `postgres` с базами `orders`, `payments`, `delivery` и MongoDB `restaurants`; данные в `emptyDir`. Каждая база доступна только своему приложению: своя роль, `CONNECT` только у владельца, `pg_hba` пускает роль только в её базу и не пускает физическую репликацию; release `bootstrap` и его hook Jobs |
 | `nomnom-authz` | SpiceDB с bootstrap-схемой и preshared key |
-| `nomnom-observability` | Alloy — только с `GRAFANA_CLOUD=1` |
+| `nomnom-observability` | Alloy и пилот OBI (eBPF-метрики Temporal) — только с `GRAFANA_CLOUD=1` |
 | `nomnom-infra` | Apache Kafka под Strimzi (ресурсы `Kafka`, `KafkaNodePool`, `KafkaTopic`, Service `kafka-kafka-bootstrap:9092`), Confluent Schema Registry (`schema-registry:8081`), Job регистрации схем (release `schema-registration`), Kafka Connect с Debezium для Outbox (ресурс `KafkaConnect` release `kafka-connect`, ADR 37) и Temporal dev server для `orders-consumer` и `orders-worker` ([`manifests/messaging`](manifests/messaging/infrastructure.yaml)); данные в `emptyDir`, состояние Connect — в топиках брокера; Redpanda Console (Deployment `console`) — только после `make kind-console` |
 
 ## Internal gateway

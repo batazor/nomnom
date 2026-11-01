@@ -1,0 +1,104 @@
+# OpenTelemetry eBPF Instrumentation, пилот (ADR 9): один pod на узел, OTLP метрик в Alloy.
+# Конфигурация — obi/obi.yaml через configMapGenerator kustomization.yaml. Набор capabilities
+# — непривилегированный вариант документации OBI без SYS_ADMIN и NET_ADMIN: propagation
+# выключен, трафик приложений не меняется.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: obi
+  namespace: nomnom-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nomnom-obi
+rules:
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list, watch]
+  - apiGroups: [""]
+    resources: [pods, services, nodes]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nomnom-obi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nomnom-obi
+subjects:
+  - kind: ServiceAccount
+    name: obi
+    namespace: nomnom-observability
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: obi
+  namespace: nomnom-observability
+  labels:
+    app.kubernetes.io/name: obi
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: obi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: obi
+    spec:
+      serviceAccountName: obi
+      # Процессы наблюдаемых контейнеров видны только из PID namespace узла.
+      hostPID: true
+      containers:
+        - name: obi
+          image: docker.io/otel/ebpf-instrument:v1.0.0@sha256:a68d70e934260f72540f157ccf4fb4adfa38f11de060d7d905696dad6a3fca02
+          env:
+            - name: OTEL_EBPF_CONFIG_PATH
+              value: /etc/obi/obi.yaml
+            # В obi/obi.yaml resource принимает только host.* и service.*.
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment.name=kind
+          # Всплеск при загрузке BPF-программ: при 512Mi первый старт получил OOMKilled,
+          # рабочий RSS около 100MB (замер 2026-11-01).
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            runAsUser: 0
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add:
+                - BPF
+                - SYS_PTRACE
+                - NET_RAW
+                - CHECKPOINT_RESTORE
+                - DAC_READ_SEARCH
+                - PERFMON
+          volumeMounts:
+            - name: config
+              mountPath: /etc/obi
+            - name: var-run-obi
+              mountPath: /var/run/obi
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+            - name: tracefs
+              mountPath: /sys/kernel/tracing
+      volumes:
+        - name: config
+          configMap:
+            name: obi
+        - name: var-run-obi
+          emptyDir: {}
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+        - name: tracefs
+          hostPath:
+            path: /sys/kernel/tracing
+            type: Directory

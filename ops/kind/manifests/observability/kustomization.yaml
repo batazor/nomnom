@@ -10,6 +10,7 @@ kind: Kustomization
 resources:
   - alloy.yaml
   - kube-state-metrics.yaml
+  - obi.yaml
   - faro-route.yaml
   - ../gateway
 # Alloy загружает все *.alloy каталога /etc/alloy как один конфиг: компоненты ссылаются друг
@@ -23,6 +24,10 @@ configMapGenerator:
       - alloy/logs.alloy
       - alloy/infra.alloy
       - alloy/export.alloy
+  - name: obi
+    namespace: nomnom-observability
+    files:
+      - obi/obi.yaml
 secretGenerator:
   - name: grafana-cloud-otlp
     namespace: nomnom-observability

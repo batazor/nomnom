@@ -1,0 +1,67 @@
+# Пилот OBI (ADR 9): метрики Temporal server, компонента без OTel SDK. Kafka Connect проверен и
+# не включён: процесс JVM подключается, но метрик нет ни без SYS_ADMIN, ни с ним (замер 2026-11-01).
+# Сервисы с SDK не выбираются: их spans и метрики уже идут в Alloy. Правила заменяют встроенные
+# исключения OBI, поэтому при default_action exclude попадает только перечисленное.
+file_format: '1.0'
+
+# Фильтр Alloy пропускает только service.namespace=nomnom (alloy/apps.alloy).
+resource:
+  attributes:
+    - name: service.namespace
+      value: nomnom
+
+# tracer_provider нет: пилот только про метрики, traces этих компонентов не экспортируются.
+meter_provider:
+  readers:
+    - periodic:
+        interval: 60000
+        exporter:
+          otlp_grpc:
+            endpoint: http://alloy.nomnom-observability:4317
+            tls:
+              insecure: true
+
+extensions:
+  obi:
+    version: '2.0'
+    capture:
+      policy:
+        default_action: exclude
+      rules:
+        - action: include
+          name: temporal
+          match:
+            kubernetes:
+              namespace_glob: [nomnom-infra]
+              pod_labels:
+                app.kubernetes.io/name: [temporal]
+      instrumentation:
+        http:
+          enabled:
+            traces: false
+            metrics: true
+        grpc:
+          enabled:
+            traces: false
+            metrics: true
+        # SQL выключен: 792 series из 1400, а СУБД определяется только как other_sql; PostgreSQL
+        # и так виден через экспортеры Alloy.
+        sql:
+          enabled:
+            traces: false
+            metrics: false
+      # Квота series: RED и связи между сервисами, без histogram размеров тел.
+      metrics:
+        features:
+          - application_red
+          - application_service_graph
+      engine:
+        propagation:
+          context_propagation: disabled
+      # Нет capability — падение на старте, а не warning и частичная телеметрия.
+      safety:
+        enforce_system_capabilities: true
+    enrich:
+      enrichers:
+        kubernetes:
+          mode: enabled
