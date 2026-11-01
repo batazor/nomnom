@@ -103,6 +103,55 @@
     {
       "annotations": {
         "dashboard_url": "/d/nomnom-delivery-overview",
+        "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#dead-letters",
+        "summary": "Integration Events ушли в <stream>.dlq: их обработка не повторяется сама."
+      },
+      "condition": "C",
+      "data": [
+        {
+          "datasourceUid": "${metrics}",
+          "model": {
+            "expr": "sum by (job, messaging_destination_name) (increase(nomnom_messaging_poison_messages_total{job=~\"nomnom/(delivery)\"}[5m]))",
+            "instant": true,
+            "range": false,
+            "refId": "A"
+          },
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          }
+        },
+        {
+          "datasourceUid": "__expr__",
+          "model": {
+            "expression": "$A \u003e 0",
+            "refId": "C",
+            "type": "math"
+          },
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          }
+        }
+      ],
+      "execErrState": "Error",
+      "folderUID": "nomnom",
+      "for": "0s",
+      "labels": {
+        "nomnom_dashboard": "nomnom-delivery-overview",
+        "severity": "warning"
+      },
+      "noDataState": "OK",
+      "orgID": 0,
+      "ruleGroup": "delivery",
+      "title": "Delivery: messages sent to DLQ",
+      "uid": "nomnom-delivery-kafka-poison"
+    },
+    {
+      "annotations": {
+        "dashboard_url": "/d/nomnom-delivery-overview",
         "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#service-availability",
         "summary": "Error budget SLO Availability 99.5% расходуется в 14.4 раз быстрее допустимого за 1h и 5m."
       },

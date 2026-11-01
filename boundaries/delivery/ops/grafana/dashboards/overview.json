@@ -62,7 +62,7 @@
         "spec": {
           "id": 1,
           "title": "Request rate by entry",
-          "description": "Входящая работа по типу входа: gRPC, GraphQL/HTTP, обработка Kafka, Temporal Activities.",
+          "description": "Входящая работа по типу входа: gRPC, GraphQL/HTTP, обработка Kafka, Temporal Activities.\n\nЧасть запросов ждёт метрик: nomnom_messaging_process_duration_seconds (см. docs/observability/metric-inventory.md).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -782,7 +782,7 @@
         "spec": {
           "id": 2,
           "title": "Errors by class",
-          "description": "Transport/availability (CANCELLED, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE), application (UNKNOWN, UNIMPLEMENTED, INTERNAL, DATA_LOSS) и business rejection (INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, PERMISSION_DENIED, FAILED_PRECONDITION, ABORTED, OUT_OF_RANGE, UNAUTHENTICATED). Бизнес-результаты в OK-ответе (PaymentDeclined) ошибками не являются.",
+          "description": "Transport/availability (CANCELLED, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE), application (UNKNOWN, UNIMPLEMENTED, INTERNAL, DATA_LOSS) и business rejection (INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, PERMISSION_DENIED, FAILED_PRECONDITION, ABORTED, OUT_OF_RANGE, UNAUTHENTICATED). Бизнес-результаты в OK-ответе (PaymentDeclined) ошибками не являются.\n\nЧасть запросов ждёт метрик: nomnom_messaging_process_duration_seconds (см. docs/observability/metric-inventory.md).",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -845,6 +845,26 @@
                       }
                     },
                     "refId": "C",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(nomnom_messaging_poison_messages_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "Kafka dead letter",
+                        "range": true
+                      }
+                    },
+                    "refId": "D",
                     "hidden": false
                   }
                 }
@@ -1270,10 +1290,10 @@
           }
         }
       },
-      "panel-27": {
+      "panel-28": {
         "kind": "Panel",
         "spec": {
-          "id": 27,
+          "id": 28,
           "title": "Produced (Outbox, Debezium)",
           "description": "События Outbox, которые коннектор `delivery-outbox` прочитал из журнала базы и отправил в Kafka (ADR 37).",
           "links": [],
@@ -1334,10 +1354,138 @@
           }
         }
       },
-      "panel-28": {
+      "panel-3": {
         "kind": "Panel",
         "spec": {
-          "id": 28,
+          "id": 3,
+          "title": "Technical error ratio",
+          "description": "Доля transport + application ошибок; business rejections исключены.\n\nЧасть запросов ждёт метрик: nomnom_messaging_process_duration_seconds (см. docs/observability/metric-inventory.md).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}) / sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "gRPC",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-31": {
+        "kind": "Panel",
+        "spec": {
+          "id": 31,
+          "title": "Retries and poison (DLQ)",
+          "description": "Метрики: `nomnom_messaging_retry_attempts_total`, `nomnom_messaging_poison_messages_total`.\n\nЧасть запросов ждёт метрик: nomnom_messaging_retry_attempts_total (см. docs/observability/metric-inventory.md).",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (messaging_destination_name, nomnom_error_class) (rate(nomnom_messaging_poison_messages_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{messaging_destination_name}}.dlq {{nomnom_error_class}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-35": {
+        "kind": "Panel",
+        "spec": {
+          "id": 35,
           "title": "Outbox CDC lag",
           "description": "Отставание коннектора `delivery-outbox` от журнала базы: время от commit записи Outbox до её чтения.",
           "links": [],
@@ -1398,10 +1546,10 @@
           }
         }
       },
-      "panel-29": {
+      "panel-36": {
         "kind": "Panel",
         "spec": {
-          "id": 29,
+          "id": 36,
           "title": "Outbox connector tasks",
           "description": "Состояние задачи коннектора `delivery-outbox`: `failed` — Outbox не доставляется.",
           "links": [],
@@ -1456,316 +1604,6 @@
                   "unit": "short",
                   "custom": {}
                 },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-3": {
-        "kind": "Panel",
-        "spec": {
-          "id": 3,
-          "title": "Technical error ratio",
-          "description": "Доля transport + application ошибок; business rejections исключены.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}) / sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "gRPC",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "percentunit",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-33": {
-        "kind": "Panel",
-        "spec": {
-          "id": 33,
-          "title": "Transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "{{nomnom_fsm_aggregate_type}} → {{nomnom_fsm_to_state}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-34": {
-        "kind": "Panel",
-        "spec": {
-          "id": 34,
-          "title": "Invalid transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "{{nomnom_fsm_aggregate_type}} {{nomnom_fsm_from_state}} × {{nomnom_fsm_trigger}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-35": {
-        "kind": "Panel",
-        "spec": {
-          "id": 35,
-          "title": "Terminal transitions",
-          "description": "Метрики: `nomnom_fsm_transitions_total`.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
-                        "legendFormat": "{{nomnom_fsm_aggregate_type}} {{nomnom_fsm_to_state}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": false,
-                  "calcs": []
-                },
-                "tooltip": {
-                  "mode": "",
-                  "sort": ""
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "unit": "ops",
-                  "custom": {}
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-36": {
-        "kind": "Panel",
-        "spec": {
-          "id": 36,
-          "title": "Delivery steps",
-          "description": "Потоки доставок между состояниями за выбранный диапазон: толщина — их число. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: объект, созданный до него, может дойти до этапа внутри него, а объект в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "${metrics}"
-                      },
-                      "spec": {
-                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(delivery)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
-                        "instant": true,
-                        "legendFormat": "",
-                        "range": false
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "volkovlabs-echarts-panel",
-            "version": "",
-            "spec": {
-              "options": {
-                "editorMode": "code",
-                "getOption": "const links = [];\nconst names = new Set();\nfor (const frame of context.panel.data.series) {\n  const field = frame.fields.find((candidate) =\u003e candidate.type === \"number\");\n  const source = field.labels.nomnom_fsm_from_state;\n  const target = field.labels.nomnom_fsm_to_state;\n  links.push({ source, target, value: field.values[field.values.length - 1] });\n  names.add(source);\n  names.add(target);\n}\nreturn {\n  animation: false,\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: \"#d8d9da\" },\n    data: Array.from(names).map((name) =\u003e ({ name })),\n    links,\n  }],\n};"
-              },
-              "fieldConfig": {
-                "defaults": {},
                 "overrides": []
               }
             }
@@ -1931,29 +1769,243 @@
           }
         }
       },
-      "panel-47": {
+      "panel-40": {
         "kind": "Panel",
         "spec": {
-          "id": 47,
-          "title": "About",
-          "description": "Сводка о сервисе и ссылки на соседние инструменты.",
+          "id": 40,
+          "title": "Transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
             "spec": {
-              "queries": [],
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{nomnom_fsm_aggregate_type}} → {{nomnom_fsm_to_state}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
               "transformations": [],
               "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "text",
+            "group": "timeseries",
             "version": "",
             "spec": {
               "options": {
-                "mode": "markdown",
-                "content": "# Delivery\n\n## Сервис\n\n| | |\n| --- | --- |\n| Процессы | `delivery` |\n| Язык | `rust` |\n| База данных | `postgresql` |\n\n## Сигналы\n\n- [Logs (Loki)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${logs}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22${logs}%22%7D%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D+%7C+service_version%3D~%5C%22${version:regex}%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces (Tempo)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces: errors](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Profiles (Pyroscope)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${profiles}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22${profiles}%22%7D%2C%22labelSelector%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D%22%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22queryType%22%3A%22profile%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n\n## Документация\n\n- [Dashboard README](https://github.com/batazor/nomnom/blob/main/boundaries/delivery/ops/grafana/README.md)\n- [Metric inventory](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md)\n\n## Соседние dashboards\n\n- [Platform / Overview](/d/nomnom-platform-overview)\n- [PostgreSQL server (community 9628)](https://grafana.com/grafana/dashboards/9628)\n- [Kafka cluster (community 7589)](https://grafana.com/grafana/dashboards/7589)\n\n"
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-41": {
+        "kind": "Panel",
+        "spec": {
+          "id": 41,
+          "title": "Invalid transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_aggregate_type, nomnom_fsm_from_state, nomnom_fsm_trigger) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"rejected\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{nomnom_fsm_aggregate_type}} {{nomnom_fsm_from_state}} × {{nomnom_fsm_trigger}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-42": {
+        "kind": "Panel",
+        "spec": {
+          "id": 42,
+          "title": "Terminal transitions",
+          "description": "Метрики: `nomnom_fsm_transitions_total`.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_aggregate_type, nomnom_fsm_to_state) (rate(nomnom_fsm_transitions_total{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", nomnom_fsm_result=\"applied\", nomnom_fsm_terminal=\"true\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "legendFormat": "{{nomnom_fsm_aggregate_type}} {{nomnom_fsm_to_state}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "",
+                  "sort": ""
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ops",
+                  "custom": {}
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-43": {
+        "kind": "Panel",
+        "spec": {
+          "id": 43,
+          "title": "Delivery steps",
+          "description": "Потоки доставок между состояниями за выбранный диапазон: толщина — их число. Панель плагина `volkovlabs-echarts-panel`: без него в stack Grafana покажет, что плагина нет. Счётчики за диапазон: объект, созданный до него, может дойти до этапа внутри него, а объект в работе ещё не дошёл, но и не потерян. Смотреть на диапазоне заметно длиннее обычного заказа.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${metrics}"
+                      },
+                      "spec": {
+                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(delivery)\", nomnom_fsm_aggregate_type=\"delivery\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"unassign\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(delivery)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
+                        "instant": true,
+                        "legendFormat": "",
+                        "range": false
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "volkovlabs-echarts-panel",
+            "version": "",
+            "spec": {
+              "options": {
+                "editorMode": "code",
+                "getOption": "const links = [];\nconst names = new Set();\nfor (const frame of context.panel.data.series) {\n  const field = frame.fields.find((candidate) =\u003e candidate.type === \"number\");\n  const source = field.labels.nomnom_fsm_from_state;\n  const target = field.labels.nomnom_fsm_to_state;\n  links.push({ source, target, value: field.values[field.values.length - 1] });\n  names.add(source);\n  names.add(target);\n}\nreturn {\n  animation: false,\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: \"#d8d9da\" },\n    data: Array.from(names).map((name) =\u003e ({ name })),\n    links,\n  }],\n};"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2021,6 +2073,38 @@
                   "unit": "short",
                   "custom": {}
                 },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-54": {
+        "kind": "Panel",
+        "spec": {
+          "id": 54,
+          "title": "About",
+          "description": "Сводка о сервисе и ссылки на соседние инструменты.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "text",
+            "version": "",
+            "spec": {
+              "options": {
+                "mode": "markdown",
+                "content": "# Delivery\n\n## Сервис\n\n| | |\n| --- | --- |\n| Процессы | `delivery` |\n| Язык | `rust` |\n| База данных | `postgresql` |\n| Consumer group | `delivery` |\n| DLQ | `delivery.v1.delivery-events.dlq` |\n\n## Сигналы\n\n- [Logs (Loki)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${logs}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22${logs}%22%7D%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D+%7C+service_version%3D~%5C%22${version:regex}%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces (Tempo)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces: errors](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Profiles (Pyroscope)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${profiles}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22${profiles}%22%7D%2C%22labelSelector%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D%22%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22queryType%22%3A%22profile%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n\n## Документация\n\n- [Dashboard README](https://github.com/batazor/nomnom/blob/main/boundaries/delivery/ops/grafana/README.md)\n- [Metric inventory](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md)\n\n## Соседние dashboards\n\n- [Platform / Overview](/d/nomnom-platform-overview)\n- [PostgreSQL server (community 9628)](https://grafana.com/grafana/dashboards/9628)\n- [Kafka cluster (community 7589)](https://grafana.com/grafana/dashboards/7589)\n\n"
+              },
+              "fieldConfig": {
+                "defaults": {},
                 "overrides": []
               }
             }
@@ -2375,7 +2459,7 @@
                                 "spec": {
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-36"
+                                    "name": "panel-43"
                                   },
                                   "conditionalRendering": {
                                     "kind": "ConditionalRenderingGroup",
@@ -3048,30 +3132,6 @@
                                 "spec": {
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-27"
-                                  },
-                                  "conditionalRendering": {
-                                    "kind": "ConditionalRenderingGroup",
-                                    "spec": {
-                                      "visibility": "show",
-                                      "condition": "and",
-                                      "items": [
-                                        {
-                                          "kind": "ConditionalRenderingData",
-                                          "spec": {
-                                            "value": true
-                                          }
-                                        }
-                                      ]
-                                    }
-                                  }
-                                }
-                              },
-                              {
-                                "kind": "AutoGridLayoutItem",
-                                "spec": {
-                                  "element": {
-                                    "kind": "ElementReference",
                                     "name": "panel-28"
                                   },
                                   "conditionalRendering": {
@@ -3096,7 +3156,55 @@
                                 "spec": {
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-29"
+                                    "name": "panel-31"
+                                  },
+                                  "conditionalRendering": {
+                                    "kind": "ConditionalRenderingGroup",
+                                    "spec": {
+                                      "visibility": "show",
+                                      "condition": "and",
+                                      "items": [
+                                        {
+                                          "kind": "ConditionalRenderingData",
+                                          "spec": {
+                                            "value": true
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "kind": "AutoGridLayoutItem",
+                                "spec": {
+                                  "element": {
+                                    "kind": "ElementReference",
+                                    "name": "panel-35"
+                                  },
+                                  "conditionalRendering": {
+                                    "kind": "ConditionalRenderingGroup",
+                                    "spec": {
+                                      "visibility": "show",
+                                      "condition": "and",
+                                      "items": [
+                                        {
+                                          "kind": "ConditionalRenderingData",
+                                          "spec": {
+                                            "value": true
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "kind": "AutoGridLayoutItem",
+                                "spec": {
+                                  "element": {
+                                    "kind": "ElementReference",
+                                    "name": "panel-36"
                                   },
                                   "conditionalRendering": {
                                     "kind": "ConditionalRenderingGroup",
@@ -3138,7 +3246,7 @@
                                 "spec": {
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-33"
+                                    "name": "panel-40"
                                   },
                                   "conditionalRendering": {
                                     "kind": "ConditionalRenderingGroup",
@@ -3162,7 +3270,7 @@
                                 "spec": {
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-34"
+                                    "name": "panel-41"
                                   },
                                   "conditionalRendering": {
                                     "kind": "ConditionalRenderingGroup",
@@ -3186,7 +3294,7 @@
                                 "spec": {
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-35"
+                                    "name": "panel-42"
                                   },
                                   "conditionalRendering": {
                                     "kind": "ConditionalRenderingGroup",
@@ -3233,7 +3341,7 @@
                       "spec": {
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-47"
+                          "name": "panel-54"
                         }
                       }
                     }

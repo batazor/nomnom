@@ -214,12 +214,12 @@ prometheus.relabel "kafka_connect" {
 }
 
 // Lag consumer groups контекстов, которые читают Kafka сами (orders-consumer — Watermill,
-// restaurants); delivery и payments только публикуют Outbox через Debezium. Группы
+// restaurants, delivery); payments только публикует Outbox через Debezium. Группы
 // <group>.dlq хранят разобранное в <stream>.dlq (docs/dlq.md): alert kafka-dlq-unresolved
 // считает неразобранное как конец partition DLQ минус их offset.
 prometheus.exporter.kafka "infra" {
   kafka_uris          = ["kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092"]
-  groups_filter_regex = "^(orders|restaurants)(\\.dlq)?$"
+  groups_filter_regex = "^(orders|restaurants|delivery)(\\.dlq)?$"
 }
 
 prometheus.scrape "kafka" {

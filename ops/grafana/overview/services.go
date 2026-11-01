@@ -32,8 +32,9 @@ func Services() []Options {
 			Context: "delivery", Title: "Delivery", Language: Rust,
 			Services: []string{inventory.Delivery},
 			GRPC:     true, Database: PostgreSQL, DatabasePool: true,
-			// Kafka не читает: Outbox публикует Debezium (ADR 37).
-			Kafka:      &Kafka{Connector: "delivery-outbox"},
+			// Читает собственные факты для Delivery Duration Statistics; Outbox публикует Debezium (ADR 37).
+			Kafka: &Kafka{ConsumerGroup: "delivery", Consumers: []string{inventory.Delivery}, Connector: "delivery-outbox",
+				DeadLetters: []string{"delivery.v1.delivery-events.dlq"}},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: deliveryDomain, DomainAlerts: deliveryAlerts, Process: deliveryFlowPanels,
 			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},

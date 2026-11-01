@@ -26,6 +26,8 @@ mod schemas;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::{Counter, Meter};
 use rdkafka::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::message::{BorrowedMessage, Header, Headers, Message, OwnedHeaders};
@@ -55,6 +57,48 @@ const RECEIVE_RETRY: Duration = Duration::from_secs(1);
 /// How long a dead letter may wait for space in the producer queue.
 const DEAD_LETTER_QUEUE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Instrumentation scope of the consumer telemetry.
+const INSTRUMENTATION: &str = "nomnom.delivery.messaging";
+/// `nomnom.error.class` of a record that cannot be read or does not match its
+/// schema, before any handler.
+const CLASS_DESERIALIZATION: &str = "deserialization";
+/// `nomnom.error.class` of a permanent error or panic of the handler.
+const CLASS_PERMANENT: &str = "permanent";
+
+/// `nomnom.messaging.poison.messages` (registry ops/semconv/model/messaging.yaml):
+/// the signal of alert `<context>-kafka-poison`.
+struct PoisonMessages(Counter<u64>);
+
+impl PoisonMessages {
+    fn new(meter: &Meter) -> Self {
+        Self(
+            meter
+                .u64_counter("nomnom.messaging.poison.messages")
+                .with_unit("{message}")
+                .with_description("Messages sent to <stream>.dlq.")
+                .build(),
+        )
+    }
+
+    fn add(
+        &self,
+        handler: &'static str,
+        event_type: &str,
+        topic: &'static str,
+        class: &'static str,
+    ) {
+        self.0.add(
+            1,
+            &[
+                KeyValue::new("nomnom.messaging.handler", handler),
+                KeyValue::new("nomnom.event.type", event_type.to_owned()),
+                KeyValue::new("messaging.destination.name", topic),
+                KeyValue::new("nomnom.error.class", class),
+            ],
+        );
+    }
+}
+
 /// Failure of a message handler.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HandlingError {
@@ -74,6 +118,7 @@ pub struct EventConsumer {
     consumer: StreamConsumer,
     dead_letters: FutureProducer,
     schemas: SchemaRegistry,
+    poison: PoisonMessages,
     group: String,
     topic: &'static str,
     /// Name of the handler in logs.
@@ -115,6 +160,7 @@ impl EventConsumer {
             consumer,
             dead_letters,
             schemas,
+            poison: PoisonMessages::new(&opentelemetry::global::meter(INSTRUMENTATION)),
             group: config.consumer_group.clone(),
             topic,
             name,
@@ -162,20 +208,26 @@ impl EventConsumer {
         let envelope = match Envelope::parse(&headers) {
             Ok(envelope) => envelope,
             Err(error) => {
-                self.dead_letter(message, &headers, &error.to_string())
+                self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &error.to_string())
                     .await;
                 return true;
             }
         };
         let Some(payload) = message.payload() else {
-            self.dead_letter(message, &headers, "message without payload")
-                .await;
+            self.dead_letter(
+                message,
+                &headers,
+                CLASS_DESERIALIZATION,
+                "message without payload",
+            )
+            .await;
             return true;
         };
         let frame = match parse_wire_frame(payload) {
             Ok(frame) => frame,
             Err(reason) => {
-                self.dead_letter(message, &headers, &reason).await;
+                self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &reason)
+                    .await;
                 return true;
             }
         };
@@ -188,12 +240,14 @@ impl EventConsumer {
                         "schema {} is not a schema of event_type {:?}",
                         frame.schema_id, envelope.event_type
                     );
-                    self.dead_letter(message, &headers, &reason).await;
+                    self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &reason)
+                        .await;
                     return true;
                 }
                 Err(SchemaLookupError::Unknown(id)) => {
                     let reason = format!("schema id {id} is unknown to the schema registry");
-                    self.dead_letter(message, &headers, &reason).await;
+                    self.dead_letter(message, &headers, CLASS_DESERIALIZATION, &reason)
+                        .await;
                     return true;
                 }
                 Err(SchemaLookupError::Unavailable(reason)) => {
@@ -226,7 +280,8 @@ impl EventConsumer {
             match outcome.unwrap_or_else(|error| Err(join_failure(error))) {
                 Ok(()) => return true,
                 Err(HandlingError::Permanent(reason)) => {
-                    self.dead_letter(message, &headers, &reason).await;
+                    self.dead_letter(message, &headers, CLASS_PERMANENT, &reason)
+                        .await;
                     return true;
                 }
                 Err(HandlingError::Transient(reason)) => {
@@ -255,6 +310,7 @@ impl EventConsumer {
         &self,
         message: &BorrowedMessage<'_>,
         headers: &[(String, Vec<u8>)],
+        class: &'static str,
         reason: &str,
     ) {
         let topic = format!("{}{DEAD_LETTER_SUFFIX}", self.topic);
@@ -292,6 +348,16 @@ impl EventConsumer {
                 .await
             {
                 Ok(_) => {
+                    let event_type = headers
+                        .iter()
+                        .find(|(key, _)| key == "event_type")
+                        .map(|(_, value)| String::from_utf8_lossy(value));
+                    self.poison.add(
+                        self.name,
+                        event_type.as_deref().unwrap_or_default(),
+                        self.topic,
+                        class,
+                    );
                     tracing::warn!(
                         operation = "consume",
                         messaging.destination.name = self.topic,
@@ -359,6 +425,54 @@ async fn pause(duration: Duration, stop: &mut watch::Receiver<bool>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opentelemetry::metrics::MeterProvider as _;
+    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+    use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
+
+    #[test]
+    fn a_dead_letter_is_counted_with_its_class() {
+        let exporter = InMemoryMetricExporter::default();
+        let provider = SdkMeterProvider::builder()
+            .with_reader(PeriodicReader::builder(exporter.clone()).build())
+            .build();
+        let poison = PoisonMessages::new(&provider.meter(INSTRUMENTATION));
+
+        poison.add(
+            "delivery.duration-statistics",
+            "nomnom.delivery.v1.DeliveryCompleted",
+            "delivery.v1.delivery-events",
+            CLASS_PERMANENT,
+        );
+        provider.force_flush().expect("flush metrics");
+
+        let exported = exporter.get_finished_metrics().expect("metrics");
+        let metric = exported
+            .iter()
+            .flat_map(|resource| resource.scope_metrics())
+            .flat_map(|scope| scope.metrics())
+            .find(|metric| metric.name() == "nomnom.messaging.poison.messages")
+            .expect("poison counter exported");
+        let AggregatedMetrics::U64(MetricData::Sum(sum)) = metric.data() else {
+            panic!("u64 sum");
+        };
+        let point = sum.data_points().next().expect("one data point");
+        assert_eq!(point.value(), 1);
+        let attributes: Vec<(String, String)> = point
+            .attributes()
+            .map(|kv| (kv.key.to_string(), kv.value.as_str().into_owned()))
+            .collect();
+        for expected in [
+            ("nomnom.messaging.handler", "delivery.duration-statistics"),
+            ("nomnom.event.type", "nomnom.delivery.v1.DeliveryCompleted"),
+            ("messaging.destination.name", "delivery.v1.delivery-events"),
+            ("nomnom.error.class", "permanent"),
+        ] {
+            assert!(
+                attributes.contains(&(expected.0.to_owned(), expected.1.to_owned())),
+                "{expected:?} in {attributes:?}"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn a_panic_of_the_handler_is_permanent() {
