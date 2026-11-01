@@ -26,7 +26,7 @@ use url::Url;
 use crate::infrastructure::locator::StoredCourierLocator;
 use crate::infrastructure::repository::Store;
 use crate::infrastructure::temporal::{
-    AssignmentActivities, AssignmentSteps, AssignmentWorkflow, Step, TASK_QUEUE,
+    AssignmentActivities, AssignmentSteps, AssignmentWorkflow, Step, TASK_QUEUE, TemporalAssignment,
 };
 use crate::pkg::config::{TemporalConfig, WorkerConfig};
 use crate::pkg::lifecycle::Worker;
@@ -54,6 +54,7 @@ struct UseCaseSteps {
     clock: SystemClock,
     telemetry: UseCaseTelemetry,
     policy: AssignmentPolicy,
+    candidates: TemporalAssignment,
 }
 
 impl AssignmentSteps for UseCaseSteps {
@@ -93,6 +94,7 @@ impl UseCaseSteps {
             offers: &self.store,
             outbox: &self.store,
             clock: &self.clock,
+            candidates: &self.candidates,
         }
         .execute(expire::Input { offer_id })
         .map(drop)
@@ -102,13 +104,18 @@ impl UseCaseSteps {
 /// Шаги назначения над хранилищем процесса: UUIDv7, локатор сохранённых
 /// позиций и системные часы; `policy` — политика назначения процесса.
 #[must_use]
-pub fn assignment_steps(store: Arc<Store>, policy: AssignmentPolicy) -> Arc<dyn AssignmentSteps> {
+pub fn assignment_steps(
+    store: Arc<Store>,
+    policy: AssignmentPolicy,
+    candidates: TemporalAssignment,
+) -> Arc<dyn AssignmentSteps> {
     Arc::new(UseCaseSteps {
         store: ObservedStore::new(Arc::clone(&store) as _, observed_outbox()),
         locator: StoredCourierLocator::new(store),
         clock: SystemClock,
         telemetry: UseCaseTelemetry::global(),
         policy,
+        candidates,
     })
 }
 
@@ -143,9 +150,11 @@ pub fn compose(config: &WorkerConfig) -> Result<WorkerProcess, Box<dyn Error>> {
     let store = Arc::new(
         Store::connect(&config.database)?.with_outbox_mapper(Arc::new(DeliveryIntegrationEvents)),
     );
+    // Истёкший offer будит поиск по рынку курьера (FR-706).
+    let candidates = TemporalAssignment::connect(&config.temporal, Arc::clone(&store) as _)?;
     let worker = TemporalWorker::start(
         &config.temporal,
-        assignment_steps(store, LOCAL_ASSIGNMENT_POLICY),
+        assignment_steps(store, LOCAL_ASSIGNMENT_POLICY, candidates),
     )?;
     Ok(WorkerProcess {
         worker: Some(worker),

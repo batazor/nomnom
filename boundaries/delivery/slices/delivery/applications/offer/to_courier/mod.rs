@@ -56,6 +56,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 
         let offer = self.unit_of_work.run(|| {
             let delivery = load_delivery_by_order(self.deliveries, &order_id)?;
+            self.deliveries.hold(&delivery)?;
             make_offer(
                 &delivery,
                 courier_id,

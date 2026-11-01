@@ -246,6 +246,35 @@ pub fn candidate(courier: &str, distance_to_pickup_meters: u32) -> CourierCandid
     }
 }
 
+/// Reads the delivery as it was before another use case changed it: the write
+/// of the use case under test loses the race.
+pub struct StaleDelivery<'a> {
+    pub store: &'a TestStore,
+    pub read: Delivery,
+}
+
+impl DeliveryRepository for StaleDelivery<'_> {
+    fn get(&self, _id: &DeliveryId) -> Result<Option<Delivery>, RepositoryError> {
+        Ok(Some(self.read.clone()))
+    }
+
+    fn find_by_order(&self, _order_id: &OrderId) -> Result<Option<Delivery>, RepositoryError> {
+        Ok(Some(self.read.clone()))
+    }
+
+    fn add(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::add(self.store, delivery)
+    }
+
+    fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::save(self.store, delivery)
+    }
+
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::hold(self.store, delivery)
+    }
+}
+
 /// Relationship writer that records, for every write, the `courier_id` of the
 /// delivery as persisted at the moment of the write. It proves that writers
 /// run before the use case saves the delivery.

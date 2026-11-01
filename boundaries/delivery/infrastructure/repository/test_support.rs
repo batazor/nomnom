@@ -309,6 +309,10 @@ impl DeliveryRepository for TestStore {
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         DeliveryRepository::save(self.available()?, delivery)
     }
+
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::hold(self.available()?, delivery)
+    }
 }
 
 impl DeliveryOfferRepository for TestStore {

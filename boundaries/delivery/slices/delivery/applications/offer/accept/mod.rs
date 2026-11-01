@@ -126,12 +126,9 @@ impl<U: UnitOfWork> Handler<'_, U> {
         // The courier becomes busy through the `courier` slice port in this
         // Unit of Work (FR-310, FR-485).
         self.couriers.occupy(courier_id, delivery.market_id())?;
-        // The Courier Assignment is valid; grant access before commit and
-        // check the delivery at least as fresh as this write (FR-447).
-        let revision = self
-            .relationships
-            .assign_courier(delivery.id(), courier_id)?;
-        delivery.record_authorization_revision(revision);
+        // Every conflict surfaces before the grant, so the loser of a race
+        // for the delivery writes nothing to the authorization graph.
+        self.deliveries.hold(&delivery)?;
 
         for mut other in load_offers_of(self.offers_of, self.offers, delivery.id())? {
             if other.id() != offer.id() && other.state() == OfferState::Pending {
@@ -141,6 +138,12 @@ impl<U: UnitOfWork> Handler<'_, U> {
         }
         let accepted = offer.pull_events();
         self.offers.save(&offer)?;
+        // The Courier Assignment is valid; grant access before commit and
+        // check the delivery at least as fresh as this write (FR-447).
+        let revision = self
+            .relationships
+            .assign_courier(delivery.id(), courier_id)?;
+        delivery.record_authorization_revision(revision);
         self.deliveries.save(&delivery)?;
         publish(self.outbox, accepted)?;
         publish(self.outbox, delivery.pull_events())?;

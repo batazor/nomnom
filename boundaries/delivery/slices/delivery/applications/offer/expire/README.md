@@ -11,12 +11,12 @@
 
 - **Владелец:** `delivery/slices/delivery`.
 - **Домен:** `domains/delivery` (переход `Expire` offer).
-- **Взаимодействие:** Вызывается Activity `expire` по Temporal timer на `expires_at + 1 s`; следующий offer делает Advance Assignment.
+- **Взаимодействие:** Вызывается Activity `expire` по Temporal timer на `expires_at + 1 s`; следующий offer делает Advance Assignment. Курьер истёкшего offer будит поиск своего Market (FR-706), повтор таймера будит его снова.
 
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(input)`; требования FR-705.
-- **Порты:** `DeliveryOfferRepository`, `DeliveryOutbox`, `Clock`.
+- **Порты:** `DeliveryOfferRepository`, `DeliveryOutbox`, `Clock`, `CandidateWake` (после commit).
 - **Транзакция:** Одна UoW: offer и его факт в Outbox.
 - **Допущение:** Без subject и проверки прав — работа процесса. `DeliveryOfferExpired` не публикуется, считается в `nomnom.delivery.offers{nomnom.outcome="expired"}`.
 

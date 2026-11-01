@@ -279,6 +279,24 @@ impl DeliveryRepository for Store {
             _ => Ok(()),
         }
     }
+
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        let version = db_version(delivery.version())?;
+        let locked = sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+            "SELECT 1 FROM deliveries WHERE id = $1 AND version = $2 FOR UPDATE",
+            delivery.id().as_str(),
+            version
+        )
+        .fetch_optional(connection))?;
+        optimistic(u64::from(locked.is_some()), || {
+            sql!(self, "SELECT", |connection| sqlx::query_scalar!(
+                "SELECT 1 FROM deliveries WHERE id = $1",
+                delivery.id().as_str()
+            )
+            .fetch_optional(connection))
+            .map(|row| row.is_some())
+        })
+    }
 }
 
 impl DeliveryOfferRepository for Store {

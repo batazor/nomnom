@@ -39,10 +39,10 @@ verify-lean-setup:
 	cd "$(AENEAS_HOME)" && eval "$$(opam env --switch=$(AENEAS_OPAM_SWITCH) --set-switch)" && opam install ./src --deps-only --with-test -y && gmake setup-charon && gmake
 	cd "$(AENEAS_HOME)/backends/lean" && lake exe cache get && lake build
 
-# Модель протокола назначения в Quint: сценарии контрпримеров и симуляция инвариантов,
-# которые держатся (verification/README.md).
+# Модель протокола назначения в Quint: сценарии и симуляция инвариантов (verification/README.md).
 QUINT := npx -y @informalsystems/quint@0.33.1
-QUINT_INVARIANTS := oneWinner assignedCourierBusy courierHasOneDelivery assignedHasGrant
+QUINT_INVARIANTS := oneWinner assignedCourierBusy courierHasOneDelivery assignedHasGrant noOpenOfferOfAssigned \
+	noOpenOfferOfClosed oneOpenOfferOfPair noForeignGrant
 
 verify-quint:
 	cd verification/quint && $(QUINT) test assignment.qnt --main=assignment

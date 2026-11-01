@@ -220,6 +220,10 @@ impl DeliveryRepository for SameRead {
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         DeliveryRepository::save(&*self.store, delivery)
     }
+
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::hold(&*self.store, delivery)
+    }
 }
 
 /// FR-704: steps racing for one delivery make one offer; the loser fails

@@ -11,7 +11,7 @@ use crate::slices::delivery::applications::authorization::DeliveryResource;
 use crate::slices::delivery::applications::error::InvalidDeliveryRequest;
 use crate::slices::delivery::applications::outbox::OutboxMessage;
 use crate::slices::delivery::applications::test_support::{
-    NOW, OFFER_TTL, ObservingRelationships, World, candidate, hamburg, subject,
+    NOW, OFFER_TTL, ObservingRelationships, StaleDelivery, World, candidate, hamburg, subject,
 };
 use crate::slices::delivery::domains::delivery::{
     DeliveryError, DeliveryOfferError, DeliveryOfferReason, DeliveryValidationError, DomainEvent,
@@ -530,4 +530,29 @@ fn unknown_offer_is_not_found() {
             DeliveryOfferId::new("offer-9")
         ))
     );
+}
+
+/// The loser of a race for the delivery fails before the grant: no relationship
+/// of a delivery it did not get.
+#[test]
+fn loser_of_a_race_writes_no_relationship() {
+    let world = world_with_two_offers();
+    let read = world.delivery("delivery-1");
+    DeliveryRepository::save(&world.store, &read).expect("the other use case");
+    let handler = Handler {
+        deliveries: &StaleDelivery {
+            store: &world.store,
+            read,
+        },
+        ..handler(&world)
+    };
+
+    assert_eq!(
+        handler.execute(&subject("courier-1"), input("offer-1", "courier-1")),
+        Err(DeliveryApplicationError::ConcurrentModification)
+    );
+
+    assert!(world.relationships.writes().is_empty());
+    assert_eq!(world.offer_state("offer-1"), OfferState::Pending);
+    assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
 }

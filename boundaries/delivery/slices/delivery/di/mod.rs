@@ -425,6 +425,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             outbox: self.ports.store(),
             clock: self.ports.clock(),
             assignment: self.ports.assignment(),
+            candidates: self.ports.candidates(),
         }
         .execute(subject, input)
     }
@@ -507,6 +508,8 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             authorization: self.ports.authorization(),
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
+            offers: self.ports.store(),
+            offers_of: self.ports.store(),
             couriers: self.ports.store(),
             outbox: self.ports.store(),
             relationships: self.ports.relationships(),
@@ -570,6 +573,7 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             offers: self.ports.store(),
             outbox: self.ports.store(),
             clock: self.ports.clock(),
+            candidates: self.ports.candidates(),
         }
         .execute(input)
     }

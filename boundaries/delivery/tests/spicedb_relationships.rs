@@ -324,6 +324,8 @@ fn cancelled_delivery_courier_loses_act_as_courier() {
         authorization: &StaticAuthorization::allow_all(),
         unit_of_work: &*world.store,
         deliveries: &*world.store,
+        offers: &*world.store,
+        offers_of: &*world.store,
         couriers: &*world.store,
         outbox: &*world.store,
         relationships: &world.writer,

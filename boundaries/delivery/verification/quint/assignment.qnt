@@ -67,6 +67,9 @@ module assignment {
   def pendingOffersOf(d: int): Set[int] =
     offersOf(d).filter(o => s.offers.get(o).state == Pending)
 
+  def pendingVersions(d: int): Set[(int, int)] =
+    pendingOffersOf(d).map(o => (o, s.offers.get(o).version))
+
   def offeredTo(d: int, c: int): bool =
     offersOf(d).exists(o => s.offers.get(o).courier == c)
 
@@ -114,6 +117,10 @@ module assignment {
         ...s,
         timers: s.timers.exclude(Set(o)),
         wakes: s.wakes.union(Set(offer.delivery)),
+        candidateWakes:
+          if (offer.state == Pending or offer.state == Expired)
+            s.candidateWakes.union(Set(offer.courier))
+          else s.candidateWakes,
         offers:
           if (offer.state == Pending)
             s.offers.set(o, { ...offer, state: Expired, version: offer.version + 1 })
@@ -164,7 +171,16 @@ module assignment {
       val ok = delivery.version == tx.deliveryVersion and versionsMatch(tx.closes)
         and s.couriers.get(tx.courier).status == Available
       val done = { ...s, txs: without(s.txs, actor) }
-      if (ok)
+      val open = openOffersOf(d).filter(o => s.offers.get(o).courier == tx.courier)
+      if (ok and open != Set())
+        // `make_offer` returns the open offer a manual offer made after the read.
+        s' = {
+          ...done,
+          deliveries: s.deliveries.set(d, { ...delivery, version: delivery.version + 1 }),
+          offers: closeOffers(s.offers, tx.closes, Expired),
+          timers: s.timers.union(open),
+        }
+      else if (ok)
         s' = {
           ...done,
           deliveries: s.deliveries.set(d, { ...delivery, version: delivery.version + 1 }),
@@ -179,14 +195,16 @@ module assignment {
     }
   }
 
-  // Offer Delivery / Offer Delivery To Courier: `make_offer` without claiming the delivery.
+  // Offer Delivery / Offer Delivery To Courier: `make_offer` under the lock of the delivery,
+  // at the version it read and without a write to it; an open offer of the pair is returned.
 
   action offerBegin(a: str, d: int, c: int): bool = all {
     not(s.txs.keys().contains(a)),
     s.deliveries.get(d).state == Waiting,
     s.couriers.get(c).status == Available,
     not(openOffersOf(d).exists(o => s.offers.get(o).courier == c)),
-    startTx(a, { ...NO_TX, kind: Offer, delivery: d, courier: c }),
+    startTx(a, { ...NO_TX, kind: Offer, delivery: d, courier: c,
+      deliveryVersion: s.deliveries.get(d).version }),
   }
 
   action offerCommit(a: str): bool = all {
@@ -194,15 +212,20 @@ module assignment {
     s.txs.get(a).kind == Offer,
     s.nextOffer < MAX_OFFERS,
     val tx = s.txs.get(a)
-    s' = {
-      ...s,
-      txs: without(s.txs, a),
-      offers: s.offers.put(s.nextOffer, {
-        delivery: tx.delivery, courier: tx.courier, state: Pending, past: false, version: 0,
-      }),
-      nextOffer: s.nextOffer + 1,
-      wakes: s.wakes.union(Set(tx.delivery)),
-    },
+    val done = { ...s, txs: without(s.txs, a) }
+    val current = s.deliveries.get(tx.delivery).version == tx.deliveryVersion
+    val open = openOffersOf(tx.delivery).exists(o => s.offers.get(o).courier == tx.courier)
+    if (current and not(open))
+      s' = {
+        ...done,
+        offers: s.offers.put(s.nextOffer, {
+          delivery: tx.delivery, courier: tx.courier, state: Pending, past: false, version: 0,
+        }),
+        nextOffer: s.nextOffer + 1,
+        wakes: s.wakes.union(Set(tx.delivery)),
+      }
+    else
+      s' = done,
   }
 
   // Reject Delivery Offer: one write, then a wake.
@@ -215,16 +238,18 @@ module assignment {
         ...s,
         offers: s.offers.set(o, { ...offer, state: Rejected, version: offer.version + 1 }),
         wakes: s.wakes.union(Set(offer.delivery)),
+        candidateWakes: s.candidateWakes.union(Set(offer.courier)),
       },
     }
   }
 
-  // Accept Delivery Offer: read, occupy the courier and write the grant, commit.
+  // Accept Delivery Offer: read, then one step under the lock of the delivery. Every
+  // conflict surfaces before the grant, so a loser writes nothing. A failed commit after
+  // the grant is left to the reconciler and not modelled.
 
   action acceptBegin(a: str, o: int): bool = {
     val offer = s.offers.get(o)
     val delivery = s.deliveries.get(offer.delivery)
-    val others = pendingOffersOf(offer.delivery).exclude(Set(o))
     all {
       not(s.txs.keys().contains(a)),
       isOpen(o),
@@ -235,41 +260,21 @@ module assignment {
         deliveryVersion: delivery.version,
         courierVersion: s.couriers.get(offer.courier).version,
         offerVersion: offer.version,
-        closes: others.map(other => (other, s.offers.get(other).version)),
       }),
     }
   }
 
-  // `occupy` saves the courier first: its row lock blocks a second writer of the
-  // courier, a stale version aborts before the grant.
-  action acceptGrant(a: str): bool = all {
-    s.txs.keys().contains(a),
-    s.txs.get(a).kind == Accept,
-    not(s.txs.get(a).holdsCourier),
-    val tx = s.txs.get(a)
-    all {
-      not(courierHeld(tx.courier)),
-      if (s.couriers.get(tx.courier).version != tx.courierVersion)
-        s' = { ...s, txs: without(s.txs, a) }
-      else
-        s' = {
-          ...s,
-          txs: s.txs.set(a, { ...tx, holdsCourier: true }),
-          grants: s.grants.union(Set((tx.delivery, tx.courier))),
-        },
-    },
-  }
-
-  // A conflict rolls the transaction back; the grant of SpiceDB stays.
   action acceptCommit(a: str): bool = all {
     s.txs.keys().contains(a),
     s.txs.get(a).kind == Accept,
-    s.txs.get(a).holdsCourier,
+    not(courierHeld(s.txs.get(a).courier)),
     val tx = s.txs.get(a)
     val delivery = s.deliveries.get(tx.delivery)
     val offer = s.offers.get(tx.offer)
+    val others = pendingOffersOf(tx.delivery).exclude(Set(tx.offer))
+      .map(other => (other, s.offers.get(other).version))
     val ok = delivery.version == tx.deliveryVersion and offer.version == tx.offerVersion
-      and versionsMatch(tx.closes)
+      and s.couriers.get(tx.courier).version == tx.courierVersion
     val done = { ...s, txs: without(s.txs, a) }
     if (ok)
       s' = {
@@ -279,8 +284,9 @@ module assignment {
           assignments: delivery.assignments + 1,
         }),
         couriers: s.couriers.setBy(tx.courier, c => { status: Busy, version: c.version + 1 }),
-        offers: closeOffers(s.offers, tx.closes, Withdrawn)
+        offers: closeOffers(s.offers, others, Withdrawn)
           .set(tx.offer, { ...offer, state: Accepted, version: offer.version + 1 }),
+        grants: s.grants.union(Set((tx.delivery, tx.courier))),
         wakes: s.wakes.union(Set(tx.delivery)),
       }
     else
@@ -340,6 +346,9 @@ module assignment {
           releases: delivery.releases + 1,
         }),
         couriers: s.couriers.setBy(tx.courier, c => { status: Available, version: c.version + 1 }),
+        offers:
+          if (tx.closing) closeOffers(s.offers, pendingVersions(tx.delivery), Withdrawn)
+          else s.offers,
         wakes: s.wakes.union(Set(tx.delivery)),
         candidateWakes: s.candidateWakes.union(Set(tx.courier)),
       }
@@ -355,6 +364,7 @@ module assignment {
       s' = {
         ...s,
         deliveries: s.deliveries.set(d, { ...delivery, state: Closed, version: delivery.version + 1 }),
+        offers: closeOffers(s.offers, pendingVersions(d), Withdrawn),
         wakes: s.wakes.union(Set(d)),
       },
     }
@@ -427,7 +437,7 @@ module assignment {
     nondet c = oneOf(COURIERS) candidateWake(c),
     reconcile,
     nondet a = oneOf(CALLERS) any {
-      offerCommit(a), acceptGrant(a), acceptCommit(a), releaseRevoke(a), releaseCommit(a),
+      offerCommit(a), acceptCommit(a), releaseRevoke(a), releaseCommit(a),
     },
     all {
       s.offers.keys() != Set(),
@@ -477,72 +487,24 @@ module assignment {
       or s.txs.keys().exists(a => s.txs.get(a).holdsCourier and s.txs.get(a).delivery == d))
 
   // Nothing is left to happen, yet a waiting delivery has a courier it could offer to.
+  // Known to be violated, so `make verify-quint` does not check it: a courier wakes one
+  // delivery, and that one may close or take another courier (ADR 2 of the context). The
+  // next stored position of the courier, not modelled, wakes the search again.
   val quiescent = s.txs.keys() == Set() and s.wakes == Set()
     and s.candidateWakes == Set() and s.timers == Set()
 
   val noStuckDelivery = not(quiescent and DELIVERIES.exists(d =>
     s.deliveries.get(d).state == Waiting and openOffersOf(d) == Set() and candidates(d) != Set()))
 
-  // Counterexamples found by the simulator, as fixed scenarios. Each one shows a
-  // violated invariant; when the code is fixed, the scenario goes with the fix.
-
   action check(condition: bool): bool = all { assert(condition), s' = s }
 
   action offered(d: int, c: int): bool = offerBegin("caller1", d, c).then(offerCommit("caller1"))
 
-  // A manual offer commits after the acceptance that withdraws the others: the
-  // assigned delivery keeps a pending offer no timer will ever close.
-  run hangingOfferOfAssignedTest =
-    init
-      .then(offered(1, 1))
-      .then(offerBegin("caller1", 1, 2))
-      .then(acceptBegin("caller2", 0))
-      .then(acceptGrant("caller2"))
-      .then(acceptCommit("caller2"))
-      .then(offerCommit("caller1"))
-      .then(check(not(noOpenOfferOfAssigned)))
-      .then(advanceBegin(1))
-      .then(deadlinePasses(1))
-      .then(check(s.offers.get(1).state == Pending and not(s.timers.contains(1))))
-
-  run twoOpenOffersOfPairTest =
-    init
-      .then(offerBegin("caller1", 1, 1))
-      .then(offerBegin("caller2", 1, 1))
-      .then(offerCommit("caller1"))
-      .then(offerCommit("caller2"))
-      .then(check(not(oneOpenOfferOfPair)))
-
-  // Cancel Delivery leaves the pending offers of the delivery open.
-  run openOfferOfCancelledTest =
-    init
-      .then(offered(1, 1))
-      .then(cancelWaiting(1))
-      .then(check(not(noOpenOfferOfClosed)))
-
-  // The loser of two acceptances keeps the grant of a delivery of another courier,
-  // until the reconciler removes it.
-  run grantOfLoserTest =
-    init
-      .then(offered(1, 1))
-      .then(offered(1, 2))
-      .then(acceptBegin("caller1", 0))
-      .then(acceptBegin("caller2", 1))
-      .then(acceptGrant("caller1"))
-      .then(acceptGrant("caller2"))
-      .then(acceptCommit("caller1"))
-      .then(acceptCommit("caller2"))
-      .then(check(s.deliveries.get(1).courier == 1 and not(noForeignGrant)))
-      .then(reconcile)
-      .then(check(noForeignGrant))
-
-  // A freed courier wakes one delivery and rejects its offer. Rejection wakes no other
-  // delivery, so the next one waits with an available courier never offered to it.
-  run stuckDeliveryTest =
+  // A courier who rejects an offer wakes the next delivery that was never offered to it.
+  run rejectionWakesNextDeliveryTest =
     init
       .then(offered(3, 1))
       .then(acceptBegin("caller1", 0))
-      .then(acceptGrant("caller1"))
       .then(acceptCommit("caller1"))
       .then(offered(1, 2))
       .then(reject(1))
@@ -551,6 +513,7 @@ module assignment {
       .then(advanceBegin(1))
       .then(advanceBegin(2))
       .then(advanceBegin(3))
+      .then(candidateWake(2))
       .then(complete(3))
       .then(advanceBegin(3))
       .then(candidateWake(1))
@@ -558,7 +521,6 @@ module assignment {
       .then(advanceCommit)
       .then(reject(3))
       .then(advanceBegin(1))
-      .then(timerFires(3))
-      .then(advanceBegin(1))
-      .then(check(quiescent and not(noStuckDelivery)))
+      .then(candidateWake(1))
+      .then(check(s.wakes.contains(2)))
 }

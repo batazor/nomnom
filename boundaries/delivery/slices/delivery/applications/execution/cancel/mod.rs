@@ -7,16 +7,18 @@
 //! `delivery:<id>#courier@user:<courier_id>` is deleted from the authorization
 //! graph before commit; a failed delete rolls the cancellation back. After
 //! commit the cancellation ends the Assignment Workflow of the delivery, and
-//! the released courier wakes the search of its Market (FR-706).
+//! the released courier wakes the search of its Market (FR-706). The pending
+//! offers of the delivery are withdrawn with it: nobody can answer them anymore.
 
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
 use crate::slices::delivery::domains::delivery::{
-    CompoundState, DeliveryCancellationReason, DeliveryId, DeliveryRepository, OrderId, State,
-    TransitionError,
+    CompoundState, DeliveryCancellationReason, DeliveryId, DeliveryOfferRepository,
+    DeliveryRepository, OfferState, OrderId, State, TransitionError,
 };
 
 use super::super::assignment::release_assignment;
@@ -76,6 +78,8 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub authorization: &'a dyn DeliveryAuthorization,
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
+    pub offers: &'a dyn DeliveryOfferRepository,
+    pub offers_of: &'a dyn OffersOfDelivery,
     pub couriers: &'a dyn CourierAssignment,
     pub outbox: &'a dyn DeliveryOutbox,
     pub relationships: &'a dyn DeliveryRelationshipWriter,
@@ -131,6 +135,14 @@ impl<U: UnitOfWork> Handler<'_, U> {
                         self.couriers,
                         self.relationships,
                     )?;
+                }
+                // Held before the offers are read, so a new offer cannot slip past.
+                self.deliveries.hold(&delivery)?;
+                for mut offer in load_offers_of(self.offers_of, self.offers, delivery.id())? {
+                    if offer.state() == OfferState::Pending {
+                        offer.withdraw()?;
+                        self.offers.save(&offer)?;
+                    }
                 }
                 self.deliveries.save(&delivery)?;
                 publish(self.outbox, delivery.pull_events())?;

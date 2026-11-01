@@ -15,6 +15,13 @@ pub trait DeliveryRepository {
     /// Updates an existing delivery; a missing id yields
     /// [`RepositoryError::Conflict`].
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError>;
+
+    /// Locks the row of the delivery until the Unit of Work ends, without a
+    /// write: a delivery changed since it was read yields
+    /// [`RepositoryError::ConcurrentModification`], a missing id
+    /// [`RepositoryError::Conflict`]. What the transaction reads afterwards
+    /// cannot be changed by another claim or save of the delivery.
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError>;
 }
 
 /// Persistence contract of the `DeliveryOffer` aggregate.

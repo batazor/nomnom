@@ -292,7 +292,7 @@ Production-локатор курьеров SHALL находить кандида
 ### Requirement: Пробуждение доставки при появлении кандидата
 **ID:** FR-706
 
-Доставка без кандидата SHALL ждать signal без таймеров перепроверки. Use case, после commit которого курьер — Courier Candidate (available с сохранённой позицией: Set Courier Availability, сохранённая позиция, освобождение курьера), SHALL будить одну доставку: самую старую по `(created_at, id)` ожидающую `Delivery` его Market без pending offer, которой этого курьера ещё не предлагали. Нет такой доставки — signal MUST NOT передаваться.
+Доставка без кандидата SHALL ждать signal без таймеров перепроверки. Use case, после commit которого курьер — Courier Candidate (available с сохранённой позицией: Set Courier Availability, сохранённая позиция, освобождение курьера, отказ от offer, истечение offer), SHALL будить одну доставку: самую старую по `(created_at, id)` ожидающую `Delivery` его Market без pending offer, которой этого курьера ещё не предлагали. Нет такой доставки — signal MUST NOT передаваться.
 
 #### Scenario: Курьер выходит на линию
 **ID:** AC-964

@@ -128,6 +128,7 @@ async fn workflow_searches_a_courier_until_pickup() {
                 maximum_active_assignments: 1,
                 offer_ttl_seconds: OFFER_TTL,
             },
+            TemporalAssignment::connect(&temporal, Arc::clone(&store) as _).expect("candidates"),
         ),
     )
     .expect("worker");

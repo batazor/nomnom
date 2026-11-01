@@ -68,6 +68,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
 
         self.unit_of_work.run(|| {
             let delivery = load_delivery(self.deliveries, &delivery_id)?;
+            self.deliveries.hold(&delivery)?;
             make_offer(
                 &delivery,
                 courier_id,
@@ -97,7 +98,10 @@ pub struct OfferPorts<'a> {
 
 /// Offers an assignable delivery to an available courier and writes the
 /// `DeliveryOffered` fact; an open offer for the same pair is returned
-/// instead of a new one.
+/// instead of a new one. The caller holds the delivery through
+/// [`DeliveryRepository::hold`] or its `save`: an acceptance or a cancellation
+/// that withdraws the pending offers cannot miss this one, and two calls for
+/// one pair see each other.
 pub fn make_offer(
     delivery: &Delivery,
     courier_id: CourierId,
@@ -147,7 +151,7 @@ mod tests {
     use crate::slices::courier::domains::courier::{CourierError, CourierStatus};
     use crate::slices::delivery::applications::outbox::OutboxMessage;
     use crate::slices::delivery::applications::test_support::{
-        NOW, OFFER_TTL, World, hamburg, service,
+        NOW, OFFER_TTL, StaleDelivery, World, hamburg, service,
     };
     use crate::slices::delivery::domains::delivery::{
         DeliveryError, DomainEvent, OfferState, State, TransitionError,
@@ -304,6 +308,30 @@ mod tests {
                 })
             ))
         );
+    }
+
+    /// An acceptance that withdraws the pending offers cannot miss a new one:
+    /// an offer made from a stale read fails.
+    #[test]
+    fn delivery_changed_since_the_read_gets_no_offer() {
+        let world = World::new();
+        world.waiting_delivery("delivery-1");
+        world.courier("courier-1", CourierStatus::Available);
+        let read = world.delivery("delivery-1");
+        DeliveryRepository::save(&world.store, &read).expect("the other use case");
+        let handler = Handler {
+            deliveries: &StaleDelivery {
+                store: &world.store,
+                read,
+            },
+            ..handler(&world)
+        };
+
+        assert_eq!(
+            handler.execute(&service(), input("courier-1")),
+            Err(DeliveryApplicationError::ConcurrentModification)
+        );
+        assert!(world.offers_of("delivery-1").expect("read").is_empty());
     }
 
     #[test]

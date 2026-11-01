@@ -1,4 +1,5 @@
 use super::*;
+use crate::infrastructure::memory::AssignmentCall;
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::slices::courier::domains::courier::{CourierId, CourierStatus};
 use crate::slices::delivery::applications::outbox::OutboxMessage;
@@ -11,6 +12,7 @@ fn handler(world: &World) -> Handler<'_, TestStore> {
         offers: &world.store,
         outbox: &world.store,
         clock: &world.clock,
+        candidates: &world.assignment,
     }
 }
 
@@ -53,10 +55,13 @@ fn pending_offer_past_its_deadline_expires() {
         })]
     );
     assert_eq!(world.store.commits(), 1);
+    let available = AssignmentCall::CourierAvailable(CourierId::new("courier-1"));
+    assert_eq!(world.assignment.calls(), vec![available.clone()]);
 
-    // A repeated timer finds it expired already.
+    // A repeated timer finds it expired already and repeats the wake.
     assert_eq!(handler(&world).execute(input()), Ok(output(false)));
     assert_eq!(world.store.outbox_messages().len(), 1);
+    assert_eq!(world.assignment.calls(), vec![available.clone(), available]);
 }
 
 /// The deadline itself is inclusive: the offer stays open.
@@ -84,6 +89,7 @@ fn offer_answered_before_the_timer_is_left_as_it_is() {
     assert_eq!(handler(&world).execute(input()), Ok(output(false)));
     assert_eq!(world.offer_state("offer-1"), OfferState::Rejected);
     assert!(world.store.outbox_messages().is_empty());
+    assert!(world.assignment.calls().is_empty());
 }
 
 #[test]

@@ -17,6 +17,8 @@ fn handler(world: &World) -> Handler<'_, TestStore> {
         authorization: &world.authorization,
         unit_of_work: &world.store,
         deliveries: &world.store,
+        offers: &world.store,
+        offers_of: &world.store,
         couriers: &world.store,
         outbox: &world.store,
         relationships: &world.relationships,
@@ -263,4 +265,20 @@ fn denied_subject_cancels_nothing() {
     );
     assert_eq!(world.delivery_state("delivery-1"), State::Assigned);
     assert_eq!(world.courier_status("courier-1"), CourierStatus::Busy);
+}
+
+/// Nobody can answer an offer of a cancelled delivery: it leaves the list of
+/// the courier at once, not at its deadline.
+#[test]
+fn cancellation_withdraws_pending_offers() {
+    let world = World::new();
+    world.waiting_delivery("delivery-1");
+    world.courier("courier-1", CourierStatus::Available);
+    world.offer("offer-1", "delivery-1", "courier-1");
+
+    handler(&world)
+        .execute(&service(), input())
+        .expect("cancelled");
+
+    assert_eq!(world.offer_state("offer-1"), OfferState::Withdrawn);
 }

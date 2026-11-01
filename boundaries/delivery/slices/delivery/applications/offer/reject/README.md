@@ -11,12 +11,12 @@
 
 - **Владелец:** `delivery/slices/delivery`.
 - **Домен:** `domains/delivery`.
-- **Взаимодействие:** После commit, и на повторе, use case будит Assignment Workflow доставки; отклонённый offer больше не pending, поэтому workflow предлагает доставку другому курьеру.
+- **Взаимодействие:** После commit, и на повторе, use case будит Assignment Workflow доставки; отклонённый offer больше не pending, поэтому workflow предлагает доставку другому курьеру. Курьер остаётся доступным и будит поиск своего Market (FR-706).
 
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(subject, input)`; требования FR-311.
-- **Порты:** `DeliveryAuthorization` (`RejectDeliveryOffer` над `Courier(id)`), `DeliveryOfferRepository`, `Clock`, `AssignmentProcess` (после commit).
+- **Порты:** `DeliveryAuthorization` (`RejectDeliveryOffer` над `Courier(id)`), `DeliveryOfferRepository`, `Clock`, `AssignmentProcess` и `CandidateWake` (после commit).
 - **Транзакция:** Без UoW: одиночная запись; повтор отклонения — no-op.
 - **Допущение:** Сам use case Find Courier не вызывает: следующий offer делает Assignment Workflow (FR-311).
 

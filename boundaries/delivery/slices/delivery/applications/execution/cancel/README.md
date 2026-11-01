@@ -5,7 +5,7 @@
 - **Тип:** Command.
 - **Actor:** Fulfillment process `orders` (Temporal Activity, service identity `orders-worker`).
 - **Намерение:** Отменить доставку заказа, пока заказ не забран у ресторана.
-- **Результат:** `Delivery` в `cancelled`, назначенный курьер освобождён; либо бизнес-отказ с причиной.
+- **Результат:** `Delivery` в `cancelled`, назначенный курьер освобождён, pending offers отозваны; либо бизнес-отказ с причиной.
 
 ## Границы
 

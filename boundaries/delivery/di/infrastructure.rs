@@ -378,6 +378,10 @@ impl DeliveryRepository for ObservedStore {
     fn save(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
         self.observed.save_delivery(&*self.inner, delivery)
     }
+
+    fn hold(&self, delivery: &Delivery) -> Result<(), RepositoryError> {
+        DeliveryRepository::hold(&*self.inner, delivery)
+    }
 }
 
 impl DeliveryOfferRepository for ObservedStore {

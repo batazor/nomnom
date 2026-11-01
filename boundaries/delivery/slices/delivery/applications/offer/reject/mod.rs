@@ -2,10 +2,13 @@
 //! No Courier Assignment is created. The offer and its `DeliveryOfferRejected`
 //! fact are written in one Unit of Work; a repeated rejection writes nothing.
 //! After commit, and on a repeat, the Assignment Workflow of the delivery is
-//! woken and offers it to the next courier (FR-311, FR-707).
+//! woken and offers it to the next courier (FR-311, FR-707), and the courier
+//! wakes the search of its Market: it stays available for other deliveries
+//! that found no candidate (FR-706).
 
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
+use crate::slices::courier::applications::candidate_wake::CandidateWake;
 use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, OfferState,
@@ -38,6 +41,7 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub outbox: &'a dyn DeliveryOutbox,
     pub clock: &'a dyn Clock,
     pub assignment: &'a dyn AssignmentProcess,
+    pub candidates: &'a dyn CandidateWake,
 }
 
 impl<U: UnitOfWork> Handler<'_, U> {
@@ -71,6 +75,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         // Also on a repeat: the wake of the first call may have been lost.
         self.assignment
             .wake(offer.delivery_id(), WakeReason::OfferAnswered)?;
+        self.candidates.courier_available(&courier_id)?;
         Ok(Output {
             offer_id,
             delivery_id: offer.delivery_id().clone(),
@@ -106,6 +111,7 @@ mod tests {
             outbox: &world.store,
             clock: &world.clock,
             assignment: &world.assignment,
+            candidates: &world.assignment,
         }
     }
 
@@ -218,10 +224,10 @@ mod tests {
         assert_eq!(world.store.outbox_messages().len(), 1);
         assert_eq!(
             world.assignment.calls(),
-            vec![AssignmentCall::Wake(
-                DeliveryId::new("delivery-1"),
-                WakeReason::OfferAnswered
-            )]
+            vec![
+                AssignmentCall::Wake(DeliveryId::new("delivery-1"), WakeReason::OfferAnswered),
+                AssignmentCall::CourierAvailable(CourierId::new("courier-1")),
+            ]
         );
     }
 }
