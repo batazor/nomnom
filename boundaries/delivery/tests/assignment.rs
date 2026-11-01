@@ -14,8 +14,8 @@ use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use delivery::infrastructure::memory::{
-    ManualClock, RecordingAssignment, RecordingRelationships, SequentialIdGenerator,
-    StaticAuthorization, StaticCourierLocator,
+    ManualClock, RecordingAssignment, RecordingRelationships, StaticAuthorization,
+    StaticCourierLocator,
 };
 use delivery::infrastructure::repository::Store;
 use delivery::pkg::authz::Subject;
@@ -247,7 +247,7 @@ fn concurrent_steps_offer_the_delivery_once() {
     let steps = 2;
     let barrier = Arc::new(Barrier::new(steps));
     let handles: Vec<_> = (0..steps)
-        .map(|step| {
+        .map(|_| {
             let deliveries = SameRead {
                 store: Arc::clone(&store),
                 barrier: Arc::clone(&barrier),
@@ -271,7 +271,6 @@ fn concurrent_steps_offer_the_delivery_once() {
                     offers_of: &*store,
                     outbox: &*store,
                     locator: &locator,
-                    ids: &SequentialIdGenerator::new(unique(&format!("offer-{step}"))),
                     clock: &ManualClock::new(NOW),
                     policy: AssignmentPolicy {
                         maximum_distance_meters: 5_000,

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Subject } from "../../../../../pkg/authz/subject.ts";
 import type { MarketId } from "../../../../restaurant/domains/restaurant/restaurant.ts";
 import {
@@ -14,7 +15,6 @@ import {
   NotFoundError,
   PermissionDeniedError,
 } from "../../failure/failure.ts";
-import type { IdGenerator } from "../../id-generator/id-generator.ts";
 import {
   type RestaurantOrderView,
   toRestaurantOrderView,
@@ -58,20 +58,17 @@ export class ReceiveOrderRequestHandler {
   readonly #accessControl: FulfillmentCoordinatorAccess;
   readonly #restaurants: RestaurantMarkets;
   readonly #restaurantOrders: RestaurantOrderRepository;
-  readonly #ids: IdGenerator;
   readonly #clock: Clock;
 
   constructor(dependencies: {
     accessControl: FulfillmentCoordinatorAccess;
     restaurants: RestaurantMarkets;
     restaurantOrders: RestaurantOrderRepository;
-    ids: IdGenerator;
     clock: Clock;
   }) {
     this.#accessControl = dependencies.accessControl;
     this.#restaurants = dependencies.restaurants;
     this.#restaurantOrders = dependencies.restaurantOrders;
-    this.#ids = dependencies.ids;
     this.#clock = dependencies.clock;
   }
 
@@ -96,7 +93,7 @@ export class ReceiveOrderRequestHandler {
       throw new NotFoundError("Restaurant", command.restaurantId);
     }
     const order = RestaurantOrder.receive({
-      id: this.#ids.next(),
+      id: randomUUID(),
       orderId: command.orderId,
       restaurantId: command.restaurantId,
       marketId: marketId.value,

@@ -40,7 +40,7 @@ def _handlers(kit: PaymentsTestKit) -> PaymentsHandlers:
     executor = kit.executor()
     return PaymentsHandlers(
         get_payment_status=GetPaymentStatusHandler(kit.statuses, kit.permissions),
-        create_payment=CreatePaymentHandler(kit.payments, kit.permissions, kit.ids),
+        create_payment=CreatePaymentHandler(kit.payments, kit.permissions),
         authorize_payment=AuthorizePaymentHandler(executor),
         capture_payment=CapturePaymentHandler(executor),
         cancel_authorization=CancelAuthorizationHandler(executor),

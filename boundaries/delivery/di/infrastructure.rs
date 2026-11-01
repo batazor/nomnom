@@ -27,6 +27,7 @@ use crate::slices::courier::di::{CourierDependencies, CourierPorts, CourierSetti
 use crate::slices::courier::domains::courier::{
     CourierId, CourierRepository, CourierStatus, MarketId,
 };
+use crate::slices::delivery::applications::Clock as DeliveryClock;
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
@@ -38,7 +39,6 @@ use crate::slices::delivery::applications::outbox::{DeliveryOutbox, OutboxMessag
 use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
-use crate::slices::delivery::applications::{Clock as DeliveryClock, IdGenerator};
 use crate::slices::delivery::di::{
     DeliveryDependencies, DeliveryPorts, DeliveryReadModels, DeliverySettings, TransactionalStore,
 };
@@ -135,7 +135,6 @@ impl<T: AssignmentProcess + CandidateWake + Send + Sync> ProcessAssignment for T
 /// Адаптеры назначения процесса: идентификаторы, локатор курьеров и
 /// Assignment Workflow.
 pub struct AssignmentAdapters {
-    pub ids: Box<dyn ProcessIds>,
     pub locator: Box<dyn ProcessLocator>,
     pub process: Arc<dyn ProcessAssignment>,
 }
@@ -217,13 +216,6 @@ impl SharedRelationships for LocalRelationships {
         &*self.relationships
     }
 }
-
-/// Генератор идентификаторов `Delivery` и offer: UUIDv7 в процессе
-/// ([`UuidIdGenerator`](crate::infrastructure::ids::UuidIdGenerator)),
-/// последовательный только в тестах (FR-541).
-pub trait ProcessIds: IdGenerator + Send + Sync {}
-
-impl<T: IdGenerator + Send + Sync> ProcessIds for T {}
 
 /// Локатор курьеров: сохранённые позиции в процессе
 /// ([`StoredCourierLocator`](crate::infrastructure::locator::StoredCourierLocator)),
@@ -324,7 +316,6 @@ pub struct LocalDeliveryPorts {
     #[shaku(inject)]
     relationships: Arc<dyn SharedRelationships>,
     locator: Box<dyn ProcessLocator>,
-    ids: Box<dyn ProcessIds>,
     city: VirtualCity,
     random: Box<dyn ProcessRandomSource>,
 }
@@ -504,11 +495,6 @@ impl DeliveryPorts for LocalDeliveryPorts {
     fn clock(&self) -> &dyn DeliveryClock {
         &*self.clock
     }
-
-    fn ids(&self) -> &dyn IdGenerator {
-        &*self.ids
-    }
-
     fn relationships(&self) -> &dyn DeliveryRelationshipWriter {
         self.relationships.delivery()
     }
@@ -636,7 +622,6 @@ pub(super) fn infrastructure(
                 read_models: stores.read_models,
                 assignment: assignment.process,
                 locator: assignment.locator,
-                ids: assignment.ids,
                 city: tracking.city,
                 random: tracking.random,
             })

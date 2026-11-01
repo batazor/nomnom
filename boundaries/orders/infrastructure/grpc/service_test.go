@@ -79,7 +79,6 @@ func newClientWithPorts(t *testing.T, subjects grpcadapter.SubjectResolver, stor
 		Slots:      ports.slots,
 		Workflow:   ports.workflow,
 		Clock:      ports.clock,
-		IDs:        &fake.IDs{},
 		Telemetry:  observability.UseCases(),
 	})
 	handlers := grpcadapter.OrderHandlers{
@@ -282,8 +281,8 @@ func TestPlaceOrderWithDeliveryWindow(t *testing.T) {
 		MinimumTotal: ordertest.Money(t, "0"),
 		MaximumTotal: ordertest.Money(t, "100"),
 	}, nil).Times(2)
-	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).Return(window, nil).Once()
-	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-2")).
+	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).Return(window, nil).Once()
+	slots.EXPECT().Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).
 		Return(order.DeliveryWindow{}, place.SlotUnavailable{Alternatives: []order.DeliveryWindow{alternative}}).Once()
 	subjects := NewMockSubjectResolver(t)
 	subjects.EXPECT().Resolve(mock.Anything).Return(customer, nil).Times(2)
@@ -296,9 +295,9 @@ func TestPlaceOrderWithDeliveryWindow(t *testing.T) {
 	request := placeRequest()
 	request.DeliveryWindowStart = timestamppb.New(windowStart)
 
-	_, err = client.PlaceOrder(context.Background(), request)
+	placed, err := client.PlaceOrder(context.Background(), request)
 	require.NoError(t, err)
-	snapshot, ok := store.Snapshot("order-1")
+	snapshot, ok := store.Snapshot(order.ID(placed.GetOrderId()))
 	require.True(t, ok)
 	assert.Equal(t, window, snapshot.DeliveryWindow)
 
@@ -392,16 +391,15 @@ func TestPlaceOrderCallsApplicationHandler(t *testing.T) {
 
 	response, err := client.PlaceOrder(context.Background(), placeRequest())
 	require.NoError(t, err)
-	assert.Equal(t, "order-1", response.GetOrderId())
 	assert.False(t, response.GetReplayed())
-	snapshot, ok := store.Snapshot("order-1")
+	snapshot, ok := store.Snapshot(order.ID(response.GetOrderId()))
 	require.True(t, ok)
 	assert.Equal(t, order.CustomerID("customer-1"), snapshot.CustomerID)
-	assert.Equal(t, []order.ID{"order-1"}, store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
+	assert.Equal(t, []order.ID{order.ID(response.GetOrderId())}, store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
 
 	replayed, err := client.PlaceOrder(context.Background(), placeRequest())
 	require.NoError(t, err)
-	assert.Equal(t, "order-1", replayed.GetOrderId())
+	assert.Equal(t, response.GetOrderId(), replayed.GetOrderId())
 	assert.True(t, replayed.GetReplayed())
 }
 
@@ -446,8 +444,7 @@ func TestPlaceOrderMapsRestaurantRefusals(t *testing.T) {
 
 			_, err := client.PlaceOrder(context.Background(), placeRequest())
 			requireReason(t, err, tc.code, tc.reason)
-			_, placed := store.Snapshot("order-1")
-			assert.False(t, placed)
+			assert.Empty(t, store.RelationshipChanges())
 		})
 	}
 }

@@ -150,16 +150,14 @@ func TestPlaceOrderEndToEndForUserAssertedByBFF(t *testing.T) {
 
 	response, err := env.client.PlaceOrder(asBFF(env.vectors.DelegateToken, env.vectors.Tokens["valid"]), placeRequest())
 	require.NoError(t, err)
-	assert.Equal(t, "order-1", response.GetOrderId())
-
-	snapshot, ok := env.store.Snapshot("order-1")
+	snapshot, ok := env.store.Snapshot(order.ID(response.GetOrderId()))
 	require.True(t, ok)
 	assert.Equal(t, order.CustomerID(env.vectors.ExpectedSubject), snapshot.CustomerID)
 	assert.Equal(t, "berlin", snapshot.MarketID.String(), "the Order takes the Market of the Restaurant")
 	require.Len(t, snapshot.Items, 1)
 	assert.Equal(t, order.MenuItemID("pizza"), snapshot.Items[0].MenuItemID())
 	assert.True(t, snapshot.Items[0].UnitPrice().Equal(ordertest.Money(t, "12.50")), "unit price comes from the restaurants menu")
-	assert.Equal(t, []order.ID{"order-1"}, env.store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
+	assert.Equal(t, []order.ID{order.ID(response.GetOrderId())}, env.store.RelationshipChanges(), "orders-consumer syncs the relationships of the new Order")
 }
 
 func TestPlaceOrderEndToEndRefusals(t *testing.T) {
@@ -213,8 +211,7 @@ func TestPlaceOrderEndToEndRefusals(t *testing.T) {
 
 			_, err := env.client.PlaceOrder(ctx, request)
 			requireReason(t, err, tc.code, tc.reason)
-			_, placed := env.store.Snapshot("order-1")
-			assert.False(t, placed)
+			assert.Empty(t, env.store.RelationshipChanges())
 		})
 	}
 }
@@ -225,6 +222,5 @@ func TestPlaceOrderEndToEndRejectsAssertionFromNonDelegate(t *testing.T) {
 
 	_, err := env.client.PlaceOrder(asBFF(env.vectors.NonDelegateToken, env.vectors.Tokens["valid"]), placeRequest())
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
-	_, placed := env.store.Snapshot("order-1")
-	assert.False(t, placed)
+	assert.Empty(t, env.store.RelationshipChanges())
 }

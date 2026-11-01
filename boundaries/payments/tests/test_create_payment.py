@@ -34,7 +34,7 @@ class CreatePaymentTest(unittest.TestCase):
     @override
     def setUp(self) -> None:
         self.kit = PaymentsTestKit(self.database)
-        self.handler = CreatePaymentHandler(self.kit.payments, self.kit.permissions, self.kit.ids)
+        self.handler = CreatePaymentHandler(self.kit.payments, self.kit.permissions)
 
     def create(
         self,
@@ -139,7 +139,7 @@ class CreatePaymentTest(unittest.TestCase):
             PaymentId("payment-winner"), OrderId("order-1"), MARKET, Money.parse("25", "EUR")
         )
         payments = RacingPaymentRepository(self.database, winner)
-        handler = CreatePaymentHandler(payments, self.kit.permissions, self.kit.ids)
+        handler = CreatePaymentHandler(payments, self.kit.permissions)
 
         result = handler.handle(self.create())
 

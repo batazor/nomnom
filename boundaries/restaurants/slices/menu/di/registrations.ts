@@ -22,7 +22,6 @@ import { BatchGetMenusHandler } from "../applications/batch-get/batch-get.ts";
 import type { Clock } from "../applications/clock/clock.ts";
 import { CreateMenuHandler } from "../applications/create/create.ts";
 import { GetMenuHandler } from "../applications/get/get.ts";
-import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import { SetMenuItemAvailabilityHandler } from "../applications/set-item-availability/set-item-availability.ts";
 import { UpdateMenuItemHandler } from "../applications/update-item/update-item.ts";
 import type { MenuRepository } from "../domains/menu/menu.ts";
@@ -39,7 +38,6 @@ export interface MenuDependencies {
   readonly db: Db;
   readonly unitOfWork: DatabaseUnitOfWork;
   readonly clock: Clock;
-  readonly ids: IdGenerator;
   readonly outbox: Outbox;
   readonly menuAccessControl: MenuAccessControl;
   /** Create Menu requires an existing restaurant (FR-211). */
@@ -118,14 +116,12 @@ export const registerMenu = (
         menuAccessControl,
         restaurants,
         menus,
-        ids,
         clock,
       }: MenuDependencies & MenuCradle) =>
         new CreateMenuHandler({
           accessControl: menuAccessControl,
           restaurants,
           menus,
-          ids,
           clock,
         }),
     ).singleton(),
@@ -135,7 +131,6 @@ export const registerMenu = (
         unitOfWork,
         menus,
         outbox,
-        ids,
         clock,
       }: MenuDependencies & MenuCradle) =>
         new AddMenuItemHandler({
@@ -143,7 +138,6 @@ export const registerMenu = (
           unitOfWork,
           menus,
           outbox,
-          ids,
           clock,
         }),
     ).singleton(),

@@ -6,7 +6,7 @@ use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData, ResourceMe
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 
 use super::*;
-use crate::infrastructure::memory::{ManualClock, SequentialIdGenerator, StaticAuthorization};
+use crate::infrastructure::memory::{ManualClock, StaticAuthorization};
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::ScopedUnitOfWork;
@@ -448,7 +448,6 @@ fn idempotent_repeat_is_recorded_once() {
     };
     let unit_of_work = ScopedUnitOfWork::new(&ports);
     let authorization = StaticAuthorization::allow_all();
-    let ids = SequentialIdGenerator::new("delivery");
     let clock = ManualClock::new(NOW);
     let city = crate::slices::delivery::domains::delivery::VirtualCity::new(52.5, 13.4, 2, 150.0)
         .expect("virtual city");
@@ -459,7 +458,6 @@ fn idempotent_repeat_is_recorded_once() {
         unit_of_work: &unit_of_work,
         deliveries: &store,
         outbox: &ports,
-        ids: &ids,
         clock: &clock,
         city: &city,
         random: &random,

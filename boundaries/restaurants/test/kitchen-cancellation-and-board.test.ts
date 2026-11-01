@@ -273,7 +273,12 @@ test("AC-281 kitchen queue lists queued orders in the policy order", async () =>
   const reversed = await new GetKitchenQueueHandler({
     accessControl: world.kitchenAccessControl,
     reader: world.board,
-    ordering: { order: async (_, entries) => [...entries].reverse() },
+    ordering: {
+      order: async (_, entries) =>
+        [...entries].sort((left, right) =>
+          right.restaurantOrderId.localeCompare(left.restaurantOrderId),
+        ),
+    },
     clock: world.clock,
   }).execute({ subject: cook, restaurantId });
 
@@ -286,7 +291,7 @@ test("AC-281 kitchen queue lists queued orders in the policy order", async () =>
   );
   assert.deepEqual(
     reversed.entries.map((entry) => entry.restaurantOrderId),
-    [second.restaurantOrderId, first.restaurantOrderId],
+    [first.restaurantOrderId, second.restaurantOrderId].sort().reverse(),
   );
 });
 
@@ -318,8 +323,8 @@ test("AC-860 AC-862 premium orders come first, a long waiting standard order joi
     [standard.restaurantOrderId, "STANDARD"],
   ]);
 
-  // The first standard order waits 45 minutes: it goes before the premium one.
-  world.clock.advance(minutes(40));
+  // The first standard order waits 44 minutes: it goes before the premium one.
+  world.clock.advance(minutes(39));
   assert.deepEqual(await queueOrder(), [
     [aged.restaurantOrderId, "STANDARD"],
     [received.restaurantOrderId, "PREMIUM"],
@@ -352,7 +357,12 @@ test("AC-282 active preparations list preparing and assembled orders with delays
       [assembled.restaurantOrderId, "ASSEMBLED"],
     ],
   );
-  assert.deepEqual(result.preparations[0]?.expectedReadyAt, delayedUntil);
+  assert.deepEqual(
+    result.preparations.find(
+      (entry) => entry.restaurantOrderId === preparing.restaurantOrderId,
+    )?.expectedReadyAt,
+    delayedUntil,
+  );
 });
 
 test("AC-283 ready orders list only READY orders with ready_at", async () => {

@@ -34,7 +34,6 @@ import { BatchGetRestaurantsHandler } from "../applications/batch-get/batch-get.
 import type { Clock } from "../applications/clock/clock.ts";
 import { CloseRestaurantHandler } from "../applications/close/close.ts";
 import { GetRestaurantHandler } from "../applications/get/get.ts";
-import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import { ListRestaurantsHandler } from "../applications/list/list.ts";
 import { ListOwnedRestaurantsHandler } from "../applications/list-owned/list-owned.ts";
 import { OpenRestaurantHandler } from "../applications/open/open.ts";
@@ -62,7 +61,6 @@ export interface RestaurantDependencies {
   readonly db: Db;
   readonly unitOfWork: DatabaseUnitOfWork;
   readonly clock: Clock;
-  readonly ids: IdGenerator;
   readonly outbox: Outbox;
   /** ADR 36: the kitchen board shows the restaurant, so every save notifies it. */
   readonly kitchenChanges: RestaurantSaved;
@@ -208,14 +206,12 @@ export const registerRestaurant = (
         restaurantAccessControl,
         ownerRelationships,
         restaurants,
-        ids,
         clock,
       }: Cradle) =>
         new RegisterRestaurantHandler({
           accessControl: restaurantAccessControl,
           ownerRelationships,
           restaurants,
-          ids,
           clock,
         }),
     ).singleton(),

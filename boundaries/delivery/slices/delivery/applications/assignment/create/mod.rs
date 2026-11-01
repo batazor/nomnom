@@ -12,10 +12,11 @@ use crate::pkg::authz::Subject;
 use crate::pkg::persistence::RepositoryError;
 use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 use crate::slices::courier::domains::courier::MarketId;
-use crate::slices::delivery::applications::{Clock, IdGenerator};
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryRepository, OrderId, VirtualCity,
 };
+use uuid::Uuid;
 
 use super::super::assignment_process::AssignmentProcess;
 use super::super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
@@ -43,7 +44,6 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub unit_of_work: &'a U,
     pub deliveries: &'a dyn DeliveryRepository,
     pub outbox: &'a dyn DeliveryOutbox,
-    pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub city: &'a VirtualCity,
     pub random: &'a dyn RandomSource,
@@ -100,7 +100,7 @@ impl<U: UnitOfWork> Handler<'_, U> {
         let tracking = new_tracking(self.city, self.random)
             .map_err(|error| DeliveryApplicationError::DependencyUnavailable(error.to_string()))?;
         let mut delivery = Delivery::create(
-            DeliveryId::new(self.ids.next_id()),
+            DeliveryId::new(Uuid::now_v7().to_string()),
             order_id.clone(),
             market_id.clone(),
             self.clock.now_epoch_seconds(),
@@ -183,7 +183,6 @@ mod tests {
             unit_of_work: &world.store,
             deliveries: &world.store,
             outbox: &world.store,
-            ids: &world.ids,
             clock: &world.clock,
             city: &world.city,
             random: &world.random,
@@ -200,14 +199,8 @@ mod tests {
             .execute(&service(), input())
             .expect("delivery created");
 
-        assert_eq!(
-            output,
-            Output {
-                delivery_id: DeliveryId::new("generated-1"),
-                created: true,
-            }
-        );
-        let delivery = world.delivery("generated-1");
+        assert!(output.created);
+        let delivery = world.delivery(output.delivery_id.as_str());
         assert_eq!(delivery.state(), State::Waiting);
         assert_eq!(delivery.courier_id(), None);
         assert_eq!(delivery.order_id(), &OrderId::new("order-1"));
@@ -218,7 +211,7 @@ mod tests {
         assert_eq!(
             world.store.outbox_messages(),
             vec![OutboxMessage::delivery(DomainEvent::DeliveryCreated {
-                delivery_id: DeliveryId::new("generated-1"),
+                delivery_id: output.delivery_id.clone(),
                 order_id: OrderId::new("order-1"),
                 market_id: berlin(),
                 created_at_epoch_seconds: NOW,
@@ -231,7 +224,7 @@ mod tests {
     #[test]
     fn identical_repeat_returns_existing_delivery() {
         let world = World::new();
-        handler(&world).execute(&service(), input()).expect("first");
+        let first = handler(&world).execute(&service(), input()).expect("first");
 
         let repeat = handler(&world)
             .execute(&service(), input())
@@ -240,7 +233,7 @@ mod tests {
         assert_eq!(
             repeat,
             Output {
-                delivery_id: DeliveryId::new("generated-1"),
+                delivery_id: first.delivery_id.clone(),
                 created: false,
             }
         );
@@ -248,12 +241,15 @@ mod tests {
             DeliveryRepository::find_by_order(&world.store, &OrderId::new("order-1"))
                 .expect("read")
                 .map(|delivery| delivery.id().clone()),
-            Some(DeliveryId::new("generated-1"))
+            Some(first.delivery_id.clone())
         );
         // The replay records no second `DeliveryCreated`; AC-873: the points
         // and the channel stay.
         assert_eq!(world.store.outbox_messages().len(), 1);
-        assert_eq!(world.delivery("generated-1").tracking(), Some(&tracking()));
+        assert_eq!(
+            world.delivery(first.delivery_id.as_str()).tracking(),
+            Some(&tracking())
+        );
     }
 
     /// ADR 41: the Market of a Delivery is immutable, so a repeat for the
@@ -261,7 +257,7 @@ mod tests {
     #[test]
     fn repeat_with_another_market_is_rejected() {
         let world = World::new();
-        handler(&world).execute(&service(), input()).expect("first");
+        let first = handler(&world).execute(&service(), input()).expect("first");
 
         assert_eq!(
             handler(&world).execute(&service(), in_market("hamburg")),
@@ -270,7 +266,10 @@ mod tests {
                 market_id: berlin(),
             })
         );
-        assert_eq!(world.delivery("generated-1").market_id(), &berlin());
+        assert_eq!(
+            world.delivery(first.delivery_id.as_str()).market_id(),
+            &berlin()
+        );
         assert_eq!(world.store.outbox_messages().len(), 1);
     }
 
@@ -331,7 +330,7 @@ mod tests {
         assert!(!repeat.created);
         assert_eq!(
             world.assignment.calls(),
-            vec![AssignmentCall::Start(DeliveryId::new("generated-1"))]
+            vec![AssignmentCall::Start(repeat.delivery_id.clone())]
         );
     }
 }

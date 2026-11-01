@@ -25,7 +25,6 @@ use std::time::{Duration, Instant};
 use shaku::{Component, HasComponent, HasProvider, Interface, Module, Provider, module};
 
 use crate::infrastructure::grpc::{GrpcWorker, SubjectResolver, subject_resolver};
-use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::{CourierPositions, StoredCourierLocator};
 use crate::infrastructure::messaging::{EventConsumer, Handled, MessageHandler};
 use crate::infrastructure::reconcile::{Reconciler, ReconciliationStore, Schedule};
@@ -119,7 +118,6 @@ pub fn assignment_adapters(
     process: Arc<dyn ProcessAssignment>,
 ) -> AssignmentAdapters {
     AssignmentAdapters {
-        ids: Box::new(UuidIdGenerator),
         locator: Box::new(StoredCourierLocator::new(positions)),
         process,
     }

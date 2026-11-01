@@ -23,7 +23,6 @@ use temporalio_sdk::{Runtime, Worker as TemporalSdkWorker, WorkerOptions};
 use tokio::sync::{oneshot, watch};
 use url::Url;
 
-use crate::infrastructure::ids::UuidIdGenerator;
 use crate::infrastructure::locator::StoredCourierLocator;
 use crate::infrastructure::repository::Store;
 use crate::infrastructure::temporal::{
@@ -52,7 +51,6 @@ pub const SERVICE_NAME: &str = "delivery-worker";
 struct UseCaseSteps {
     store: ObservedStore,
     locator: StoredCourierLocator,
-    ids: UuidIdGenerator,
     clock: SystemClock,
     telemetry: UseCaseTelemetry,
     policy: AssignmentPolicy,
@@ -82,7 +80,6 @@ impl UseCaseSteps {
             offers_of: &self.store,
             outbox: &self.store,
             locator: &self.locator,
-            ids: &self.ids,
             clock: &self.clock,
             policy: self.policy,
         }
@@ -109,7 +106,6 @@ pub fn assignment_steps(store: Arc<Store>, policy: AssignmentPolicy) -> Arc<dyn 
     Arc::new(UseCaseSteps {
         store: ObservedStore::new(Arc::clone(&store) as _, observed_outbox()),
         locator: StoredCourierLocator::new(store),
-        ids: UuidIdGenerator,
         clock: SystemClock,
         telemetry: UseCaseTelemetry::global(),
         policy,

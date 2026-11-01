@@ -21,8 +21,8 @@
 
 use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
-use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{
     DeliveryId, DeliveryOfferId, DeliveryOfferRepository, DeliveryRepository, OfferState, State,
 };
@@ -66,7 +66,6 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
     pub locator: &'a dyn CourierLocator,
-    pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
 }
@@ -126,7 +125,6 @@ impl<U: UnitOfWork> Handler<'_, U> {
                 offers: self.offers,
                 offers_of: self.offers_of,
                 outbox: self.outbox,
-                ids: self.ids,
                 clock: self.clock,
                 policy: self.policy,
             },

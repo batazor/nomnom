@@ -10,12 +10,13 @@ use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::domains::courier::CourierId;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::applications::offers_of_delivery::{OffersOfDelivery, load_offers_of};
-use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{
     Delivery, DeliveryId, DeliveryOffer, DeliveryOfferId, DeliveryOfferRepository,
     DeliveryRepository,
 };
+use uuid::Uuid;
 
 use super::super::authorization::{DeliveryAuthorization, DeliveryPermission, DeliveryResource};
 use super::super::error::DeliveryApplicationError;
@@ -47,7 +48,6 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub offers: &'a dyn DeliveryOfferRepository,
     pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
-    pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
 }
@@ -76,7 +76,6 @@ impl<U: UnitOfWork> Handler<'_, U> {
                     offers: self.offers,
                     offers_of: self.offers_of,
                     outbox: self.outbox,
-                    ids: self.ids,
                     clock: self.clock,
                     policy: self.policy,
                 },
@@ -92,7 +91,6 @@ pub struct OfferPorts<'a> {
     pub offers: &'a dyn DeliveryOfferRepository,
     pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
-    pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
 }
@@ -120,7 +118,7 @@ pub fn make_offer(
     }
 
     let mut offer = DeliveryOffer::new(
-        DeliveryOfferId::new(ports.ids.next_id()),
+        DeliveryOfferId::new(Uuid::now_v7().to_string()),
         delivery.id().clone(),
         courier_id,
         now,
@@ -164,7 +162,6 @@ mod tests {
             offers: &world.store,
             offers_of: &world.store,
             outbox: &world.store,
-            ids: &world.ids,
             clock: &world.clock,
             policy: world.policy,
         }
@@ -191,21 +188,24 @@ mod tests {
         assert_eq!(
             output,
             Output {
-                offer_id: DeliveryOfferId::new("generated-1"),
+                offer_id: output.offer_id.clone(),
                 delivery_id: DeliveryId::new("delivery-1"),
                 courier_id: CourierId::new("courier-1"),
                 expires_at_epoch_seconds: NOW + OFFER_TTL,
                 created: true,
             }
         );
-        assert_eq!(world.offer_state("generated-1"), OfferState::Pending);
+        assert_eq!(
+            world.offer_state(output.offer_id.as_str()),
+            OfferState::Pending
+        );
         assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
         assert_eq!(world.courier_status("courier-1"), CourierStatus::Available);
         assert_eq!(
             world.store.outbox_messages(),
             vec![OutboxMessage::delivery(DomainEvent::DeliveryOffered {
                 delivery_id: DeliveryId::new("delivery-1"),
-                offer_id: DeliveryOfferId::new("generated-1"),
+                offer_id: output.offer_id.clone(),
                 courier_id: CourierId::new("courier-1"),
                 expires_at_epoch_seconds: NOW + OFFER_TTL,
             })]
@@ -219,7 +219,7 @@ mod tests {
         let world = World::new();
         world.waiting_delivery("delivery-1");
         world.courier("courier-1", CourierStatus::Available);
-        handler(&world)
+        let first = handler(&world)
             .execute(&service(), input("courier-1"))
             .expect("first");
         world.clock.advance(OFFER_TTL);
@@ -228,7 +228,7 @@ mod tests {
             .execute(&service(), input("courier-1"))
             .expect("repeat");
 
-        assert_eq!(repeat.offer_id, DeliveryOfferId::new("generated-1"));
+        assert_eq!(repeat.offer_id, first.offer_id);
         assert!(!repeat.created);
         assert_eq!(world.offers_of("delivery-1").expect("read").len(), 1);
     }
@@ -238,7 +238,7 @@ mod tests {
         let world = World::new();
         world.waiting_delivery("delivery-1");
         world.courier("courier-1", CourierStatus::Available);
-        handler(&world)
+        let first = handler(&world)
             .execute(&service(), input("courier-1"))
             .expect("first");
         world.clock.advance(OFFER_TTL + 1);
@@ -246,7 +246,7 @@ mod tests {
         let next = handler(&world)
             .execute(&service(), input("courier-1"))
             .expect("next");
-        assert_eq!(next.offer_id, DeliveryOfferId::new("generated-2"));
+        assert_ne!(next.offer_id, first.offer_id);
         assert!(next.created);
     }
 

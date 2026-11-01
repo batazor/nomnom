@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use crate::slices::courier::applications::Clock as CourierClock;
-use crate::slices::delivery::applications::{Clock as DeliveryClock, IdGenerator};
+use crate::slices::delivery::applications::Clock as DeliveryClock;
 
 /// Clock whose time is set explicitly by the test.
 #[derive(Debug)]
@@ -35,29 +35,5 @@ impl CourierClock for ManualClock {
 impl DeliveryClock for ManualClock {
     fn now_epoch_seconds(&self) -> i64 {
         self.now.load(Ordering::SeqCst)
-    }
-}
-
-/// Deterministic identifiers `<prefix>-1`, `<prefix>-2`, ...
-#[derive(Debug)]
-pub struct SequentialIdGenerator {
-    prefix: String,
-    next: AtomicU64,
-}
-
-impl SequentialIdGenerator {
-    #[must_use]
-    pub fn new(prefix: impl Into<String>) -> Self {
-        Self {
-            prefix: prefix.into(),
-            next: AtomicU64::new(1),
-        }
-    }
-}
-
-impl IdGenerator for SequentialIdGenerator {
-    fn next_id(&self) -> String {
-        let value = self.next.fetch_add(1, Ordering::SeqCst);
-        format!("{}-{value}", self.prefix)
     }
 }

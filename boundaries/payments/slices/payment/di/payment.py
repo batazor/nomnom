@@ -33,7 +33,6 @@ from slices.payment.infrastructure.authorization import (
     create_spicedb_client,
 )
 from slices.payment.infrastructure.clock import SystemClock
-from slices.payment.infrastructure.ids import UuidIdentifiers
 from slices.payment.infrastructure.messaging import PaymentEventsMapper
 from slices.payment.infrastructure.observability import (
     DomainMetrics,
@@ -141,7 +140,6 @@ class PaymentContainer(containers.DeclarativeContainer):
     # Integration Events payments.v1.payment-events (ADR 31); publishes Debezium (ADR 37).
     outbox_mapper = providers.Singleton(PaymentEventsMapper)
     clock = providers.Singleton(SystemClock)
-    ids = providers.Singleton(UuidIdentifiers)
     # Business counters (ops/semconv domain.yaml): Domain Events written to the Outbox
     # are recorded after the outer Unit of Work commits; applied Payment FSM transitions
     # (fsm.yaml) too.
@@ -183,7 +181,6 @@ class PaymentContainer(containers.DeclarativeContainer):
         provider=payment_provider,
         permissions=permissions,
         clock=clock,
-        operation_ids=ids,
         applier=applier,
         transitions=fsm_metrics,
         subjects=subjects,
@@ -203,7 +200,7 @@ class PaymentContainer(containers.DeclarativeContainer):
             instrument,
             use_cases,
             names.CREATE_PAYMENT,
-            providers.Factory(CreatePaymentHandler, payments, permissions, ids),
+            providers.Factory(CreatePaymentHandler, payments, permissions),
         ),
         authorize_payment=providers.Factory(
             instrument,

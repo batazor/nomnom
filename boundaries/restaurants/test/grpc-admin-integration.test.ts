@@ -33,7 +33,6 @@ import { spiceDbEndpoint } from "./support/global-containers.ts";
 import { createService } from "./support/grpc.ts";
 import {
   FixedClock,
-  SequentialIdGenerator,
   startOfDay,
   testWaitTimePolicy,
 } from "./support/restaurants.ts";
@@ -132,8 +131,8 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
     }
   });
 
-  /** Service with a switchable caller; restaurant ids start with `<run><scope>-`. */
-  const world = async (scope: string) => {
+  /** Service with a switchable caller. */
+  const world = async () => {
     // The adapter with its own consistency, as in production: checks of a
     // restaurant are at_least_as_fresh with its stored revision (FR-447).
     const writer = new SpiceDbRelationshipWriter({ client, timeoutMs: 5000 });
@@ -193,7 +192,6 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
         accessControl,
         ownerRelationships: writer,
         restaurants,
-        ids: new SequentialIdGenerator(`${run}${scope}-restaurant`),
         clock: new FixedClock(startOfDay),
       }),
       updateRestaurant: new UpdateRestaurantHandler({
@@ -259,12 +257,12 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
   };
 
   test("AC-479 operator registers a restaurant and the owner gets manage", async () => {
-    const { register, restaurants, can } = await world("register");
+    const { register, restaurants, can } = await world();
 
     const response = await register();
 
     const restaurantId = response.restaurant?.restaurantId ?? "";
-    assert.ok(restaurantId.startsWith(run));
+    assert.ok(restaurantId);
     assert.equal(response.version, 1n);
     // FR-447: the ZedToken of the owner write is stored with the restaurant.
     assert.ok(
@@ -276,7 +274,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
   });
 
   test("AC-480 AC-482 owner assigns and revokes staff, visible immediately; repeats are changed=false", async () => {
-    const { as, register, restaurants, can } = await world("staff");
+    const { as, register, restaurants, can } = await world();
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
     const request = { restaurantId, userId: cook };
     // FR-447: every relationship write stores its ZedToken with the restaurant.
@@ -316,7 +314,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
   });
 
   test("AC-481 a user without manage gets PERMISSION_DENIED and staff is unchanged", async () => {
-    const { as, register, restaurants, can } = await world("denied");
+    const { as, register, restaurants, can } = await world();
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
 
     await assert.rejects(
@@ -346,7 +344,7 @@ describe("FR-446 admin RPCs against SpiceDB", () => {
   });
 
   test("AC-852 AC-853 the owner sets the premium fee by UpdateRestaurant, a user without manage is PERMISSION_DENIED", async () => {
-    const { as, register, restaurants } = await world("update");
+    const { as, register, restaurants } = await world();
     const restaurantId = (await register()).restaurant?.restaurantId ?? "";
 
     const updated = await as(owner).updateRestaurant(

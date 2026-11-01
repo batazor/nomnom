@@ -17,7 +17,6 @@ import {
   createRestaurantWorld,
   type Infrastructure,
   owner,
-  SequentialIdGenerator,
 } from "./restaurants.ts";
 
 export const createMenuWorld = async (
@@ -33,13 +32,11 @@ export const createMenuWorld = async (
   const menus = new DatabaseMenuRepository(store);
   const reader = new DatabaseMenuReader(store);
   const accessControl = new TestMenuAccessControl();
-  const ids = new SequentialIdGenerator("menu");
   const outbox = options.outbox ?? infrastructure.outbox;
   const createMenu = new CreateMenuHandler({
     accessControl,
     restaurants: restaurantWorld.restaurants,
     menus,
-    ids,
     clock: infrastructure.clock,
   });
   const addMenuItem = new AddMenuItemHandler({
@@ -47,7 +44,6 @@ export const createMenuWorld = async (
     unitOfWork: infrastructure.unitOfWork,
     menus,
     outbox,
-    ids,
     clock: infrastructure.clock,
   });
   const updateMenuItem = new UpdateMenuItemHandler({

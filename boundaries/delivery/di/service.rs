@@ -9,8 +9,6 @@ use std::time::Duration;
 
 use shaku::{HasComponent, module};
 
-#[cfg(test)]
-use crate::infrastructure::memory::SequentialIdGenerator;
 #[cfg(any(test, feature = "test-support"))]
 use crate::infrastructure::memory::{
     FixedRandomSource, RecordingAssignment, RecordingPositionPublisher, RecordingRelationships,
@@ -141,7 +139,6 @@ pub fn build_over(
     service(infrastructure(
         stores,
         AssignmentAdapters {
-            ids: Box::new(crate::infrastructure::ids::UuidIdGenerator),
             locator: Box::new(StaticCourierLocator::new(Vec::new())),
             process: Arc::new(RecordingAssignment::new()),
         },
@@ -162,7 +159,6 @@ pub(crate) fn build_with_locator(
     service(infrastructure(
         ProcessStores::over(store),
         AssignmentAdapters {
-            ids: Box::new(SequentialIdGenerator::new("delivery")),
             locator: Box::new(locator),
             process: Arc::new(RecordingAssignment::new()),
         },
@@ -185,7 +181,6 @@ pub(crate) fn build_over_store(
     service(infrastructure(
         ProcessStores::over(store),
         AssignmentAdapters {
-            ids: Box::new(SequentialIdGenerator::new("delivery")),
             locator: Box::new(crate::infrastructure::locator::StoredCourierLocator::new(
                 Arc::clone(store) as _,
             )),
@@ -257,7 +252,7 @@ mod tests {
             )
             .expect("delivery created");
         assert!(created.created);
-        assert_eq!(created.delivery_id.as_str(), "delivery-1");
+        assert!(!created.delivery_id.as_str().is_empty());
     }
 
     #[test]

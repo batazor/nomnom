@@ -162,7 +162,6 @@ describe("kitchen command RPCs over MongoDB", () => {
       accessControl,
       restaurants: new RepositoryRestaurantExistence(restaurants),
       restaurantOrders,
-      ids: { next: () => randomUUID() },
       clock,
     });
     const unused = {

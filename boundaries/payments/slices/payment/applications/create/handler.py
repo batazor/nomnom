@@ -1,5 +1,6 @@
 """Create Payment: idempotently create the local payment intent of an Order."""
 
+import uuid
 from dataclasses import dataclass
 
 from pkg.authz import Subject
@@ -18,7 +19,7 @@ from slices.payment.domains.payment import (
 
 from ..access import require_permission
 from ..errors import InvalidPaymentRequestError, PaymentAlreadyExistsError
-from ..ports import PaymentIdSource, PaymentPermission, PaymentPermissionChecker, PaymentResource
+from ..ports import PaymentPermission, PaymentPermissionChecker, PaymentResource
 
 
 @dataclass(frozen=True)
@@ -54,11 +55,9 @@ class CreatePaymentHandler:
         self,
         payments: PaymentRepository,
         permissions: PaymentPermissionChecker,
-        ids: PaymentIdSource,
     ) -> None:
         self._payments = payments
         self._permissions = permissions
-        self._ids = ids
 
     def handle(self, command: CreatePaymentInput) -> CreatePaymentResult:
         """Create the Payment of the Order, or return the existing one with the same terms.
@@ -76,7 +75,7 @@ class CreatePaymentHandler:
         order_id = OrderId(command.order_id)
         market_id = _market(command.market_id)
         amount = _positive_money(command.amount, command.currency)
-        payment_id = self._ids.new_payment_id()
+        payment_id = PaymentId(str(uuid.uuid4()))
         require_permission(
             self._permissions,
             command.subject,

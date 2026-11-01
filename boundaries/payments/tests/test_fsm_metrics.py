@@ -77,7 +77,6 @@ class FsmMetricsTest(unittest.TestCase):
             provider=self.kit.provider,
             permissions=self.kit.permissions,
             clock=self.kit.clock,
-            operation_ids=self.kit.ids,
             applier=ProviderResultApplier(
                 self.kit.payments, self.kit.outbox, self.kit.clock, self.fsm
             ),

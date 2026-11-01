@@ -24,9 +24,13 @@ test("AC-221 create menu creates an empty menu of the restaurant", async () => {
     restaurantId,
   });
 
-  assert.deepEqual(result, { menuId: "menu-1", restaurantId, version: 1 });
+  assert.deepEqual(result, {
+    menuId: result.menuId,
+    restaurantId,
+    version: 1,
+  });
   assert.deepEqual(await world.getMenu.execute({ restaurantId }), {
-    menuId: "menu-1",
+    menuId: result.menuId,
     restaurantId,
     items: [],
   });
@@ -101,8 +105,8 @@ test("AC-226 AC-773 add menu item creates an available dish by default and publi
   });
 
   assert.deepEqual(result, {
-    menuItemId: "menu-2",
-    menuId: "menu-1",
+    menuItemId: result.menuItemId,
+    menuId: result.menuId,
     name: "Pho",
     description: "Beef noodle soup",
     price: { amount: "9.50", currency: "EUR" },
@@ -202,7 +206,7 @@ test("update menu item availability publishes MenuItemAvailabilityChanged", asyn
   assert.equal(last?.event.type, "MenuItemAvailabilityChanged");
   assert.deepEqual(last?.aggregate, {
     type: "Menu",
-    id: "menu-1",
+    id: (await world.getMenu.execute({ restaurantId })).menuId,
     version: result.version,
   });
 });
@@ -240,7 +244,7 @@ test("AC-230 set availability changes only availability and publishes the fact",
   assert.deepEqual(after.items, [{ ...before.items[0], isAvailable: false }]);
   assert.deepEqual((await world.outbox.records()).at(-1)?.event, {
     type: "MenuItemAvailabilityChanged",
-    menuId: "menu-1",
+    menuId: before.menuId,
     restaurantId,
     menuItemId,
     marketId: "berlin",

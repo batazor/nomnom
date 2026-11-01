@@ -39,6 +39,7 @@ linters:
             - "!$test"
           allow:
             - $gostd
+            - github.com/google/uuid
             - nomnom/orders/pkg/authz
             - nomnom/orders/pkg/unitofwork
             - nomnom/orders/pkg/telemetry

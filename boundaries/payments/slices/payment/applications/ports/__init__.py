@@ -23,8 +23,6 @@ from slices.payment.domains.payment import (
 )
 
 __all__ = [
-    "PaymentIdSource",
-    "PaymentOperationIdSource",
     "PaymentOutbox",
     "PaymentPermission",
     "PaymentPermissionChecker",
@@ -169,20 +167,4 @@ class ProviderMessageInbox(Protocol):
 
     def register(self, provider_message_id: str) -> bool:
         """Record the message in the active Unit of Work; ``False`` for a duplicate."""
-        ...
-
-
-class PaymentIdSource(Protocol):
-    """Source of new Payment identifiers, so that use cases stay deterministic in tests."""
-
-    def new_payment_id(self) -> PaymentId:
-        """Return a new unique Payment identifier."""
-        ...
-
-
-class PaymentOperationIdSource(Protocol):
-    """Source of new Payment Operation identifiers, deterministic in tests."""
-
-    def new_operation_id(self) -> OperationId:
-        """Return a new unique Payment Operation identifier."""
         ...

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Subject } from "../../pkg/authz/subject.ts";
 import type { Outbox } from "../../pkg/outbox/outbox.ts";
 import type { UnitOfWork } from "../../pkg/unit-of-work/unit-of-work.ts";
@@ -66,7 +67,6 @@ import { createMenuWorld } from "./menus.ts";
 import {
   createInfrastructure,
   type Infrastructure,
-  SequentialIdGenerator,
   testWaitTimePolicy,
 } from "./restaurants.ts";
 
@@ -120,7 +120,6 @@ export const createKitchenWorld = async (
     policy: testWaitTimePolicy(minutes(PREPARATION_MINUTES)),
     agingFactor: QUEUE_AGING_FACTOR,
   });
-  const startRequests = new SequentialIdGenerator("start-request");
   const scheduleSlots = new DatabaseScheduleSlotRepository(
     createScheduleSlotCollection(infrastructure.db, infrastructure.unitOfWork),
   );
@@ -131,7 +130,6 @@ export const createKitchenWorld = async (
   });
   const conditions = new StaticAcceptanceConditions();
   const outbox = options.outbox ?? infrastructure.outbox;
-  const ids = new SequentialIdGenerator("restaurant-order");
   const commandDependencies = {
     accessControl,
     unitOfWork: options.unitOfWork ?? infrastructure.unitOfWork,
@@ -153,7 +151,6 @@ export const createKitchenWorld = async (
       accessControl,
       restaurants: new RepositoryRestaurantExistence(menuWorld.restaurants),
       restaurantOrders,
-      ids,
       clock: infrastructure.clock,
     }),
     accept: new AcceptOrderHandler({
@@ -182,7 +179,6 @@ export const createKitchenWorld = async (
       accessControl,
       restaurants: new RepositoryRestaurantExistence(menuWorld.restaurants),
       cooks,
-      ids: new SequentialIdGenerator("cook"),
     }),
     putCookOnLine: new PutCookOnLineHandler(cookCommandDependencies),
     takeCookOffLine: new TakeCookOffLineHandler(cookCommandDependencies),
@@ -305,10 +301,7 @@ export const createKitchenWorld = async (
   };
 
   /** Start Next Preparation by the kitchen with a fresh request id. */
-  const startNext = (
-    restaurantId: string,
-    requestId: string = startRequests.next(),
-  ) =>
+  const startNext = (restaurantId: string, requestId: string = randomUUID()) =>
     handlers.startPreparation.execute({
       subject: cook,
       restaurantId,
@@ -326,6 +319,8 @@ export const createKitchenWorld = async (
       plannedReadyAt: Date;
     }>,
   ) => {
+    // Orders of a test keep the sequence of their steps: ids do not order them.
+    infrastructure.clock.advance(1000);
     orderSequence += 1;
     const { restaurantOrder } = await handlers.receive.execute({
       subject: ordersService,

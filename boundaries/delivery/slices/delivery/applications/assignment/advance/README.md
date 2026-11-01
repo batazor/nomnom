@@ -16,7 +16,7 @@
 ## Реализация
 
 - **Handler:** `mod.rs` — `Input`, `Output`, `Handler::execute(input)`; требования FR-704, FR-705, FR-711.
-- **Порты:** `DeliveryRepository`, `DeliveryOfferRepository`, `OffersOfDelivery`, `CourierAssignment`, `CourierLocator`, `DeliveryOutbox`, `IdGenerator`, `Clock`, `AssignmentPolicy`.
+- **Порты:** `DeliveryRepository`, `DeliveryOfferRepository`, `OffersOfDelivery`, `CourierAssignment`, `CourierLocator`, `DeliveryOutbox`, `Clock`, `AssignmentPolicy`.
 - **Транзакция:** Одна UoW: истечение просроченного pending offer, выбор кандидата, сохранение `Delivery` с прочитанной версией и новый offer с `DeliveryOffered` в Outbox.
 - **Допущение:** Без subject и проверки прав — работа процесса. Конкурентное изменение доставки или курьер, переставший быть доступным, — ошибка, которую повторяет retry policy Activity.
 

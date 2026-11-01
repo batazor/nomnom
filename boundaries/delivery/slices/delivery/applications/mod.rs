@@ -30,11 +30,6 @@ pub trait Clock {
     fn now_epoch_seconds(&self) -> i64;
 }
 
-/// Generates identifiers of new aggregates before a transaction starts.
-pub trait IdGenerator {
-    fn next_id(&self) -> String;
-}
-
 /// Input validation of a required identifier: surrounding whitespace is
 /// removed and an empty value is rejected.
 fn required_identifier(value: &str) -> Option<&str> {

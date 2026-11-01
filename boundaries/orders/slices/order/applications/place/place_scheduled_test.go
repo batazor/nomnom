@@ -59,16 +59,16 @@ func TestPlaceOrderPremiumWithDeliveryWindow(t *testing.T) {
 		Return(snapshot, nil).
 		Once()
 	e.slots.EXPECT().
-		Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).
+		Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).
 		Return(deliveryWindow(t, windowStart), nil).
 		Once()
 	input := scheduledInput()
 	input.Priority = string(order.PriorityPremium)
 
-	_, err := e.handler.Handle(context.Background(), input)
+	result, err := e.handler.Handle(context.Background(), input)
 
 	require.NoError(t, err)
-	placed, ok := e.store.Snapshot("order-1")
+	placed, ok := e.store.Snapshot(result.OrderID)
 	require.True(t, ok)
 	assert.Equal(t, windowStart, placed.DeliveryWindow.Start())
 	assert.Equal(t, order.PriorityPremium, placed.Service.Priority())
@@ -104,7 +104,7 @@ func TestPlaceOrderRefusalOfTheReservationStoresNothing(t *testing.T) {
 				Return(openSnapshot(t), nil).
 				Once()
 			e.slots.EXPECT().
-				Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).
+				Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).
 				Return(order.DeliveryWindow{}, refusal.err).
 				Once()
 
@@ -126,7 +126,7 @@ func TestPlaceOrderScheduledReplayDoesNotReserveAgain(t *testing.T) {
 		Return(openSnapshot(t), nil).
 		Once()
 	e.slots.EXPECT().
-		Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).
+		Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).
 		Return(deliveryWindow(t, windowStart), nil).
 		Once()
 

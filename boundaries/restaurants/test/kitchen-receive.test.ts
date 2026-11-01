@@ -26,7 +26,7 @@ test("AC-242 receive order request creates a RECEIVED restaurant order", async (
 
   assert.equal(result.created, true);
   assert.deepEqual(result.restaurantOrder, {
-    restaurantOrderId: "restaurant-order-1",
+    restaurantOrderId: result.restaurantOrder.restaurantOrderId,
     orderId: "order-42",
     restaurantId,
     state: "RECEIVED",

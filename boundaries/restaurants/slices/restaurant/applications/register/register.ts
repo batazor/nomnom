@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import {
   Restaurant,
@@ -9,7 +10,6 @@ import type {
 } from "../access-control/access-control.ts";
 import type { Clock } from "../clock/clock.ts";
 import { PermissionDeniedError } from "../failure/failure.ts";
-import type { IdGenerator } from "../id-generator/id-generator.ts";
 import {
   type RestaurantView,
   toRestaurantView,
@@ -32,20 +32,17 @@ export class RegisterRestaurantHandler {
   readonly #accessControl: RestaurantAccessControl;
   readonly #ownerRelationships: OwnerRelationshipWriter;
   readonly #restaurants: RestaurantRepository;
-  readonly #ids: IdGenerator;
   readonly #clock: Clock;
 
   constructor(dependencies: {
     accessControl: RestaurantAccessControl;
     ownerRelationships: OwnerRelationshipWriter;
     restaurants: RestaurantRepository;
-    ids: IdGenerator;
     clock: Clock;
   }) {
     this.#accessControl = dependencies.accessControl;
     this.#ownerRelationships = dependencies.ownerRelationships;
     this.#restaurants = dependencies.restaurants;
-    this.#ids = dependencies.ids;
     this.#clock = dependencies.clock;
   }
 
@@ -56,7 +53,7 @@ export class RegisterRestaurantHandler {
       throw new PermissionDeniedError("register restaurant");
     }
     const restaurant = Restaurant.register({
-      id: this.#ids.next(),
+      id: randomUUID(),
       name: command.name,
       ownerId: command.ownerId,
       marketId: command.marketId,

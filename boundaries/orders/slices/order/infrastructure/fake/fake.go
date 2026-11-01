@@ -6,7 +6,6 @@ package fake
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -31,19 +30,6 @@ func (c *Clock) Advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.now = c.now.Add(d)
-}
-
-// IDs generates sequential order identifiers order-1, order-2, ...
-type IDs struct {
-	mu   sync.Mutex
-	next int
-}
-
-func (g *IDs) NewOrderID(context.Context) (order.ID, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.next++
-	return order.ID(fmt.Sprintf("order-%d", g.next)), nil
 }
 
 // AlwaysOpen is a cancellation policy without a window; it is a test stand-in,

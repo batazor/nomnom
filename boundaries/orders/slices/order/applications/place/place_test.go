@@ -46,7 +46,6 @@ func newEnv(t *testing.T) env {
 		Catalog:         e.catalog,
 		Slots:           e.slots,
 		Relationships:   e.store,
-		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
 	})
 	return e
@@ -128,7 +127,7 @@ func TestPlaceOrderWithAnotherKeyPlacesAnotherOrder(t *testing.T) {
 		Snapshot(mock.Anything, order.RestaurantID("restaurant-1"), []order.MenuItemID{"pizza", "soup"}).
 		Return(openSnapshot(t), nil).
 		Times(2)
-	_, err := e.handler.Handle(context.Background(), validInput())
+	first, err := e.handler.Handle(context.Background(), validInput())
 	require.NoError(t, err)
 
 	other := validInput()
@@ -136,7 +135,7 @@ func TestPlaceOrderWithAnotherKeyPlacesAnotherOrder(t *testing.T) {
 	result, err := e.handler.Handle(context.Background(), other)
 
 	require.NoError(t, err)
-	assert.Equal(t, order.ID("order-2"), result.OrderID)
+	assert.NotEqual(t, first.OrderID, result.OrderID)
 }
 
 func TestPlaceOrderPropagatesCatalogFailure(t *testing.T) {
@@ -156,8 +155,6 @@ func TestPlaceOrderPropagatesCatalogFailure(t *testing.T) {
 
 func assertNothingPlaced(t *testing.T, e env) {
 	t.Helper()
-	_, ok := e.store.Snapshot("order-1")
-	assert.False(t, ok)
 	assert.Empty(t, e.store.OutboxRecords())
 }
 
@@ -170,7 +167,6 @@ func (e env) handlerWithKeys(keys place.IdempotencyKeys) place.Handler {
 		Catalog:         e.catalog,
 		Slots:           e.slots,
 		Relationships:   e.store,
-		IDs:             &fake.IDs{},
 		Clock:           fake.NewClock(now),
 	})
 }
@@ -201,7 +197,7 @@ func TestPlaceOrderReplaysOrderCommittedDuringKeyConflict(t *testing.T) {
 	keys := NewMockIdempotencyKeys(t)
 	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").Return("", false, nil).Twice()
 	keys.EXPECT().
-		RememberOrder(mock.Anything, order.CustomerID("customer-1"), "key-1", order.ID("order-1")).
+		RememberOrder(mock.Anything, order.CustomerID("customer-1"), "key-1", mock.AnythingOfType("order.ID")).
 		RunAndReturn(e.store.RememberOrder).
 		Once()
 	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").RunAndReturn(e.store.FindOrder).Once()
@@ -235,7 +231,7 @@ func TestPlaceOrderKeyConflictWithoutOrderIsConcurrencyConflict(t *testing.T) {
 	keys := NewMockIdempotencyKeys(t)
 	keys.EXPECT().FindOrder(mock.Anything, order.CustomerID("customer-1"), "key-1").Return("", false, nil).Times(3)
 	keys.EXPECT().
-		RememberOrder(mock.Anything, order.CustomerID("customer-1"), "key-1", order.ID("order-1")).
+		RememberOrder(mock.Anything, order.CustomerID("customer-1"), "key-1", mock.AnythingOfType("order.ID")).
 		Return(place.ErrIdempotencyKeyTaken).
 		Once()
 
@@ -327,10 +323,10 @@ func TestPlaceOrderWithoutPriorityIsStandard(t *testing.T) {
 	input := premiumInput()
 	input.Priority = ""
 
-	_, err = e.handler.Handle(context.Background(), input)
+	result, err := e.handler.Handle(context.Background(), input)
 
 	require.NoError(t, err)
-	placed, ok := e.store.Snapshot("order-1")
+	placed, ok := e.store.Snapshot(result.OrderID)
 	require.True(t, ok)
 	assert.Equal(t, order.PriorityStandard, placed.Service.Priority())
 	_, premium := placed.Service.PremiumFee()

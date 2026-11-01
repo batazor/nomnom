@@ -230,20 +230,6 @@ class FixedClock:
         self._now += delta
 
 
-class SequentialIdentifiers:
-    def __init__(self) -> None:
-        self._payments = 0
-        self._operations = 0
-
-    def new_payment_id(self) -> PaymentId:
-        self._payments += 1
-        return PaymentId(f"payment-{self._payments}")
-
-    def new_operation_id(self) -> OperationId:
-        self._operations += 1
-        return OperationId(f"operation-{self._operations}")
-
-
 class PaymentsTestKit:
     """Real PostgreSQL adapters over a truncated database plus the non-storage fakes."""
 
@@ -265,7 +251,6 @@ class PaymentsTestKit:
         self.provider = FakePaymentProvider()
         self.permissions = FakePermissions()
         self.clock = FixedClock()
-        self.ids = SequentialIdentifiers()
         self.transitions = FsmMetrics()
 
     def executor(self) -> PaymentOperationExecutor:
@@ -275,7 +260,6 @@ class PaymentsTestKit:
             provider=self.provider,
             permissions=self.permissions,
             clock=self.clock,
-            operation_ids=self.ids,
             applier=self.applier(),
             transitions=self.transitions,
             subjects=self.subjects,

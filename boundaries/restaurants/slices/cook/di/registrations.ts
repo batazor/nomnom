@@ -24,7 +24,6 @@ import type {
 } from "../applications/cook-workload/cook-workload.ts";
 import { GetCookPoolHandler } from "../applications/get-pool/get-pool.ts";
 import { HireCookHandler } from "../applications/hire/hire.ts";
-import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import { PutCookOnLineHandler } from "../applications/put-on-line/put-on-line.ts";
 import { RetireCookHandler } from "../applications/retire/retire.ts";
 import { TakeCookOffLineHandler } from "../applications/take-off-line/take-off-line.ts";
@@ -41,7 +40,6 @@ export interface CookDependencies {
   /** ADR 36: Change Notification of the kitchen board of every cook write. */
   readonly kitchenChanges: CookSaved;
   readonly clock: Clock;
-  readonly ids: IdGenerator;
   readonly cookAccessControl: CookPoolAccess;
   /** Existence of restaurants, from the `restaurantorder` slice. */
   readonly restaurantExistence: CookRestaurants;
@@ -97,12 +95,11 @@ export const registerCook = (container: AwilixContainer<Cradle>): void => {
         new PoolCookAssigner({ cooks, workload: kitchenBoard }),
     ).singleton(),
     hireCook: asFunction(
-      ({ cookAccessControl, restaurantExistence, cooks, ids }: Cradle) =>
+      ({ cookAccessControl, restaurantExistence, cooks }: Cradle) =>
         new HireCookHandler({
           accessControl: cookAccessControl,
           restaurants: restaurantExistence,
           cooks,
-          ids,
         }),
     ).singleton(),
     putCookOnLine: asFunction(

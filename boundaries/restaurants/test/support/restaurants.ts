@@ -9,7 +9,6 @@ import type {
 import { AssignStaffHandler } from "../../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import type { Clock } from "../../slices/restaurant/applications/clock/clock.ts";
 import { CloseRestaurantHandler } from "../../slices/restaurant/applications/close/close.ts";
-import type { IdGenerator } from "../../slices/restaurant/applications/id-generator/id-generator.ts";
 import { OpenRestaurantHandler } from "../../slices/restaurant/applications/open/open.ts";
 import { RegisterRestaurantHandler } from "../../slices/restaurant/applications/register/register.ts";
 import { RevokeStaffHandler } from "../../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
@@ -101,7 +100,6 @@ export const createRestaurantWorld = async (
   const authorization = new TestRestaurantAuthorization().allowRegistration(
     operator,
   );
-  const ids = new SequentialIdGenerator("restaurant");
   const outbox = options.outbox ?? infrastructure.outbox;
   const changeOpening = {
     accessControl: authorization,
@@ -114,7 +112,6 @@ export const createRestaurantWorld = async (
     accessControl: authorization,
     ownerRelationships: authorization,
     restaurants,
-    ids,
     clock: infrastructure.clock,
   });
   const update = new UpdateRestaurantHandler({
@@ -179,7 +176,6 @@ export const createRestaurantWorld = async (
     catalog,
     memberships,
     authorization,
-    ids,
     register,
     update,
     open,
@@ -210,21 +206,6 @@ export class FixedClock implements Clock {
 
   advance(milliseconds: number): void {
     this.#now += milliseconds;
-  }
-}
-
-/** Deterministic identifiers `<prefix>-1`, `<prefix>-2`, ... for tests. */
-export class SequentialIdGenerator implements IdGenerator {
-  readonly #prefix: string;
-  #sequence = 0;
-
-  constructor(prefix: string) {
-    this.#prefix = prefix;
-  }
-
-  next(): string {
-    this.#sequence += 1;
-    return `${this.#prefix}-${this.#sequence}`;
   }
 }
 

@@ -170,7 +170,7 @@ test("AC-213 List Restaurants lists by default only restaurants inside their sch
     [...noon.restaurants, ...rest.restaurants].map(
       (restaurant) => restaurant.restaurantId,
     ),
-    [ids[0], ids[2]],
+    [ids[0], ids[2]].sort(),
     "B opens at 18:00, the page skips it",
   );
   assert.equal(rest.nextCursor, undefined);
@@ -191,7 +191,7 @@ test("AC-213 List Restaurants lists by default only restaurants inside their sch
       [ids[0], false],
       [ids[1], true],
       [ids[2], false],
-    ],
+    ].sort(([left], [right]) => String(left).localeCompare(String(right))),
   );
 });
 

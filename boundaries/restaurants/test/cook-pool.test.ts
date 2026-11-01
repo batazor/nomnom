@@ -237,18 +237,18 @@ test("AC-783 a never assigned cook goes first, then the earliest last assignment
     "Aigul",
     "Oleg",
   ]);
-  const [aigul, oleg] = cookIds;
-  assert.ok(aigul && oleg);
+  const [lower, higher] = [...cookIds].sort();
+  assert.ok(lower && higher);
   const cookOf = async (restaurantOrderId: string) =>
     (await world.restaurantOrders.get(restaurantOrderId))?.cookId;
 
   // Both never assigned: the lower id.
   const first = await world.givenOrderIn("READY", restaurantId, phoId);
   world.clock.advance(minutes(8));
-  // Aigul is free again, Oleg was never assigned.
+  // The first is free again, the second was never assigned.
   const second = await world.givenOrderIn("READY", restaurantId, phoId);
   world.clock.advance(minutes(2));
-  // Both free: Aigul was assigned 10 minutes ago, Oleg 2 minutes ago.
+  // Both free: the first was assigned 10 minutes ago, the second 2 minutes ago.
   const third = await world.givenOrderIn("PREPARING", restaurantId, phoId);
 
   assert.deepEqual(
@@ -257,7 +257,7 @@ test("AC-783 a never assigned cook goes first, then the earliest last assignment
       await cookOf(second.restaurantOrderId),
       await cookOf(third.restaurantOrderId),
     ],
-    [aigul, oleg, aigul],
+    [lower, higher, lower],
   );
 });
 

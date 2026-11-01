@@ -12,6 +12,7 @@ use crate::pkg::unit_of_work::{ScopedUnitOfWork, TransactionScope};
 use crate::slices::courier::applications::assignment::CourierAssignment;
 use crate::slices::courier::applications::authorization::CourierAuthorization;
 use crate::slices::courier::applications::candidate_wake::CandidateWake;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::applications::assignment_process::AssignmentProcess;
 use crate::slices::delivery::applications::authorization::DeliveryAuthorization;
 use crate::slices::delivery::applications::courier_locator::CourierLocator;
@@ -33,7 +34,6 @@ use crate::slices::delivery::applications::policy::AssignmentPolicy;
 use crate::slices::delivery::applications::relationships::DeliveryRelationshipWriter;
 use crate::slices::delivery::applications::tracking::RandomSource;
 use crate::slices::delivery::applications::tracking::get_by_order::{self, OrderDeliveryReadModel};
-use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::applications::{
     assignment::advance, assignment::create, assignment::find_courier,
     assignment::reassign_courier, execution::cancel, execution::deliver, execution::pick_up,
@@ -109,7 +109,6 @@ pub trait DeliveryPorts: Interface {
     fn read_models(&self) -> &dyn DeliveryReadModels;
     fn locator(&self) -> &dyn CourierLocator;
     fn clock(&self) -> &dyn Clock;
-    fn ids(&self) -> &dyn IdGenerator;
     fn relationships(&self) -> &dyn DeliveryRelationshipWriter;
     /// Virtual City of the tracking (FR-658).
     fn city(&self) -> &VirtualCity;
@@ -276,7 +275,6 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             unit_of_work: &self.unit_of_work(),
             deliveries: self.ports.store(),
             outbox: self.ports.store(),
-            ids: self.ports.ids(),
             clock: self.ports.clock(),
             city: self.ports.city(),
             random: self.ports.random(),
@@ -315,7 +313,6 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             offers: self.ports.store(),
             offers_of: self.ports.store(),
             outbox: self.ports.store(),
-            ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
         }
@@ -335,7 +332,6 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             offers: self.ports.store(),
             offers_of: self.ports.store(),
             outbox: self.ports.store(),
-            ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
             assignment: self.ports.assignment(),
@@ -559,7 +555,6 @@ impl DeliveryUseCases for DeliveryUseCasesImpl {
             offers_of: self.ports.store(),
             outbox: self.ports.store(),
             locator: self.ports.locator(),
-            ids: self.ports.ids(),
             clock: self.ports.clock(),
             policy: self.settings.assignment_policy(),
         }

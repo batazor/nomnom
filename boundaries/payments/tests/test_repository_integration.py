@@ -90,19 +90,6 @@ class _Clock:
         return NOW
 
 
-class _Ids:
-    def __init__(self) -> None:
-        self.count = 0
-
-    def new_payment_id(self) -> PaymentId:
-        self.count += 1
-        return PaymentId(f"payment-{self.count}")
-
-    def new_operation_id(self) -> OperationId:
-        self.count += 1
-        return OperationId(f"operation-{self.count}")
-
-
 @pytest.mark.usefixtures("database")
 class RepositoryIntegrationTest(unittest.TestCase):
     database: Database
@@ -368,7 +355,6 @@ class RepositoryIntegrationTest(unittest.TestCase):
             provider=provider,
             permissions=FakePermissions(),
             clock=_Clock(),
-            operation_ids=_Ids(),
             applier=ProviderResultApplier(self.payments, self.outbox, _Clock(), FsmMetrics()),
             transitions=FsmMetrics(),
             subjects=DatabaseSubjectKeys(self.database, {1: SUBJECT_KEK}, SUBJECT_REF_KEY),

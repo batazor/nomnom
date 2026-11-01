@@ -35,7 +35,6 @@ import type {
 } from "../applications/access-control/access-control.ts";
 import { CancelRestaurantOrderHandler } from "../applications/cancel/cancel.ts";
 import type { Clock } from "../applications/clock/clock.ts";
-import type { IdGenerator } from "../applications/id-generator/id-generator.ts";
 import {
   GetKitchenQueueHandler,
   type KitchenQueueOrdering,
@@ -92,7 +91,6 @@ export interface RestaurantOrderDependencies {
   /** ADR 36: Change Notification of every Restaurant Order write. */
   readonly kitchenChanges: KitchenChangeNotifier;
   readonly clock: Clock;
-  readonly ids: IdGenerator;
   readonly kitchenAccessControl: KitchenAccess;
   readonly restaurants: RestaurantRepository;
   readonly menus: MenuRepository;
@@ -218,7 +216,6 @@ export const registerRestaurantOrder = (
         kitchenAccessControl,
         restaurantExistence,
         restaurantOrders,
-        ids,
         clock,
         domainMetrics,
       }: Cradle) =>
@@ -227,7 +224,6 @@ export const registerRestaurantOrder = (
             accessControl: kitchenAccessControl,
             restaurants: restaurantExistence,
             restaurantOrders,
-            ids,
             clock,
           }),
           domainMetrics,

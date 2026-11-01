@@ -64,7 +64,6 @@ func newHarness(t *testing.T) harness {
 		Catalog:    placementCatalog,
 		Workflow:   workflow,
 		Clock:      fake.NewClock(start),
-		IDs:        &fake.IDs{},
 		Telemetry:  observability.UseCases(),
 	})
 	h := harness{

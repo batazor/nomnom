@@ -11,6 +11,7 @@ A completed operation is returned as recorded without a provider call. A pending
 repeats the provider call with the same key, which the provider deduplicates.
 """
 
+import uuid
 from dataclasses import dataclass
 
 from pkg.authz import Subject
@@ -21,6 +22,7 @@ from slices.payment.domains.payment import (
     DuplicateIdempotencyKeyError,
     InvalidTransitionError,
     OperationAlreadyPendingError,
+    OperationId,
     OperationKind,
     OperationRequester,
     PaymentId,
@@ -41,7 +43,6 @@ from ..errors import (
 )
 from ..operation_result import PAYMENT_AGGREGATE, OperationStatus, PaymentOperationResult
 from ..ports import (
-    PaymentOperationIdSource,
     PaymentPermissionChecker,
     PaymentProviderGateway,
     PaymentResource,
@@ -92,7 +93,6 @@ class PaymentOperationExecutor:
         provider: PaymentProviderGateway,
         permissions: PaymentPermissionChecker,
         clock: Clock,
-        operation_ids: PaymentOperationIdSource,
         applier: ProviderResultApplier,
         transitions: PaymentTransitionObserver,
         subjects: SubjectSealer,
@@ -102,7 +102,6 @@ class PaymentOperationExecutor:
         self._provider = provider
         self._permissions = permissions
         self._clock = clock
-        self._operation_ids = operation_ids
         self._applier = applier
         self._transitions = transitions
         self._subjects = subjects
@@ -170,7 +169,7 @@ class PaymentOperationExecutor:
         kind: OperationKind,
         subject: Subject,
     ) -> _Reservation:
-        operation_id = self._operation_ids.new_operation_id()
+        operation_id = OperationId(str(uuid.uuid4()))
         requested_at = self._clock.now()
 
         def reserve() -> _Reservation:

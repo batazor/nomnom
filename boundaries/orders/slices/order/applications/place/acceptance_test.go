@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/cucumber/godog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -117,7 +119,7 @@ func TestAcceptance(t *testing.T) {
 					Return(openSnapshot(t), nil).
 					Once()
 				e.slots.EXPECT().
-					Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).
+					Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).
 					Return(deliveryWindow(t, windowStart), nil).
 					Once()
 			})
@@ -128,7 +130,7 @@ func TestAcceptance(t *testing.T) {
 					Return(openSnapshot(t), nil).
 					Once()
 				e.slots.EXPECT().
-					Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, order.ID("order-1")).
+					Reserve(mock.Anything, order.RestaurantID("restaurant-1"), windowStart, mock.AnythingOfType("order.ID")).
 					Return(order.DeliveryWindow{}, place.SlotUnavailable{Alternatives: alternatives()}).
 					Once()
 			})
@@ -175,7 +177,8 @@ func TestAcceptance(t *testing.T) {
 				require.NoError(godog.T(ctx), err)
 			})
 			sc.When(`^the customer places a premium order for 500 RUB$`, func(ctx context.Context) {
-				_, err := e.handler.Handle(ctx, premiumInput())
+				var err error
+				result, err = e.handler.Handle(ctx, premiumInput())
 				require.NoError(godog.T(ctx), err)
 			})
 			sc.When(`^the customer tries to place a premium order$`, func(ctx context.Context) {
@@ -191,8 +194,12 @@ func TestAcceptance(t *testing.T) {
 			})
 
 			sc.Then(`^the order is placed for the customer in the market of the restaurant$`, func(ctx context.Context) {
-				assert.Equal(godog.T(ctx), place.Result{OrderID: "order-1"}, result)
-				placed, ok := e.store.Snapshot("order-1")
+				// AC-515: Order ids are UUIDv7.
+				generated, err := uuid.Parse(string(result.OrderID))
+				require.NoError(godog.T(ctx), err)
+				assert.Equal(godog.T(ctx), uuid.Version(7), generated.Version())
+				assert.False(godog.T(ctx), result.Replayed)
+				placed, ok := e.store.Snapshot(result.OrderID)
 				require.True(godog.T(ctx), ok)
 				assert.Equal(godog.T(ctx), order.StatePlaced, placed.State)
 				assert.Equal(godog.T(ctx), order.CustomerID("customer-1"), placed.CustomerID)
@@ -200,15 +207,15 @@ func TestAcceptance(t *testing.T) {
 				assert.Equal(godog.T(ctx), ordertest.MarketID(t), placed.MarketID)
 			})
 			sc.Then(`^the total is computed from the catalog prices$`, func(ctx context.Context) {
-				placed, _ := e.store.Snapshot("order-1")
+				placed, _ := e.store.Snapshot(result.OrderID)
 				restored, err := order.Restore(placed)
 				require.NoError(godog.T(ctx), err)
 				assert.Equal(godog.T(ctx), "29 EUR", restored.Total().String())
 			})
 			sc.Then(`^the placement is published with the order$`, func(ctx context.Context) {
-				placed, _ := e.store.Snapshot("order-1")
-				assert.Equal(godog.T(ctx), repositorytest.ExpectedOutbox(t, "order-1", 1, order.OrderPlaced{
-					OrderID:      "order-1",
+				placed, _ := e.store.Snapshot(result.OrderID)
+				assert.Equal(godog.T(ctx), repositorytest.ExpectedOutbox(t, result.OrderID, 1, order.OrderPlaced{
+					OrderID:      result.OrderID,
 					CustomerID:   "customer-1",
 					RestaurantID: "restaurant-1",
 					MarketID:     ordertest.MarketID(t),
@@ -219,7 +226,7 @@ func TestAcceptance(t *testing.T) {
 			})
 			sc.Then(`^the relationships of the order are recorded for synchronization$`, func(ctx context.Context) {
 				// ADR 18: orders-consumer syncs them from RelationshipsChanged committed with the Order.
-				assert.Equal(godog.T(ctx), []order.ID{"order-1"}, e.store.RelationshipChanges())
+				assert.Equal(godog.T(ctx), []order.ID{result.OrderID}, e.store.RelationshipChanges())
 			})
 			sc.Then(`^the order is refused with the reason ([a-z_]+)$`, func(ctx context.Context, reason string) {
 				var notOrderable order.NotOrderable
@@ -231,8 +238,6 @@ func TestAcceptance(t *testing.T) {
 				assert.Equal(godog.T(ctx), []order.PolicyReasonCode{order.PolicyReasonCode(reason)}, codes)
 			})
 			sc.Then(`^nothing is placed$`, func(ctx context.Context) {
-				_, ok := e.store.Snapshot("order-1")
-				assert.False(godog.T(ctx), ok)
 				assert.Empty(godog.T(ctx), e.store.OutboxRecords())
 				assert.Empty(godog.T(ctx), e.store.RelationshipChanges())
 			})
@@ -250,7 +255,7 @@ func TestAcceptance(t *testing.T) {
 				e.catalog.AssertNumberOfCalls(godog.T(ctx), "Snapshot", 1)
 			})
 			sc.Then(`^the order keeps the premium fee$`, func(ctx context.Context) {
-				placed, ok := e.store.Snapshot("order-1")
+				placed, ok := e.store.Snapshot(result.OrderID)
 				require.True(godog.T(ctx), ok)
 				assert.Equal(godog.T(ctx), order.PriorityPremium, placed.Service.Priority())
 				fee, premium := placed.Service.PremiumFee()
@@ -260,7 +265,7 @@ func TestAcceptance(t *testing.T) {
 				assert.True(godog.T(ctx), fee.Equal(want), "the fee of the snapshot is kept in the Order")
 			})
 			sc.Then(`^the total of the order is 599 RUB$`, func(ctx context.Context) {
-				placed, _ := e.store.Snapshot("order-1")
+				placed, _ := e.store.Snapshot(result.OrderID)
 				restored, err := order.Restore(placed)
 				require.NoError(godog.T(ctx), err)
 				assert.Equal(godog.T(ctx), "599 RUB", restored.Total().String())
@@ -269,16 +274,16 @@ func TestAcceptance(t *testing.T) {
 				assert.ErrorIs(godog.T(ctx), failure, place.ErrPremiumUnavailable)
 			})
 			sc.Then(`^the order keeps the reserved delivery window$`, func(ctx context.Context) {
-				assert.Equal(godog.T(ctx), place.Result{OrderID: "order-1"}, result)
-				placed, ok := e.store.Snapshot("order-1")
+				assert.False(godog.T(ctx), result.Replayed)
+				placed, ok := e.store.Snapshot(result.OrderID)
 				require.True(godog.T(ctx), ok)
 				assert.Equal(godog.T(ctx), windowStart, placed.DeliveryWindow.Start())
 				assert.Equal(godog.T(ctx), windowEnd, placed.DeliveryWindow.End())
 			})
 			sc.Then(`^the placement is published with the delivery window$`, func(ctx context.Context) {
-				placed, _ := e.store.Snapshot("order-1")
-				assert.Equal(godog.T(ctx), repositorytest.ExpectedOutbox(t, "order-1", 1, order.OrderPlaced{
-					OrderID:        "order-1",
+				placed, _ := e.store.Snapshot(result.OrderID)
+				assert.Equal(godog.T(ctx), repositorytest.ExpectedOutbox(t, result.OrderID, 1, order.OrderPlaced{
+					OrderID:        result.OrderID,
 					CustomerID:     "customer-1",
 					RestaurantID:   "restaurant-1",
 					MarketID:       ordertest.MarketID(t),

@@ -69,7 +69,6 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	fulfillmentConfig := cfg.Fulfillment
 	workflow := NewFulfillmentWorkflow(client, fulfillmentConfig)
 	clock := di.NewClock()
-	idGenerator := di.NewOrderIDs()
 	useCases := observability.UseCases()
 	dependencies := di.Dependencies{
 		Commands:   processStore,
@@ -80,7 +79,6 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 		Slots:      slotReservations,
 		Workflow:   workflow,
 		Clock:      clock,
-		IDs:        idGenerator,
 		Telemetry:  useCases,
 		Metrics:    domainMetrics,
 	}

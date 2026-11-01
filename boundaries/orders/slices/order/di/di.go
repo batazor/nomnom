@@ -48,7 +48,7 @@ var (
 	TelemetrySet = wire.NewSet(observability.UseCases)
 	// APISet — command и query use cases cmd/orders и их порты, кроме Workflow:
 	// Temporal client выбирает composition root.
-	APISet = wire.NewSet(NewAuthorizer, NewCancellationPolicy, NewCatalog, NewSlotReservations, NewClock, NewOrderIDs,
+	APISet = wire.NewSet(NewAuthorizer, NewCancellationPolicy, NewCatalog, NewSlotReservations, NewClock,
 		wire.Struct(new(Dependencies), "*"), NewModule)
 	// ConsumerSet — handlers orders-consumer без Notifier workflow: его Temporal
 	// client открывает KafkaConsumer.Start.
@@ -117,9 +117,6 @@ func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.I
 
 // NewClock — системные часы use cases.
 func NewClock() Clock { return system.Clock{} }
-
-// NewOrderIDs — генератор UUIDv7 идентификаторов Order.
-func NewOrderIDs() place.IDGenerator { return system.OrderIDs{} }
 
 // NewAuthorizer connects the authorization ports to SpiceDB (ADR 18). The
 // endpoint is required: a process that checks permissions does not start

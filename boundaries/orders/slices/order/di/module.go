@@ -59,7 +59,6 @@ type Dependencies struct {
 	Slots      place.SlotReservations
 	Workflow   Workflow
 	Clock      Clock
-	IDs        place.IDGenerator
 	Telemetry  *telemetry.UseCases
 	Metrics    *observability.DomainMetrics
 }
@@ -76,7 +75,6 @@ func NewModule(deps Dependencies) *Module {
 		Catalog:         deps.Catalog,
 		Slots:           deps.Slots,
 		Relationships:   store,
-		IDs:             deps.IDs,
 		Clock:           deps.Clock,
 	})
 	requestCancellation := requestcancellation.NewHandler(requestcancellation.Dependencies{

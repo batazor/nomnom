@@ -2,7 +2,7 @@
 
 use crate::infrastructure::memory::{
     FixedRandomSource, ManualClock, RecordingAssignment, RecordingRelationships, RelationshipWrite,
-    SequentialIdGenerator, StaticAuthorization, StaticCourierLocator,
+    StaticAuthorization, StaticCourierLocator,
 };
 use crate::infrastructure::repository::test_support::TestStore;
 use crate::pkg::authz::{RelationshipWriteError, Subject};
@@ -31,7 +31,6 @@ pub struct World {
     pub store: TestStore,
     pub authorization: StaticAuthorization,
     pub clock: ManualClock,
-    pub ids: SequentialIdGenerator,
     pub locator: StaticCourierLocator,
     pub policy: AssignmentPolicy,
     pub relationships: RecordingRelationships,
@@ -50,7 +49,6 @@ impl World {
             store: TestStore::new(),
             authorization,
             clock: ManualClock::new(NOW),
-            ids: SequentialIdGenerator::new("generated"),
             locator: StaticCourierLocator::default(),
             policy: AssignmentPolicy {
                 maximum_distance_meters: 5_000,

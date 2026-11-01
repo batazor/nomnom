@@ -50,7 +50,6 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
       },
     },
     restaurants: world.restaurants,
-    ids: world.ids,
     clock: world.clock,
   });
 
@@ -63,7 +62,7 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
   });
 
   assert.deepEqual(result, {
-    restaurantId: "restaurant-1",
+    restaurantId: result.restaurantId,
     name: "Pho Bar",
     marketId: market,
     timeZone: BERLIN,
@@ -71,11 +70,11 @@ test("AC-202 register restaurant creates a closed restaurant after the owner rel
     isOpen: false,
     version: 1,
   });
-  assert.deepEqual(calls, ["touch:restaurant-1"]);
+  assert.deepEqual(calls, [`touch:${result.restaurantId}`]);
   assert.deepEqual(world.authorization.owners, [
-    { restaurantId: "restaurant-1", ownerId: owner.id },
+    { restaurantId: result.restaurantId, ownerId: owner.id },
   ]);
-  const stored = await world.restaurants.get("restaurant-1");
+  const stored = await world.restaurants.get(result.restaurantId);
   assert.equal(stored?.isOpen, false);
   assert.equal(stored?.marketId.value, market);
   // FR-447: the owner TOUCH revision is saved with the new restaurant.
@@ -145,7 +144,6 @@ test("AC-204 restaurant is not stored when the owner relationship write fails", 
       },
     },
     restaurants: world.restaurants,
-    ids: world.ids,
     clock: world.clock,
   });
 
@@ -465,7 +463,7 @@ test("AC-213 list restaurants returns only open restaurants by default", async (
   );
   assert.deepEqual(
     allPage.restaurants.map((restaurant) => restaurant.restaurantId),
-    [open, closed],
+    [open, closed].sort(),
   );
 });
 
@@ -475,7 +473,7 @@ test("AC-214 list restaurants pages with a cursor without repeats", async () => 
     await world.givenRestaurant("A"),
     await world.givenRestaurant("B"),
     await world.givenRestaurant("C"),
-  ];
+  ].sort();
   const list = new ListRestaurantsHandler({
     reader: world.catalog,
     clock: world.clock,

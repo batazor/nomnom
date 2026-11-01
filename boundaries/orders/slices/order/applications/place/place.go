@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"nomnom/orders/pkg/authz"
 	"nomnom/orders/pkg/unitofwork"
 	"nomnom/orders/slices/order/applications/failure"
@@ -105,10 +107,6 @@ type Catalog interface {
 	Snapshot(ctx context.Context, restaurantID order.RestaurantID, menuItemIDs []order.MenuItemID) (CatalogSnapshot, error)
 }
 
-type IDGenerator interface {
-	NewOrderID(ctx context.Context) (order.ID, error)
-}
-
 // ErrIdempotencyKeyTaken is returned by IdempotencyKeys.RememberOrder when the
 // key already identifies another Order: a concurrent request with the same key
 // committed first.
@@ -145,7 +143,6 @@ type Dependencies struct {
 	// order#restaurant afterwards (ADR 18). The Customer reads and cancels the
 	// own Order by customer_id before that.
 	Relationships syncrelationships.Changes
-	IDs           IDGenerator
 	Clock         Clock
 }
 
@@ -189,10 +186,12 @@ func (h Handler) Handle(ctx context.Context, in Input) (Result, error) {
 		return Result{}, err
 	}
 
-	orderID, err := h.deps.IDs.NewOrderID(ctx)
+	// UUIDv7 is time-ordered, so new Orders stay close in the primary key index.
+	generated, err := uuid.NewV7()
 	if err != nil {
 		return Result{}, fmt.Errorf("generate order id: %w", err)
 	}
+	orderID := order.ID(generated.String())
 	window, err := h.reserve(ctx, in, orderID)
 	if err != nil {
 		return Result{}, err

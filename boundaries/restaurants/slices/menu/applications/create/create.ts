@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Subject } from "../../../../pkg/authz/subject.ts";
 import type { RestaurantRepository } from "../../../restaurant/domains/restaurant/restaurant.ts";
 import { Menu, type MenuRepository } from "../../domains/menu/menu.ts";
@@ -8,7 +9,6 @@ import {
   NotFoundError,
   PermissionDeniedError,
 } from "../failure/failure.ts";
-import type { IdGenerator } from "../id-generator/id-generator.ts";
 
 export type CreateMenu = Readonly<{
   subject: Subject;
@@ -29,20 +29,17 @@ export class CreateMenuHandler {
   readonly #accessControl: MenuAccessControl;
   readonly #restaurants: RestaurantRepository;
   readonly #menus: MenuRepository;
-  readonly #ids: IdGenerator;
   readonly #clock: Clock;
 
   constructor(dependencies: {
     accessControl: MenuAccessControl;
     restaurants: RestaurantRepository;
     menus: MenuRepository;
-    ids: IdGenerator;
     clock: Clock;
   }) {
     this.#accessControl = dependencies.accessControl;
     this.#restaurants = dependencies.restaurants;
     this.#menus = dependencies.menus;
-    this.#ids = dependencies.ids;
     this.#clock = dependencies.clock;
   }
 
@@ -65,7 +62,7 @@ export class CreateMenuHandler {
       throw new AlreadyExistsError("Menu", command.restaurantId);
     }
     const menu = Menu.create({
-      id: this.#ids.next(),
+      id: randomUUID(),
       restaurantId: command.restaurantId,
       marketId: restaurant.marketId.value,
       createdAt: this.#clock.now(),

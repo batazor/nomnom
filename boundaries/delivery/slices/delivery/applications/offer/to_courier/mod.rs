@@ -9,8 +9,8 @@
 use crate::pkg::authz::Subject;
 use crate::pkg::unit_of_work::UnitOfWork;
 use crate::slices::courier::applications::assignment::CourierAssignment;
+use crate::slices::delivery::applications::Clock;
 use crate::slices::delivery::applications::offers_of_delivery::OffersOfDelivery;
-use crate::slices::delivery::applications::{Clock, IdGenerator};
 use crate::slices::delivery::domains::delivery::{DeliveryOfferRepository, DeliveryRepository};
 
 use super::super::assignment_process::{AssignmentProcess, WakeReason};
@@ -35,7 +35,6 @@ pub struct Handler<'a, U: UnitOfWork> {
     pub offers: &'a dyn DeliveryOfferRepository,
     pub offers_of: &'a dyn OffersOfDelivery,
     pub outbox: &'a dyn DeliveryOutbox,
-    pub ids: &'a dyn IdGenerator,
     pub clock: &'a dyn Clock,
     pub policy: AssignmentPolicy,
     pub assignment: &'a dyn AssignmentProcess,
@@ -65,7 +64,6 @@ impl<U: UnitOfWork> Handler<'_, U> {
                     offers: self.offers,
                     offers_of: self.offers_of,
                     outbox: self.outbox,
-                    ids: self.ids,
                     clock: self.clock,
                     policy: self.policy,
                 },
@@ -87,7 +85,7 @@ mod tests {
         NOW, OFFER_TTL, World, hamburg, subject,
     };
     use crate::slices::delivery::domains::delivery::{
-        DeliveryError, DeliveryId, DeliveryOfferId, OfferState, OrderId, State, TransitionError,
+        DeliveryError, DeliveryId, OfferState, OrderId, State, TransitionError,
     };
 
     fn handler(world: &World) -> Handler<'_, TestStore> {
@@ -99,7 +97,6 @@ mod tests {
             offers: &world.store,
             offers_of: &world.store,
             outbox: &world.store,
-            ids: &world.ids,
             clock: &world.clock,
             policy: world.policy,
             assignment: &world.assignment,
@@ -128,14 +125,17 @@ mod tests {
         assert_eq!(
             output,
             Output {
-                offer_id: DeliveryOfferId::new("generated-1"),
+                offer_id: output.offer_id.clone(),
                 delivery_id: DeliveryId::new("delivery-1"),
                 courier_id: CourierId::new("courier-chosen"),
                 expires_at_epoch_seconds: NOW + OFFER_TTL,
                 created: true,
             }
         );
-        assert_eq!(world.offer_state("generated-1"), OfferState::Pending);
+        assert_eq!(
+            world.offer_state(output.offer_id.as_str()),
+            OfferState::Pending
+        );
         // The offer of the assignment process stays: the first acceptance wins.
         assert_eq!(world.offer_state("offer-auto"), OfferState::Pending);
         assert_eq!(world.delivery_state("delivery-1"), State::Waiting);

@@ -123,7 +123,6 @@ class PaymentsContainerTest(unittest.TestCase):
             "payment_provider": kit.provider,
             "permissions": kit.permissions,
             "clock": kit.clock,
-            "ids": kit.ids,
         }.items():
             getattr(container.payment, name).override(providers.Object(fake))
 

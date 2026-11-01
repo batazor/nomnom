@@ -7,7 +7,6 @@
 // Resources acquired asynchronously (MongoDB connection, subject resolver)
 // are connected and released by cmd/restaurants and registered as values;
 // the SpiceDB client is built by the container and closed by its disposer.
-import { randomUUID } from "node:crypto";
 import type { Http2Server } from "node:http2";
 
 import { type AwilixContainer, aliasTo, asFunction, asValue } from "awilix";
@@ -108,10 +107,6 @@ interface Clock {
   now(): Date;
 }
 
-interface IdGenerator {
-  next(): string;
-}
-
 /** First reconciliation pass shortly after start. */
 const RECONCILER_FIRST_PASS_MS = 10_000;
 
@@ -148,7 +143,6 @@ export interface InfrastructureCradle {
   readonly valkey: Valkey;
   readonly cacheMetrics: CacheMetrics;
   readonly clock: Clock;
-  readonly ids: IdGenerator;
   /** Random number in `[0, 1)` of the Demo Simulator. */
   readonly random: () => number;
   /** Structured stdout logs (pkg/telemetry/logger.ts). */
@@ -239,7 +233,6 @@ const infrastructureRegistrations = (
   valkey: asValue(resources.valkey),
   cacheMetrics: asFunction(() => new CacheMetrics()).singleton(),
   clock: asValue<Clock>({ now: () => new Date() }),
-  ids: asValue<IdGenerator>({ next: () => randomUUID() }),
   random: asValue(Math.random),
   logger: asValue(resources.logger),
   useCaseTelemetry: asFunction(() => new UseCaseTelemetry()).singleton(),

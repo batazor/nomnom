@@ -16,7 +16,6 @@ fn handler(world: &World) -> Handler<'_, TestStore> {
         offers_of: &world.store,
         outbox: &world.store,
         locator: &world.locator,
-        ids: &world.ids,
         clock: &world.clock,
         policy: world.policy,
     }
@@ -48,6 +47,14 @@ fn offered(offer: &str, expires_at: i64) -> Output {
 }
 
 /// AC-959
+/// The identifier the use case generated for the new offer.
+fn generated_offer(output: &Output) -> &str {
+    match output {
+        Output::Offered { offer_id, .. } => offer_id.as_str(),
+        other => panic!("expected an offer, got {other:?}"),
+    }
+}
+
 #[test]
 fn created_delivery_is_offered_at_once() {
     let world = World::new();
@@ -58,14 +65,15 @@ fn created_delivery_is_offered_at_once() {
         .execute(input("delivery-1"))
         .expect("advanced");
 
-    assert_eq!(output, offered("generated-1", NOW + OFFER_TTL));
-    assert_eq!(world.offer_state("generated-1"), OfferState::Pending);
+    let offer = generated_offer(&output);
+    assert_eq!(output, offered(offer, NOW + OFFER_TTL));
+    assert_eq!(world.offer_state(offer), OfferState::Pending);
     assert_eq!(world.delivery_state("delivery-1"), State::Waiting);
     assert_eq!(
         world.store.outbox_messages(),
         vec![OutboxMessage::delivery(DomainEvent::DeliveryOffered {
             delivery_id: DeliveryId::new("delivery-1"),
-            offer_id: DeliveryOfferId::new("generated-1"),
+            offer_id: DeliveryOfferId::new(offer),
             courier_id: CourierId::new("courier-1"),
             expires_at_epoch_seconds: NOW + OFFER_TTL,
         })]
@@ -106,10 +114,11 @@ fn offer_past_its_deadline_expires_before_the_next_offer() {
         .execute(input("delivery-1"))
         .expect("advanced");
 
-    assert_eq!(output, offered("generated-1", NOW + 2 * OFFER_TTL + 1));
+    let offer = generated_offer(&output);
+    assert_eq!(output, offered(offer, NOW + 2 * OFFER_TTL + 1));
     assert_eq!(world.offer_state("offer-1"), OfferState::Expired);
     assert_eq!(
-        world.store_offer("generated-1").courier_id(),
+        world.store_offer(offer).courier_id(),
         &CourierId::new("courier-2")
     );
     assert_eq!(
@@ -129,10 +138,10 @@ fn rejected_delivery_is_offered_to_another_courier() {
     let world = World::new();
     on_line(&world, &["courier-1", "courier-2"]);
     world.waiting_delivery("delivery-1");
-    handler(&world)
+    let first_output = handler(&world)
         .execute(input("delivery-1"))
         .expect("first offer");
-    let mut first = world.store_offer("generated-1");
+    let mut first = world.store_offer(generated_offer(&first_output));
     first
         .reject(&CourierId::new("courier-1"), NOW)
         .expect("rejected");
@@ -142,9 +151,10 @@ fn rejected_delivery_is_offered_to_another_courier() {
         .execute(input("delivery-1"))
         .expect("advanced");
 
-    assert_eq!(output, offered("generated-2", NOW + OFFER_TTL));
+    let offer = generated_offer(&output);
+    assert_eq!(output, offered(offer, NOW + OFFER_TTL));
     assert_eq!(
-        world.store_offer("generated-2").courier_id(),
+        world.store_offer(offer).courier_id(),
         &CourierId::new("courier-2")
     );
 }
@@ -172,10 +182,10 @@ fn delivery_without_candidate_waits_for_a_courier() {
         candidate("courier-1", 500),
         candidate("courier-2", 500),
     ]);
-    assert_eq!(
-        handler(&world).execute(input("delivery-1")),
-        Ok(offered("generated-1", NOW + OFFER_TTL))
-    );
+    let output = handler(&world)
+        .execute(input("delivery-1"))
+        .expect("advanced");
+    assert_eq!(output, offered(generated_offer(&output), NOW + OFFER_TTL));
 }
 
 #[test]

@@ -16,6 +16,7 @@ import type { RestaurantAccessControl } from "../slices/restaurant/applications/
 import { AssignStaffHandler } from "../slices/restaurant/applications/assign-staff/assign-staff.ts";
 import { RegisterRestaurantHandler } from "../slices/restaurant/applications/register/register.ts";
 import { RevokeStaffHandler } from "../slices/restaurant/applications/revoke-staff/revoke-staff.ts";
+import { Restaurant } from "../slices/restaurant/domains/restaurant/restaurant.ts";
 import { RelationshipReconciler } from "../slices/restaurant/infrastructure/reconcile/reconcile.ts";
 import {
   createRestaurantCollection,
@@ -24,12 +25,7 @@ import {
 } from "../slices/restaurant/infrastructure/repository/restaurants.ts";
 import { createTestDatabase, noKitchenChanges } from "./support/database.ts";
 import { spiceDbEndpoint } from "./support/global-containers.ts";
-import {
-  FixedClock,
-  market,
-  SequentialIdGenerator,
-  startOfDay,
-} from "./support/restaurants.ts";
+import { FixedClock, market, startOfDay } from "./support/restaurants.ts";
 
 // Runs against the SpiceDB testcontainer of the global setup
 // (authorization/bootstrap.yaml, key `devkey`, plaintext). Every id of a
@@ -101,8 +97,7 @@ describe("SpiceDB restaurant relationships", () => {
     );
   };
 
-  /** Restaurant ids of a world start with `<run><scope>-`. */
-  const world = async (scope: string) => {
+  const world = async () => {
     const { db, unitOfWork } = await createTestDatabase();
     const store = createRestaurantCollection(db, unitOfWork);
     const restaurants = new DatabaseRestaurantRepository(
@@ -132,7 +127,6 @@ describe("SpiceDB restaurant relationships", () => {
       accessControl,
       ownerRelationships: writer,
       restaurants,
-      ids: new SequentialIdGenerator(`${run}${scope}-restaurant`),
       clock: new FixedClock(startOfDay),
     });
     const staff = { accessControl, staffRelationships: writer, restaurants };
@@ -151,18 +145,25 @@ describe("SpiceDB restaurant relationships", () => {
   const _cook = `${run}cook`;
 
   test("AC-478 reconciler restores a lost owner and deletes an orphan after two passes grace apart", async () => {
-    const { store, register, restaurants, adapter } = await world("reconcile");
-    const { restaurantId } = await register.execute({
-      subject: operator,
-      name: "Pho",
-      ownerId: owner.id,
-      marketId: market,
-      timeZone: "Europe/Berlin",
-    });
+    const { store, restaurants, adapter } = await world();
     const writer = new SpiceDbRelationshipWriter({
       client: spicedb(),
       timeoutMs: 5000,
     });
+    // The reconciler sees only ids with the prefix of this run.
+    const restaurantId = `${run}reconcile-restaurant`;
+    const restaurant = Restaurant.register({
+      id: restaurantId,
+      name: "Pho",
+      ownerId: owner.id,
+      marketId: market,
+      timeZone: "Europe/Berlin",
+      registeredAt: startOfDay,
+    });
+    restaurant.recordAuthorizationRevision(
+      await writer.touchOwner({ restaurantId, ownerId: owner.id }),
+    );
+    await restaurants.save(restaurant);
     // Lost owner relationship.
     await spicedb().writeRelationships(
       v1.WriteRelationshipsRequest.create({

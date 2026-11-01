@@ -18,7 +18,7 @@ mod tracks;
 
 pub use assignment::{AssignmentCall, RecordingAssignment};
 pub use authorization::StaticAuthorization;
-pub use clock::{ManualClock, SequentialIdGenerator};
+pub use clock::ManualClock;
 pub use locator::StaticCourierLocator;
 pub use random::FixedRandomSource;
 pub use relationships::{RecordingRelationships, RelationshipWrite};
