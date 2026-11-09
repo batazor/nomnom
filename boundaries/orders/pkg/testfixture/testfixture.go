@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log"
 	"net"
@@ -345,7 +345,7 @@ func (r *SchemaRegistry) post(ctx context.Context, path string, s registrySchema
 		return registered{}, fmt.Errorf("POST %s: status %d", path, resp.StatusCode)
 	}
 	var out registered
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		return registered{}, fmt.Errorf("POST %s: %w", path, err)
 	}
 	return out, nil

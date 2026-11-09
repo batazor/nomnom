@@ -1,7 +1,7 @@
 package overview
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"regexp"
 	"slices"
 	"strings"
@@ -192,7 +192,9 @@ func TestDatasourcesAreCrossDashboardVariables(t *testing.T) {
 	}
 	dashboards["platform"] = platform
 	for ctx, d := range dashboards {
-		var use struct{ Global []string }
+		var use struct {
+			Global []string `json:"global"`
+		}
 		if err := json.Unmarshal([]byte(d.Manifest.Metadata.Annotations["grafana.app/useCrossDashboardVariables"]), &use); err != nil {
 			t.Fatalf("%s: annotation: %v", ctx, err)
 		}

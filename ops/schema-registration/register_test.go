@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net"
 	"net/http"
@@ -106,7 +106,7 @@ func getJSON(t *testing.T, path string, out any) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s: status %d", path, resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, out); err != nil {
 		t.Fatal(err)
 	}
 }

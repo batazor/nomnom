@@ -1,7 +1,7 @@
 package overview
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"strings"
 	"testing"

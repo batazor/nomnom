@@ -15,7 +15,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -138,9 +139,9 @@ func deadLetters(ctx context.Context, cfg config.KafkaConfig, action string, arg
 		if err != nil {
 			return err
 		}
-		encoder := json.NewEncoder(out)
+		encoder := jsontext.NewEncoder(out)
 		for _, letter := range found {
-			if err := encoder.Encode(describe(letter)); err != nil {
+			if err := json.MarshalEncode(encoder, describe(letter)); err != nil {
 				return err
 			}
 		}

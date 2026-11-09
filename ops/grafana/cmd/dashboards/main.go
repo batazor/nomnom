@@ -7,7 +7,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"os"
@@ -107,10 +108,8 @@ func encode(d overview.Dashboard) []byte { return encodeJSON(d.Manifest) }
 
 func encodeJSON(v any) []byte {
 	var raw bytes.Buffer
-	enc := json.NewEncoder(&raw)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
+	// Deterministic: ключи map в сортированном порядке, иначе -check расходится.
+	if err := json.MarshalEncode(jsontext.NewEncoder(&raw, jsontext.WithIndent("  ")), v, json.Deterministic(true)); err != nil {
 		fail(err)
 	}
 	return raw.Bytes()

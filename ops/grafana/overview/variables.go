@@ -1,7 +1,7 @@
 package overview
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -190,12 +190,9 @@ func explore(datasourceVar, plugin string, query map[string]any) string {
 		"queries":    []any{query},
 		"range":      map[string]string{"from": "${__from}", "to": "${__to}"},
 	}}
-	var raw strings.Builder
-	enc := json.NewEncoder(&raw)
-	enc.SetEscapeHTML(false)
-	_ = enc.Encode(panes)
+	raw, _ := json.Marshal(panes, json.Deterministic(true))
 	tokens := map[string]string{}
-	escaped := grafanaVariable.ReplaceAllStringFunc(strings.TrimSpace(raw.String()), func(v string) string {
+	escaped := grafanaVariable.ReplaceAllStringFunc(string(raw), func(v string) string {
 		key := fmt.Sprintf("GRAFANAVAR%dX", len(tokens))
 		tokens[key] = v
 		return key

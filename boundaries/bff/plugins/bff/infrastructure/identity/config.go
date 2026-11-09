@@ -2,7 +2,7 @@ package identity
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 )
 
@@ -54,7 +54,7 @@ func Load(c Config) (*Identity, error) {
 		}
 	}
 	var providers []Provider
-	if err := json.Unmarshal([]byte(c.IdPProviders), &providers); err != nil {
+	if err := json.Unmarshal([]byte(c.IdPProviders), &providers, json.RejectUnknownMembers(true)); err != nil {
 		return nil, fmt.Errorf("%s: %w", EnvIdPProviders, err)
 	}
 	// JWKS URLs are refreshed for the life of the plugin process.

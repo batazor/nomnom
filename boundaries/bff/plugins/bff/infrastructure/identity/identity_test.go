@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"math/big"
 	"net/http"
@@ -126,7 +126,7 @@ func TestAccessTokenVerifierSharesRefreshAfterKeyRotation(t *testing.T) {
 	var published atomic.Value
 	published.Store([]map[string]string{rsaJWK("before", before)})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"keys": published.Load()})
+		_ = json.MarshalWrite(w, map[string]any{"keys": published.Load()})
 	}))
 	defer server.Close()
 	verifier, err := NewAccessTokenVerifier(t.Context(), "nomnom-bff", []Provider{{Issuer: issuer, JWKSURL: server.URL}})
