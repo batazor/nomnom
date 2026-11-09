@@ -12,6 +12,9 @@ html {
   font-family: var(--font-family-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  /* macOS thickens glyph edges by default, so light text on the dark theme
+     reads half a weight heavier; grayscale antialiasing keeps true weight. */
+  -webkit-font-smoothing: antialiased;
 }
 
 body {

@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta name="theme-color" content="#f4f1eb" />
+    <!-- Browser chrome follows the page canvas: --color-background per scheme
+         in src/shared/tokens/theme.css (theme.test.ts keeps them in sync). -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f3f1" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#11110f" />
     <meta name="description" content="nomnom — customer web application foundation" />
     <title>nomnom</title>
     <!-- Environment of the deployment (ops/helm ConfigMap); runs before the app. -->
