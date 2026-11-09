@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "craft-design-engineering": {
+      "source": "gustavo-fior/craft",
+      "sourceType": "github",
+      "skillPath": "skills/craft-design-engineering/SKILL.md",
+      "computedHash": "009f31d93fd627c84bd3cc0fbec62a9570957f81a15b150674a9164cf4f4219f"
+    }
+  }
+}
