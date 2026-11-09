@@ -20,3 +20,7 @@ boundaries/*/ops/helm/charts/
 
 # Временные git worktree субагентов Claude Code
 .claude/worktrees/
+
+# Бинарники локального go build ops-утилит.
+ops/architecture/architecture
+ops/schema-registration/schema-registration
