@@ -40,6 +40,6 @@ make arch-dev
 
 Модель пишется вручную и описывает то, что есть в коде и `ops/`. Изменение, которое добавляет процесс, хранилище, топик или синхронную связь между контекстами, правит и модель. Перед коммитом запускайте `make arch-check`.
 
-[`ops/architecture`](../../ops/architecture/) сверяет с моделью topics из `topics.yaml`, бэкенды `GRPCRoute` и releases из `ops/kind/values`. Не сверяются: подписки consumer'ов в коде (объявлены на четырёх языках), хранилища, связи с SpiceDB и Temporal. Заголовок связи `-[kafka]->` — список коротких имён topics: из него каталог событий берёт потребителей.
+[`ops/architecture`](../../ops/architecture/) сверяет с моделью topics из `topics.yaml`, бэкенды `GRPCRoute` и helm releases skaffold со своим values из `ops/kind/values` (дополнения вроде `payments-stripe.yaml` и `*-grafana-cloud.yaml` процессами не считаются). Не сверяются: подписки consumer'ов в коде (объявлены на четырёх языках), хранилища, связи с SpiceDB и Temporal. Заголовок связи `-[kafka]->` — список коротких имён topics: из него каталог событий берёт потребителей.
 
 Термины берутся из [Ubiquitous Language](../ubiquitous-language.md).

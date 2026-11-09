@@ -61,15 +61,11 @@ func checkModel(root, model string, topics []Topic, consumers map[string][]strin
 		}
 	}
 
-	values, err := filepath.Glob(filepath.Join(root, "ops/kind/values/*.yaml"))
+	releases, err := readKindReleases(filepath.Join(root, "ops/kind/skaffold/skaffold.yaml"))
 	if err != nil {
 		return nil, err
 	}
-	for _, path := range values {
-		release := strings.TrimSuffix(filepath.Base(path), ".yaml")
-		if strings.Contains(release, "grafana-cloud") || strings.HasSuffix(release, "-dev") {
-			continue
-		}
+	for _, release := range releases {
 		title, ok := kindValues[release]
 		if !ok {
 			title = release
@@ -110,6 +106,41 @@ func listADRs(root string) ([]string, error) {
 		all = append(all, found...)
 	}
 	return all, nil
+}
+
+// readKindReleases возвращает helm release'ы skaffold со своим values в
+// ops/kind/values. Дополнения к ним (grafana-cloud, dev, Stripe) подключаются
+// профилями или вручную и процессами не считаются.
+func readKindReleases(path string) ([]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var docs []struct {
+		Deploy struct {
+			Helm struct {
+				Releases []struct {
+					Name        string   `yaml:"name"`
+					ValuesFiles []string `yaml:"valuesFiles"`
+				} `yaml:"releases"`
+			} `yaml:"helm"`
+		} `yaml:"deploy"`
+	}
+	if err := yaml.Load(raw, &docs, yaml.WithAllDocuments()); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	var releases []string
+	for _, doc := range docs {
+		for _, r := range doc.Deploy.Helm.Releases {
+			if slices.ContainsFunc(r.ValuesFiles, func(f string) bool { return strings.HasPrefix(f, "../values/") }) {
+				releases = append(releases, r.Name)
+			}
+		}
+	}
+	if len(releases) == 0 {
+		return nil, fmt.Errorf("%s: нет helm release'ов с values из ops/kind/values", path)
+	}
+	return releases, nil
 }
 
 func readRouteBackends(path string) ([]string, error) {
