@@ -77,12 +77,6 @@ kind-stripe-listen: ## доставлять webhooks Stripe test mode в payment
 kind-e2e: ## полный неинтерактивный прогон для CI; KIND_KEEP=1 сохраняет кластер
 	@$(KIND_SCRIPTS)/e2e.sh
 
-## Black-box проверка runtime contract (docs/cloud-native-runtime.md); RUNTIME_SERVICES сужает набор
-RUNTIME_SERVICES ?=
-.PHONY: runtime-contract
-runtime-contract: ## собрать backend-приложения и проверить health, SIGTERM/SIGINT, drain и exit code
-	@python3 ops/runtime-contract/contract_test.py $(RUNTIME_SERVICES)
-
 ## Authorization (ADR 18): schema и bootstrap в authorization/
 SPICEDB_IMAGE ?= authzed/spicedb:v1.57.0
 ZED_IMAGE ?= authzed/zed:v1.2.1

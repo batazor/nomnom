@@ -348,7 +348,7 @@ composition root
 
 Общие параметры: `management.port` (отличается от бизнес-порта), `shutdown.readinessDelay` (по умолчанию `5s`, допускается `0`) и `shutdown.drainTimeout` (по умолчанию `20s`). В `payments` и `restaurants` flush телеметрии ограничен `shutdown.telemetryFlushTimeout`. Повторный сигнал во время shutdown завершает процесс сразу: в Go, Node.js и Python восстанавливается обработка по умолчанию, а в Rust, где `tokio` не умеет её вернуть, lifecycle прерывает drain и выходит с non-zero exit.
 
-Один набор black-box сценариев проверяет contract на реальных процессах всех четырёх приложений: [`ops/runtime-contract`](../ops/runtime-contract/README.md), запуск — `make runtime-contract`. Завершение начатых запросов в пределах deadline и non-zero exit при его превышении покрыты unit-тестами lifecycle-модулей.
+Contract проверяется unit-тестами lifecycle-модуля и загрузчика конфигурации каждого приложения: health, остановка по сигналу, drain deadline, exit code и fail fast. Общего black-box набора для всех языков нет.
 
 ## Текущее состояние
 

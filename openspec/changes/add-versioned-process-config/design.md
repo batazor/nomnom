@@ -132,7 +132,7 @@ config:
 ## Тесты
 
 - Unit-тесты загрузчика в каждом сервисе: неверные `apiVersion`, `kind`, `metadata.name`; неизвестный ключ в `spec` и на верхнем уровне; секрет в файле; нет `CONFIG_FILE`; секрет из env; правила `telemetry` и неизвестный `protocol`.
-- `ops/runtime-contract`: процессы стартуют с временным файлом конфигурации; сценарии fail fast — `shutdown.drainTimeout: 0ms` в файле, неизвестный ключ, нет `CONFIG_FILE`.
+- Black-box набор `ops/runtime-contract` удаляется: процессы применяют миграции при старте (ADR 42) и без настоящих хранилищ не стартуют, а сценарии fail fast покрывают unit-тесты загрузчиков. Lifecycle (health, сигналы, drain) остаётся на unit-тестах lifecycle-модулей.
 - `helm template` каждого chart: файл рендерится с ролью и путями JWKS, ключ, которым владеет chart, в values — ошибка.
 - Kind e2e — один прогон в конце: сервисы стартуют, трассы и метрики доходят до Alloy.
 
@@ -153,4 +153,4 @@ config:
 
 ## Порядок
 
-Одно изменение для всех пяти сервисов: формат и загрузчик в `pkg/config`, телеметрия, chart и kind values, runtime-contract, документация. Проверка — один раз в конце: `make check` сервисов, `helm template`, runtime-contract, kind e2e.
+Одно изменение для всех пяти сервисов: формат и загрузчик в `pkg/config`, телеметрия, chart и kind values, документация. Проверка — один раз в конце: `make check` сервисов, `helm template`, kind e2e.

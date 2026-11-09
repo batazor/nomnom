@@ -44,6 +44,6 @@
 - `boundaries/payments` (Python, pydantic-settings): `pkg/config`, `pkg/telemetry`, `di`; новая зависимость `pyyaml`.
 - `boundaries/restaurants` (TypeScript, zod): `pkg/config`, `pkg/telemetry`, `cmd`; новая зависимость `yaml`.
 - Helm chart всех пяти сервисов: `configmap.yaml`, `_helpers.tpl`, deployment, `values*.yaml`; `ops/kind/values/*.yaml` сервисов.
-- `ops/runtime-contract`: процессы запускаются с файлом конфигурации.
+- `ops/runtime-contract` и `make runtime-contract` удаляются: сценарии запуска без настоящих хранилищ не работают с миграций при старте (ADR 42), а fail fast покрывают unit-тесты загрузчиков.
 - Makefile `run` сервисов.
 - Документация: ADR 17, ADR 9, `docs/cloud-native-runtime.md`, `docs/observability.md`, README и `ops/README.md` сервисов, `ops/kind/README.md`.

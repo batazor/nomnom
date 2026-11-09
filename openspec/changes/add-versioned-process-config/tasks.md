@@ -19,7 +19,7 @@
 
 ## 3. Runtime contract
 
-- [x] 3.1 `ops/runtime-contract`: процессы стартуют с временным файлом конфигурации и секретами в env; сценарии fail fast на файле, неизвестный ключ, нет `CONFIG_FILE` (`FR-762`, `FR-763`, «Fail fast при старте»).
+- [x] 3.1 Удалить `ops/runtime-contract` и `make runtime-contract`; fail fast (`FR-762`, `FR-763`, «Fail fast при старте») покрыт unit-тестами загрузчиков.
 
 ## 4. Документация
 
@@ -29,4 +29,4 @@
 
 ## 5. Проверка
 
-- [ ] 5.1 `make check` в каждом сервисе, `helm template` каждого chart с kind values, `ops/runtime-contract`, kind e2e; `openspec validate add-versioned-process-config --strict`.
+- [ ] 5.1 `make check` в каждом сервисе, `helm template` каждого chart с kind values, kind e2e; `openspec validate add-versioned-process-config --strict`.
