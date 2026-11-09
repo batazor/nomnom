@@ -2,7 +2,10 @@ package overview
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"nomnom/ops/grafana/inventory"
 )
 
 // Scope — набор service.name, который запрашивает row: variable фильтра job и
@@ -34,6 +37,14 @@ func (s Scope) job() string {
 		return fmt.Sprintf(`job=~"nomnom/(%s)"`, strings.Join(s.Services, "|"))
 	}
 	return fmt.Sprintf(`job=~"nomnom/(${%s:pipe})"`, s.Var)
+}
+
+// exemplars — row запрашивает хотя бы один сервис с подтверждёнными exemplars;
+// у инфраструктурного scrape exemplars нет.
+func (s Scope) exemplars() bool {
+	return s.Job == "" && slices.ContainsFunc(s.Services, func(service string) bool {
+		return slices.Contains(inventory.Exemplars, service)
+	})
 }
 
 // Sel строит selector с фильтром service и instance.

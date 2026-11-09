@@ -360,7 +360,7 @@ func (g *generator) panel(p Panel, sc Scope) (*dashboard.PanelBuilder, PanelSumm
 		if p.Sankey {
 			query.Instant(true)
 		}
-		if inventory.ExemplarsEnabled && strings.Contains(q.Expr, "histogram_quantile") {
+		if sc.exemplars() && strings.Contains(q.Expr, "histogram_quantile") {
 			query.Exemplar(true)
 		}
 		group.Target(dashboard.NewTargetBuilder().RefId(ref).Query(query))

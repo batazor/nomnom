@@ -69,6 +69,8 @@ OpenTelemetry и profiling-интеграции выбираются и пров
 
 Нельзя предполагать одинаковые типы profiles, overhead, platform/runtime compatibility и точную span-to-profile correlation для Go, Node.js, Rust и Python. Из языков проекта официальные Span Profiles документированы для Go и Python и только для CPU; Node.js и Rust ограничиваются корреляцией по service/version/time. Особенно отдельно проверяются community/native зависимости Rust, native profiler Node.js и поддержка целевого Python 3.14. BFF получает profiling-подход после выбора его runtime.
 
+Exemplars (переход metric → trace) так же зависят от SDK. Go и Python SDK пишут их по умолчанию: фильтр `trace_based` сохраняет exemplar измерения внутри sampled span, отдельной настройки и `OTEL_METRICS_EXEMPLAR_FILTER` не нужно. JS SDK (`@opentelemetry/sdk-metrics` 3.x) exemplars не реализует, Rust SDK (`opentelemetry_sdk` 0.33) пишет точки без них — для `restaurants` и `delivery` переход к trace идёт только через `trace_id` логов, собственная реализация reservoir не пишется. Exemplar появляется только у измерения с context активного span: метрики, записанные без context (Temporal `MetricsHandler`) или пришедшие через Prometheus bridge (Watermill), exemplars не несут.
+
 ### Отложено до реализации
 
 - закреплённые версии SDK и конкретные библиотеки инструментирования;
@@ -86,6 +88,6 @@ OpenTelemetry и profiling-интеграции выбираются и пров
 
 OBI требует DaemonSet с расширенными правами: `hostPID`, hostPath и capabilities, в том числе `BPF`, `PERFMON`, `SYS_PTRACE`, поэтому агент видит процессы всего узла. Ему нужны Linux с BTF, ядро 5.8+ и память на всплеск при старте (пик около 317 МБ при рабочих 100 МБ). Совместимость propagation OBI с eBPF-программами Cilium не проверена: перед включением propagation её нужно проверить отдельно.
 
-Разная зрелость SDK и profilers по языкам ограничивает единообразие. Trace/profile correlation включается только там, где она документирована и проверена. Head sampling не гарантирует сохранение всех ошибочных traces; tail sampling, если понадобится, потребует отдельного решения и дополнительных ресурсов.
+Разная зрелость SDK и profilers по языкам ограничивает единообразие. Trace/profile correlation и exemplars включаются только там, где они документированы и проверены. Head sampling не гарантирует сохранение всех ошибочных traces; tail sampling, если понадобится, потребует отдельного решения и дополнительных ресурсов.
 
 Архитектурные границы сохраняются: observability остаётся инфраструктурной возможностью и не создаёт зависимость доменной модели от SDK. Реализация потребует end-to-end проверки каждого потока и корреляции, потому что наличие атрибута в приложении само по себе не гарантирует его сохранение collector и backend.

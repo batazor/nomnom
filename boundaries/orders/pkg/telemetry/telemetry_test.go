@@ -14,9 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -96,6 +99,45 @@ func TestEnvironmentDoesNotOverrideServiceName(t *testing.T) {
 	assert.Equal(t, "orders-consumer", name.AsString())
 	environment, _ := rm.Resource.Set().Value("deployment.environment.name")
 	assert.Equal(t, "kind", environment.AsString())
+}
+
+// Переход metric → trace в Grafana: измерение внутри sampled span уходит с exemplar
+// этого span (фильтр trace_based SDK по умолчанию), вне span — без exemplar.
+func TestHistogramMeasuredInSpanCarriesExemplarOfThatSpan(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	m, err := telemetry.New(context.Background(), config.TelemetryConfig{ServiceName: "orders"},
+		func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
+	duration, err := m.Meter("test").Float64Histogram("nomnom.usecase.duration", metric.WithUnit("s"))
+	require.NoError(t, err)
+
+	tracer := sdktrace.NewTracerProvider().Tracer("test")
+	ctx, span := tracer.Start(context.Background(), "usecase place_order")
+	duration.Record(ctx, 0.2, metric.WithAttributes(attribute.String("nomnom.outcome", "success")))
+	span.End()
+	duration.Record(context.Background(), 0.3, metric.WithAttributes(attribute.String("nomnom.outcome", "error")))
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+	exemplars := map[string][]metricdata.Exemplar[float64]{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, mt := range sm.Metrics {
+			if mt.Name != "nomnom.usecase.duration" {
+				continue
+			}
+			for _, point := range mt.Data.(metricdata.Histogram[float64]).DataPoints {
+				outcome, _ := point.Attributes.Value("nomnom.outcome")
+				exemplars[outcome.AsString()] = point.Exemplars
+			}
+		}
+	}
+	require.Len(t, exemplars["success"], 1)
+	traceID, spanID := span.SpanContext().TraceID(), span.SpanContext().SpanID()
+	assert.Equal(t, traceID[:], exemplars["success"][0].TraceID)
+	assert.Equal(t, spanID[:], exemplars["success"][0].SpanID)
+	assert.InDelta(t, 0.2, exemplars["success"][0].Value, 1e-9)
+	assert.Empty(t, exemplars["error"])
 }
 
 // AC-1080: an endpoint without tracing.enabled and metrics.enabled exports nothing.

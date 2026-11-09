@@ -235,6 +235,24 @@ Data sources и derived fields настраиваются так, чтобы п�
 
 `trace_id` в логе и exemplar являются ссылками, а не индексируемыми metric labels. Каждая связь проверяется end-to-end тестом после реализации pipeline: наличие атрибута в приложении ещё не гарантирует, что Alloy и backend его сохранили в ожидаемом виде.
 
+### Exemplars
+
+Exemplar — `trace_id` и `span_id` одного измерения histogram, сохранённые рядом с агрегатом. SDK пишет его для измерения внутри sampled span (фильтр `trace_based` по умолчанию); при 100% sampling ссылка ведёт на сохранённый trace. Alloy передаёт exemplars по OTLP без изменений (`filter` и `transform` в `apps.alloy` их не трогают), Grafana Cloud хранит их с labels `trace_id` и `span_id`.
+
+| Источник | Exemplars | Причина |
+| --- | --- | --- |
+| `orders`, `orders-consumer` (Go SDK) | есть | `rpc.*.call.duration`, `nomnom.usecase.duration`, `db.client.operation.duration` |
+| `payments` (Python SDK) | есть | те же histograms |
+| `orders-worker` | нет | Temporal `MetricsHandler` записывает без context |
+| Watermill-метрики Go-процессов | нет | Prometheus bridge не переносит exemplars histograms, Watermill их не пишет |
+| `restaurants`, `restaurants-consumer` (JS SDK) | нет | `@opentelemetry/sdk-metrics` exemplars не реализует |
+| `delivery` (Rust SDK) | нет | `opentelemetry_sdk` пишет точки без exemplars |
+| BFF (Cosmo Router) | не проверено | — |
+
+Проверено 2026-11-09 на kind + `make kind-deploy GRAFANA_CLOUD=1`: `query_exemplars` Grafana Cloud возвращает exemplars для `rpc_server_call_duration_seconds`, `rpc_client_call_duration_seconds`, `nomnom_usecase_duration_seconds` и `db_client_operation_duration_seconds` jobs `nomnom/orders`, `nomnom/orders-consumer`, `nomnom/payments`; для Watermill — нет. В коде контракт закрепляют тесты `orders` (`pkg/telemetry`: exemplar указывает на span измерения) и `payments` (`tests/test_observability.py`: exemplar длительности use case — его span).
+
+Overview-dashboards включают exemplars в latency-панелях (`histogram_quantile`) только для сервисов из `inventory.Exemplars` ([ops/grafana](../ops/grafana/inventory/inventory.go)). Кнопки перехода из exemplar в Tempo нет: data source `grafanacloud-prom` создан Grafana Cloud, доступен только для чтения и связывает с Tempo label `traceID`, а OTLP-ingestion пишет `trace_id`; Grafana сравнивает имя точно. Trace открывается по значению `trace_id` из tooltip exemplar.
+
 ## Размещение в коде
 
 Observability дополняет, но не меняет принятую Vertical Slice Architecture:

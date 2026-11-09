@@ -2,6 +2,7 @@ package overview
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"nomnom/ops/grafana/inventory"
@@ -119,12 +120,50 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	} else {
 		b.WriteString(" Span Profiles для этого runtime не поддерживаются: только корреляция service/version/time.\n")
 	}
-	b.WriteString("- **Exemplars** — выключены: не подтверждено, что SDK histograms, Alloy и Grafana Cloud сохраняют exemplars (`inventory.ExemplarsEnabled`).\n")
+	b.WriteString(exemplarsLine(o))
 	b.WriteString("- **Deployments** — annotation по смене `service_version` в `target_info`; появляется, когда `target_info` получает статус «есть».\n")
 	if o.Database != "" || o.Kafka != nil {
 		b.WriteString("- **Серверные метрики зависимостей** — ссылки на community dashboards в шапке; панели не дублируются.\n")
 	}
 	return b.String()
+}
+
+// exemplarsLine — где latency-панели показывают exemplars (inventory.Exemplars) и почему
+// их нет у остальных ролей.
+func exemplarsLine(o Options) string {
+	var with, without []string
+	for _, service := range o.Services {
+		if slices.Contains(inventory.Exemplars, service) {
+			with = append(with, "`"+service+"`")
+		} else {
+			without = append(without, "`"+service+"`")
+		}
+	}
+	if len(with) == 0 {
+		var reason string
+		switch o.Language {
+		case Node:
+			reason = "JS SDK (`@opentelemetry/sdk-metrics`) exemplars не реализует"
+		case Rust:
+			reason = "Rust SDK (`opentelemetry_sdk`) пишет точки без exemplars"
+		case Cosmo:
+			reason = "запись exemplars Cosmo Router не проверена"
+		default:
+			panic(fmt.Sprintf("overview %s: %s SDK пишет exemplars, но ни одна роль не подтверждена в inventory.Exemplars", o.Context, o.Language))
+		}
+		return "- **Exemplars** — нет: " + reason + ". Переход к trace — через `trace_id` логов.\n"
+	}
+	line := "- **Exemplars** — в latency-панелях (`histogram_quantile`) " + strings.Join(with, ", ") +
+		": точка exemplar несёт `trace_id` и `span_id` измерения внутри sampled span. " +
+		"Кнопки перехода в Tempo нет: data source `grafanacloud-prom` (read-only, Grafana Cloud) связывает с Tempo label `traceID`, " +
+		"а OTLP-ingestion пишет `trace_id`; trace открывается по значению из tooltip."
+	if len(without) > 0 {
+		line += " Без exemplars: " + strings.Join(without, ", ") + " (причина — `inventory.Exemplars`)."
+	}
+	if o.Kafka != nil && o.Kafka.Watermill {
+		line += " Метрики Watermill (Prometheus bridge) exemplars не несут."
+	}
+	return line + "\n"
 }
 
 // sloTable — цели сервиса (ADR 40); без SLO раздел отсутствует.

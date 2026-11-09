@@ -97,9 +97,16 @@ const DocPath = "docs/observability/metric-inventory.md"
 // VerifiedPipeline — где подтверждены метрики со статусом Present.
 const VerifiedPipeline = "2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series)."
 
-// Exemplars включаются в запросах только когда это подтверждено end-to-end:
-// SDK histograms с exemplars, Alloy и Grafana Cloud.
-const ExemplarsEnabled = false
+// Exemplars — service.name, у которых exemplars histograms подтверждены end-to-end:
+// SDK пишет exemplar измерения внутри sampled span (фильтр trace_based), Alloy передаёт
+// его по OTLP, Grafana Cloud хранит с labels trace_id и span_id (query_exemplars,
+// 2026-11-09). Только эти сервисы получают exemplars в latency-панелях.
+//
+// Нет exemplars: restaurants и restaurants-consumer (JS SDK 3.1 их не реализует),
+// delivery (Rust SDK 0.33 пишет пустой список), orders-worker (Temporal MetricsHandler
+// записывает без context), BFF (Cosmo Router не проверен). Метрики Watermill через
+// Prometheus bridge exemplars не несут и у Go-сервисов.
+var Exemplars = []string{Orders, OrdersConsumer, Payments}
 
 // verified — статусы, где часть сервисов подтверждена в Grafana Cloud (present), остальные ожидаются.
 func verified(present []string, others ...string) map[string]Status {

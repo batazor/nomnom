@@ -1557,6 +1557,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
+                        "exemplar": true,
                         "expr": "histogram_quantile(0.5, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "gRPC p50",
                         "range": true
@@ -1577,6 +1578,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
+                        "exemplar": true,
                         "expr": "histogram_quantile(0.95, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "gRPC p95",
                         "range": true
@@ -1597,6 +1599,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
+                        "exemplar": true,
                         "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "gRPC p99",
                         "range": true

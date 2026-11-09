@@ -338,6 +338,21 @@ class UseCaseTelemetryTest(unittest.TestCase):
             self.assertEqual(span.events, ())
             self.assertNotIn("secret", str(span.status.description))
 
+    def test_duration_exemplar_points_to_the_usecase_span(self) -> None:
+        """Переход metric → trace: exemplar длительности — span use case (фильтр trace_based)."""
+
+        class Echo:
+            def handle(self, request: str, /) -> str:
+                return request
+
+        self.use_cases.instrument(names.GET_PAYMENT_STATUS, Echo()).handle("request")
+
+        [(_, point)] = self.signals.points("nomnom.usecase.duration")
+        [exemplar] = point.exemplars
+        span = self.signals.span("usecase get_payment_status")
+        self.assertEqual(exemplar.trace_id, span.context.trace_id)
+        self.assertEqual(exemplar.span_id, span.context.span_id)
+
 
 class ProviderTelemetryTest(unittest.TestCase):
     def test_duration_by_operation_and_outcome(self) -> None:
