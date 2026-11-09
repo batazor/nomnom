@@ -26,7 +26,7 @@ JSON — артефакт генератора: правки вносятся в
 
 ## Data sources
 
-Выбираются общими (cross-dashboard, global) variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope). Определения — [`ops/grafana/variables`](../../../../ops/grafana/variables), dashboard подключает их annotation `grafana.app/useCrossDashboardVariables`; нужен feature toggle `grafana.dashboardGlobalVariables` ([ADR 29](../../../../docs/adr/0029-grafana-dashboards-as-code.md)).
+Выбираются общими (cross-dashboard, global) variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope). Определения — [`ops/grafana/variables`](../../../../ops/grafana/variables), dashboard подключает их annotation `grafana.app/useCrossDashboardVariables`. В шапке только `metrics`, остальные — в меню Controls: они нужны лишь ссылкам Explore. Нужен feature toggle `grafana.dashboardGlobalVariables` ([ADR 29](../../../../docs/adr/0029-grafana-dashboards-as-code.md)).
 
 ## Variables
 

@@ -19,11 +19,17 @@ import (
 // конкретного окружения и работает с любым provisioning. Это общие (cross-dashboard)
 // variables уровня организации: определение одно на все dashboards nomnom, dashboard
 // подключает их annotation useCrossDashboardVariables.
-var datasources = []struct{ name, label, plugin string }{
-	{"metrics", "Metrics (Prometheus)", "prometheus"},
-	{"logs", "Logs (Loki)", "loki"},
-	{"traces", "Traces (Tempo)", "tempo"},
-	{"profiles", "Profiles (Pyroscope)", "grafana-pyroscope-datasource"},
+// Панели запрашивают только metrics; logs, traces и profiles нужны лишь ссылкам Explore
+// (About, data links серий), поэтому они в меню Controls, а не в шапке: Grafana сортирует
+// общие variables по имени, и иначе metrics стоял бы между logs и profiles.
+var datasources = []struct {
+	name, label, plugin string
+	hide                dashboard.VariableHide
+}{
+	{"metrics", "Metrics (Prometheus)", "prometheus", dashboard.VariableHideDontHide},
+	{"logs", "Logs (Loki)", "loki", dashboard.VariableHideInControlsMenu},
+	{"traces", "Traces (Tempo)", "tempo", dashboard.VariableHideInControlsMenu},
+	{"profiles", "Profiles (Pyroscope)", "grafana-pyroscope-datasource", dashboard.VariableHideInControlsMenu},
 }
 
 // appDatasources исключает служебные data sources Grafana Cloud того же типа: первым по
@@ -49,7 +55,7 @@ func GlobalVariables() ([]GlobalVariable, error) {
 	var out []GlobalVariable
 	for _, ds := range datasources {
 		v, err := dashboard.NewDatasourceVariableBuilder(ds.name).Label(ds.label).PluginId(ds.plugin).
-			Regex(appDatasources).Refresh(dashboard.VariableRefreshOnDashboardLoad).Build()
+			Regex(appDatasources).Refresh(dashboard.VariableRefreshOnDashboardLoad).Hide(ds.hide).Build()
 		if err != nil {
 			return nil, fmt.Errorf("variable %s: %w", ds.name, err)
 		}

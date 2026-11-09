@@ -19,7 +19,7 @@
       "multi": false,
       "includeAll": false,
       "label": "Profiles (Pyroscope)",
-      "hide": "dontHide",
+      "hide": "inControlsMenu",
       "skipUrlSync": false,
       "allowCustomValue": true
     }

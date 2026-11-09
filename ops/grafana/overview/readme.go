@@ -94,7 +94,7 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	b.WriteString("JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.\n\n")
 
 	sloTable(&b, o)
-	b.WriteString("## Data sources\n\nВыбираются общими (cross-dashboard, global) variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope). Определения — [`ops/grafana/variables`](../../../../ops/grafana/variables), dashboard подключает их annotation `grafana.app/useCrossDashboardVariables`; нужен feature toggle `grafana.dashboardGlobalVariables` ([ADR 29](../../../../docs/adr/0029-grafana-dashboards-as-code.md)).\n\n")
+	b.WriteString("## Data sources\n\nВыбираются общими (cross-dashboard, global) variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope). Определения — [`ops/grafana/variables`](../../../../ops/grafana/variables), dashboard подключает их annotation `grafana.app/useCrossDashboardVariables`. В шапке только `metrics`, остальные — в меню Controls: они нужны лишь ссылкам Explore. Нужен feature toggle `grafana.dashboardGlobalVariables` ([ADR 29](../../../../docs/adr/0029-grafana-dashboards-as-code.md)).\n\n")
 
 	b.WriteString("## Variables\n\n| Variable | Источник | Назначение |\n| --- | --- | --- |\n")
 	b.WriteString("| `environment` | `target_info` → `deployment_environment_name` | Фильтр окружения через join с `target_info`. |\n")

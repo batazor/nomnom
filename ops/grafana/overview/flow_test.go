@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	dashboard "github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
+
 	"nomnom/ops/grafana/inventory"
 )
 
@@ -174,7 +176,9 @@ func TestDatasourcesAreCrossDashboardVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	defined := map[string]bool{}
+	hidden := map[string]bool{}
 	for _, v := range globals {
+		hidden[v.Name] = v.Manifest.Spec.(dashboard.VariableKind).DatasourceVariableKind.Spec.Hide != dashboard.VariableHideDontHide
 		if v.Manifest.Kind != "Variable" || v.Manifest.ApiVersion != "dashboard.grafana.app/v2beta1" || v.Manifest.Metadata.Annotations["grafana.app/folder"] != "" {
 			t.Errorf("%s: не global Variable: %+v", v.Name, v.Manifest)
 		}
@@ -203,6 +207,10 @@ func TestDatasourcesAreCrossDashboardVariables(t *testing.T) {
 			name, _, _ := strings.Cut(chunk, "}")
 			if !slices.Contains(use.Global, name) {
 				t.Errorf("%s: ${%s} не подключена annotation %v", ctx, name, use.Global)
+			}
+			// Data source панелей выбирается в шапке, а не в меню Controls.
+			if hidden[name] {
+				t.Errorf("%s: ${%s} нужна панелям, но скрыта из шапки", ctx, name)
 			}
 		}
 		for _, name := range use.Global {
