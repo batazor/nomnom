@@ -11,7 +11,9 @@ Base2 exponential histogram OpenTelemetry Grafana Cloud хранит как nati
 - **SDK сервисов.** `orders`, `controlplane` (Go), `delivery` (Rust), `restaurants` (TypeScript), `payments` (Python) агрегируют все histograms как base2 exponential с `max_size` 40 через view MeterProvider. Наборы explicit-границ (`SecondsBuckets`, `*_BUCKETS`, `buckets.py`, константы `mod.rs`) и advice `explicitBucketBoundaries` удаляются. Timers Temporal SDK в `orders` меняются вместе с MeterProvider.
 - **OBI.** Метрики Temporal server — exponential (`default_histogram_aggregation` OTLP exporter в `obi/obi.yaml`).
 - **Dashboards и alerts.** Генератор `ops/grafana` строит запросы к native histograms: `histogram_count`, `histogram_sum`, `histogram_quantile` без `_bucket`, latency SLI — `histogram_fraction`. Инвентарь различает native и классические histograms; суффиксы `_bucket`/`_count`/`_sum` у native histogram — ошибка генерации. Артефакты пересобираются.
-- **Документация.** ADR 9 (стратегия histograms), ADR 40 (latency SLI, порог — степень двойки), `docs/observability.md`, инвентарь метрик, README `ops/grafana-cloud` (лимиты free tier, замер).
+- **Документация.** ADR 9 (стратегия histograms), ADR 40 (latency SLI, порог — степень двойки), `docs/observability.md`, инвентарь метрик, README `ops/grafana-cloud` (лимиты free tier).
+
+Замер расхода series после перехода в изменение не входит.
 
 Не входит:
 

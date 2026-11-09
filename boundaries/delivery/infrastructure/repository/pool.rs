@@ -40,16 +40,6 @@ pub const POOL_METER_NAME: &str = "nomnom.delivery.postgres";
 const POOL_NAME_ATTRIBUTE: &str = "db.client.connection.pool.name";
 const STATE_ATTRIBUTE: &str = "db.client.connection.state";
 
-/// Acquire from a warm pool takes microseconds, a new connection through the
-/// pooler milliseconds, a saturated pool up to the acquire timeout; use time
-/// spans a Unit of Work (as `orders`).
-pub const POOL_TIME_BUCKETS: [f64; 15] = [
-    0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0,
-];
-
-/// Advisory buckets of `db.client.operation.duration` (semconv).
-pub const OPERATION_BUCKETS: [f64; 9] = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0];
-
 tokio::task_local! {
     /// Start of the acquire running on this task, for `create_time`.
     static ACQUIRE_STARTED: Instant;
@@ -114,25 +104,21 @@ impl PoolMetrics {
                 meter,
                 "db.client.connection.wait_time",
                 "Time to obtain a connection from the pool.",
-                &POOL_TIME_BUCKETS,
             ),
             use_time: seconds(
                 meter,
                 "db.client.connection.use_time",
                 "Time from acquire to the return of a connection.",
-                &POOL_TIME_BUCKETS,
             ),
             create_time: seconds(
                 meter,
                 "db.client.connection.create_time",
                 "Time to open a new connection, handshake and auth included.",
-                &POOL_TIME_BUCKETS,
             ),
             operation: seconds(
                 meter,
                 "db.client.operation.duration",
                 "Duration of database client operations.",
-                &OPERATION_BUCKETS,
             ),
             observed: Arc::default(),
         }
@@ -260,17 +246,11 @@ impl PoolMetrics {
     }
 }
 
-fn seconds(
-    meter: &Meter,
-    name: &'static str,
-    description: &'static str,
-    buckets: &[f64],
-) -> Histogram<f64> {
+fn seconds(meter: &Meter, name: &'static str, description: &'static str) -> Histogram<f64> {
     meter
         .f64_histogram(name)
         .with_unit("s")
         .with_description(description)
-        .with_boundaries(buckets.to_vec())
         .build()
 }
 

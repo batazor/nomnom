@@ -26,13 +26,12 @@ fn point_attributes(
     metric: &opentelemetry_sdk::metrics::data::Metric,
 ) -> Vec<Vec<(String, String)>> {
     assert_eq!(metric.unit(), "s");
-    let AggregatedMetrics::F64(MetricData::Histogram(histogram)) = metric.data() else {
-        panic!("{} is an f64 histogram", metric.name());
+    let AggregatedMetrics::F64(MetricData::ExponentialHistogram(histogram)) = metric.data() else {
+        panic!("{} is an f64 exponential histogram", metric.name());
     };
     histogram
         .data_points()
         .map(|point| {
-            assert_eq!(point.bounds().collect::<Vec<_>>(), SECONDS_BUCKETS.to_vec());
             let mut pairs: Vec<(String, String)> = point
                 .attributes()
                 .map(|kv| (kv.key.to_string(), kv.value.as_str().into_owned()))
@@ -57,6 +56,7 @@ fn call_durations_carry_the_inventory_attributes() {
     let exporter = InMemoryMetricExporter::default();
     let provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(exporter.clone()).build())
+        .with_view(crate::pkg::telemetry::exponential_histograms)
         .build();
     let metrics = RpcMetrics::new(&provider.meter(INSTRUMENTATION));
     let call = ClientCall {

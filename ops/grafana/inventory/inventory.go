@@ -25,9 +25,14 @@ const (
 type Type string
 
 const (
-	Counter   Type = "counter"
+	Counter Type = "counter"
+	// Histogram — base2 exponential histogram OTel SDK процессов и OBI; в Grafana Cloud —
+	// native histogram, одна series без суффиксов (ADR 9).
 	Histogram Type = "histogram"
-	Gauge     Type = "gauge"
+	// ClassicHistogram — explicit-bucket histogram с series _bucket/_count/_sum: Cosmo
+	// Router (views в коде), Prometheus bridge (Watermill), Prometheus scrape.
+	ClassicHistogram Type = "classic histogram"
+	Gauge            Type = "gauge"
 )
 
 // Service names (OTel service.name) deployable roles. Значения совпадают с
@@ -78,7 +83,7 @@ type Section struct {
 
 type Metric struct {
 	// Name — имя в Prometheus после OTLP-трансляции (UnderscoreEscapingWithSuffixes):
-	// unit suffix и _total добавлены. Для histogram — базовое имя без _bucket.
+	// unit suffix и _total добавлены. Для histogram — базовое имя без суффиксов.
 	Name    string
 	Section string
 	Type    Type
@@ -139,7 +144,7 @@ var Sections = []Section{
 	{"usecase", "Application use cases", "Декоратор application handlers в composition root (docs/observability.md#use-cases). Один histogram на все use cases; `outcome`: success | rejected | error — бизнес-отказ отделён от технического сбоя. `error_type` — закрытый набор slice, пуст при success. Без ID, subject и payload."},
 	{"uow", "Unit of Work", "Декоратор Unit of Work (ADR 20). Deadlock/serialization — классы retry, а не SQL-панели поверх DB instrumentation."},
 	{"fsm", "Domain Lifecycle (FSM)", "Декоратор применения FSM-перехода (ADR 21). Labels допустимы только с закрытым набором значений из FSM-таблицы."},
-	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Prometheus counters приходят без `_total`."},
+	{"temporal", "Temporal", "Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — exponential histograms в секундах (общий view `pkg/telemetry`); без монотонных counters SDK пишет UpDownCounter и в Prometheus counters приходят без `_total`."},
 	{"kitchen", "Kitchen", "Gauges kitchen queue — projection/polling Kitchen Board, не выводятся из counters. Consumer lag ≠ Kitchen Queue Size."},
 	{"authz", "Authorization (SpiceDB)", "Декоратор порта авторизации (ADR 18). `denied` — бизнес-результат, `error`/`timeout` — технический сбой. Без subject/resource ID."},
 	{"provider", "Payment provider", "Клиентский адаптер платёжного провайдера; провайдер не выбран."},
@@ -163,7 +168,7 @@ var Metrics = []Metric{
 	// graphql
 	{Name: "router_http_requests_total", Section: "graphql", Type: Counter, Source: "Cosmo `router.http.requests`", Labels: []string{"wg_operation_type", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF)},
 	{Name: "router_http_requests_error_total", Section: "graphql", Type: Counter, Source: "Cosmo `router.http.requests.error`", Labels: []string{"wg_operation_type", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "GraphQL errors в ответе 200."},
-	{Name: "router_http_request_duration_milliseconds", Section: "graphql", Type: Histogram, Source: "Cosmo `router.http.request.duration_milliseconds`", Labels: []string{"wg_operation_type", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway)."},
+	{Name: "router_http_request_duration_milliseconds", Section: "graphql", Type: ClassicHistogram, Source: "Cosmo `router.http.request.duration_milliseconds`", Labels: []string{"wg_operation_type", "wg_subgraph_name", "http_status_code"}, Status: expected(BFF), Note: "Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway)."},
 
 	// runtime
 	{Name: "process_cpu_time_seconds_total", Section: "runtime", Type: Counter, Source: "`process.cpu.time`", Labels: []string{"cpu_mode"}, Status: verified([]string{Orders, OrdersWorker, OrdersConsumer, Restaurants, Delivery, Payments}), Note: "Go: `go.opentelemetry.io/contrib/instrumentation/host` (метрики `system.*` отбрасываются View)."},
@@ -195,8 +200,8 @@ var Metrics = []Metric{
 
 	// watermill (built-in)
 	{Name: "watermill_consumer_subscriber_messages_received_total", Section: "watermill", Type: Counter, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"acked", "handler_name", "subscriber_name"}, Status: verified([]string{OrdersConsumer}), Note: "`acked`: acked | nacked. Через OTel Prometheus bridge (`pkg/telemetry`)."},
-	{Name: "watermill_consumer_handler_execution_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"handler_name", "success"}, Status: verified([]string{OrdersConsumer}), Note: "Снаружи DLQ: `success=\"false\"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом."},
-	{Name: "watermill_consumer_publish_time_seconds", Section: "watermill", Type: Histogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: verified([]string{OrdersConsumer}), Note: "Publisher consumer-роли — dead letters в `<stream>.dlq`."},
+	{Name: "watermill_consumer_handler_execution_time_seconds", Section: "watermill", Type: ClassicHistogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"handler_name", "success"}, Status: verified([]string{OrdersConsumer}), Note: "Снаружи DLQ: `success=\"false\"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом."},
+	{Name: "watermill_consumer_publish_time_seconds", Section: "watermill", Type: ClassicHistogram, Source: "`PrometheusMetricsBuilder` subsystem `consumer`", Labels: []string{"success", "handler_name", "publisher_name"}, Status: verified([]string{OrdersConsumer}), Note: "Publisher consumer-роли — dead letters в `<stream>.dlq`."},
 
 	// messaging-otel
 	{Name: "messaging_client_consumed_messages_total", Section: "messaging-otel", Type: Counter, Source: "`messaging.client.consumed.messages`", Labels: []string{"messaging_system", "messaging_destination_name", "messaging_consumer_group_name", "error_type"}, Status: verified([]string{Delivery}, otelConsumers...)},
@@ -303,11 +308,11 @@ var Metrics = []Metric{
 
 	// spicedb (Alloy scrape :9090, job infra/spicedb)
 	{Name: "grpc_server_handled_total", Section: "spicedb", Type: Counter, Source: "SpiceDB go-grpc-prometheus", Labels: []string{"grpc_service", "grpc_method", "grpc_code", "grpc_type"}, Status: verified([]string{SpiceDB}), Note: "Health-check `grpc.health.v1.Health` отбрасывается в Alloy."},
-	{Name: "grpc_server_handling_seconds", Section: "spicedb", Type: Histogram, Source: "SpiceDB go-grpc-prometheus", Labels: []string{"grpc_service", "grpc_method", "grpc_type"}, Status: verified([]string{SpiceDB})},
+	{Name: "grpc_server_handling_seconds", Section: "spicedb", Type: ClassicHistogram, Source: "SpiceDB go-grpc-prometheus", Labels: []string{"grpc_service", "grpc_method", "grpc_type"}, Status: verified([]string{SpiceDB})},
 	{Name: "spicedb_v1_check_permissionship_total", Section: "spicedb", Type: Counter, Source: "SpiceDB", Labels: []string{"method", "permissionship"}, Status: verified([]string{SpiceDB}), Note: "`permissionship`: HAS_PERMISSION | NO_PERMISSION | CONDITIONAL_PERMISSION — решение, не ошибка."},
 	{Name: "spicedb_dispatch_client_check_total", Section: "spicedb", Type: Counter, Source: "SpiceDB dispatcher", Status: verified([]string{SpiceDB})},
 	{Name: "spicedb_dispatch_client_check_from_cache_total", Section: "spicedb", Type: Counter, Source: "SpiceDB dispatcher", Status: verified([]string{SpiceDB})},
-	{Name: "spicedb_datastore_query_latency", Section: "spicedb", Type: Histogram, Source: "SpiceDB datastore", Labels: []string{"operation", "query_shape"}, Status: verified([]string{SpiceDB}), Note: "Доставляются только `_sum`/`_count` (средняя latency): buckets — ~100 series."},
+	{Name: "spicedb_datastore_query_latency", Section: "spicedb", Type: ClassicHistogram, Source: "SpiceDB datastore", Labels: []string{"operation", "query_shape"}, Status: verified([]string{SpiceDB}), Note: "Доставляются только `_sum`/`_count` (средняя latency): buckets — ~100 series."},
 	{Name: "process_cpu_seconds_total", Section: "spicedb", Type: Counter, Source: "Prometheus Go client", Status: verified([]string{SpiceDB})},
 	{Name: "process_resident_memory_bytes", Section: "spicedb", Type: Gauge, Source: "Prometheus Go client", Status: verified([]string{SpiceDB})},
 
@@ -385,16 +390,31 @@ func Lookup(name string) (Metric, bool) {
 	return Metric{}, false
 }
 
-// BaseName убирает суффиксы histogram-серий.
+var histogramSuffixes = []string{"_bucket", "_count", "_sum"}
+
+// BaseName убирает суффиксы series классической histogram.
 func BaseName(series string) string {
-	for _, suffix := range []string{"_bucket", "_count", "_sum"} {
+	for _, suffix := range histogramSuffixes {
 		if base, ok := strings.CutSuffix(series, suffix); ok {
-			if m, found := lookupExact(base); found && m.Type == Histogram {
+			if m, found := lookupExact(base); found && m.Type == ClassicHistogram {
 				return base
 			}
 		}
 	}
 	return series
+}
+
+// NativeSuffixed возвращает базовое имя, если series — суффикс native histogram:
+// у native histogram нет series _bucket/_count/_sum, такой запрос всегда пуст.
+func NativeSuffixed(series string) (string, bool) {
+	for _, suffix := range histogramSuffixes {
+		if base, ok := strings.CutSuffix(series, suffix); ok {
+			if m, found := lookupExact(base); found && m.Type == Histogram {
+				return base, true
+			}
+		}
+	}
+	return "", false
 }
 
 func lookupExact(name string) (Metric, bool) {

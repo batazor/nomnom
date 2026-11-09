@@ -2,6 +2,7 @@ package overview
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -16,10 +17,28 @@ type SLO struct {
 }
 
 type LatencySLO struct {
-	// Bucket — граница histogram (le) в секундах; совпадает с границей buckets сервиса.
-	Bucket string
-	// Target — доля вызовов не дольше Bucket.
+	// Threshold — порог в секундах, степень двойки: граница бакета native histogram
+	// при scale ≥ 0, поэтому доля вызовов не дольше порога точна (ADR 40).
+	Threshold string
+	// Target — доля вызовов не дольше Threshold.
 	Target float64
+}
+
+// validateSLO отвергает порог latency, который не совпадает с границей бакета:
+// histogram_fraction интерполировал бы внутри бакета.
+func (o Options) validateSLO() error {
+	if o.SLO == nil || o.SLO.Latency == nil {
+		return nil
+	}
+	threshold := o.SLO.Latency.Threshold
+	v, err := strconv.ParseFloat(threshold, 64)
+	if err != nil {
+		return fmt.Errorf("%s: порог latency SLO %q: %w", o.Context, threshold, err)
+	}
+	if frac, _ := math.Frexp(v); v <= 0 || frac != 0.5 {
+		return fmt.Errorf("%s: порог latency SLO %s s — не степень двойки, доля по native histogram была бы неточной (ADR 40)", o.Context, threshold)
+	}
+	return nil
 }
 
 // sloWindow — окно SLO и error budget.
@@ -57,11 +76,11 @@ func (o Options) slis() []sli {
 	var out []sli
 	if o.GRPC {
 		out = append(out, sli{name: "Availability", target: o.SLO.Availability, bad: func(sc Scope, w, by string) string {
-			return Sum(by, sc.Over(w, rpcServer+"_count", codesTechnical)) + " / " + Sum(by, sc.Over(w, rpcServer+"_count"))
+			return Sum(by, sc.CountOver(w, rpcServer, codesTechnical)) + " / " + Sum(by, sc.CountOver(w, rpcServer))
 		}})
 		if l := o.SLO.Latency; l != nil {
-			out = append(out, sli{name: "Latency ≤ " + l.Bucket + "s", target: l.Target, bad: func(sc Scope, w, by string) string {
-				return "1 - " + Sum(by, sc.Over(w, rpcServer+"_bucket", `le="`+l.Bucket+`"`)) + " / " + Sum(by, sc.Over(w, rpcServer+"_count"))
+			out = append(out, sli{name: "Latency ≤ " + l.Threshold + "s", target: l.Target, bad: func(sc Scope, w, by string) string {
+				return "1 - " + sc.Fraction(w, by, l.Threshold, rpcServer)
 			}})
 		}
 	}

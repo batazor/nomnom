@@ -18,11 +18,6 @@ const TRANSACTION_OPTIONS: TransactionOptions = {
 
 export const UOW_INSTRUMENTATION = "nomnom.restaurants.uow";
 
-/** Seconds: one transaction, the driver's retries included. */
-export const UOW_DURATION_BUCKETS = [
-  0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30,
-];
-
 /** Server code of a write conflict between concurrent transactions. */
 const WRITE_CONFLICT_CODE = 112;
 
@@ -68,7 +63,6 @@ export class DatabaseUnitOfWork implements UnitOfWork {
     this.#duration = meter.createHistogram("nomnom.uow.duration", {
       description: "Duration of one Unit of Work transaction.",
       unit: "s",
-      advice: { explicitBucketBoundaries: UOW_DURATION_BUCKETS },
     });
     this.#retries = meter.createCounter("nomnom.uow.retries", {
       description: "Unit of Work retries by conflict class.",

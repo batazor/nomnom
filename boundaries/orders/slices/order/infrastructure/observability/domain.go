@@ -18,10 +18,6 @@ import (
 
 const domainInstrumentation = "nomnom/orders/slices/order/domain"
 
-// Границы fulfillment duration: заказ живёт минуты–часы, общие SecondsBuckets
-// заканчиваются на 300 s.
-var fulfillmentBuckets = []float64{300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200, 10800, 14400}
-
 // ReasonCodes — закрытый набор label reason (FailOrCancelOrder); другое значение
 // пишется как "other", чтобы опечатка не порождала новую series. Набор задаёт
 // процесс fulfillment; composition root передаёт его сюда, чтобы слайс order не
@@ -84,8 +80,7 @@ func newDomainMetrics(meter metric.Meter, now func() time.Time, reasons ReasonCo
 		otel.Handle(err)
 	}
 	m.fulfillment, err = meter.Float64Histogram("nomnom.orders.fulfillment.duration",
-		metric.WithUnit("s"), metric.WithDescription("placed_at → OrderCompleted commit."),
-		metric.WithExplicitBucketBoundaries(fulfillmentBuckets...))
+		metric.WithUnit("s"), metric.WithDescription("placed_at → OrderCompleted commit."))
 	if err != nil {
 		otel.Handle(err)
 	}

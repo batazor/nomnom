@@ -634,7 +634,7 @@
         "spec": {
           "id": 18,
           "title": "Connector tasks by status",
-          "description": "Задача `failed` — Outbox контекста не доставляется: `GET /connectors/\u003cname\u003e/status`, после исправления — restart задачи.",
+          "description": "Задача `failed` — Outbox контекста не доставляется: `GET /connectors/<name>/status`, после исправления — restart задачи.",
           "links": [],
           "data": {
             "kind": "QueryGroup",

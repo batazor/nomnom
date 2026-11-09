@@ -11,7 +11,6 @@ from enum import StrEnum
 import psycopg
 from opentelemetry import metrics
 
-from pkg.telemetry import SECONDS_BUCKETS
 from slices.payment.applications.errors import ConcurrencyConflictError
 
 INSTRUMENTATION = "nomnom.payments.uow"
@@ -80,7 +79,6 @@ class TransactionMetrics:
             "nomnom.uow.duration",
             unit="s",
             description="Duration of one Unit of Work transaction.",
-            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
         self._retries = meter.create_counter(
             "nomnom.uow.retries",

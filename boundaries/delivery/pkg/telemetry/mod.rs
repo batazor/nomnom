@@ -13,7 +13,9 @@
 //!   SDK, 2048 spans) — только при `tracing.enabled`.
 //! - Metrics: MeterProvider с periodic OTLP exporter (`metrics.exportInterval`)
 //!   — только при `metrics.enabled`; вместе с ним process runtime metrics
-//!   ([`process`]).
+//!   ([`process`]). Все histograms — base2 exponential
+//!   ([`exponential_histograms`]): Grafana Cloud хранит их как native
+//!   histograms, explicit-границ у instruments нет.
 //! - OTLP: `grpc` (tonic) или `http/protobuf` (`<endpoint>/v1/traces`,
 //!   `<endpoint>/v1/metrics`).
 //! - Logs: JSON в stdout ([`log`]) с уровнем `logging.level`, не зависят от
@@ -39,7 +41,9 @@ use opentelemetry_otlp::{
     WithHttpConfig,
 };
 use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
+use opentelemetry_sdk::metrics::{
+    Aggregation, Instrument, InstrumentKind, PeriodicReader, SdkMeterProvider, Stream,
+};
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::resource::TelemetryResourceDetector;
 use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
@@ -53,10 +57,35 @@ pub const SERVICE_NAMESPACE: &str = "nomnom";
 const TRACES_PATH: &str = "v1/traces";
 const METRICS_PATH: &str = "v1/metrics";
 
-/// Границы histograms длительностей в секундах (как `SecondsBuckets` orders).
-pub const SECONDS_BUCKETS: [f64; 14] = [
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 300.0,
-];
+/// Максимум бакетов base2 exponential histogram (ADR 9): Grafana Cloud считает
+/// 0,25 series за непустой бакет, поэтому histogram стоит не больше 10 series.
+/// При разбросе длительностей до 2^40 scale не опускается ниже 0, и степени двойки
+/// (пороги latency SLO, ADR 40) остаются границами бакетов.
+pub const HISTOGRAM_MAX_SIZE: u32 = 40;
+
+/// Максимальный scale base2 exponential histogram — значение SDK по умолчанию;
+/// при росте разброса scale уменьшается сам.
+pub const HISTOGRAM_MAX_SCALE: i8 = 20;
+
+/// View MeterProvider: каждый histogram instrument агрегируется как base2
+/// exponential histogram с [`HISTOGRAM_MAX_SIZE`] и [`HISTOGRAM_MAX_SCALE`];
+/// остальные instruments идут view по умолчанию.
+#[must_use]
+pub fn exponential_histograms(instrument: &Instrument) -> Option<Stream> {
+    if instrument.kind() != InstrumentKind::Histogram {
+        return None;
+    }
+    Some(
+        Stream::builder()
+            .with_aggregation(Aggregation::Base2ExponentialHistogram {
+                max_size: HISTOGRAM_MAX_SIZE,
+                max_scale: HISTOGRAM_MAX_SCALE,
+                record_min_max: true,
+            })
+            .build()
+            .expect("stream without unit and cardinality limit is valid"),
+    )
+}
 
 /// Metrics и traces pipeline процесса; `shutdown` выгружает накопленные
 /// точки и spans.
@@ -117,6 +146,7 @@ pub fn start(config: &TelemetryConfig) -> Result<Telemetry, String> {
             .build();
         let provider = SdkMeterProvider::builder()
             .with_reader(reader)
+            .with_view(exponential_histograms)
             .with_resource(resource)
             .build();
         opentelemetry::global::set_meter_provider(provider.clone());

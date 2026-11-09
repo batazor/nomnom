@@ -71,12 +71,14 @@ OpenTelemetry и profiling-интеграции выбираются и пров
 
 Exemplars (переход metric → trace) так же зависят от SDK. Go и Python SDK пишут их по умолчанию: фильтр `trace_based` сохраняет exemplar измерения внутри sampled span, отдельной настройки и `OTEL_METRICS_EXEMPLAR_FILTER` не нужно. JS SDK (`@opentelemetry/sdk-metrics` 3.x) exemplars не реализует, Rust SDK (`opentelemetry_sdk` 0.33) пишет точки без них — для `restaurants` и `delivery` переход к trace идёт только через `trace_id` логов, собственная реализация reservoir не пишется. Exemplar появляется только у измерения с context активного span: метрики, записанные без context (Temporal `MetricsHandler`) или пришедшие через Prometheus bridge (Watermill), exemplars не несут.
 
+Histograms длительностей и размеров в процессах (OTel SDK всех языков) и в OBI агрегируются как base2 exponential histogram с не более чем 40 бакетами; Grafana Cloud хранит их как native histograms — одна series на комбинацию labels вместо series на каждую границу, `_sum` и `_count`. Billing native histogram — 0,25 series за непустой бакет, то есть не больше 10 series на histogram против ~17 у explicit-бакетов с 14 границами; это главный рычаг квоты series free tier. Наборы границ в коде не задаются. Запросы используют `histogram_count`, `histogram_sum`, `histogram_quantile` и `histogram_fraction` по базовому имени, без `_bucket`/`_count`/`_sum`. Классическими остаются histograms, чью агрегацию проект не задаёт: Cosmo Router (views в коде router), Watermill (Prometheus bridge) и Prometheus scrape инфраструктуры. Native и классическая histogram под одним именем не смешиваются.
+
 ### Отложено до реализации
 
 - закреплённые версии SDK и конкретные библиотеки инструментирования;
 - число и topology экземпляров Alloy, processors, queues, retries, WAL, TLS и authentication;
 - sampling и retention по окружениям, storage sizing и multi-tenancy;
-- набор Loki labels, promoted resource attributes метрик и histogram buckets;
+- набор Loki labels и promoted resource attributes метрик;
 - dashboards, alerts, SLO и правила доступа;
 - BFF runtime и поддерживаемая им profiling-интеграция.
 

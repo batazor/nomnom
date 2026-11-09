@@ -81,7 +81,11 @@ func TestInventoryMatchesSemconvRegistry(t *testing.T) {
 			t.Errorf("%s: нет в ops/semconv", m.Name)
 			continue
 		}
-		if instrumentType[g.Instrument] != m.Type {
+		kind := m.Type
+		if kind == ClassicHistogram {
+			kind = Histogram
+		}
+		if instrumentType[g.Instrument] != kind {
 			t.Errorf("%s: тип %s в инвентаре, %s в registry", m.Name, m.Type, g.Instrument)
 		}
 		var labels []string

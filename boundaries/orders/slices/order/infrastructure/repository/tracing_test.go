@@ -78,17 +78,17 @@ func TestQueryTracerRecordsSafeSpansAndSemconvDuration(t *testing.T) {
 	assert.Equal(t, "SELECT", attrs["db.operation.name"].AsString())
 	assert.NotContains(t, attrs, attribute.Key("pgx.query.parameters"), "bind parameters are never recorded")
 	for key, value := range attrs {
-		assert.NotContains(t, value.Emit(), "secret-order-id", "attribute %s carries a bind parameter", key)
+		assert.NotContains(t, value.String(), "secret-order-id", "attribute %s carries a bind parameter", key)
 	}
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))
-	var duration *metricdata.Histogram[float64]
+	var duration *metricdata.ExponentialHistogram[float64]
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
 			assert.NotEqual(t, "db.client.operation.errors", m.Name, "non-semconv metric is dropped")
 			if m.Name == telemetry.DBOperationDurationMetric {
-				h := m.Data.(metricdata.Histogram[float64])
+				h := m.Data.(metricdata.ExponentialHistogram[float64])
 				duration = &h
 			}
 		}

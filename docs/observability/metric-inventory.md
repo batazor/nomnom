@@ -12,7 +12,7 @@
 | ожидается | Метрика принята архитектурой (semconv, ADR, решение по Watermill), но не экспортируется или не доставляется. |
 
 Имена приведены в виде Prometheus после OTLP-трансляции (точки → подчёркивания, unit suffix, `_total` для
-монотонных counters); Grafana Cloud добавляет suffixes при OTLP ingestion. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют `_bucket`/`_count`/`_sum`.
+монотонных counters); Grafana Cloud добавляет suffixes при OTLP ingestion. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя. Тип histogram — base2 exponential histogram OTel SDK и OBI, в Grafana Cloud native histogram без суффиксов: запросы используют `histogram_count`, `histogram_sum`, `histogram_quantile`, `histogram_fraction` по базовому имени. Тип classic histogram (Cosmo Router, Watermill через Prometheus bridge, Prometheus scrape) запрашивается через `_bucket`/`_count`/`_sum`.
 
 ## Состояние на дату генерации
 
@@ -55,7 +55,7 @@ OTel resource в Prometheus: `job="nomnom/<service.name>"`, `instance=<service.i
 | --- | --- | --- | --- | --- | --- |
 | `router_http_requests_total` | Cosmo `router.http.requests` | counter | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | — |
 | `router_http_requests_error_total` | Cosmo `router.http.requests.error` | counter | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | GraphQL errors в ответе 200. |
-| `router_http_request_duration_milliseconds` | Cosmo `router.http.request.duration_milliseconds` | histogram | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway). |
+| `router_http_request_duration_milliseconds` | Cosmo `router.http.request.duration_milliseconds` | classic histogram | `wg_operation_type`, `wg_subgraph_name`, `http_status_code` | `bff`: ожидается | Без `wg_subgraph_name` — клиентский запрос, с ним — вызов subgraph (BFF plugin → internal gateway). |
 
 <a id="runtime"></a>
 
@@ -120,8 +120,8 @@ ADR 43: cache-aside GetRestaurant, GetMenu и ListRestaurants `restaurants` (`in
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `watermill_consumer_subscriber_messages_received_total` | `PrometheusMetricsBuilder` subsystem `consumer` | counter | `acked`, `handler_name`, `subscriber_name` | `orders-consumer`: есть | `acked`: acked | nacked. Через OTel Prometheus bridge (`pkg/telemetry`). |
-| `watermill_consumer_handler_execution_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `handler_name`, `success` | `orders-consumer`: есть | Снаружи DLQ: `success="false"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом. |
-| `watermill_consumer_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | histogram | `success`, `handler_name`, `publisher_name` | `orders-consumer`: есть | Publisher consumer-роли — dead letters в `<stream>.dlq`. |
+| `watermill_consumer_handler_execution_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | classic histogram | `handler_name`, `success` | `orders-consumer`: есть | Снаружи DLQ: `success="false"` — только исчерпанный transient (nack); permanent уходит в DLQ и считается успехом. |
+| `watermill_consumer_publish_time_seconds` | `PrometheusMetricsBuilder` subsystem `consumer` | classic histogram | `success`, `handler_name`, `publisher_name` | `orders-consumer`: есть | Publisher consumer-роли — dead letters в `<stream>.dlq`. |
 
 <a id="messaging-otel"></a>
 
@@ -206,7 +206,7 @@ Outbox публикует Debezium в Kafka Connect (ADR 37). Prometheus JMX exp
 
 ## Temporal
 
-Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — histograms в секундах с границами `telemetry.SecondsBuckets`; без монотонных counters SDK пишет UpDownCounter и в Prometheus counters приходят без `_total`.
+Temporal Go SDK `MetricsHandler` (contrib/opentelemetry, `UseMonotonicCounters`) в `orders-worker` и клиенте `orders-consumer`. Timers — exponential histograms в секундах (общий view `pkg/telemetry`); без монотонных counters SDK пишет UpDownCounter и в Prometheus counters приходят без `_total`.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
@@ -323,11 +323,11 @@ Alloy scrape `:9090` pod SpiceDB, `job="infra/spicedb"`. Серверная ст
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
 | `grpc_server_handled_total` | SpiceDB go-grpc-prometheus | counter | `grpc_service`, `grpc_method`, `grpc_code`, `grpc_type` | `spicedb`: есть | Health-check `grpc.health.v1.Health` отбрасывается в Alloy. |
-| `grpc_server_handling_seconds` | SpiceDB go-grpc-prometheus | histogram | `grpc_service`, `grpc_method`, `grpc_type` | `spicedb`: есть | — |
+| `grpc_server_handling_seconds` | SpiceDB go-grpc-prometheus | classic histogram | `grpc_service`, `grpc_method`, `grpc_type` | `spicedb`: есть | — |
 | `spicedb_v1_check_permissionship_total` | SpiceDB | counter | `method`, `permissionship` | `spicedb`: есть | `permissionship`: HAS_PERMISSION | NO_PERMISSION | CONDITIONAL_PERMISSION — решение, не ошибка. |
 | `spicedb_dispatch_client_check_total` | SpiceDB dispatcher | counter | — | `spicedb`: есть | — |
 | `spicedb_dispatch_client_check_from_cache_total` | SpiceDB dispatcher | counter | — | `spicedb`: есть | — |
-| `spicedb_datastore_query_latency` | SpiceDB datastore | histogram | `operation`, `query_shape` | `spicedb`: есть | Доставляются только `_sum`/`_count` (средняя latency): buckets — ~100 series. |
+| `spicedb_datastore_query_latency` | SpiceDB datastore | classic histogram | `operation`, `query_shape` | `spicedb`: есть | Доставляются только `_sum`/`_count` (средняя latency): buckets — ~100 series. |
 | `process_cpu_seconds_total` | Prometheus Go client | counter | — | `spicedb`: есть | — |
 | `process_resident_memory_bytes` | Prometheus Go client | gauge | — | `spicedb`: есть | — |
 

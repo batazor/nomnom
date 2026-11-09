@@ -22,11 +22,6 @@ use opentelemetry::{Context, KeyValue};
 /// Instrumentation scope of the use case telemetry.
 pub const INSTRUMENTATION: &str = "nomnom.delivery.usecase";
 
-/// Buckets of `nomnom.usecase.duration`, as in `orders`.
-const BUCKETS: [f64; 12] = [
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0,
-];
-
 /// Commands change state, queries only read.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Kind {
@@ -122,7 +117,6 @@ impl UseCaseTelemetry {
                 .f64_histogram("nomnom.usecase.duration")
                 .with_unit("s")
                 .with_description("Duration of one application use case call.")
-                .with_boundaries(BUCKETS.to_vec())
                 .build(),
         }
     }

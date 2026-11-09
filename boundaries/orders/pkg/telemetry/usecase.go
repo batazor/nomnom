@@ -86,8 +86,7 @@ type UseCases struct {
 func NewUseCases(classify Classifier) *UseCases {
 	duration, err := otel.Meter(useCaseInstrumentation).Float64Histogram("nomnom.usecase.duration",
 		metric.WithUnit("s"),
-		metric.WithDescription("Duration of one application use case call."),
-		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30))
+		metric.WithDescription("Duration of one application use case call."))
 	if err != nil {
 		otel.Handle(err)
 	}

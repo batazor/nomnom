@@ -5,7 +5,7 @@
 ### Requirement: Процессы агрегируют histograms как base2 exponential
 **ID:** FR-774
 
-MeterProvider каждого процесса `orders`, `controlplane`, `delivery`, `restaurants` и `payments` SHALL агрегировать все histogram instruments, включая timers Temporal SDK и histograms Watermill, как base2 exponential histogram с `max_size` 40 и `max_scale` 20. Explicit-границы бакетов MUST NOT задаваться ни view, ни advice instrument.
+MeterProvider каждого процесса `orders`, `controlplane`, `delivery`, `restaurants` и `payments` SHALL агрегировать все histogram instruments OpenTelemetry, включая timers Temporal SDK, как base2 exponential histogram с `max_size` 40 и `max_scale` 20. Explicit-границы бакетов MUST NOT задаваться ни view, ни advice instrument. Histograms Watermill приходят через Prometheus bridge мимо views и остаются классическими.
 
 #### Scenario: RPC histogram сервиса
 **ID:** AC-1090
@@ -55,18 +55,6 @@ OBI SHALL экспортировать histograms метрик Temporal server �
 - **WHEN** выполняются запросы всех панелей overview-dashboards и Platform / Overview
 - **THEN** ни один запрос не завершается ошибкой
 - **AND** панели rate, error ratio и latency gRPC-сервисов возвращают данные
-
-### Requirement: Расход series измерен после перехода
-**ID:** FR-777
-
-После перехода число активных series stack SHALL быть измерено и записано в `ops/grafana-cloud/README.md` вместе с методикой замера.
-
-#### Scenario: Замер
-**ID:** AC-1095
-
-- **GIVEN** kind развёрнут с `GRAFANA_CLOUD=1` более 20 минут без передеплоя, сервисы обработали вызовы
-- **WHEN** читаются `grafanacloud_instance_active_series` и `count({job=~"nomnom/.+"})`
-- **THEN** значения записаны в README с датой и сравнением с исходными 7450 и 4640
 
 ### Requirement: Latency SLI считается по native histogram
 **ID:** FR-778

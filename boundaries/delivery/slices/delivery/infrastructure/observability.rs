@@ -65,16 +65,6 @@ const OUTCOME: &str = "nomnom.outcome";
 /// `nomnom.reason` of a value outside the closed set.
 pub const OTHER_REASON: &str = "other";
 
-/// Creation → courier assignment: seconds to an hour.
-const ASSIGNMENT_LATENCY_BUCKETS: [f64; 12] = [
-    5.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1200.0, 1800.0, 2700.0, 3600.0,
-];
-
-/// Creation → completion: minutes to hours.
-const DURATION_BUCKETS: [f64; 12] = [
-    300.0, 600.0, 900.0, 1200.0, 1800.0, 2700.0, 3600.0, 5400.0, 7200.0, 10800.0, 14400.0, 21600.0,
-];
-
 /// Current time in epoch seconds at the moment of recording.
 pub type EpochClock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
@@ -156,13 +146,11 @@ impl DomainMetrics {
                 .f64_histogram("nomnom.delivery.assignment.latency")
                 .with_unit("s")
                 .with_description("Delivery creation to courier assignment.")
-                .with_boundaries(ASSIGNMENT_LATENCY_BUCKETS.to_vec())
                 .build(),
             duration: meter
                 .f64_histogram("nomnom.delivery.duration")
                 .with_unit("s")
                 .with_description("Delivery creation to completion.")
-                .with_boundaries(DURATION_BUCKETS.to_vec())
                 .build(),
             failure_reasons: failure_reasons
                 .iter()

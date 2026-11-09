@@ -19,9 +19,6 @@ import type {
 const POOL_NAME = "db.client.connection.pool.name";
 const STATE = "db.client.connection.state";
 
-// Semconv advice for db.client.connection.{create,wait,use}_time.
-const POOL_TIME_BUCKETS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10];
-
 type ConnectionId = number | "<monitor>";
 
 type PoolState = {
@@ -109,20 +106,17 @@ export class DatabasePoolMetrics {
       description:
         "Time to obtain a connection from the pool, failed included.",
       unit: "s",
-      advice: { explicitBucketBoundaries: POOL_TIME_BUCKETS },
     });
     this.#createTime = meter.createHistogram(
       "db.client.connection.create_time",
       {
         description: "Time to establish a new connection, handshake and auth.",
         unit: "s",
-        advice: { explicitBucketBoundaries: POOL_TIME_BUCKETS },
       },
     );
     this.#useTime = meter.createHistogram("db.client.connection.use_time", {
       description: "Time between checkout and check-in of a connection.",
       unit: "s",
-      advice: { explicitBucketBoundaries: POOL_TIME_BUCKETS },
     });
     meter.addBatchObservableCallback(
       (result) => {

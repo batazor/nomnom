@@ -153,6 +153,9 @@ func UID(context string) string { return "nomnom-" + context + "-overview" }
 
 // ServiceOverview — общая функция всех overview-dashboards.
 func ServiceOverview(opts Options) (Dashboard, error) {
+	if err := opts.validateSLO(); err != nil {
+		return Dashboard{}, err
+	}
 	g := &generator{opts: opts}
 	uid := UID(opts.Context)
 	main := Scope{Var: "service", Services: opts.Services, Instance: true}
@@ -393,6 +396,10 @@ func (g *generator) check(panel string, q Query, sc Scope) (bool, []string) {
 	var missing []string
 	allowed := slices.Clone(inventory.ResourceLabels)
 	for _, s := range a.Selectors {
+		if base, native := inventory.NativeSuffixed(s.Series); native {
+			g.errs = append(g.errs, fmt.Sprintf("%s: %s — native histogram без series _bucket/_count/_sum, запрос по %s через histogram_count/histogram_sum/histogram_quantile/histogram_fraction", panel, s.Series, base))
+			continue
+		}
 		m, ok := inventory.Lookup(s.Series)
 		if !ok {
 			g.errs = append(g.errs, fmt.Sprintf("%s: метрика %s отсутствует в инвентаре", panel, s.Series))

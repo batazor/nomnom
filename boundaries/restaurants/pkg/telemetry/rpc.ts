@@ -1,16 +1,12 @@
 // Semconv RPC metrics (OpenTelemetry semantic conventions v1.44.0, the same
 // as otelgrpc in orders): `rpc.server.call.duration` and
-// `rpc.client.call.duration` in seconds with explicit bucket boundaries,
+// `rpc.client.call.duration` in seconds (base2 exponential histograms, view in
+// pkg/telemetry/histograms.ts),
 // `rpc.method` as `Service/Method` and `rpc.response.status_code` as the name
 // of the canonical gRPC code. Inventory: ops/grafana/inventory, section rpc.
 import { type Histogram, metrics } from "@opentelemetry/api";
 
 export const RPC_INSTRUMENTATION = "nomnom.restaurants.rpc";
-
-/** Seconds; semconv advice for request durations. */
-export const RPC_DURATION_BUCKETS = [
-  0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10,
-];
 
 /** Canonical gRPC status names by numeric code. */
 export const GRPC_STATUS_NAMES: readonly string[] = [
@@ -65,12 +61,10 @@ function instruments(): { server: Histogram; client: Histogram } {
     serverDuration = meter.createHistogram("rpc.server.call.duration", {
       description: "Measures the duration of inbound remote procedure calls.",
       unit: "s",
-      advice: { explicitBucketBoundaries: RPC_DURATION_BUCKETS },
     });
     clientDuration = meter.createHistogram("rpc.client.call.duration", {
       description: "Measures the duration of outbound remote procedure calls.",
       unit: "s",
-      advice: { explicitBucketBoundaries: RPC_DURATION_BUCKETS },
     });
   }
   return { server: serverDuration, client: clientDuration };

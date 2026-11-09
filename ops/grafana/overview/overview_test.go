@@ -206,7 +206,7 @@ func TestGeneratorRejectsUninventoriedMetricAndForbiddenLabel(t *testing.T) {
 func TestGeneratorRejectsTraceLabelOutsideSeries(t *testing.T) {
 	g := &generator{opts: Options{}}
 	sc := Scope{Var: "service", Services: []string{inventory.Orders}}
-	q := Query{Expr: Sum("rpc_method", sc.Rate(rpcServer+"_count"))}
+	q := Query{Expr: Sum("rpc_method", sc.Count(rpcServer))}
 	g.checkTrace("p", q, spanLabel("rpc_method"))
 	if len(g.errs) > 0 {
 		t.Fatalf("label серии отклонён: %v", g.errs)

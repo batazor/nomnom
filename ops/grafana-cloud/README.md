@@ -35,6 +35,7 @@ Profile `grafana-cloud` ([skaffold.yaml](../kind/skaffold/skaffold.yaml)) доб
 | Только `service.namespace=nomnom`, остальной OTLP отбрасывается | `otelcol.processor.filter "nomnom"` |
 | Собственные метрики Alloy не отправляются | `alloy/*.alloy` |
 | Инфраструктура — только allowlist метрик (`prometheus.relabel`): SpiceDB без health-check и buckets datastore, PostgreSQL только базы владельцев (и верхние 100 запросов `pg_stat_statements`), Envoy internal gateway только clusters GRPCRoute (~420 series), pods только прикладных неймспейсов и `condition="true"` readiness; kube-state-metrics генерирует три метрики pods | `alloy/infra.alloy`, `kube-state-metrics.yaml` |
+| Histograms процессов и OBI — base2 exponential (не больше 40 бакетов), в stack native histograms: billing 0,25 series за непустой бакет, не больше 10 series на histogram. Классические остаются у BFF (views Cosmo Router), Watermill (Prometheus bridge) и scrape инфраструктуры | `pkg/telemetry` сервисов, `obi/obi.yaml` |
 | Экспорт раз в 60 s | `config.spec.metrics.exportInterval` в `values/grafana-cloud.yaml` |
 | Values профиля получают все releases orders, restaurants, delivery, payments и controlplane (BFF — Cosmo, своя telemetry) | `skaffold.yaml`, `values/grafana-cloud.yaml` |
 | BFF (Cosmo Router): из метрик Router остаются `router.http.requests`, `.requests.error`, `.request.duration_milliseconds` с labels `wg.operation.type`, `wg.subgraph.name`, `http.status_code` | `values/bff-grafana-cloud.yaml`, `otelcol.processor.filter "nomnom"`, `otelcol.processor.transform "bff_metrics"` |

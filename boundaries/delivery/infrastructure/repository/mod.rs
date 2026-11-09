@@ -37,8 +37,8 @@ use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 pub use migrate::{MIGRATION_SETS, MigrationSet, migrate};
 pub use outbox::{NoIntegrationEvents, OUTBOX_TOPIC, OutboxMapper, OutboxRecord, event_id};
 pub use pool::{
-    OPERATION_BUCKETS, ObservedConnection, POOL_METER_NAME, POOL_NAME, POOL_TIME_BUCKETS,
-    PoolMetrics, error_type, operation_name, pool_options,
+    ObservedConnection, POOL_METER_NAME, POOL_NAME, PoolMetrics, error_type, operation_name,
+    pool_options,
 };
 pub use transaction::{TransactionMetrics, UOW_METER_NAME};
 

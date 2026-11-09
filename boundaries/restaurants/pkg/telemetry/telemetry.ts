@@ -4,8 +4,9 @@
 // not read. Metrics and traces share one resource (pkg/telemetry/resource.ts).
 // OTLP metrics are exported only with `spec.metrics.enabled`; without it the
 // global no-op MeterProvider stays in place and instruments cost nothing. The
-// pipeline adds Node.js runtime metrics (v8js.*, nodejs.eventloop.*) and
-// process.cpu.time / process.memory.usage. Tracing (pkg/telemetry/tracing.ts)
+// pipeline aggregates every histogram as base2 exponential
+// (pkg/telemetry/histograms.ts) and adds Node.js runtime metrics (v8js.*,
+// nodejs.eventloop.*) and process.cpu.time / process.memory.usage. Tracing (pkg/telemetry/tracing.ts)
 // always propagates W3C Trace Context and exports spans only with
 // `spec.tracing.enabled`. Shutdown performs the final export of both providers
 // within the flush timeout.
@@ -20,6 +21,7 @@ import {
 import type { SpanProcessor } from "@opentelemetry/sdk-trace";
 
 import type { TelemetryConfig } from "../config/telemetry.ts";
+import { HISTOGRAM_VIEWS } from "./histograms.ts";
 import { OTLP_EXPORT_TIMEOUT_MS, otlpMetricExporter } from "./otlp.ts";
 import { registerProcessMetrics } from "./process-metrics.ts";
 import { type ResourceAttributes, telemetryResource } from "./resource.ts";
@@ -91,6 +93,7 @@ export function startTelemetry(
   const provider = new MeterProvider({
     resource: resourceFromAttributes(resource),
     readers,
+    views: HISTOGRAM_VIEWS,
   });
   metrics.setGlobalMeterProvider(provider);
   const runtime = new RuntimeNodeInstrumentation({

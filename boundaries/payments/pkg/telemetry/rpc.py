@@ -3,7 +3,8 @@
 Current semconv RPC (the inventory ``rpc`` section): spans are named ``Service/Method``
 and carry ``rpc.system.name=grpc``, ``rpc.method`` and ``rpc.response.status_code``
 (the code name, e.g. ``NOT_FOUND``); histograms ``rpc.server.call.duration`` and
-``rpc.client.call.duration`` are in seconds with explicit seconds buckets.
+``rpc.client.call.duration`` are in seconds; the process MeterProvider aggregates them
+as base2 exponential histograms.
 
 One interceptor per direction instruments a call, so spans and metrics never come from
 two competing middlewares. ``opentelemetry-instrumentation-grpc`` is not used: it emits
@@ -23,7 +24,6 @@ import grpc
 from opentelemetry import metrics, propagate, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
-from .buckets import SECONDS_BUCKETS
 from .propagation import metadata_carrier
 
 INSTRUMENTATION = "nomnom.payments.grpc"
@@ -82,7 +82,6 @@ class ServerTelemetryInterceptor(grpc.ServerInterceptor):
             "rpc.server.call.duration",
             unit="s",
             description="Measures the duration of inbound remote procedure calls.",
-            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
 
     @override
@@ -183,7 +182,6 @@ class ClientTelemetryInterceptor(grpc.UnaryUnaryClientInterceptor):
             "rpc.client.call.duration",
             unit="s",
             description="Measures the duration of outbound remote procedure calls.",
-            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
 
     @override

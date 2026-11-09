@@ -21,7 +21,10 @@ import grpc
 import pytest
 from opentelemetry import baggage, propagate, trace
 from opentelemetry.context import attach, detach
-from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.metrics.export import (
+    ExponentialHistogramDataPoint,
+    InMemoryMetricReader,
+)
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -267,7 +270,10 @@ class GrpcPropagationTest(unittest.TestCase):
                 }
             ],
         )
-        self.assertEqual(servers[0][1].explicit_bounds, telemetry.SECONDS_BUCKETS)
+        server_point = servers[0][1]
+        self.assertIsInstance(server_point, ExponentialHistogramDataPoint)
+        self.assertEqual(server_point.count, 1)
+        self.assertLessEqual(len(server_point.positive.bucket_counts), telemetry.HISTOGRAM_MAX_SIZE)
         clients = self.signals.points("rpc.client.call.duration")
         self.assertEqual(
             [attributes for attributes, _ in clients],
@@ -331,7 +337,8 @@ class UseCaseTelemetryTest(unittest.TestCase):
         for attrs, point in self.signals.points("nomnom.usecase.duration"):
             self.assertEqual(attrs["nomnom.usecase.name"], "authorize_payment")
             self.assertEqual(attrs["nomnom.usecase.kind"], "command")
-            self.assertEqual(point.explicit_bounds, telemetry.SECONDS_BUCKETS)
+            self.assertIsInstance(point, ExponentialHistogramDataPoint)
+            self.assertLessEqual(len(point.positive.bucket_counts), telemetry.HISTOGRAM_MAX_SIZE)
         for span in self.signals.finished():
             self.assertIs(span.status.status_code, StatusCode.ERROR)
             # Текст ошибки (может содержать вход) не попадает в span.

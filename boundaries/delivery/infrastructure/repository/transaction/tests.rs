@@ -20,6 +20,7 @@ fn harness() -> Harness {
     let exporter = InMemoryMetricExporter::default();
     let provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(exporter.clone()).build())
+        .with_view(crate::pkg::telemetry::exponential_histograms)
         .build();
     let store = Store::connect(&fresh_database())
         .expect("connect test database")
@@ -75,14 +76,13 @@ impl Harness {
                 }
                 (
                     "nomnom.uow.duration",
-                    AggregatedMetrics::F64(MetricData::Histogram(histogram)),
+                    AggregatedMetrics::F64(MetricData::ExponentialHistogram(histogram)),
                 ) => {
                     assert_eq!(metric.unit(), "s");
                     for point in histogram.data_points() {
-                        assert_eq!(point.bounds().collect::<Vec<_>>(), SECONDS_BUCKETS.to_vec());
                         let entry: &mut (u64, u64) =
                             outcomes.entry(outcome(point.attributes())).or_default();
-                        entry.1 = point.count();
+                        entry.1 = u64::try_from(point.count()).expect("count fits u64");
                     }
                 }
                 (name, _) => panic!("unexpected metric {name}"),

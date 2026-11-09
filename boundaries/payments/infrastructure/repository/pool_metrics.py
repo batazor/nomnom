@@ -22,26 +22,6 @@ INSTRUMENTATION = "nomnom.payments.postgres"
 POOL_NAME_ATTRIBUTE = "db.client.connection.pool.name"
 STATE_ATTRIBUTE = "db.client.connection.state"
 
-# Выдача соединения из прогретого пула — микросекунды, новое соединение через пулер —
-# миллисекунды, насыщенный пул — до acquire timeout; use time покрывает Unit of Work.
-POOL_TIME_BUCKETS = (
-    0.0005,
-    0.001,
-    0.0025,
-    0.005,
-    0.01,
-    0.025,
-    0.05,
-    0.1,
-    0.25,
-    0.5,
-    1.0,
-    2.5,
-    5.0,
-    10.0,
-    30.0,
-)
-
 
 class PoolMetrics:
     """Instruments of one psycopg pool (docs/observability/metric-inventory.md#db).
@@ -100,19 +80,16 @@ class PoolMetrics:
             "db.client.connection.wait_time",
             unit="s",
             description="The time it took to obtain an open connection from the pool.",
-            explicit_bucket_boundaries_advisory=POOL_TIME_BUCKETS,
         )
         self._use_time = meter.create_histogram(
             "db.client.connection.use_time",
             unit="s",
             description="The time between borrowing a connection and returning it to the pool.",
-            explicit_bucket_boundaries_advisory=POOL_TIME_BUCKETS,
         )
         self._create_time = meter.create_histogram(
             "db.client.connection.create_time",
             unit="s",
             description="The time it took to create a new connection.",
-            explicit_bucket_boundaries_advisory=POOL_TIME_BUCKETS,
         )
 
     def bind(self, pool: ConnectionPool) -> None:

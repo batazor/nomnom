@@ -22,7 +22,6 @@ use std::time::Instant;
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Histogram, Meter};
 
-use crate::pkg::telemetry::SECONDS_BUCKETS;
 use crate::pkg::unit_of_work::{UnitOfWork, UnitOfWorkError};
 
 use super::{Connection, Store};
@@ -75,7 +74,6 @@ impl TransactionMetrics {
                 .f64_histogram("nomnom.uow.duration")
                 .with_unit("s")
                 .with_description("Duration of one Unit of Work transaction.")
-                .with_boundaries(SECONDS_BUCKETS.to_vec())
                 .build(),
         }
     }

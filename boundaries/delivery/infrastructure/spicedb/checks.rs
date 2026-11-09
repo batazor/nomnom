@@ -16,8 +16,6 @@ use std::time::Instant;
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Histogram, Meter};
 
-use crate::pkg::telemetry::SECONDS_BUCKETS;
-
 use super::mapping::PermissionCheck;
 
 /// Instrumentation scope of the authorization metrics.
@@ -70,7 +68,6 @@ impl CheckMetrics {
                 .f64_histogram("nomnom.authz.check.duration")
                 .with_unit("s")
                 .with_description("Duration of one authorization check.")
-                .with_boundaries(SECONDS_BUCKETS.to_vec())
                 .build(),
         }
     }

@@ -148,11 +148,17 @@ func signalURL(endpoint, signal string) (string, error) {
 	return base.JoinPath("v1", signal).String(), nil
 }
 
+// ExponentialHistogram — агрегация всех histograms процесса (ADR 9): base2
+// exponential, в Grafana Cloud — native histogram. MaxSize 40 ограничивает
+// billable series histogram десятью (0,25 за непустой бакет); MaxScale — значение SDK.
+var ExponentialHistogram = sdkmetric.AggregationBase2ExponentialHistogram{MaxSize: 40, MaxScale: 20}
+
 // New собирает metrics pipeline без регистрации глобального провайдера; newReader nil — без экспорта.
 func New(ctx context.Context, res *resource.Resource, newReader ReaderFactory) (*Telemetry, error) {
 	options := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(sdkmetric.NewView(sdkmetric.Instrument{Name: "system.*"}, sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}})),
+		sdkmetric.WithView(sdkmetric.NewView(sdkmetric.Instrument{Kind: sdkmetric.InstrumentKindHistogram}, sdkmetric.Stream{Aggregation: ExponentialHistogram})),
 	}
 	if newReader != nil {
 		reader, err := newReader()

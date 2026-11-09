@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/failure"
 )
 
@@ -69,8 +68,7 @@ func newUnitOfWorkMetrics(meter metric.Meter) (*unitOfWorkMetrics, error) {
 		metric.WithUnit("{transaction}"), metric.WithDescription("Unit of Work transactions by outcome."))
 	errs = append(errs, err)
 	m.duration, err = meter.Float64Histogram("nomnom.uow.duration",
-		metric.WithUnit("s"), metric.WithDescription("Duration of one Unit of Work transaction."),
-		metric.WithExplicitBucketBoundaries(telemetry.SecondsBuckets...))
+		metric.WithUnit("s"), metric.WithDescription("Duration of one Unit of Work transaction."))
 	errs = append(errs, err)
 	m.retries, err = meter.Int64Counter("nomnom.uow.retries",
 		metric.WithUnit("{retry}"), metric.WithDescription("Unit of Work retries by conflict class."))

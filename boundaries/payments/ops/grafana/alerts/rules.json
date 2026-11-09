@@ -13,7 +13,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[5m]))",
+            "expr": "sum by (job) (histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m]))) / sum by (job) (histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[5m])))",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -27,7 +27,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0.05",
+            "expression": "$A > 0.05",
             "refId": "C",
             "type": "math"
           },
@@ -62,7 +62,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "histogram_quantile(0.95, sum by (job, le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(payments)\"}[5m])))",
+            "expr": "histogram_quantile(0.95, sum by (job) (rate(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[5m])))",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -76,7 +76,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 1",
+            "expression": "$A > 1",
             "refId": "C",
             "type": "math"
           },
@@ -111,7 +111,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[1h]))) / 0.001 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[5m]))) / 0.001 > 14.4",
+            "expr": "(sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h]))) / sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[1h])))) / 0.001 and (sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[5m]))) / sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[5m])))) / 0.001 > 14.4",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -125,7 +125,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 14.4",
+            "expression": "$A > 14.4",
             "refId": "C",
             "type": "math"
           },
@@ -160,7 +160,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[6h]))) / 0.001 and (sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[30m]))) / 0.001 > 6",
+            "expr": "(sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h]))) / sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[6h])))) / 0.001 and (sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30m]))) / sum by (job) (histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[30m])))) / 0.001 > 6",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -174,7 +174,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 6",
+            "expression": "$A > 6",
             "refId": "C",
             "type": "math"
           },
@@ -209,7 +209,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(payments)\", le=\"0.25\"}[1h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[1h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(payments)\", le=\"0.25\"}[5m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[5m]))) / 0.05 > 14.4",
+            "expr": "(1 - histogram_fraction(0, 0.25, sum by (job) (increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[1h])))) / 0.05 and (1 - histogram_fraction(0, 0.25, sum by (job) (increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[5m])))) / 0.05 > 14.4",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -223,7 +223,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 14.4",
+            "expression": "$A > 14.4",
             "refId": "C",
             "type": "math"
           },
@@ -258,7 +258,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "(1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(payments)\", le=\"0.25\"}[6h])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[6h]))) / 0.05 and (1 - sum by (job) (increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(payments)\", le=\"0.25\"}[30m])) / sum by (job) (increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(payments)\"}[30m]))) / 0.05 > 6",
+            "expr": "(1 - histogram_fraction(0, 0.25, sum by (job) (increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[6h])))) / 0.05 and (1 - histogram_fraction(0, 0.25, sum by (job) (increase(rpc_server_call_duration_seconds{job=~\"nomnom/(payments)\"}[30m])))) / 0.05 > 6",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -272,7 +272,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 6",
+            "expression": "$A > 6",
             "refId": "C",
             "type": "math"
           },

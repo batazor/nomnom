@@ -46,13 +46,13 @@ func (g *generator) health(sc Scope) []Panel {
 	var latency []Query
 	var errTraces, latencyTraces []string
 	if o.GRPC {
-		rate = append(rate, Query{Sum("", sc.Rate(rpcServer+"_count")), "gRPC"})
+		rate = append(rate, Query{Sum("", sc.Count(rpcServer)), "gRPC"})
 		errs = append(errs,
-			Query{Sum("", sc.Rate(rpcServer+"_count", codesTransport)), "gRPC transport/availability"},
-			Query{Sum("", sc.Rate(rpcServer+"_count", codesApplication)), "gRPC application"},
-			Query{Sum("", sc.Rate(rpcServer+"_count", codesBusiness)), "gRPC business rejection"},
+			Query{Sum("", sc.Count(rpcServer, codesTransport)), "gRPC transport/availability"},
+			Query{Sum("", sc.Count(rpcServer, codesApplication)), "gRPC application"},
+			Query{Sum("", sc.Count(rpcServer, codesBusiness)), "gRPC business rejection"},
 		)
-		ratio = append(ratio, Query{Sum("", sc.Rate(rpcServer+"_count", codesTechnical)) + " / " + Sum("", sc.Rate(rpcServer+"_count")), "gRPC"})
+		ratio = append(ratio, Query{Sum("", sc.Count(rpcServer, codesTechnical)) + " / " + Sum("", sc.Count(rpcServer)), "gRPC"})
 		errTraces = append(errTraces, spansTransport, spansApplication, spansBusiness)
 		grpc := sc.Percentiles("gRPC ", "", rpcServer)
 		latency = append(latency, grpc...)
@@ -72,25 +72,25 @@ func (g *generator) health(sc Scope) []Panel {
 	}
 	if o.Kafka.consumes() {
 		if o.Kafka.Watermill {
-			rate = append(rate, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka processing"})
-			errs = append(errs, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)), "Kafka nack (retries exhausted)"})
+			rate = append(rate, Query{Sum("", sc.Count("watermill_consumer_handler_execution_time_seconds")), "Kafka processing"})
+			errs = append(errs, Query{Sum("", sc.Count("watermill_consumer_handler_execution_time_seconds", `success="false"`)), "Kafka nack (retries exhausted)"})
 			errTraces = append(errTraces, consumerErrorSpan)
-			ratio = append(ratio, Query{Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count", `success="false"`)) + " / " + Sum("", sc.Rate("watermill_consumer_handler_execution_time_seconds_count")), "Kafka"})
+			ratio = append(ratio, Query{Sum("", sc.Count("watermill_consumer_handler_execution_time_seconds", `success="false"`)) + " / " + Sum("", sc.Count("watermill_consumer_handler_execution_time_seconds")), "Kafka"})
 		} else {
-			rate = append(rate, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka processing"})
-			errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`)), "Kafka technical failure"})
+			rate = append(rate, Query{Sum("", sc.Count("nomnom_messaging_process_duration_seconds")), "Kafka processing"})
+			errs = append(errs, Query{Sum("", sc.Count("nomnom_messaging_process_duration_seconds", `nomnom_error_class!~"|business"`)), "Kafka technical failure"})
 			errTraces = append(errTraces, consumerErrorSpan)
-			ratio = append(ratio, Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!=""`)) + " / " + Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count")), "Kafka"})
+			ratio = append(ratio, Query{Sum("", sc.Count("nomnom_messaging_process_duration_seconds", `nomnom_error_class!=""`)) + " / " + Sum("", sc.Count("nomnom_messaging_process_duration_seconds")), "Kafka"})
 		}
 	}
 	if o.Kafka.consumes() {
 		errs = append(errs, Query{Sum("", sc.Rate("nomnom_messaging_poison_messages_total")), "Kafka dead letter"},
-			Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class="business"`)), "Kafka business rejection"})
+			Query{Sum("", sc.Count("nomnom_messaging_process_duration_seconds", `nomnom_error_class="business"`)), "Kafka business rejection"})
 		// Dead letter и business rejection не помечают span ошибкой: ссылки нет.
 		errTraces = append(errTraces, "", "")
 	}
 	if o.Temporal != nil {
-		rate = append(rate, Query{Sum("", sc.Rate("temporal_activity_execution_latency_seconds_count")), "Temporal activities"})
+		rate = append(rate, Query{Sum("", sc.Count("temporal_activity_execution_latency_seconds")), "Temporal activities"})
 		errs = append(errs, Query{Sum("", sc.Rate("temporal_activity_execution_failed_total")), "Temporal activity failure"})
 		errTraces = append(errTraces, "status=error")
 	}
@@ -169,8 +169,8 @@ func (g *generator) dependencies(sc Scope) []Panel {
 	if o.GRPCClients {
 		gateway := `rpc_method!~"authzed.*"`
 		panels = append(panels,
-			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{rateBy(sc, "rpc_method", rpcClient+"_count", gateway)}},
-			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + spanLabel("rpc_response_status_code")}, Queries: []Query{{Sum("rpc_method, rpc_response_status_code", sc.Rate(rpcClient+"_count", gateway, codesTechnical)), "{{rpc_method}} {{rpc_response_status_code}}"}}},
+			Panel{Title: "gRPC via internal gateway: rate", Unit: "ops", Queries: []Query{countBy(sc, "rpc_method", rpcClient, gateway)}},
+			Panel{Title: "gRPC via internal gateway: technical errors", Unit: "ops", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + spanLabel("rpc_response_status_code")}, Queries: []Query{{Sum("rpc_method, rpc_response_status_code", sc.Count(rpcClient, gateway, codesTechnical)), "{{rpc_method}} {{rpc_response_status_code}}"}}},
 			Panel{Title: "gRPC via internal gateway: p95", Unit: "s", Traces: []string{"kind=client && " + spanLabel("rpc_method") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "rpc_method", rpcClient, gateway), "{{rpc_method}}"}}},
 		)
 	}
@@ -186,8 +186,8 @@ func (g *generator) dependencies(sc Scope) []Panel {
 		dbSpan := `kind=client && span.db.system.name="` + string(o.Database) + `"`
 		panels = append(panels,
 			Panel{Title: string(o.Database) + ": operations", Unit: "ops", Traces: []string{"", dbSpan + " && " + spanLabel("error_type")}, Queries: []Query{
-				rateBy(sc, "db_operation_name", "db_client_operation_duration_seconds_count", db),
-				{Sum("error_type", sc.Rate("db_client_operation_duration_seconds_count", db, `error_type!=""`)), "error {{error_type}}"},
+				countBy(sc, "db_operation_name", "db_client_operation_duration_seconds", db),
+				{Sum("error_type", sc.Count("db_client_operation_duration_seconds", db, `error_type!=""`)), "error {{error_type}}"},
 			}},
 			Panel{Title: string(o.Database) + ": p95 by operation", Unit: "s", Traces: []string{dbSpan + " && " + spanLabel("db_operation_name") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "db_operation_name", "db_client_operation_duration_seconds", db), "{{db_operation_name}}"}}},
 		)
@@ -206,9 +206,9 @@ func (g *generator) dependencies(sc Scope) []Panel {
 	if o.PaymentProvider {
 		provider := "nomnom_payments_provider_request_duration_seconds"
 		panels = append(panels,
-			Panel{Title: "Payment provider: requests", Unit: "ops", Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count")), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}},
+			Panel{Title: "Payment provider: requests", Unit: "ops", Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Count(provider)), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}},
 				Description: "`declined` — бизнес-результат провайдера, не технический сбой."},
-			Panel{Title: "Payment provider: errors and timeouts", Unit: "ops", Traces: []string{spanLabel("nomnom_payment_operation") + " && " + spanLabel("nomnom_outcome")}, Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Rate(provider+"_count", `nomnom_outcome=~"error|timeout"`)), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}}},
+			Panel{Title: "Payment provider: errors and timeouts", Unit: "ops", Traces: []string{spanLabel("nomnom_payment_operation") + " && " + spanLabel("nomnom_outcome")}, Queries: []Query{{Sum("nomnom_payment_operation, nomnom_outcome", sc.Count(provider, `nomnom_outcome=~"error|timeout"`)), "{{nomnom_payment_operation}} {{nomnom_outcome}}"}}},
 			Panel{Title: "Payment provider: p95", Unit: "s", Traces: []string{spanLabel("nomnom_payment_operation") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "nomnom_payment_operation", provider), "{{nomnom_payment_operation}}"}}},
 		)
 	}
@@ -228,13 +228,13 @@ func (g *generator) kafka(sc Scope) []Panel {
 	var processed Query
 	if k.Watermill {
 		consumed = []Query{{Sum("handler_name, acked", sc.Rate("watermill_consumer_subscriber_messages_received_total")), "{{handler_name}} acked={{acked}}"}}
-		failures = []Query{rateBy(sc, "handler_name", "watermill_consumer_handler_execution_time_seconds_count", `success="false"`)}
-		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
+		failures = []Query{countBy(sc, "handler_name", "watermill_consumer_handler_execution_time_seconds", `success="false"`)}
+		processed = Query{Sum("", sc.Count("nomnom_messaging_process_duration_seconds", `nomnom_error_class=~"|business"`)), "processed"}
 	} else {
 		consumed = []Query{rateBy(sc, "messaging_destination_name", "messaging_client_consumed_messages_total")}
-		processed = Query{Sum("", sc.Rate("nomnom_messaging_process_duration_seconds_count", `nomnom_error_class=~"|business"`)), "processed"}
+		processed = Query{Sum("", sc.Count("nomnom_messaging_process_duration_seconds", `nomnom_error_class=~"|business"`)), "processed"}
 	}
-	failures = append(failures, rateBy(sc, "nomnom_error_class", "nomnom_messaging_process_duration_seconds_count", `nomnom_error_class!~"|business"`))
+	failures = append(failures, countBy(sc, "nomnom_error_class", "nomnom_messaging_process_duration_seconds", `nomnom_error_class!~"|business"`))
 	produce := Panel{Title: "Produced (Outbox, Debezium)", Unit: "ops", Queries: produced,
 		Description: "События Outbox, которые коннектор `" + k.Connector + "` прочитал из журнала базы и отправил в Kafka (ADR 37)."}
 	outbox := []Panel{
@@ -270,10 +270,10 @@ func (g *generator) kafka(sc Scope) []Panel {
 func useCases(sc Scope) []Panel {
 	uc := "nomnom_usecase_duration_seconds"
 	return []Panel{
-		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{rateBy(sc, "nomnom_outcome", uc+"_count")},
+		{Title: "Calls by outcome", Unit: "ops", Queries: []Query{countBy(sc, "nomnom_outcome", uc)},
 			Description: "success, rejected (отказ по правилам use case) и error (технический сбой)."},
-		{Title: "Rejections by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="rejected" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="rejected"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
-		{Title: "Errors by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="error" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Rate(uc+"_count", `nomnom_outcome="error"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
+		{Title: "Rejections by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="rejected" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Count(uc, `nomnom_outcome="rejected"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
+		{Title: "Errors by use case", Unit: "ops", Traces: []string{spanLabel("nomnom_usecase_name") + ` && span.nomnom.outcome="error" && ` + spanLabel("error_type")}, Queries: []Query{{Sum("nomnom_usecase_name, error_type", sc.Count(uc, `nomnom_outcome="error"`)), "{{nomnom_usecase_name}} {{error_type}}"}}},
 		{Title: "Duration p95 by use case", Unit: "s", Traces: []string{spanLabel("nomnom_usecase_name") + " && " + slower("s")}, Queries: []Query{{sc.Quantile("0.95", "nomnom_usecase_name", uc), "{{nomnom_usecase_name}}"}}},
 	}
 }
@@ -310,7 +310,7 @@ func temporal(worker, main Scope) []Panel {
 		{Title: "Oldest running fulfillment", Unit: "s", Queries: []Query{{Max("", worker.Gauge("nomnom_orders_fulfillment_oldest_running_age_seconds")), "age"}},
 			Description: "Возраст старейшего выполняющегося workflow: polling Visibility, SDK метрики не даёт."},
 		{Title: "Activities executed / failed attempts", Unit: "ops", Traces: []string{"", "status=error"}, Queries: []Query{
-			{Sum("activity_type", worker.Rate("temporal_activity_execution_latency_seconds_count")), "executed {{activity_type}}"},
+			{Sum("activity_type", worker.Count("temporal_activity_execution_latency_seconds")), "executed {{activity_type}}"},
 			{Sum("activity_type", worker.Rate("temporal_activity_execution_failed_total")), "failed {{activity_type}}"},
 		}, Description: "Каждая неуспешная попытка, кроме последней, ведёт к retry по Retry Policy."},
 		{Title: "Activity latency p95", Unit: "s", Queries: []Query{{worker.Quantile("0.95", "activity_type", "temporal_activity_execution_latency_seconds"), "{{activity_type}}"}}},

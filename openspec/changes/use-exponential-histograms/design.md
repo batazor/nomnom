@@ -16,7 +16,7 @@
 
 Grafana Cloud считает native histogram как `0,25 × непустые бакеты` активных series; `_sum` и `_count` не тарифицируются. OTLP exponential histogram со стандартной base2-схемой принимается как native histogram. Billing OTLP-series тот же, что у остальных.
 
-Оценка: при ~3,9k series histograms сейчас ожидается 0,8–1,5k после перехода — итого 1,5–2,2k живых series сервисов вместо 4,6k. Оценка, не замер: число непустых бакетов зависит от разброса длительностей. Замер — часть проверки (AC-1095).
+Оценка: при ~3,9k series histograms сейчас ожидается 0,8–1,5k после перехода — итого 1,5–2,2k живых series сервисов вместо 4,6k. Оценка, не замер: число непустых бакетов зависит от разброса длительностей. Замер после перехода в это изменение не входит.
 
 ## Агрегация
 
@@ -34,7 +34,8 @@ Grafana Cloud считает native histogram как `0,25 × непустые �
 
 | Сервис | Механизм |
 | --- | --- |
-| `orders`, `controlplane` | `sdkmetric.NewView(sdkmetric.Instrument{Kind: sdkmetric.InstrumentKindHistogram}, sdkmetric.Stream{Aggregation: sdkmetric.AggregationBase2ExponentialHistogram{MaxSize: 40, MaxScale: 20}})` вместо текущего view с `SecondsBuckets` |
+| `orders` | функция-view `histogramView` на все histograms (`AggregationBase2ExponentialHistogram{MaxSize: 40, MaxScale: 20}`) вместо view Temporal с `SecondsBuckets` и view otelpgx |
+| `controlplane` | `sdkmetric.NewView(sdkmetric.Instrument{Kind: sdkmetric.InstrumentKindHistogram}, sdkmetric.Stream{Aggregation: ExponentialHistogram})` |
 | `delivery` | `with_view` с `Stream::builder().with_aggregation(Aggregation::Base2ExponentialHistogram { max_size: 40, max_scale: 20, record_min_max: true })` для `InstrumentKind::Histogram`; тип стабилен в `opentelemetry_sdk` 0.33 без `spec_unstable_metrics_views` |
 | `restaurants` | view `instrumentType: HISTOGRAM`, `aggregation: { type: EXPONENTIAL_HISTOGRAM, options: { maxSize: 40 } }` |
 | `payments` | `View(instrument_type=Histogram, aggregation=ExponentialBucketHistogramAggregation(max_size=40, max_scale=20))` |
@@ -42,7 +43,9 @@ Grafana Cloud считает native histogram как `0,25 × непустые �
 
 View применяется ко всем histograms, включая advice instruments: при exponential-агрегации advice `explicitBucketBoundaries` игнорируется, поэтому advice и константы границ удаляются, а не остаются мёртвым кодом.
 
-Temporal SDK (`contrib/opentelemetry`) пишет в MeterProvider процесса — его timers меняются тем же view. Watermill histograms тоже.
+Temporal SDK (`contrib/opentelemetry`) пишет в MeterProvider процесса — его timers меняются тем же view. Watermill (`components/metrics`) пишет в `prometheus.Registerer`, а bridge отдаёт его histograms мимо views; builder Watermill не задаёт native-опции Prometheus, поэтому его две histograms (~24 series) остаются классическими (`ClassicHistogram` в инвентаре).
+
+Go SDK создаёт stream на каждый совпавший view, поэтому в `orders` агрегация задаётся одной функцией-view на все histograms, которая заодно применяет allowlist attributes `db.client.operation.duration` otelpgx: отдельный view otelpgx дал бы второй stream. В `@opentelemetry/sdk-metrics` 3.1 у exponential-агрегации нет параметра `maxScale`, действует значение SDK 20.
 
 ## Запросы
 
@@ -57,7 +60,7 @@ Native histogram в Prometheus — одна series с базовым имене�
 
 Фильтр environment (`and on (job, instance) target_info…`) не меняется: он сопоставляет labels, а не тип сэмпла. Порядок важен: `histogram_count`/`histogram_fraction` применяются к уже отфильтрованному и просуммированному histogram, `sum` складывает native histograms поэлементно.
 
-Инвентарь (`ops/grafana/inventory`) различает `Histogram` (OTel SDK, native) и `ClassicHistogram` (`bff`, Prometheus scrape). `BaseName` снимает суффиксы только у классических; запрос с `_bucket`/`_count`/`_sum` для native histogram — ошибка генерации и теста, как сейчас неизвестная метрика. Scope получает `Count`, `SumOf`, `Fraction` рядом с `Rate`/`Over`/`Quantile`; строковые суффиксы в `rows.go`, `slo.go`, `service_alerts.go`, `platform.go`, `pool.go` уходят.
+Инвентарь (`ops/grafana/inventory`) различает `Histogram` (OTel SDK, native) и `ClassicHistogram` (`bff`, Watermill, Prometheus scrape). `BaseName` снимает суффиксы только у классических; запрос с `_bucket`/`_count`/`_sum` для native histogram — ошибка генерации и теста, как сейчас неизвестная метрика. Scope получает `Count`, `SumOf`, `Fraction` рядом с `Rate`/`Over`/`Quantile`; строковые суффиксы в `rows.go`, `slo.go`, `service_alerts.go`, `platform.go`, `pool.go` уходят.
 
 ## Latency SLI
 

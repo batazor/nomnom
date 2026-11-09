@@ -19,11 +19,6 @@ const PoolName = "orders"
 
 const poolInstrumentation = "nomnom/orders/postgres"
 
-// poolTimeBuckets: acquire from a warm pool takes microseconds, a new
-// connection through the pooler milliseconds, a saturated pool up to the
-// connect timeout; use time spans a Unit of Work.
-var poolTimeBuckets = []float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
-
 // poolMetrics exports OTel semconv db.client.connection.* for one pgx pool:
 // gauges from Pool.Stat at collection, histograms and counters from the pool
 // tracer hooks (acquire, release, connect).
@@ -64,16 +59,13 @@ func newPoolMetrics(meter metric.Meter, now func() time.Time) (*poolMetrics, err
 		metric.WithUnit("{timeout}"), metric.WithDescription("The number of connection timeouts that have occurred trying to obtain a connection from the pool."))
 	collect(err)
 	m.waitTime, err = meter.Float64Histogram("db.client.connection.wait_time",
-		metric.WithUnit("s"), metric.WithDescription("The time it took to obtain an open connection from the pool."),
-		metric.WithExplicitBucketBoundaries(poolTimeBuckets...))
+		metric.WithUnit("s"), metric.WithDescription("The time it took to obtain an open connection from the pool."))
 	collect(err)
 	m.useTime, err = meter.Float64Histogram("db.client.connection.use_time",
-		metric.WithUnit("s"), metric.WithDescription("The time between borrowing a connection and returning it to the pool."),
-		metric.WithExplicitBucketBoundaries(poolTimeBuckets...))
+		metric.WithUnit("s"), metric.WithDescription("The time between borrowing a connection and returning it to the pool."))
 	collect(err)
 	m.createTime, err = meter.Float64Histogram("db.client.connection.create_time",
-		metric.WithUnit("s"), metric.WithDescription("The time it took to create a new connection."),
-		metric.WithExplicitBucketBoundaries(poolTimeBuckets...))
+		metric.WithUnit("s"), metric.WithDescription("The time it took to create a new connection."))
 	collect(err)
 	m.count, err = meter.Int64ObservableUpDownCounter("db.client.connection.count",
 		metric.WithUnit("{connection}"), metric.WithDescription("The number of connections that are currently in state described by the state attribute."))

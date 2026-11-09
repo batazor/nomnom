@@ -27,7 +27,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0.05",
+            "expression": "$A > 0.05",
             "refId": "C",
             "type": "math"
           },
@@ -76,7 +76,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0.25",
+            "expression": "$A > 0.25",
             "refId": "C",
             "type": "math"
           },
@@ -125,7 +125,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003c 1",
+            "expression": "$A < 1",
             "refId": "C",
             "type": "math"
           },
@@ -174,7 +174,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0",
+            "expression": "$A > 0",
             "refId": "C",
             "type": "math"
           },
@@ -223,7 +223,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0",
+            "expression": "$A > 0",
             "refId": "C",
             "type": "math"
           },
@@ -272,7 +272,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0",
+            "expression": "$A > 0",
             "refId": "C",
             "type": "math"
           },
@@ -321,7 +321,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 60000",
+            "expression": "$A > 60000",
             "refId": "C",
             "type": "math"
           },
@@ -370,7 +370,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003c 1",
+            "expression": "$A < 1",
             "refId": "C",
             "type": "math"
           },
@@ -419,7 +419,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 1.073741824e+09",
+            "expression": "$A > 1.073741824e+09",
             "refId": "C",
             "type": "math"
           },
@@ -468,7 +468,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 0",
+            "expression": "$A > 0",
             "refId": "C",
             "type": "math"
           },
@@ -517,7 +517,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003e 2",
+            "expression": "$A > 2",
             "refId": "C",
             "type": "math"
           },
@@ -566,7 +566,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003c 1",
+            "expression": "$A < 1",
             "refId": "C",
             "type": "math"
           },
@@ -615,7 +615,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003c 1.2096e+06",
+            "expression": "$A < 1.2096e+06",
             "refId": "C",
             "type": "math"
           },
@@ -664,7 +664,7 @@
         {
           "datasourceUid": "__expr__",
           "model": {
-            "expression": "$A \u003c 1",
+            "expression": "$A < 1",
             "refId": "C",
             "type": "math"
           },

@@ -18,9 +18,9 @@ Overview-dashboards показывают ошибки и latency, но не от
 
 | SLI | Плохое событие | Метрика |
 | --- | --- | --- |
-| Availability (контексты) | входящий gRPC-вызов с техническим кодом: transport (`CANCELLED`, `DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`) или application (`UNKNOWN`, `UNIMPLEMENTED`, `INTERNAL`, `DATA_LOSS`) | `rpc_server_call_duration_seconds_count` |
+| Availability (контексты) | входящий gRPC-вызов с техническим кодом: transport (`CANCELLED`, `DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`) или application (`UNKNOWN`, `UNIMPLEMENTED`, `INTERNAL`, `DATA_LOSS`) | `histogram_count` по `rpc_server_call_duration_seconds` |
 | Availability (BFF) | клиентский GraphQL-запрос с ошибкой | `router_http_requests_error_total` / `router_http_requests_total`, `wg_subgraph_name=""` |
-| Latency | вызов дольше границы bucket | `rpc_server_call_duration_seconds_bucket{le=…}` / `_count` |
+| Latency | вызов дольше порога | `1 - histogram_fraction(0, порог, rpc_server_call_duration_seconds)` |
 
 Business rejection (`NOT_FOUND`, `FAILED_PRECONDITION`, …) — корректный ответ и бюджет не тратит. Kafka, Temporal и Outbox — асинхронные пути со своими сигналами (lag, age, DLQ); их SLO (freshness) — отдельное решение.
 
@@ -34,7 +34,7 @@ Business rejection (`NOT_FOUND`, `FAILED_PRECONDITION`, …) — коррект�
 | `delivery` | 99.5% | 95% вызовов ≤ 0.5 s |
 | `bff` | 99.5% | не принят: границы buckets Cosmo Router не зафиксированы |
 
-Оформление заказа и оплата — критический путь пользователя, отсюда 99.9%. Порог latency — граница общих buckets (`SecondsBuckets`, одинаковы во всех контекстах): доля вызовов ниже границы считается точно, без интерполяции `histogram_quantile`. Цели задаются явно в `Options.SLO` (`ops/grafana/overview/services.go`); сервис без SLO не получает row и alerts.
+Оформление заказа и оплата — критический путь пользователя, отсюда 99.9%. `rpc_server_call_duration_seconds` — native histogram (base2 exponential, ADR 9). Порог latency — степень двойки: при scale ≥ 0 это граница бакета, поэтому `histogram_fraction` считает долю вызовов не дольше порога точно, без интерполяции внутри бакета; порог не степень двойки генератор отвергает (`LatencySLO.Threshold`). Цели задаются явно в `Options.SLO` (`ops/grafana/overview/services.go`); сервис без SLO не получает row и alerts.
 
 **Error budget** = 1 − цель. Burn rate — доля плохих событий за окно, делённая на бюджет: 1 — бюджет кончится ровно за 30d.
 

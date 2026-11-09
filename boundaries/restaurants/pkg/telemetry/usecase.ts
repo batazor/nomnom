@@ -14,11 +14,6 @@ import {
 
 export const USECASE_INSTRUMENTATION = "nomnom.restaurants.usecase";
 
-/** Seconds, the same boundaries as orders. */
-export const USECASE_DURATION_BUCKETS = [
-  0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30,
-];
-
 export type UseCaseKind = "command" | "query";
 
 /** Stable snake_case name, e.g. `accept_order`, and its kind. */
@@ -104,7 +99,6 @@ export class UseCaseTelemetry {
       .createHistogram("nomnom.usecase.duration", {
         description: "Duration of one application use case call.",
         unit: "s",
-        advice: { explicitBucketBoundaries: USECASE_DURATION_BUCKETS },
       });
   }
 

@@ -9,7 +9,8 @@ an OTLP exporter over ``spec.telemetry.protocol`` (``grpc`` or ``http/protobuf``
   ``infrastructure/repository/statements.py``);
 * metrics — ``MeterProvider`` with a periodic OTLP reader every
   ``spec.metrics.exportInterval`` and the CPython runtime metrics, only when
-  ``spec.metrics.enabled``.
+  ``spec.metrics.enabled``; every histogram is a base2 exponential histogram
+  (Grafana Cloud stores it as a native histogram).
 
 Both providers share one resource (``service.namespace=nomnom``, ``service.name`` of the
 process, ``service.instance.id`` from ``POD_NAME``, ``spec.telemetry.resourceAttributes``);
@@ -27,8 +28,9 @@ from urllib.parse import urlparse
 
 from opentelemetry import metrics, trace
 from opentelemetry.context import Context
-from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics import Histogram, MeterProvider
 from opentelemetry.sdk.metrics.export import MetricExporter, MetricReader
+from opentelemetry.sdk.metrics.view import ExponentialBucketHistogramAggregation, View
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter
@@ -43,7 +45,6 @@ from opentelemetry.util.types import Attributes
 
 from pkg.config import LogLevel, TelemetrySettings
 
-from .buckets import SECONDS_BUCKETS
 from .logs import JsonFormatter, configure_logging, redact
 from .propagation import (
     BAGGAGE_ALLOWLIST,
@@ -55,7 +56,8 @@ from .runtime import register_runtime_metrics
 
 __all__ = [
     "BAGGAGE_ALLOWLIST",
-    "SECONDS_BUCKETS",
+    "HISTOGRAM_MAX_SCALE",
+    "HISTOGRAM_MAX_SIZE",
     "SERVICE_NAMESPACE",
     "JsonFormatter",
     "Telemetry",
@@ -90,6 +92,11 @@ SPAN_SCHEDULE_DELAY_MS = 5000
 EXPORT_TIMEOUT_S = 3.0
 SPAN_EXPORT_TIMEOUT_MS = 3_000
 METRIC_EXPORT_TIMEOUT_MS = 3_000
+# Base2 exponential histograms (ADR 9): Grafana Cloud хранит их как native histogram и
+# считает 0,25 series за непустой бакет; 40 бакетов — не больше 10 billable series.
+# Значения одинаковы во всех сервисах: dashboards и latency SLO рассчитаны на одну форму.
+HISTOGRAM_MAX_SIZE = 40
+HISTOGRAM_MAX_SCALE = 20
 # Пути сигналов OTLP/HTTP относительно spec.telemetry.endpoint.
 HTTP_TRACES_PATH = "v1/traces"
 HTTP_METRICS_PATH = "v1/metrics"
@@ -181,8 +188,22 @@ def create_tracer_provider(resource: Resource, processor: SpanProcessor) -> Trac
 
 
 def create_meter_provider(resource: Resource, readers: Sequence[MetricReader]) -> MeterProvider:
-    """Meter provider of the process with ``readers`` and the CPython runtime metrics."""
-    provider = MeterProvider(resource=resource, metric_readers=list(readers))
+    """Meter provider of the process with ``readers`` and the CPython runtime metrics.
+
+    Every histogram instrument is aggregated as a base2 exponential histogram.
+    """
+    provider = MeterProvider(
+        resource=resource,
+        metric_readers=list(readers),
+        views=[
+            View(
+                instrument_type=Histogram,
+                aggregation=ExponentialBucketHistogramAggregation(
+                    max_size=HISTOGRAM_MAX_SIZE, max_scale=HISTOGRAM_MAX_SCALE
+                ),
+            )
+        ],
+    )
     register_runtime_metrics(provider.get_meter("nomnom.payments.runtime"))
     return provider
 

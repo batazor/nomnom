@@ -26,9 +26,6 @@ import { SpanKind, TRACER_NAME } from "../../pkg/telemetry/tracing.ts";
 // the command document, filters, documents and replies are never read
 // (docs/observability.md, "PostgreSQL и MongoDB").
 
-/** Semconv advice for db.client.operation.duration (seconds). */
-const OPERATION_BUCKETS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10];
-
 /** Handshake and topology commands: not application operations. */
 const IGNORED_COMMANDS = new Set([
   "hello",
@@ -81,7 +78,6 @@ export class DatabaseCommandTelemetry {
     this.#duration = meter.createHistogram("db.client.operation.duration", {
       description: "Duration of database client operations.",
       unit: "s",
-      advice: { explicitBucketBoundaries: OPERATION_BUCKETS },
     });
   }
 

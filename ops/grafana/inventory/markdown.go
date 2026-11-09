@@ -23,7 +23,7 @@ func Markdown() string {
 | ожидается | Метрика принята архитектурой (semconv, ADR, решение по Watermill), но не экспортируется или не доставляется. |
 
 Имена приведены в виде Prometheus после OTLP-трансляции (точки → подчёркивания, unit suffix, ` + "`_total`" + ` для
-монотонных counters); Grafana Cloud добавляет suffixes при OTLP ingestion. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя; запросы используют ` + "`_bucket`/`_count`/`_sum`" + `.
+монотонных counters); Grafana Cloud добавляет suffixes при OTLP ingestion. Метрики Prometheus bridge (Watermill) не меняются. Для histogram указано базовое имя. Тип histogram — base2 exponential histogram OTel SDK и OBI, в Grafana Cloud native histogram без суффиксов: запросы используют ` + "`histogram_count`, `histogram_sum`, `histogram_quantile`, `histogram_fraction`" + ` по базовому имени. Тип classic histogram (Cosmo Router, Watermill через Prometheus bridge, Prometheus scrape) запрашивается через ` + "`_bucket`/`_count`/`_sum`" + `.
 
 ## Состояние на дату генерации
 

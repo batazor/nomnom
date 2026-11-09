@@ -227,3 +227,37 @@ func TestCollectsRuntimeMetricsWithTheProcessResource(t *testing.T) {
 	assert.Equal(t, "test", attrs["deployment.environment.name"])
 	assert.Equal(t, "controlplane-0", attrs["service.instance.id"])
 }
+
+// Histograms процесса — base2 exponential не больше чем с ExponentialHistogram.MaxSize бакетами.
+func TestHistogramsAreExponential(t *testing.T) {
+	res, err := telemetry.Resource(context.Background(), telemetryConfig("", config.TelemetryProtocolGRPC, false).Telemetry)
+	require.NoError(t, err)
+	reader := sdkmetric.NewManualReader()
+	tel, err := telemetry.New(context.Background(), res, func() (sdkmetric.Reader, error) { return reader, nil })
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
+
+	duration, err := tel.Meter("test").Float64Histogram("rpc.server.call.duration")
+	require.NoError(t, err)
+	for _, seconds := range []float64{0.001, 0.02, 0.3, 4, 120} {
+		duration.Record(context.Background(), seconds)
+	}
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+	var found bool
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "rpc.server.call.duration" {
+				continue
+			}
+			data, ok := m.Data.(metricdata.ExponentialHistogram[float64])
+			require.True(t, ok, "aggregation %T", m.Data)
+			require.Len(t, data.DataPoints, 1)
+			assert.EqualValues(t, 5, data.DataPoints[0].Count)
+			assert.LessOrEqual(t, len(data.DataPoints[0].PositiveBucket.Counts), int(telemetry.ExponentialHistogram.MaxSize))
+			found = true
+		}
+	}
+	assert.True(t, found, "rpc.server.call.duration")
+}

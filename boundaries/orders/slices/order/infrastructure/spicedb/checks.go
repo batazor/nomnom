@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"nomnom/orders/pkg/authz"
-	"nomnom/orders/pkg/telemetry"
 )
 
 const checkInstrumentation = "nomnom/orders/spicedb"
@@ -46,8 +45,7 @@ func newCheckMetrics() checkMetrics {
 		otel.Handle(err)
 	}
 	duration, err := meter.Float64Histogram("nomnom.authz.check.duration",
-		metric.WithUnit("s"), metric.WithDescription("Duration of one authorization check."),
-		metric.WithExplicitBucketBoundaries(telemetry.SecondsBuckets...))
+		metric.WithUnit("s"), metric.WithDescription("Duration of one authorization check."))
 	if err != nil {
 		otel.Handle(err)
 	}

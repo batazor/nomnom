@@ -57,8 +57,24 @@ var DBOperationDurationAttributes = []attribute.Key{
 	semconv.DBSystemNameKey, semconv.DBOperationNameKey, semconv.DBCollectionNameKey, semconv.ErrorTypeKey,
 }
 
-// SecondsBuckets — границы histograms длительностей в секундах.
-var SecondsBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300}
+// ExponentialHistogram — агрегация всех histograms процесса (ADR 9): base2
+// exponential, в Grafana Cloud — native histogram. MaxSize 40 ограничивает
+// billable series histogram десятью (0,25 за непустой бакет); MaxScale — значение SDK.
+var ExponentialHistogram = sdkmetric.AggregationBase2ExponentialHistogram{MaxSize: 40, MaxScale: 20}
+
+// histogramView задаёт ExponentialHistogram каждой histogram, а для
+// db.client.operation.duration otelpgx ещё и allowlist attributes. Один view на
+// histogram: SDK создаёт stream на каждый совпавший view, второй дал бы дубликат.
+func histogramView(i sdkmetric.Instrument) (sdkmetric.Stream, bool) {
+	if i.Kind != sdkmetric.InstrumentKindHistogram {
+		return sdkmetric.Stream{}, false
+	}
+	stream := sdkmetric.Stream{Name: i.Name, Description: i.Description, Unit: i.Unit, Aggregation: ExponentialHistogram}
+	if i.Name == DBOperationDurationMetric && i.Scope.Name == PgxScope {
+		stream.AttributeFilter = attribute.NewAllowKeysFilter(DBOperationDurationAttributes...)
+	}
+	return stream, true
+}
 
 // Metrics — metrics pipeline процесса. Registry принимает метрики библиотек на
 // Prometheus client; MeterProvider собирает их через bridge вместе с OTel instruments.
@@ -175,22 +191,15 @@ func New(ctx context.Context, cfg config.TelemetryConfig, newReader ReaderFactor
 	options := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(sdkmetric.NewView(sdkmetric.Instrument{Name: "system.*"}, sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}})),
-		// otelpgx: db.client.operation.duration — только с attributes инвентаря
-		// (section db); собственный counter db.client.operation.errors не входит
-		// в semconv и в ops/semconv, поэтому отбрасывается.
-		sdkmetric.WithView(sdkmetric.NewView(
-			sdkmetric.Instrument{Name: DBOperationDurationMetric, Scope: instrumentation.Scope{Name: PgxScope}},
-			sdkmetric.Stream{AttributeFilter: attribute.NewAllowKeysFilter(DBOperationDurationAttributes...)},
-		)),
+		// Все histograms, включая timers Temporal SDK и db.client.operation.duration
+		// otelpgx (только с attributes инвентаря, section db). Histograms Watermill
+		// приходят через Prometheus bridge мимо views и остаются классическими.
+		sdkmetric.WithView(histogramView),
+		// Собственный counter otelpgx db.client.operation.errors не входит в semconv
+		// и в ops/semconv, поэтому отбрасывается.
 		sdkmetric.WithView(sdkmetric.NewView(
 			sdkmetric.Instrument{Name: "db.client.operation.errors", Scope: instrumentation.Scope{Name: PgxScope}},
 			sdkmetric.Stream{Aggregation: sdkmetric.AggregationDrop{}},
-		)),
-		// Timers Temporal SDK — histograms в секундах без своих границ; дефолтные
-		// границы SDK рассчитаны на миллисекунды.
-		sdkmetric.WithView(sdkmetric.NewView(
-			sdkmetric.Instrument{Kind: sdkmetric.InstrumentKindHistogram, Scope: instrumentation.Scope{Name: TemporalMeterName}},
-			sdkmetric.Stream{Aggregation: sdkmetric.AggregationExplicitBucketHistogram{Boundaries: SecondsBuckets}},
 		)),
 	}
 	if newReader != nil {

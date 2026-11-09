@@ -12,9 +12,6 @@ INSTRUMENTATION = "nomnom.payments.event_store"
 
 _FROM_SNAPSHOT = "nomnom.event_store.from_snapshot"
 
-# Поток обычного заказа — 7-10 событий; границы бакетов различают хвост и весь поток.
-REPLAYED_EVENTS_BUCKETS = (0, 1, 2, 3, 5, 8, 13, 21, 34, 55)
-
 
 class ReplayMetrics:
     """``nomnom.payments.event_store.replayed_events``.
@@ -29,7 +26,6 @@ class ReplayMetrics:
             "nomnom.payments.event_store.replayed_events",
             unit="{event}",
             description="Stream events applied on loading a Payment.",
-            explicit_bucket_boundaries_advisory=REPLAYED_EVENTS_BUCKETS,
         )
 
     def loaded(self, replayed_events: int, *, from_snapshot: bool) -> None:

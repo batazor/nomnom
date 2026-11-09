@@ -23,7 +23,8 @@ import {
 } from "@opentelemetry/api";
 import {
   type DataPoint,
-  type Histogram,
+  DataPointType,
+  type ExponentialHistogram,
   MetricReader,
   type ResourceMetrics,
 } from "@opentelemetry/sdk-metrics";
@@ -45,20 +46,14 @@ import {
   KafkaConsumerWorker,
 } from "../infrastructure/kafka/consumer.ts";
 import { DatabaseCommandTelemetry } from "../infrastructure/repository/command-telemetry.ts";
-import {
-  DatabaseUnitOfWork,
-  UOW_DURATION_BUCKETS,
-} from "../infrastructure/repository/unit-of-work.ts";
+import { DatabaseUnitOfWork } from "../infrastructure/repository/unit-of-work.ts";
 import { checkPermissionRequest } from "../infrastructure/spicedb/access-control.ts";
-import {
-  AUTHZ_DURATION_BUCKETS,
-  ObservedPermissionsClient,
-} from "../infrastructure/spicedb/check-telemetry.ts";
+import { ObservedPermissionsClient } from "../infrastructure/spicedb/check-telemetry.ts";
 import { loadTelemetryConfig, specSchema } from "../pkg/config/config.ts";
 import type { Outbox } from "../pkg/outbox/outbox.ts";
+import { HISTOGRAM_MAX_SIZE } from "../pkg/telemetry/histograms.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../pkg/telemetry/resource.ts";
-import { RPC_DURATION_BUCKETS } from "../pkg/telemetry/rpc.ts";
 import { startTelemetry } from "../pkg/telemetry/telemetry.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import {
@@ -67,11 +62,7 @@ import {
   injectContext,
   withSpan,
 } from "../pkg/telemetry/tracing.ts";
-import {
-  command,
-  USECASE_DURATION_BUCKETS,
-  UseCaseTelemetry,
-} from "../pkg/telemetry/usecase.ts";
+import { command, UseCaseTelemetry } from "../pkg/telemetry/usecase.ts";
 import { NotFoundError } from "../slices/restaurantorder/applications/failure/failure.ts";
 import { createTestDatabase } from "./support/database.ts";
 import {
@@ -127,7 +118,7 @@ const metricNamed = (resourceMetrics: ResourceMetrics, name: string) =>
 
 const pointsOf = (resourceMetrics: ResourceMetrics, name: string) =>
   (metricNamed(resourceMetrics, name)?.dataPoints ?? []) as DataPoint<
-    Histogram | number
+    ExponentialHistogram | number
   >[];
 
 const spanNamed = (exporter: InMemorySpanExporter, name: string) => {
@@ -318,9 +309,10 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
       "rpc.method": method,
       "rpc.response.status_code": "OK",
     });
-    assert.deepEqual(
-      (rpcPoint.value as Histogram).buckets.boundaries,
-      RPC_DURATION_BUCKETS,
+    assert.equal(rpc?.dataPointType, DataPointType.EXPONENTIAL_HISTOGRAM);
+    assert.ok(
+      (rpcPoint.value as ExponentialHistogram).positive.bucketCounts.length <=
+        HISTOGRAM_MAX_SIZE,
     );
     const [useCasePoint] = pointsOf(metrics, "nomnom.usecase.duration");
     assert.ok(useCasePoint);
@@ -329,9 +321,9 @@ test("one trace spans the gRPC call, the use case and, through the Outbox, the K
       "nomnom.usecase.kind": "command",
       "nomnom.outcome": "success",
     });
-    assert.deepEqual(
-      (useCasePoint.value as Histogram).buckets.boundaries,
-      USECASE_DURATION_BUCKETS,
+    assert.equal(
+      metricNamed(metrics, "nomnom.usecase.duration")?.dataPointType,
+      DataPointType.EXPONENTIAL_HISTOGRAM,
     );
   } finally {
     await telemetry.shutdown();
@@ -819,18 +811,16 @@ test("Unit of Work transactions, duration and driver retries by outcome and reas
     assert.deepEqual(
       durations.map((point) => [
         point.attributes["nomnom.outcome"],
-        (point.value as Histogram).count,
+        (point.value as ExponentialHistogram).count,
       ]),
       [
         ["committed", 2],
         ["rolled_back", 1],
       ],
     );
-    const [committed] = durations;
-    assert.ok(committed);
-    assert.deepEqual(
-      (committed.value as Histogram).buckets.boundaries,
-      UOW_DURATION_BUCKETS,
+    assert.equal(
+      metricNamed(metrics, "nomnom.uow.duration")?.dataPointType,
+      DataPointType.EXPONENTIAL_HISTOGRAM,
     );
   } finally {
     await telemetry.shutdown();
@@ -896,7 +886,7 @@ test("SpiceDB checks record nomnom.authz.checks and duration by permission, reso
         point.attributes,
         name === "nomnom.authz.checks"
           ? point.value
-          : (point.value as Histogram).count,
+          : (point.value as ExponentialHistogram).count,
       ]);
     const expected = [
       [
@@ -934,11 +924,9 @@ test("SpiceDB checks record nomnom.authz.checks and duration by permission, reso
     ];
     assert.deepEqual(labels("nomnom.authz.checks"), expected);
     assert.deepEqual(labels("nomnom.authz.check.duration"), expected);
-    const [duration] = pointsOf(metrics, "nomnom.authz.check.duration");
-    assert.ok(duration);
-    assert.deepEqual(
-      (duration.value as Histogram).buckets.boundaries,
-      AUTHZ_DURATION_BUCKETS,
+    assert.equal(
+      metricNamed(metrics, "nomnom.authz.check.duration")?.dataPointType,
+      DataPointType.EXPONENTIAL_HISTOGRAM,
     );
   } finally {
     await telemetry.shutdown();

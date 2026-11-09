@@ -82,7 +82,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum(histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "gRPC",
                         "range": true
                       }
@@ -146,7 +146,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "1 - (1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+                        "expr": "1 - (1 - histogram_fraction(0, 0.5, sum(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval]))))",
                         "legendFormat": "SLI",
                         "range": true
                       }
@@ -230,7 +230,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "1 - (1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d]))) / 0.05",
+                        "expr": "1 - (1 - histogram_fraction(0, 0.5, sum(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])))) / 0.05",
                         "legendFormat": "remaining",
                         "range": true
                       }
@@ -294,7 +294,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "(1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h]))) / 0.05",
+                        "expr": "(1 - histogram_fraction(0, 0.5, sum(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])))) / 0.05",
                         "legendFormat": "1h",
                         "range": true
                       }
@@ -314,7 +314,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "(1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h]))) / 0.05",
+                        "expr": "(1 - histogram_fraction(0, 0.5, sum(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])))) / 0.05",
                         "legendFormat": "6h",
                         "range": true
                       }
@@ -334,7 +334,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "(1 - sum(increase(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", le=\"0.5\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d]))) / 0.05",
+                        "expr": "(1 - histogram_fraction(0, 0.5, sum(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])))) / 0.05",
                         "legendFormat": "3d",
                         "range": true
                       }
@@ -674,7 +674,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum(histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "gRPC transport/availability",
                         "range": true
                       }
@@ -694,7 +694,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum(histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "gRPC application",
                         "range": true
                       }
@@ -714,7 +714,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"INVALID_ARGUMENT|NOT_FOUND|ALREADY_EXISTS|PERMISSION_DENIED|FAILED_PRECONDITION|ABORTED|OUT_OF_RANGE|UNAUTHENTICATED\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum(histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"INVALID_ARGUMENT|NOT_FOUND|ALREADY_EXISTS|PERMISSION_DENIED|FAILED_PRECONDITION|ABORTED|OUT_OF_RANGE|UNAUTHENTICATED\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "gRPC business rejection",
                         "range": true
                       }
@@ -762,7 +762,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.response.status_code%3D~%5C%22CANCELLED%7CDEADLINE_EXCEEDED%7CRESOURCE_EXHAUSTED%7CUNAVAILABLE%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.response.status_code%3D~%5C%22CANCELLED%7CDEADLINE_EXCEEDED%7CRESOURCE_EXHAUSTED%7CUNAVAILABLE%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -780,7 +780,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.response.status_code%3D~%5C%22UNKNOWN%7CUNIMPLEMENTED%7CINTERNAL%7CDATA_LOSS%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.response.status_code%3D~%5C%22UNKNOWN%7CUNIMPLEMENTED%7CINTERNAL%7CDATA_LOSS%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -798,7 +798,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.response.status_code%3D~%5C%22INVALID_ARGUMENT%7CNOT_FOUND%7CALREADY_EXISTS%7CPERMISSION_DENIED%7CFAILED_PRECONDITION%7CABORTED%7COUT_OF_RANGE%7CUNAUTHENTICATED%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.response.status_code%3D~%5C%22INVALID_ARGUMENT%7CNOT_FOUND%7CALREADY_EXISTS%7CPERMISSION_DENIED%7CFAILED_PRECONDITION%7CABORTED%7COUT_OF_RANGE%7CUNAUTHENTICATED%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -981,7 +981,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum by (db_operation_name) (histogram_count(rate(db_client_operation_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "{{db_operation_name}}",
                         "range": true
                       }
@@ -1001,7 +1001,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (error_type) (rate(db_client_operation_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\", error_type!=\"\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum by (error_type) (histogram_count(rate(db_client_operation_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\", error_type!=\"\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "error {{error_type}}",
                         "range": true
                       }
@@ -1049,7 +1049,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.error.type%3D%5C%22${__field.labels.error_type}%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.error.type%3D%5C%22${__field.labels.error_type}%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -1084,7 +1084,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.95, sum by (db_operation_name, le) (rate(db_client_operation_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
+                        "expr": "histogram_quantile(0.95, sum by (db_operation_name) (rate(db_client_operation_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", db_system_name=\"mongodb\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "{{db_operation_name}}",
                         "range": true
                       }
@@ -1132,7 +1132,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.db.operation.name%3D%5C%22${__field.labels.db_operation_name}%5C%22+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dclient+%26%26+span.db.system.name%3D%5C%22mongodb%5C%22+%26%26+span.db.operation.name%3D%5C%22${__field.labels.db_operation_name}%5C%22+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -1231,7 +1231,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}) / sum(rate(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
+                        "expr": "sum(histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}) / sum(histogram_count(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval])) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"})",
                         "legendFormat": "gRPC",
                         "range": true
                       }
@@ -1359,7 +1359,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.5, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
+                        "expr": "histogram_quantile(0.5, sum(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "gRPC p50",
                         "range": true
                       }
@@ -1379,7 +1379,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.95, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
+                        "expr": "histogram_quantile(0.95, sum(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "gRPC p95",
                         "range": true
                       }
@@ -1399,7 +1399,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
+                        "expr": "histogram_quantile(0.99, sum(rate(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", instance=~\"$service_instance\"}[$__rate_interval]) and on (job, instance) target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"}))",
                         "legendFormat": "gRPC p99",
                         "range": true
                       }
@@ -1447,7 +1447,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.method+%21%3D+nil+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.method+%21%3D+nil+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -1465,7 +1465,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.method+%21%3D+nil+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.method+%21%3D+nil+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -1483,7 +1483,7 @@
                         "value": [
                           {
                             "title": "Traces этой серии",
-                            "url": "/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.method+%21%3D+nil+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                            "url": "/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+kind%3Dserver+%26%26+span.rpc.method+%21%3D+nil+%26%26+duration+%3E%3D+${__value.raw}s%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
                             "targetBlank": true
                           }
                         ]
@@ -1902,7 +1902,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(restaurants|restaurants-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) \u003e 0",
+                        "expr": "sum by (nomnom_fsm_from_state, nomnom_fsm_to_state) ((max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"}[$__range]) - (nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"} offset $__range or 0 * max_over_time(nomnom_fsm_transitions_total{job=~\"nomnom/(restaurants|restaurants-consumer)\", nomnom_fsm_aggregate_type=\"restaurant_order\", nomnom_fsm_result=\"applied\", nomnom_fsm_trigger!~\"report_delay\"}[$__range]))) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(restaurants|restaurants-consumer)\", deployment_environment_name=~\"$environment\"}[$__range])) > 0",
                         "instant": true,
                         "legendFormat": "",
                         "range": false
@@ -1924,7 +1924,7 @@
             "spec": {
               "options": {
                 "editorMode": "code",
-                "getOption": "const links = [];\nconst names = new Set();\nfor (const frame of context.panel.data.series) {\n  const field = frame.fields.find((candidate) =\u003e candidate.type === \"number\");\n  const source = field.labels.nomnom_fsm_from_state;\n  const target = field.labels.nomnom_fsm_to_state;\n  links.push({ source, target, value: field.values[field.values.length - 1] });\n  names.add(source);\n  names.add(target);\n}\nreturn {\n  animation: false,\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: \"#d8d9da\" },\n    data: Array.from(names).map((name) =\u003e ({ name })),\n    links,\n  }],\n};"
+                "getOption": "const links = [];\nconst names = new Set();\nfor (const frame of context.panel.data.series) {\n  const field = frame.fields.find((candidate) => candidate.type === \"number\");\n  const source = field.labels.nomnom_fsm_from_state;\n  const target = field.labels.nomnom_fsm_to_state;\n  links.push({ source, target, value: field.values[field.values.length - 1] });\n  names.add(source);\n  names.add(target);\n}\nreturn {\n  animation: false,\n  backgroundColor: \"transparent\",\n  tooltip: { trigger: \"item\" },\n  series: [{\n    type: \"sankey\",\n    nodeAlign: \"left\",\n    emphasis: { focus: \"adjacency\" },\n    lineStyle: { color: \"gradient\", curveness: 0.5 },\n    label: { color: \"#d8d9da\" },\n    data: Array.from(names).map((name) => ({ name })),\n    links,\n  }],\n};"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2020,7 +2020,7 @@
             "spec": {
               "options": {
                 "mode": "markdown",
-                "content": "# Restaurants\n\n## Сервис\n\n| | |\n| --- | --- |\n| Процессы | `restaurants`, `restaurants-consumer` |\n| Язык | `nodejs` |\n| База данных | `mongodb` |\n| Consumer group | `restaurants` |\n| DLQ | `restaurants.v1.restaurant-order-events.dlq` |\n\n## Сигналы\n\n- [Logs (Loki)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${logs}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22${logs}%22%7D%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D+%7C+service_version%3D~%5C%22${version:regex}%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces (Tempo)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces: errors](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Profiles (Pyroscope)](/explore?schemaVersion=1\u0026panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${profiles}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22${profiles}%22%7D%2C%22labelSelector%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D%22%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22queryType%22%3A%22profile%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n\n## Документация\n\n- [Dashboard README](https://github.com/batazor/nomnom/blob/main/boundaries/restaurants/ops/grafana/README.md)\n- [Metric inventory](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md)\n\n## Соседние dashboards\n\n- [Platform / Overview](/d/nomnom-platform-overview)\n- [MongoDB server (community 7353)](https://grafana.com/grafana/dashboards/7353)\n- [Kafka cluster (community 7589)](https://grafana.com/grafana/dashboards/7589)\n\n"
+                "content": "# Restaurants\n\n## Сервис\n\n| | |\n| --- | --- |\n| Процессы | `restaurants`, `restaurants-consumer` |\n| Язык | `nodejs` |\n| База данных | `mongodb` |\n| Consumer group | `restaurants` |\n| DLQ | `restaurants.v1.restaurant-order-events.dlq` |\n\n## Сигналы\n\n- [Logs (Loki)](/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${logs}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22${logs}%22%7D%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D+%7C+service_version%3D~%5C%22${version:regex}%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces (Tempo)](/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Traces: errors](/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${traces}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22${traces}%22%7D%2C%22limit%22%3A20%2C%22query%22%3A%22%7Bresource.service.name%3D~%5C%22${service:pipe}%5C%22+%26%26+resource.deployment.environment.name%3D~%5C%22$environment%5C%22+%26%26+status%3Derror%7D%22%2C%22queryType%22%3A%22traceql%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n- [Profiles (Pyroscope)](/explore?schemaVersion=1&panes=%7B%22nomnom%22%3A%7B%22datasource%22%3A%22${profiles}%22%2C%22queries%22%3A%5B%7B%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22${profiles}%22%7D%2C%22labelSelector%22%3A%22%7Bservice_name%3D~%5C%22${service:pipe}%5C%22%2C+deployment_environment_name%3D~%5C%22$environment%5C%22%7D%22%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22queryType%22%3A%22profile%22%2C%22refId%22%3A%22A%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D)\n\n## Документация\n\n- [Dashboard README](https://github.com/batazor/nomnom/blob/main/boundaries/restaurants/ops/grafana/README.md)\n- [Metric inventory](https://github.com/batazor/nomnom/blob/main/docs/observability/metric-inventory.md)\n\n## Соседние dashboards\n\n- [Platform / Overview](/d/nomnom-platform-overview)\n- [MongoDB server (community 7353)](https://grafana.com/grafana/dashboards/7353)\n- [Kafka cluster (community 7589)](https://grafana.com/grafana/dashboards/7589)\n\n"
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2052,7 +2052,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "1 - (sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[$__rate_interval]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+                        "expr": "1 - (sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[$__rate_interval])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])) / sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[$__rate_interval])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
                         "legendFormat": "SLI",
                         "range": true
                       }
@@ -2136,7 +2136,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "1 - (sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[30d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d]))) / 0.005",
+                        "expr": "1 - (sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[30d])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d])) / sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[30d])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[30d]))) / 0.005",
                         "legendFormat": "remaining",
                         "range": true
                       }
@@ -2200,7 +2200,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "(sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[1h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h]))) / 0.005",
+                        "expr": "(sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[1h])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h])) / sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[1h])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[1h]))) / 0.005",
                         "legendFormat": "1h",
                         "range": true
                       }
@@ -2220,7 +2220,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "(sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[6h]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h]))) / 0.005",
+                        "expr": "(sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[6h])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h])) / sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[6h])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[6h]))) / 0.005",
                         "legendFormat": "6h",
                         "range": true
                       }
@@ -2240,7 +2240,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "(sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])) / sum(increase(rpc_server_call_duration_seconds_count{job=~\"nomnom/(${service:pipe})\"}[3d]) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d]))) / 0.005",
+                        "expr": "(sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\", rpc_response_status_code=~\"CANCELLED|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|UNAVAILABLE|UNKNOWN|UNIMPLEMENTED|INTERNAL|DATA_LOSS\"}[3d])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d])) / sum(histogram_count(increase(rpc_server_call_duration_seconds{job=~\"nomnom/(${service:pipe})\"}[3d])) and on (job, instance) max_over_time(target_info{job=~\"nomnom/(${service:pipe})\", deployment_environment_name=~\"$environment\"}[3d]))) / 0.005",
                         "legendFormat": "3d",
                         "range": true
                       }

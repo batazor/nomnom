@@ -2,13 +2,6 @@ import { type Meter, metrics } from "@opentelemetry/api";
 
 import type { ConsumerMetrics, MessageLabels } from "./processor.ts";
 
-const DURATION_BUCKETS = [
-  0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30,
-];
-const AGE_BUCKETS = [
-  0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300, 900, 3600,
-];
-
 // Attributes из registry ops/semconv (make semconv-check), те же, что у orders-consumer.
 const HANDLER = "nomnom.messaging.handler";
 const EVENT_TYPE = "nomnom.event.type";
@@ -33,7 +26,6 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
         description:
           "Processing of one inbound message, including retries; error_class only on failure.",
         unit: "s",
-        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
       },
     );
     this.#retries = meter.createCounter("nomnom.messaging.retry.attempts", {
@@ -52,7 +44,6 @@ export class OtelConsumerMetrics implements ConsumerMetrics {
     this.#age = meter.createHistogram("nomnom.messaging.message.age", {
       description: "now - occurred_at when processing starts.",
       unit: "s",
-      advice: { explicitBucketBoundaries: AGE_BUCKETS },
     });
   }
 

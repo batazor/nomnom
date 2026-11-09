@@ -172,7 +172,6 @@ class PoolMetricsTest(unittest.TestCase):
         self.assertEqual(wait.count, 1)
         self.assertAlmostEqual(wait.sum, 0.02)
         self.assertEqual(wait.attributes, {"db.client.connection.pool.name": "payments"})
-        self.assertEqual(wait.explicit_bounds[0], 0.0005)
         (use,) = cast(list[HistogramDataPoint], points["db.client.connection.use_time"])
         self.assertAlmostEqual(use.sum, 0.3)
         self.assertNotIn("db.client.connection.timeouts", points)

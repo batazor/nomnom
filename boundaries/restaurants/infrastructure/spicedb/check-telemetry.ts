@@ -11,11 +11,6 @@ import type { PermissionsClient } from "./client.ts";
 
 export const AUTHZ_INSTRUMENTATION = "nomnom.restaurants.authz";
 
-/** Seconds: a check is one SpiceDB round trip bounded by its deadline. */
-export const AUTHZ_DURATION_BUCKETS = [
-  0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5,
-];
-
 // Attributes from the registry ops/semconv (make semconv-check).
 const PERMISSION = "nomnom.authz.permission";
 const RESOURCE_TYPE = "nomnom.authz.resource_type";
@@ -47,7 +42,6 @@ export class ObservedPermissionsClient implements PermissionsClient {
     this.#duration = meter.createHistogram("nomnom.authz.check.duration", {
       description: "Duration of one authorization check.",
       unit: "s",
-      advice: { explicitBucketBoundaries: AUTHZ_DURATION_BUCKETS },
     });
   }
 

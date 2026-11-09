@@ -14,7 +14,6 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/applications/failure"
 	"nomnom/orders/slices/order/domains/order"
 	"nomnom/orders/slices/order/domains/order/ordertest"
@@ -59,7 +58,6 @@ func collectUnitOfWork(t *testing.T, reader *sdkmetric.ManualReader) uowMetrics 
 			case "nomnom.uow.duration":
 				assert.Equal(t, "s", m.Unit)
 				for _, dp := range m.Data.(metricdata.Histogram[float64]).DataPoints {
-					assert.Equal(t, telemetry.SecondsBuckets, dp.Bounds)
 					got.durations[label(m, dp.Attributes, "nomnom.outcome")] += dp.Count
 				}
 			case "nomnom.uow.retries":

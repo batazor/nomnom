@@ -16,7 +16,7 @@ func Services() []Options {
 			Temporal: &Temporal{Worker: inventory.OrdersWorker},
 			Domain:   ordersDomain,
 			Process:  orderFlowPanels,
-			SLO:      &SLO{Availability: 0.999, Latency: &LatencySLO{Bucket: "0.25", Target: 0.95}},
+			SLO:      &SLO{Availability: 0.999, Latency: &LatencySLO{Threshold: "0.25", Target: 0.95}},
 		},
 		{
 			Context: "restaurants", Title: "Restaurants", Language: Node,
@@ -26,7 +26,7 @@ func Services() []Options {
 				DeadLetters: []string{"restaurants.v1.restaurant-order-events.dlq"}},
 			UnitOfWork: true, Lifecycle: true, Kitchen: true, Authorization: true,
 			Domain: restaurantsDomain, Process: kitchenFlowPanels,
-			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
+			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Threshold: "0.5", Target: 0.95}},
 		},
 		{
 			Context: "delivery", Title: "Delivery", Language: Rust,
@@ -37,7 +37,7 @@ func Services() []Options {
 				DeadLetters: []string{"delivery.v1.delivery-events.dlq"}},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: deliveryDomain, DomainAlerts: deliveryAlerts, Process: deliveryFlowPanels,
-			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Bucket: "0.5", Target: 0.95}},
+			SLO: &SLO{Availability: 0.995, Latency: &LatencySLO{Threshold: "0.5", Target: 0.95}},
 		},
 		{
 			Context: "payments", Title: "Payments", Language: Python,
@@ -47,7 +47,7 @@ func Services() []Options {
 			Kafka:      &Kafka{Connector: "payments-outbox"},
 			UnitOfWork: true, Lifecycle: true, Authorization: true,
 			Domain: paymentsDomain,
-			SLO:    &SLO{Availability: 0.999, Latency: &LatencySLO{Bucket: "0.25", Target: 0.95}},
+			SLO:    &SLO{Availability: 0.999, Latency: &LatencySLO{Threshold: "0.25", Target: 0.95}},
 		},
 		{
 			Context: "bff", Title: "BFF", Language: Cosmo,

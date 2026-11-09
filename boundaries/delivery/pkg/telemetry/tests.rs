@@ -111,3 +111,60 @@ fn export_without_endpoint_is_an_error() {
 
     assert!(error.contains("spec.telemetry.endpoint"), "{error}");
 }
+
+/// AC-1090: histograms процесса — base2 exponential с ограничением бакетов, остальные
+/// instruments не меняются.
+#[test]
+fn histograms_are_base2_exponential() {
+    use opentelemetry::metrics::MeterProvider as _;
+    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+    use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader};
+
+    let exporter = InMemoryMetricExporter::default();
+    let provider = SdkMeterProvider::builder()
+        .with_reader(PeriodicReader::builder(exporter.clone()).build())
+        .with_view(exponential_histograms)
+        .build();
+    let meter = provider.meter("test");
+    let duration = meter.f64_histogram("test.duration").with_unit("s").build();
+    let calls = meter.u64_counter("test.calls").build();
+    // Разброс 1 µs – 1000 s (2^30) шире 40 бакетов на scale 20: SDK уменьшает scale.
+    for exponent in -6..=3 {
+        duration.record(10f64.powi(exponent), &[]);
+    }
+    duration.record(0.25, &[]);
+    calls.add(1, &[]);
+    provider.force_flush().expect("flush");
+
+    let exported = exporter.get_finished_metrics().expect("metrics");
+    let metrics: Vec<_> = exported
+        .iter()
+        .flat_map(|resource| resource.scope_metrics())
+        .flat_map(|scope| scope.metrics())
+        .collect();
+    let histogram = metrics
+        .iter()
+        .find(|metric| metric.name() == "test.duration")
+        .expect("test.duration");
+    let AggregatedMetrics::F64(MetricData::ExponentialHistogram(histogram)) = histogram.data()
+    else {
+        panic!("test.duration is an f64 exponential histogram");
+    };
+    let point = histogram.data_points().next().expect("data point");
+    assert_eq!(point.count(), 11);
+    assert!(point.scale() >= 0, "scale {}", point.scale());
+    assert!(point.scale() <= HISTOGRAM_MAX_SCALE);
+    assert!(
+        point.positive_bucket().counts().count() <= HISTOGRAM_MAX_SIZE as usize,
+        "buckets {}",
+        point.positive_bucket().counts().count()
+    );
+    let counter = metrics
+        .iter()
+        .find(|metric| metric.name() == "test.calls")
+        .expect("test.calls");
+    assert!(matches!(
+        counter.data(),
+        AggregatedMetrics::U64(MetricData::Sum(_))
+    ));
+}

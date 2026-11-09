@@ -11,13 +11,6 @@ use opentelemetry::metrics::{Counter, Histogram, Meter};
 /// Instrumentation scope of the consumer telemetry.
 pub(super) const INSTRUMENTATION: &str = "nomnom.delivery.messaging";
 
-/// Buckets of `nomnom.messaging.process.duration`, as in `orders`.
-const PROCESS_DURATION_BUCKETS: [f64; 12] = [
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0,
-];
-/// Buckets of `nomnom.messaging.message.age`, as in `orders`.
-const MESSAGE_AGE_BUCKETS: [f64; 10] = [0.1, 0.5, 1.0, 5.0, 15.0, 30.0, 60.0, 300.0, 900.0, 3600.0];
-
 /// `nomnom.error.class` of a record that cannot be read or does not match its
 /// schema, before any handler.
 pub(super) const CLASS_DESERIALIZATION: &str = "deserialization";
@@ -81,13 +74,11 @@ impl ConsumerTelemetry {
                 .with_description(
                     "Duration of processing one inbound Integration Event, retries included.",
                 )
-                .with_boundaries(PROCESS_DURATION_BUCKETS.to_vec())
                 .build(),
             age: meter
                 .f64_histogram("nomnom.messaging.message.age")
                 .with_unit("s")
                 .with_description("now − occurred_at when the consumer receives the event.")
-                .with_boundaries(MESSAGE_AGE_BUCKETS.to_vec())
                 .build(),
             retries: meter
                 .u64_counter("nomnom.messaging.retry.attempts")

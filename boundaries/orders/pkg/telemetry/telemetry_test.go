@@ -126,7 +126,7 @@ func TestHistogramMeasuredInSpanCarriesExemplarOfThatSpan(t *testing.T) {
 			if mt.Name != "nomnom.usecase.duration" {
 				continue
 			}
-			for _, point := range mt.Data.(metricdata.Histogram[float64]).DataPoints {
+			for _, point := range mt.Data.(metricdata.ExponentialHistogram[float64]).DataPoints {
 				outcome, _ := point.Attributes.Value("nomnom.outcome")
 				exemplars[outcome.AsString()] = point.Exemplars
 			}
@@ -229,7 +229,8 @@ func TestStartExportsToConfiguredEndpointOverHTTP(t *testing.T) {
 	assert.NotEmpty(t, metrics.ResourceMetrics)
 }
 
-// Counters Temporal SDK монотонные: в Prometheus — counter с _total, а не gauge.
+// Counters Temporal SDK монотонные: в Prometheus — counter с _total, а не gauge;
+// timers — exponential histograms общего view.
 func TestTemporalCountersAreMonotonic(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	m, err := telemetry.New(context.Background(), config.TelemetryConfig{ServiceName: "orders-worker"}, func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })
@@ -252,9 +253,10 @@ func TestTemporalCountersAreMonotonic(t *testing.T) {
 			case metricdata.Sum[int64]:
 				found[metric.Name] = true
 				assert.True(t, data.IsMonotonic, metric.Name)
-			case metricdata.Histogram[float64]:
+			case metricdata.ExponentialHistogram[float64]:
 				found[metric.Name] = true
-				assert.Equal(t, telemetry.SecondsBuckets, data.DataPoints[0].Bounds, "seconds buckets for %s", metric.Name)
+				assert.LessOrEqual(t, len(data.DataPoints[0].PositiveBucket.Counts), int(telemetry.ExponentialHistogram.MaxSize), "buckets of %s", metric.Name)
+				assert.EqualValues(t, 1, data.DataPoints[0].Count, metric.Name)
 			}
 		}
 	}

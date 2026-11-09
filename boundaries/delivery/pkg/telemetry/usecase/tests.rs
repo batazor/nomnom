@@ -22,6 +22,7 @@ fn harness() -> Harness {
     let metrics = InMemoryMetricExporter::default();
     let meter_provider = SdkMeterProvider::builder()
         .with_reader(PeriodicReader::builder(metrics.clone()).build())
+        .with_view(crate::pkg::telemetry::exponential_histograms)
         .build();
     let telemetry = UseCaseTelemetry::new(
         BoxedTracer::new(Box::new(tracer_provider.tracer(INSTRUMENTATION))),
@@ -69,15 +70,13 @@ impl Harness {
             .find(|metric| metric.name() == "nomnom.usecase.duration")
             .expect("nomnom.usecase.duration");
         assert_eq!(metric.unit(), "s");
-        let AggregatedMetrics::F64(MetricData::Histogram(histogram)) = metric.data() else {
-            panic!("f64 histogram");
+        let AggregatedMetrics::F64(MetricData::ExponentialHistogram(histogram)) = metric.data()
+        else {
+            panic!("f64 exponential histogram");
         };
         let mut points: Vec<_> = histogram
             .data_points()
-            .map(|point| {
-                assert_eq!(point.bounds().collect::<Vec<_>>(), BUCKETS.to_vec());
-                attributes(point.attributes())
-            })
+            .map(|point| attributes(point.attributes()))
             .collect();
         points.sort();
         points

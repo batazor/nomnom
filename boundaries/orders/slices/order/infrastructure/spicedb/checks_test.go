@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"nomnom/orders/pkg/telemetry"
 	"nomnom/orders/slices/order/infrastructure/spicedb"
 )
 
@@ -92,7 +91,6 @@ func TestCheckRecordsResult(t *testing.T) {
 						require.Len(t, points, 1)
 						assert.Equal(t, want, point(t, points[0].Attributes))
 						assert.EqualValues(t, 1, points[0].Count)
-						assert.Equal(t, telemetry.SecondsBuckets, points[0].Bounds)
 						timed = true
 					}
 				}

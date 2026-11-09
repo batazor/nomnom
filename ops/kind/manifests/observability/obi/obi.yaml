@@ -20,6 +20,9 @@ meter_provider:
             endpoint: http://alloy.nomnom-observability:4317
             tls:
               insecure: true
+            # Native histograms в Grafana Cloud, как у сервисов (ADR 9): bucket
+            # boundaries OBI при этом игнорируются.
+            default_histogram_aggregation: base2_exponential_bucket_histogram
 
 extensions:
   obi:

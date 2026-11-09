@@ -85,7 +85,7 @@ func spicedbPanels(sc Scope) []Panel {
 		{Title: "Dispatch cache hit ratio", Unit: "percentunit", Queries: []Query{{
 			Sum("", sc.Rate("spicedb_dispatch_client_check_from_cache_total")) + " / " + Sum("", sc.Rate("spicedb_dispatch_client_check_total")), "hit ratio"}}},
 		{Title: "Datastore latency (avg) by operation", Unit: "s", Queries: []Query{{
-			Sum("operation", sc.Rate("spicedb_datastore_query_latency_sum")) + " / " + Sum("operation", sc.Rate("spicedb_datastore_query_latency_count")), "{{operation}}"}},
+			Sum("operation", sc.SumOf("spicedb_datastore_query_latency")) + " / " + Sum("operation", sc.Count("spicedb_datastore_query_latency")), "{{operation}}"}},
 			Description: "Средняя: buckets datastore не доставляются (квота series)."},
 		{Title: "CPU", Unit: "short", Queries: []Query{{Sum("", sc.Rate("process_cpu_seconds_total")), "cores"}}},
 		{Title: "Resident memory", Unit: "bytes", Queries: []Query{{Sum("", sc.Gauge("process_resident_memory_bytes")), "RSS"}}},

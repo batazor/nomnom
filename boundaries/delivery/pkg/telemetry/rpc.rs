@@ -1,8 +1,8 @@
 //! gRPC telemetry by the current RPC semantic conventions, shared by the
 //! server layer (`infrastructure/grpc/tracing.rs`) and the outgoing clients
 //! (SpiceDB): spans named `package.Service/Method` and the histograms
-//! `rpc.server.call.duration` / `rpc.client.call.duration` (`s`, explicit
-//! seconds buckets) → `rpc_server_call_duration_seconds` /
+//! `rpc.server.call.duration` / `rpc.client.call.duration` (`s`, base2
+//! exponential histograms of the process view) → `rpc_server_call_duration_seconds` /
 //! `rpc_client_call_duration_seconds` of the inventory (section «rpc»).
 //!
 //! Attributes: `rpc.system.name` = `grpc`, `rpc.method` = `Service/Method`
@@ -18,8 +18,6 @@ use opentelemetry::propagation::{Injector, TextMapPropagator as _};
 use opentelemetry::trace::{SpanKind, Status, TraceContextExt as _, Tracer as _};
 use opentelemetry::{Context, KeyValue};
 use opentelemetry_sdk::propagation::TraceContextPropagator;
-
-use super::SECONDS_BUCKETS;
 
 /// Instrumentation scope of the gRPC telemetry.
 pub const INSTRUMENTATION: &str = "nomnom.delivery.grpc";
@@ -93,7 +91,6 @@ impl RpcMetrics {
                 .f64_histogram(name)
                 .with_unit("s")
                 .with_description(description)
-                .with_boundaries(SECONDS_BUCKETS.to_vec())
                 .build()
         };
         Self {

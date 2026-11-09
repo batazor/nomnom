@@ -85,11 +85,50 @@ func (s Scope) Rate(metric string, matchers ...string) string {
 // окно (max_over_time), чтобы instance, завершившиеся внутри окна, оставались в
 // расчёте; version и instance не фильтруются: SLO относится к сервису, а не к выкатке.
 func (s Scope) Over(window, metric string, matchers ...string) string {
-	inner := "increase(" + s.Sel(metric, matchers...) + "[" + window + "])"
+	return s.overFilter(window, "increase("+s.Sel(metric, matchers...)+"["+window+"])")
+}
+
+func (s Scope) overFilter(window, inner string) string {
 	if s.Job != "" || s.Literal {
 		return inner
 	}
 	return inner + fmt.Sprintf(` and on (job, instance) max_over_time(target_info{%s, deployment_environment_name=~"$environment"}[%s])`, s.job(), window)
+}
+
+// native — histogram процесса или OBI: native histogram без series _bucket/_count/_sum.
+func native(histogram string) bool {
+	m, ok := inventory.Lookup(histogram)
+	return ok && m.Type == inventory.Histogram
+}
+
+// Count — частота наблюдений histogram: histogram_count у native, _count у классической.
+func (s Scope) Count(histogram string, matchers ...string) string {
+	if native(histogram) {
+		return s.filter("histogram_count(rate(" + s.Sel(histogram, matchers...) + "[$__rate_interval]))")
+	}
+	return s.Rate(histogram+"_count", matchers...)
+}
+
+// SumOf — скорость роста суммы наблюдений: histogram_sum у native, _sum у классической.
+func (s Scope) SumOf(histogram string, matchers ...string) string {
+	if native(histogram) {
+		return s.filter("histogram_sum(rate(" + s.Sel(histogram, matchers...) + "[$__rate_interval]))")
+	}
+	return s.Rate(histogram+"_sum", matchers...)
+}
+
+// CountOver — число наблюдений histogram за окно SLO с фильтром environment, как Over.
+func (s Scope) CountOver(window, histogram string, matchers ...string) string {
+	if native(histogram) {
+		return s.overFilter(window, "histogram_count(increase("+s.Sel(histogram, matchers...)+"["+window+"]))")
+	}
+	return s.Over(window, histogram+"_count", matchers...)
+}
+
+// Fraction — доля наблюдений native histogram не больше upper за окно SLO. upper —
+// степень двойки: при scale ≥ 0 это граница бакета, доля точна без интерполяции (ADR 40).
+func (s Scope) Fraction(window, by, upper, histogram string, matchers ...string) string {
+	return "histogram_fraction(0, " + upper + ", " + Sum(by, s.Over(window, histogram, matchers...)) + ")"
 }
 
 // Grown — точный прирост counter за окно без экстраполяции increase(): последнее
@@ -111,8 +150,12 @@ func (s Scope) Gauge(metric string, matchers ...string) string {
 	return s.filter(s.Sel(metric, matchers...))
 }
 
-// Quantile — histogram_quantile по базовому имени histogram.
+// Quantile — histogram_quantile по базовому имени histogram: у native — по самой
+// series, у классической — по _bucket с группировкой le.
 func (s Scope) Quantile(q, by, histogram string, matchers ...string) string {
+	if native(histogram) {
+		return fmt.Sprintf("histogram_quantile(%s, %s)", q, Sum(by, s.Rate(histogram, matchers...)))
+	}
 	group := "le"
 	if by != "" {
 		group = by + ", le"
@@ -123,6 +166,11 @@ func (s Scope) Quantile(q, by, histogram string, matchers ...string) string {
 // rateBy — запрос rate() по одному label с этим же label в легенде.
 func rateBy(s Scope, label, metric string, matchers ...string) Query {
 	return Query{Sum(label, s.Rate(metric, matchers...)), "{{" + label + "}}"}
+}
+
+// countBy — частота наблюдений histogram по одному label с этим же label в легенде.
+func countBy(s Scope, label, histogram string, matchers ...string) Query {
+	return Query{Sum(label, s.Count(histogram, matchers...)), "{{" + label + "}}"}
 }
 
 // Sum агрегирует выражение; пустой by — sum без группировки.

@@ -20,8 +20,6 @@ from typing import Protocol
 from opentelemetry import metrics, trace
 from opentelemetry.trace import Status, StatusCode
 
-from .buckets import SECONDS_BUCKETS
-
 INSTRUMENTATION = "nomnom.payments.usecase"
 
 USECASE_NAME = "nomnom.usecase.name"
@@ -111,7 +109,6 @@ class UseCases:
             "nomnom.usecase.duration",
             unit="s",
             description="Duration of one application use case call.",
-            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
 
     def instrument[In, Out](self, use_case: UseCase, handler: Handler[In, Out]) -> Handler[In, Out]:

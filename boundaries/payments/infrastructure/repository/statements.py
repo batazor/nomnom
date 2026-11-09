@@ -47,8 +47,6 @@ OPERATIONS = frozenset(
     {"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "BEGIN", "COMMIT", "ROLLBACK", "LOCK"}
 )
 
-# Semconv advice db.client.operation.duration: как у MongoDB-операций restaurants.
-OPERATION_BUCKETS = (0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0)
 
 _SEPARATORS = str.maketrans(dict.fromkeys("(),;", " "))
 
@@ -157,7 +155,6 @@ class StatementTelemetry:
             "db.client.operation.duration",
             unit="s",
             description="Duration of database client operations.",
-            explicit_bucket_boundaries_advisory=list(OPERATION_BUCKETS),
         )
 
     def cursor_class(self) -> type[psycopg.Cursor[Any]]:

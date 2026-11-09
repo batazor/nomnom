@@ -30,7 +30,6 @@ from opentelemetry import metrics
 
 from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
 from pkg.config import SpiceDBSettings
-from pkg.telemetry import SECONDS_BUCKETS
 from pkg.telemetry.rpc import ClientTelemetryInterceptor, split_target
 from slices.payment.applications.ports import (
     PaymentPermission,
@@ -126,7 +125,6 @@ class SpiceDBPermissionChecker:
             "nomnom.authz.check.duration",
             unit="s",
             description="Duration of one authorization check.",
-            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
 
     def is_allowed(

@@ -14,7 +14,6 @@ from enum import StrEnum
 from opentelemetry import metrics, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
-from pkg.telemetry import SECONDS_BUCKETS
 from slices.payment.applications.ports import (
     PaymentProviderGateway,
     ProviderOperationOutcome,
@@ -76,7 +75,6 @@ class ObservedProvider:
             "nomnom.payments.provider.request.duration",
             unit="s",
             description="Duration of one payment provider request.",
-            explicit_bucket_boundaries_advisory=list(SECONDS_BUCKETS),
         )
 
     @property
