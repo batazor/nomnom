@@ -6,7 +6,7 @@
 // written: secrets by key name, credentials in URLs and bearer tokens in text.
 import { isSpanContextValid, trace } from "@opentelemetry/api";
 
-import type { ResourceAttributes } from "./resource.ts";
+import { type ResourceAttributes, SERVICE_NAMESPACE } from "./resource.ts";
 
 export type Severity = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
@@ -196,4 +196,29 @@ export function logUncaughtErrors(logger: Logger): void {
   };
   process.on("uncaughtException", fail("process failed"));
   process.on("unhandledRejection", fail("unhandled promise rejection"));
+}
+
+/**
+ * Runs `load` (the configuration of the process) and returns its result. An
+ * error is written as one ERROR record with the identity known before the
+ * configuration — `service.namespace` and `service.name` — and the process
+ * exits 1 before it opens a port.
+ */
+export function logStartupFailure<T>(
+  serviceName: string,
+  load: () => T,
+  write?: (line: string) => void,
+): T {
+  try {
+    return load();
+  } catch (error) {
+    createLogger({
+      resource: {
+        "service.namespace": SERVICE_NAMESPACE,
+        "service.name": serviceName,
+      },
+      ...(write === undefined ? {} : { write }),
+    }).error("invalid configuration", { operation: "config", error });
+    process.exit(1);
+  }
 }

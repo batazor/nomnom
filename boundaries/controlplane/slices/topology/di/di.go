@@ -27,7 +27,7 @@ type Module struct {
 	Published <-chan struct{}
 }
 
-// NewManager создаёт manager контроллера; без ROUTES__* процесс не стартует.
+// NewManager создаёт manager контроллера; без spec.routes процесс не стартует.
 func NewManager(restConfig *rest.Config, routes config.RoutesConfig, shutdown config.ShutdownConfig) (manager.Manager, error) {
 	if err := routes.Validate(); err != nil {
 		return nil, err

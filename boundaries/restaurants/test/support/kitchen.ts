@@ -76,7 +76,7 @@ export const PREPARATION_MINUTES = 20;
 export const minutes = (value: number): number => value * 60_000;
 /** KITCHEN_QUEUE__AGING_FACTOR of the tests (the .env.example value). */
 export const QUEUE_AGING_FACTOR = 2;
-/** SCHEDULED_SLOT__* of the tests (the .env.example values). */
+/** spec.scheduledSlot of the tests (the config.example.yaml values). */
 export const SLOT_WIDTH_MINUTES = 15;
 export const SLOT_MIN_LEAD_MINUTES = 45;
 export const SLOT_MAX_HORIZON_MINUTES = 48 * 60;

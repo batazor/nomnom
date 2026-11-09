@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
 )
 
@@ -147,31 +148,31 @@ func TestLogRedaction(t *testing.T) {
 	assert.Equal(t, "o-1", r["order_id"], "allowed lookup identifiers stay")
 }
 
-// Resource fields follow OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES, as for traces and metrics.
-func TestLogResourceFollowsOTelEnv(t *testing.T) {
-	t.Setenv("OTEL_SERVICE_NAME", "orders-consumer")
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=local,service.version=abc123,service.instance.id=pod-1")
-	resource, err := telemetry.LogResourceFor(context.Background(), "orders")
+// Resource fields follow spec.telemetry, as for traces and metrics; OTEL_* has no effect.
+func TestLogResourceFollowsTelemetryConfig(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "other")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=other,service.instance.id=other")
+	resource, err := telemetry.LogResourceFor(context.Background(), config.TelemetryConfig{
+		ServiceName:        "orders-consumer",
+		ResourceAttributes: map[string]string{"deployment.environment.name": "local", "service.version": "abc123"},
+		InstanceID:         "pod-1",
+	})
 	require.NoError(t, err)
 	assert.Equal(t, telemetry.LogResource{
 		Namespace: "nomnom", Name: "orders-consumer", Version: "abc123", Environment: "local", InstanceID: "pod-1",
 	}, resource)
 
-	t.Setenv("OTEL_SERVICE_NAME", "")
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
-	resource, err = telemetry.LogResourceFor(context.Background(), "orders-reconciler")
+	resource, err = telemetry.LogResourceFor(context.Background(), config.TelemetryConfig{ServiceName: "orders-worker"})
 	require.NoError(t, err)
-	assert.Equal(t, "orders-reconciler", resource.Name)
+	assert.Equal(t, "orders-worker", resource.Name)
 	assert.NotEmpty(t, resource.Version, "build version by default")
 	assert.Empty(t, resource.Environment, "unknown environment is absent, not faked")
 }
 
-func TestParseLogLevel(t *testing.T) {
-	for raw, want := range map[string]slog.Level{"": slog.LevelInfo, "debug": slog.LevelDebug, "WARN": slog.LevelWarn, "error": slog.LevelError} {
-		got, err := telemetry.ParseLogLevel(raw)
-		require.NoError(t, err)
-		assert.Equal(t, want, got, raw)
-	}
-	_, err := telemetry.ParseLogLevel("verbose")
-	assert.Error(t, err)
+func TestSetupLoggingRejectsUnknownLevel(t *testing.T) {
+	_, err := telemetry.SetupLogging(context.Background(), config.ObservabilityConfig{
+		Telemetry: config.TelemetryConfig{ServiceName: "orders"},
+		Logging:   config.LoggingConfig{Level: "verbose"},
+	})
+	require.ErrorContains(t, err, "spec.logging.level")
 }

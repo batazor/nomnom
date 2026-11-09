@@ -9,7 +9,7 @@ import (
 
 func TestConfigAllowsMinConnsEqualToMaxConns(t *testing.T) {
 	cfg := Config{
-		MaxConns: 1, MinConns: 1, MaxConnLifetime: time.Minute, MaxConnIdleTime: time.Minute,
+		DSN: "postgres://orders@db/orders", MaxConns: 1, MinConns: 1, MaxConnLifetime: time.Minute, MaxConnIdleTime: time.Minute,
 		ConnectTimeout: time.Second, HealthCheckPeriod: time.Minute,
 	}
 	require.NoError(t, cfg.Validate())

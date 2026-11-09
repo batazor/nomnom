@@ -17,9 +17,6 @@ import (
 	fulfillmenttemporal "nomnom/orders/slices/fulfillment/infrastructure/temporal"
 )
 
-// WorkerServiceName — service.name Temporal worker по умолчанию; OTEL_SERVICE_NAME переопределяет.
-const WorkerServiceName = "orders-worker"
-
 // TemporalWorker — lifecycle.Worker процесса orders-worker: подключается к
 // Temporal в Start, опрашивает task queue orders и останавливает poll в Shutdown.
 type TemporalWorker struct {
@@ -32,7 +29,8 @@ type TemporalWorker struct {
 	newWorker func(c client.Client, options worker.Options) runner
 	ensure    func(ctx context.Context, c client.Client) error
 
-	newMetrics func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
+	telemetry  config.ObservabilityConfig
+	newMetrics func(ctx context.Context, cfg config.ObservabilityConfig) (*telemetry.Metrics, error)
 	metrics    *telemetry.Metrics
 	client     client.Client
 	worker     runner
@@ -55,6 +53,7 @@ func NewTemporalWorker(cfg config.Config, activities *fulfillmenttemporal.Activi
 		drain:      cfg.Shutdown.DrainTimeout,
 		activities: activities,
 		dial:       client.DialContext,
+		telemetry:  cfg.Observability,
 		newMetrics: telemetry.Start,
 		newWorker: func(c client.Client, options worker.Options) runner {
 			return worker.New(c, fulfillmenttemporal.TaskQueue, options)
@@ -76,7 +75,7 @@ func (w *TemporalWorker) Start(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, w.cfg.ConnectTimeout)
 	defer cancel()
 
-	metrics, err := w.newMetrics(ctx, WorkerServiceName)
+	metrics, err := w.newMetrics(ctx, w.telemetry)
 	if err != nil {
 		return fmt.Errorf("start telemetry: %w", err)
 	}

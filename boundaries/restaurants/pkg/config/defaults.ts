@@ -1,42 +1,20 @@
 import type { Process } from "./database.ts";
 
+// Explicit defaults of the settings of the configuration file
+// (pkg/config/file.ts); a setting without a default here is required.
 export const DEFAULT_PORT = 8082;
-export const PORT_ENV = "SERVER__PORT";
 export const DEFAULT_MANAGEMENT_PORT = 9082;
-export const MANAGEMENT_PORT_ENV = "MANAGEMENT__PORT";
 export const DEFAULT_READINESS_DELAY = "5s";
-export const READINESS_DELAY_ENV = "SHUTDOWN__READINESS_DELAY";
 export const DEFAULT_DRAIN_TIMEOUT = "20s";
-export const DRAIN_TIMEOUT_ENV = "SHUTDOWN__DRAIN_TIMEOUT";
 export const DEFAULT_TELEMETRY_FLUSH_TIMEOUT = "5s";
-export const TELEMETRY_FLUSH_TIMEOUT_ENV = "SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT";
-export const IDENTITY_ISSUER_ENV = "IDENTITY__ISSUER";
-export const IDENTITY_AUDIENCE_ENV = "IDENTITY__AUDIENCE";
-export const IDENTITY_JWKS_FILE_ENV = "IDENTITY__JWKS_FILE";
-export const IDENTITY_SERVICE_ACCOUNTS_ENV = "IDENTITY__SERVICE_ACCOUNTS";
-export const IDENTITY_USER_ISSUER_ENV = "IDENTITY__USER_ISSUER";
-export const IDENTITY_USER_JWKS_FILE_ENV = "IDENTITY__USER_JWKS_FILE";
-export const IDENTITY_USER_DELEGATES_ENV = "IDENTITY__USER_DELEGATES";
-export const SPICEDB_ENDPOINT_ENV = "SPICEDB__ENDPOINT";
-export const SPICEDB_PRESHARED_KEY_ENV = "SPICEDB__PRESHARED_KEY";
-export const SPICEDB_INSECURE_ENV = "SPICEDB__INSECURE";
-export const SPICEDB_TIMEOUT_ENV = "SPICEDB__TIMEOUT";
 export const DEFAULT_SPICEDB_TIMEOUT = "2s";
-export const MONGODB_URI_ENV = "MONGODB__URI";
-export const MONGODB_DATABASE_ENV = "MONGODB__DATABASE";
 export const DEFAULT_MONGODB_DATABASE = "restaurants";
-export const MONGODB_TIMEOUT_ENV = "MONGODB__TIMEOUT";
 export const DEFAULT_MONGODB_TIMEOUT = "5s";
-export const MONGODB_MAX_POOL_SIZE_ENV = "MONGODB__MAX_POOL_SIZE";
-export const MONGODB_MIN_POOL_SIZE_ENV = "MONGODB__MIN_POOL_SIZE";
 export const DEFAULT_MONGODB_MIN_POOL_SIZE = 0;
-export const MONGODB_MAX_IDLE_TIME_ENV = "MONGODB__MAX_IDLE_TIME";
 export const DEFAULT_MONGODB_MAX_IDLE_TIME = "5m";
-export const MONGODB_WAIT_QUEUE_TIMEOUT_ENV = "MONGODB__WAIT_QUEUE_TIMEOUT";
 export const DEFAULT_MONGODB_WAIT_QUEUE_TIMEOUT = "5s";
-export const MONGODB_MAX_CONNECTING_ENV = "MONGODB__MAX_CONNECTING";
 export const DEFAULT_MONGODB_MAX_CONNECTING = 2;
-/** Upper bound of `MONGODB__MAX_POOL_SIZE` per process (and per server). */
+/** Upper bound of `spec.mongodb.maxPoolSize` per process (and per server). */
 export const MONGODB_POOL_SIZE_LIMIT = 100;
 /**
  * Default `maxPoolSize` per process: the API serves concurrent RPCs, the
@@ -45,63 +23,28 @@ export const MONGODB_POOL_SIZE_LIMIT = 100;
  */
 export const DEFAULT_MONGODB_MAX_POOL_SIZE: Readonly<Record<Process, number>> =
   Object.freeze({ api: 20, consumer: 5 });
-export const RECONCILER_INTERVAL_ENV = "RECONCILER__INTERVAL";
 export const DEFAULT_RECONCILER_INTERVAL = "5m";
-export const RECONCILER_GRACE_ENV = "RECONCILER__GRACE";
 export const DEFAULT_RECONCILER_GRACE = "10m";
-export const RECONCILER_PAGE_SIZE_ENV = "RECONCILER__PAGE_SIZE";
 export const DEFAULT_RECONCILER_PAGE_SIZE = 500;
-export const KITCHEN_PREPARATION_TIME_ENV = "KITCHEN__PREPARATION_TIME";
 export const DEFAULT_KITCHEN_PREPARATION_TIME = "20m";
-export const KITCHEN_REPEAT_POLICY_ENV = "KITCHEN__REPEAT_POLICY";
 export const DEFAULT_KITCHEN_REPEAT_POLICY = "succeed-without-event";
-export const KITCHEN_CANCELLATION_DURING_PREPARATION_ENV =
-  "KITCHEN__CANCELLATION_DURING_PREPARATION";
 export const DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION = "reject";
-export const KITCHEN_QUEUE_AGING_FACTOR_ENV = "KITCHEN_QUEUE__AGING_FACTOR";
 export const DEFAULT_KITCHEN_QUEUE_AGING_FACTOR = 2;
-export const WAIT_TIME_SAMPLE_SIZE_ENV = "WAIT_TIME__SAMPLE_SIZE";
 export const DEFAULT_WAIT_TIME_SAMPLE_SIZE = 50;
-export const WAIT_TIME_RECENT_WINDOW_ENV = "WAIT_TIME__RECENT_WINDOW";
 export const DEFAULT_WAIT_TIME_RECENT_WINDOW = "30m";
-export const WAIT_TIME_ELEVATED_FACTOR_ENV = "WAIT_TIME__ELEVATED_FACTOR";
 export const DEFAULT_WAIT_TIME_ELEVATED_FACTOR = 1.5;
-export const WAIT_TIME_NORMAL_FACTOR_ENV = "WAIT_TIME__NORMAL_FACTOR";
 export const DEFAULT_WAIT_TIME_NORMAL_FACTOR = 1.2;
-
-export const KAFKA_BROKERS_ENV = "KAFKA__BROKERS";
-export const KAFKA_CLIENT_ID_ENV = "KAFKA__CLIENT_ID";
 export const DEFAULT_KAFKA_CLIENT_ID = "restaurants-consumer";
-export const KAFKA_CONSUMER_GROUP_ENV = "KAFKA__CONSUMER_GROUP";
 export const DEFAULT_KAFKA_CONSUMER_GROUP = "restaurants";
-export const KAFKA_INITIAL_OFFSET_ENV = "KAFKA__INITIAL_OFFSET";
 export const DEFAULT_KAFKA_INITIAL_OFFSET = "oldest";
-// Schema Registry записей стримов (FR-715): URL обязателен consumer, без default.
-export const SCHEMA_REGISTRY_URL_ENV = "SCHEMA_REGISTRY__URL";
-export const SCHEMA_REGISTRY_TIMEOUT_ENV = "SCHEMA_REGISTRY__TIMEOUT";
 export const DEFAULT_SCHEMA_REGISTRY_TIMEOUT = "5s";
-export const CONSUMER_MAX_RETRIES_ENV = "CONSUMER__MAX_RETRIES";
 export const DEFAULT_CONSUMER_MAX_RETRIES = 5;
-export const CONSUMER_RETRY_INITIAL_INTERVAL_ENV =
-  "CONSUMER__RETRY_INITIAL_INTERVAL";
 export const DEFAULT_CONSUMER_RETRY_INITIAL_INTERVAL = "100ms";
-export const CONSUMER_RETRY_MAX_INTERVAL_ENV = "CONSUMER__RETRY_MAX_INTERVAL";
 export const DEFAULT_CONSUMER_RETRY_MAX_INTERVAL = "5s";
-// Demo Simulator (FR-606): required, without defaults.
-export const SIMULATOR_INTERVAL_ENV = "SIMULATOR__INTERVAL";
-export const SIMULATOR_MIN_DELAY_ENV = "SIMULATOR__MIN_DELAY";
-export const SIMULATOR_MAX_DELAY_ENV = "SIMULATOR__MAX_DELAY";
-// Delivery Windows of scheduled orders (FR-694): required, without defaults.
-export const SCHEDULED_SLOT_WIDTH_ENV = "SCHEDULED_SLOT__WIDTH";
-export const SCHEDULED_SLOT_MIN_LEAD_ENV = "SCHEDULED_SLOT__MIN_LEAD";
-export const SCHEDULED_SLOT_MAX_HORIZON_ENV = "SCHEDULED_SLOT__MAX_HORIZON";
-export const SCHEDULED_SLOT_HOLD_TTL_ENV = "SCHEDULED_SLOT__HOLD_TTL";
-export const SCHEDULED_SLOT_ALTERNATIVES_ENV = "SCHEDULED_SLOT__ALTERNATIVES";
-// Valkey, кеш чтения каталога (ADR 43, локальный ADR 3): URL обязателен, без default.
-export const VALKEY_URL_ENV = "VALKEY__URL";
-export const VALKEY_COMMAND_TIMEOUT_ENV = "VALKEY__COMMAND_TIMEOUT";
 export const DEFAULT_VALKEY_COMMAND_TIMEOUT = "50ms";
-export const CACHE_TTL_ENV = "CACHE__TTL";
 export const DEFAULT_CACHE_TTL = "1m";
-export const CACHE_REFRESH_GROUP_ENV = "CACHE__REFRESH_GROUP";
 export const DEFAULT_CACHE_REFRESH_GROUP = "restaurants-cache";
+export const DEFAULT_TELEMETRY_PROTOCOL = "grpc";
+/** OpenTelemetry SDK default of the periodic metrics export. */
+export const DEFAULT_METRICS_EXPORT_INTERVAL = "60s";
+export const DEFAULT_LOG_LEVEL = "info";

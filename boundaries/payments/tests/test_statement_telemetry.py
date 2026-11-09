@@ -66,7 +66,7 @@ class StatementTelemetryTest(unittest.TestCase):
         telemetry = StatementTelemetry(
             self.tracer_provider, MeterProvider(metric_readers=[self.reader])
         )
-        self.observed = create_database(database.Config(DATABASE__URI=self.uri), telemetry)
+        self.observed = create_database(database.Config(uri=self.uri), telemetry)
         self.addCleanup(self.observed.close)
         self.payments = DatabasePaymentRepository(self.observed, 5)
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import {
   DEFAULT_MONGODB_DATABASE,
   DEFAULT_MONGODB_MAX_CONNECTING,
@@ -7,17 +8,13 @@ import {
   DEFAULT_MONGODB_MIN_POOL_SIZE,
   DEFAULT_MONGODB_TIMEOUT,
   DEFAULT_MONGODB_WAIT_QUEUE_TIMEOUT,
-  MONGODB_DATABASE_ENV,
-  MONGODB_MAX_CONNECTING_ENV,
-  MONGODB_MAX_IDLE_TIME_ENV,
-  MONGODB_MAX_POOL_SIZE_ENV,
-  MONGODB_MIN_POOL_SIZE_ENV,
   MONGODB_POOL_SIZE_LIMIT,
-  MONGODB_TIMEOUT_ENV,
-  MONGODB_URI_ENV,
-  MONGODB_WAIT_QUEUE_TIMEOUT_ENV,
-} from "./env.ts";
-import { durationSchema } from "./schemas.ts";
+} from "./defaults.ts";
+import type { Spec } from "./file.ts";
+import { positiveDurationSchema } from "./schemas.ts";
+
+/** Secret: connection string replica set, только из env (Kubernetes Secret). */
+export const MONGODB_URI_ENV = "MONGODB__URI";
 
 /**
  * Processes of restaurants that open a MongoClient; each sizes its own pool
@@ -25,9 +22,43 @@ import { durationSchema } from "./schemas.ts";
  */
 export type Process = "api" | "consumer";
 
-/** Подключение к MongoDB (ADR 8, локальный ADR 1), когда задан `MONGODB__URI`. */
+/**
+ * `spec.mongodb`: база, timeout и лимиты пула без connection string из Secret.
+ * 0 у таймаутов драйвер трактует как «без ограничения», поэтому он запрещён.
+ */
+export const mongodbSectionSchema = z
+  .strictObject({
+    database: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,63}$/, "invalid database name")
+      .prefault(DEFAULT_MONGODB_DATABASE),
+    timeout: positiveDurationSchema.prefault(DEFAULT_MONGODB_TIMEOUT),
+    /** Пусто — default процесса (`DEFAULT_MONGODB_MAX_POOL_SIZE`). */
+    maxPoolSize: z
+      .number()
+      .int()
+      .min(1)
+      .max(MONGODB_POOL_SIZE_LIMIT)
+      .optional(),
+    minPoolSize: z
+      .number()
+      .int()
+      .min(0)
+      .prefault(DEFAULT_MONGODB_MIN_POOL_SIZE),
+    maxIdleTime: positiveDurationSchema.prefault(DEFAULT_MONGODB_MAX_IDLE_TIME),
+    waitQueueTimeout: positiveDurationSchema.prefault(
+      DEFAULT_MONGODB_WAIT_QUEUE_TIMEOUT,
+    ),
+    /** Пусто — `DEFAULT_MONGODB_MAX_CONNECTING`, но не больше maxPoolSize. */
+    maxConnecting: z.number().int().min(1).optional(),
+  })
+  .prefault({});
+
+export type MongoDbSection = z.output<typeof mongodbSectionSchema>;
+
+/** Подключение к MongoDB (ADR 8, локальный ADR 1); `MONGODB__URI` обязателен. */
 export type Config = Readonly<{
-  /** Connection string replica set; приходит из Secret, не из values. */
+  /** Connection string replica set; приходит из Secret, не из файла конфигурации. */
   uri: string;
   database: string;
   /** Server selection timeout: недоступная MongoDB останавливает старт. */
@@ -52,11 +83,10 @@ export type PoolConfig = Readonly<{
   maxConnecting: number;
 }>;
 
-const MONGODB_DATABASE_NAME = /^[A-Za-z0-9_-]{1,63}$/;
-
 export function load(
-  environment: Record<string, string | undefined>,
-  process: Process = "api",
+  spec: Pick<Spec, "mongodb">,
+  environment: Readonly<Record<string, string | undefined>>,
+  process: Process,
 ): Config {
   const uri = environment[MONGODB_URI_ENV]?.trim() ?? "";
   if (uri === "") {
@@ -69,90 +99,44 @@ export function load(
       `${MONGODB_URI_ENV} must be a mongodb:// or mongodb+srv:// connection string`,
     );
   }
-  const database =
-    environment[MONGODB_DATABASE_ENV]?.trim() || DEFAULT_MONGODB_DATABASE;
-  if (!MONGODB_DATABASE_NAME.test(database)) {
-    throw new Error(
-      `${MONGODB_DATABASE_ENV}: invalid database name "${database}"`,
-    );
-  }
-  const timeoutMs = durationSchema
-    .refine((value) => value > 0, "MongoDB timeout must be positive")
-    .parse(environment[MONGODB_TIMEOUT_ENV]?.trim() || DEFAULT_MONGODB_TIMEOUT);
   return Object.freeze({
     uri,
-    database,
-    timeoutMs,
-    pool: loadPool(environment, process),
+    database: spec.mongodb.database,
+    timeoutMs: spec.mongodb.timeout,
+    pool: loadPool(spec.mongodb, process),
   });
 }
 
 /**
- * Лимиты пула с defaults процесса; значение вне диапазона останавливает старт.
- * 0 у таймаутов драйвер трактует как «без ограничения», поэтому он запрещён.
+ * Лимиты пула с defaults процесса; минимум и число одновременных подключений
+ * больше maxPoolSize останавливают старт.
  */
 export function loadPool(
-  environment: Record<string, string | undefined>,
-  process: Process = "api",
+  mongodb: MongoDbSection,
+  process: Process,
 ): PoolConfig {
-  const value = (name: string) => environment[name]?.trim() || undefined;
-  const integer = (name: string, min: number, max: number, fallback: number) =>
-    parseSetting(
-      name,
-      z.coerce.number().int().min(min).max(max),
-      value(name) ?? fallback,
+  const maxPoolSize =
+    mongodb.maxPoolSize ?? DEFAULT_MONGODB_MAX_POOL_SIZE[process];
+  if (mongodb.minPoolSize > maxPoolSize) {
+    throw new Error(
+      `spec.mongodb.minPoolSize: ${mongodb.minPoolSize} must not exceed maxPoolSize ${maxPoolSize}`,
     );
-  const positiveDuration = (name: string, fallback: string) =>
-    parseSetting(
-      name,
-      durationSchema.refine((ms) => ms > 0, "must be positive"),
-      value(name) ?? fallback,
+  }
+  // Default не превышает маленький пул (maxPoolSize: 1); явное значение
+  // больше maxPoolSize бессмысленно и отклоняется.
+  const maxConnecting =
+    mongodb.maxConnecting ??
+    Math.min(DEFAULT_MONGODB_MAX_CONNECTING, maxPoolSize);
+  if (maxConnecting > maxPoolSize) {
+    throw new Error(
+      `spec.mongodb.maxConnecting: ${maxConnecting} must not exceed maxPoolSize ${maxPoolSize}`,
     );
-
-  const maxPoolSize = integer(
-    MONGODB_MAX_POOL_SIZE_ENV,
-    1,
-    MONGODB_POOL_SIZE_LIMIT,
-    DEFAULT_MONGODB_MAX_POOL_SIZE[process],
-  );
-  const minPoolSize = integer(
-    MONGODB_MIN_POOL_SIZE_ENV,
-    0,
-    maxPoolSize,
-    DEFAULT_MONGODB_MIN_POOL_SIZE,
-  );
-  // Default не превышает маленький пул (MONGODB__MAX_POOL_SIZE=1); явное
-  // значение больше maxPoolSize бессмысленно и отклоняется.
-  const maxConnecting = integer(
-    MONGODB_MAX_CONNECTING_ENV,
-    1,
-    maxPoolSize,
-    Math.min(DEFAULT_MONGODB_MAX_CONNECTING, maxPoolSize),
-  );
+  }
   return Object.freeze({
     maxPoolSize,
-    minPoolSize,
-    maxIdleTimeMs: positiveDuration(
-      MONGODB_MAX_IDLE_TIME_ENV,
-      DEFAULT_MONGODB_MAX_IDLE_TIME,
-    ),
-    waitQueueTimeoutMs: positiveDuration(
-      MONGODB_WAIT_QUEUE_TIMEOUT_ENV,
-      DEFAULT_MONGODB_WAIT_QUEUE_TIMEOUT,
-    ),
+    minPoolSize: mongodb.minPoolSize,
+    maxIdleTimeMs: mongodb.maxIdleTime,
+    waitQueueTimeoutMs: mongodb.waitQueueTimeout,
     maxConnecting,
   });
-}
-
-function parseSetting<T>(
-  name: string,
-  schema: z.ZodType<T>,
-  raw: string | number,
-): T {
-  const result = schema.safeParse(raw);
-  if (!result.success) {
-    const reason = result.error.issues.map((issue) => issue.message).join("; ");
-    throw new Error(`${name}: invalid value "${raw}": ${reason}`);
-  }
-  return result.data;
 }

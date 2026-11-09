@@ -5,21 +5,23 @@ use std::time::Duration;
 use config::ConfigError;
 use serde::Deserialize;
 
-use super::DATABASE_URI_ENV;
+use super::{DATABASE_URI_ENV, DEFAULT_DATABASE_MAX_CONNS};
 
-/// Хранилище `delivery`. URI обязателен для процесса и миграций: пустое
-/// значение или не PostgreSQL connection URI завершает загрузку конфига.
-/// URI приходит из Secret.
+/// Хранилище `delivery`, секция `spec.database`. URI обязателен для процесса
+/// и миграций: пустое значение или не PostgreSQL connection URI завершает
+/// загрузку конфига. URI — секрет из env `DATABASE__URI`, поля в файле у него
+/// нет: `spec.database.uri` — неизвестный ключ.
 ///
-/// Пул процесса ограничен: размер задаёт Helm (`database.pool.maxConns`, ~10);
+/// Пул процесса ограничен: размер задаёт `spec.database.maxConns` (~10);
 /// миграции при старте берут отдельное соединение (`MIGRATE_MAX_CONNS`).
 /// Pooler перед PostgreSQL работает только в session mode: миграции держат
 /// session-level advisory lock.
 #[derive(Clone, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase", default)]
 pub struct Config {
     /// PostgreSQL connection URI `postgresql://user:password@host/db`
     /// (или схема `postgres://`); libpq key=value не принимается.
+    #[serde(skip)]
     pub uri: String,
     /// Максимум соединений пула процесса (1..=[`MAX_MAX_CONNS`]).
     pub max_conns: u32,
@@ -29,7 +31,7 @@ pub struct Config {
     /// Соединение старше закрывается при возврате в пул.
     #[serde(with = "humantime_serde")]
     pub max_lifetime: Duration,
-    /// Простаивающее дольше соединение закрывается (выше `min_conns`).
+    /// Простаивающее дольше соединение закрывается (выше `minConns`).
     #[serde(with = "humantime_serde")]
     pub idle_timeout: Duration,
     /// Сколько операция ждёт соединение пула; затем ошибка `PoolTimedOut`
@@ -40,14 +42,14 @@ pub struct Config {
 
 /// Верхняя граница пула одного процесса.
 pub const MAX_MAX_CONNS: u32 = 100;
-/// Верхняя граница `min_conns` (session-mode pooler).
+/// Верхняя граница `minConns` (session-mode pooler).
 pub const MAX_MIN_CONNS: u32 = 1;
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             uri: String::new(),
-            max_conns: 10,
+            max_conns: DEFAULT_DATABASE_MAX_CONNS,
             min_conns: 0,
             max_lifetime: Duration::from_secs(30 * 60),
             idle_timeout: Duration::from_secs(5 * 60),
@@ -106,34 +108,34 @@ impl Config {
         }
         if self.max_conns == 0 || self.max_conns > MAX_MAX_CONNS {
             return invalid(format!(
-                "database max_conns must be between 1 and {MAX_MAX_CONNS}, got {}",
+                "spec.database.maxConns must be between 1 and {MAX_MAX_CONNS}, got {}",
                 self.max_conns
             ));
         }
         if self.min_conns > MAX_MIN_CONNS {
             return invalid(format!(
-                "database min_conns must be between 0 and {MAX_MIN_CONNS}, got {}",
+                "spec.database.minConns must be between 0 and {MAX_MIN_CONNS}, got {}",
                 self.min_conns
             ));
         }
         if self.min_conns > self.max_conns {
             return invalid(format!(
-                "database min_conns {} must not exceed max_conns {}",
+                "spec.database.minConns {} must not exceed spec.database.maxConns {}",
                 self.min_conns, self.max_conns
             ));
         }
         for (name, value) in [
-            ("max_lifetime", self.max_lifetime),
-            ("idle_timeout", self.idle_timeout),
-            ("acquire_timeout", self.acquire_timeout),
+            ("maxLifetime", self.max_lifetime),
+            ("idleTimeout", self.idle_timeout),
+            ("acquireTimeout", self.acquire_timeout),
         ] {
             if value.is_zero() {
-                return invalid(format!("database {name} must be positive"));
+                return invalid(format!("spec.database.{name} must be positive"));
             }
         }
         if self.idle_timeout > self.max_lifetime {
             return invalid(format!(
-                "database idle_timeout {:?} must not exceed max_lifetime {:?}",
+                "spec.database.idleTimeout {:?} must not exceed spec.database.maxLifetime {:?}",
                 self.idle_timeout, self.max_lifetime
             ));
         }

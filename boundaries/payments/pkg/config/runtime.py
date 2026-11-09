@@ -2,73 +2,39 @@
 
 from datetime import timedelta
 
-from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
 
 from .duration import _duration
+from .section import Section
 
 DEFAULT_PORT = 8084
-PORT_ENV = "SERVER__PORT"
-
 DEFAULT_MANAGEMENT_PORT = 9084
-MANAGEMENT_PORT_ENV = "MANAGEMENT__PORT"
-
 DEFAULT_READINESS_DELAY = timedelta(seconds=5)
-READINESS_DELAY_ENV = "SHUTDOWN__READINESS_DELAY"
-
 DEFAULT_DRAIN_TIMEOUT = timedelta(seconds=20)
-DRAIN_TIMEOUT_ENV = "SHUTDOWN__DRAIN_TIMEOUT"
-
 DEFAULT_TELEMETRY_FLUSH_TIMEOUT = timedelta(seconds=5)
-TELEMETRY_FLUSH_TIMEOUT_ENV = "SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT"
 
 
-class ServerSettings(BaseSettings):
-    """Business gRPC port; ``SERVER__PORT`` or the platform-provided ``PORT``."""
+class ServerSettings(Section):
+    """Business gRPC port (``spec.server``)."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    port: int = Field(
-        default=DEFAULT_PORT,
-        ge=1,
-        le=65535,
-        validation_alias=AliasChoices(PORT_ENV, "PORT"),
-    )
+    port: int = Field(default=DEFAULT_PORT, ge=1, le=65535)
 
 
-class ManagementSettings(BaseSettings):
+class ManagementSettings(Section):
     """Management port (Kubernetes name ``metrics``): health is kept off the business port."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    port: int = Field(
-        default=DEFAULT_MANAGEMENT_PORT,
-        ge=1,
-        le=65535,
-        validation_alias=MANAGEMENT_PORT_ENV,
-    )
+    port: int = Field(default=DEFAULT_MANAGEMENT_PORT, ge=1, le=65535)
 
 
-class ShutdownSettings(BaseSettings):
+class ShutdownSettings(Section):
     """Graceful shutdown timings: readiness delay, drain deadline and telemetry flush."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
     # Ожидание распространения not ready до остановки приёма запросов.
-    readiness_delay: timedelta = Field(
-        default=DEFAULT_READINESS_DELAY,
-        validation_alias=READINESS_DELAY_ENV,
-    )
+    readiness_delay: timedelta = DEFAULT_READINESS_DELAY
     # Deadline на завершение начатой работы.
-    drain_timeout: timedelta = Field(
-        default=DEFAULT_DRAIN_TIMEOUT,
-        validation_alias=DRAIN_TIMEOUT_ENV,
-    )
+    drain_timeout: timedelta = DEFAULT_DRAIN_TIMEOUT
     # Deadline на flush и shutdown telemetry providers после drain.
-    telemetry_flush_timeout: timedelta = Field(
-        default=DEFAULT_TELEMETRY_FLUSH_TIMEOUT,
-        validation_alias=TELEMETRY_FLUSH_TIMEOUT_ENV,
-    )
+    telemetry_flush_timeout: timedelta = DEFAULT_TELEMETRY_FLUSH_TIMEOUT
 
     @field_validator("readiness_delay", "drain_timeout", "telemetry_flush_timeout", mode="before")
     @classmethod

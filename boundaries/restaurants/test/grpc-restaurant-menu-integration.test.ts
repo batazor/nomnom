@@ -74,15 +74,9 @@ describe("restaurant and menu command RPCs over MongoDB", () => {
   const menuId = `m-${randomUUID()}`;
 
   before(async () => {
-    tracing = startTracing(
-      "restaurants",
-      {},
-      {
-        spanProcessors: [
-          new SimpleSpanProcessor({ exporter: new InMemorySpanExporter() }),
-        ],
-      },
-    );
+    tracing = startTracing(undefined, { "service.name": "restaurants" }, [
+      new SimpleSpanProcessor({ exporter: new InMemorySpanExporter() }),
+    ]);
     database = await connectDatabase({
       uri,
       database: `restaurants_commands_${randomUUID().slice(0, 8)}`,

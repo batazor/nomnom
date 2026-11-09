@@ -1,40 +1,21 @@
-//! Live tracking (FR-658, FR-661, FR-665, FR-666): Virtual City, интервал
-//! записи позиции курьера и Valkey потока позиций. Значений по умолчанию
-//! нет: пустое или нечисловое значение завершает startup. Правила сетки
-//! (не меньше 2 кварталов, положительный квартал, рамка в диапазонах широты
-//! и долготы) проверяет только сам Virtual City при сборке процесса — тоже
-//! до открытия портов.
+//! Live tracking (FR-658, FR-661, FR-665, FR-666), секция `spec.tracking`:
+//! Virtual City и интервал записи позиции курьера; Valkey потока позиций —
+//! секрет `VALKEY__URL` из env. Значений по умолчанию нет: отсутствующее или
+//! нечисловое значение завершает startup. Правила сетки (не меньше 2
+//! кварталов, положительный квартал, рамка в диапазонах широты и долготы)
+//! проверяет только сам Virtual City при сборке процесса — тоже до открытия
+//! портов.
 
 use std::time::Duration;
 
 use config::ConfigError;
 use serde::Deserialize;
 
-pub const TRACKING_CITY_ORIGIN_LATITUDE_ENV: &str = "TRACKING__CITY_ORIGIN_LATITUDE";
-pub const TRACKING_CITY_ORIGIN_LONGITUDE_ENV: &str = "TRACKING__CITY_ORIGIN_LONGITUDE";
-pub const TRACKING_CITY_BLOCKS_ENV: &str = "TRACKING__CITY_BLOCKS";
-pub const TRACKING_BLOCK_METERS_ENV: &str = "TRACKING__BLOCK_METERS";
-pub const TRACKING_PERSIST_INTERVAL_ENV: &str = "TRACKING__PERSIST_INTERVAL";
+pub const TRACKING_PERSIST_INTERVAL_KEY: &str = "spec.tracking.persistInterval";
 pub const VALKEY_URL_ENV: &str = "VALKEY__URL";
 
-/// Ключ конфигурации и переменная окружения; значения по умолчанию нет.
-pub(super) const TRACKING_SETTINGS: [(&str, &str); 6] = [
-    (
-        "tracking.city_origin_latitude",
-        TRACKING_CITY_ORIGIN_LATITUDE_ENV,
-    ),
-    (
-        "tracking.city_origin_longitude",
-        TRACKING_CITY_ORIGIN_LONGITUDE_ENV,
-    ),
-    ("tracking.city_blocks", TRACKING_CITY_BLOCKS_ENV),
-    ("tracking.block_meters", TRACKING_BLOCK_METERS_ENV),
-    ("tracking.persist_interval", TRACKING_PERSIST_INTERVAL_ENV),
-    ("valkey.url", VALKEY_URL_ENV),
-];
-
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct TrackingConfig {
     /// Широта юго-западного угла Virtual City.
     pub city_origin_latitude: f64,
@@ -53,7 +34,7 @@ impl TrackingConfig {
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
         if self.persist_interval.is_zero() {
             return Err(ConfigError::Message(format!(
-                "{TRACKING_PERSIST_INTERVAL_ENV} must be positive"
+                "{TRACKING_PERSIST_INTERVAL_KEY} must be positive"
             )));
         }
         Ok(())
@@ -66,9 +47,9 @@ impl TrackingConfig {
     }
 }
 
-/// Valkey потока позиций курьеров (pub/sub, не кеш).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+/// Valkey потока позиций курьеров (pub/sub, не кеш). Только секрет из env:
+/// секции `spec.valkey` нет.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValkeyConfig {
     /// `redis://user:password@host:port`; в Kubernetes только из Secret.
     pub url: String,
@@ -76,6 +57,7 @@ pub struct ValkeyConfig {
 
 impl ValkeyConfig {
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
+        // Значение не попадает в сообщение: URL содержит пароль.
         if !(self.url.starts_with("redis://") || self.url.starts_with("rediss://")) {
             return Err(ConfigError::Message(format!(
                 "{VALKEY_URL_ENV} must be a redis:// or rediss:// URL"

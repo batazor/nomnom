@@ -49,20 +49,56 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end }}
 
 {{/*
+Секунды длительности Go-формата (500ms, 5s, 1m30s) для проверок chart.
+Usage: {{ include "delivery.durationSeconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" "20s") }}
+*/}}
+{{- define "delivery.durationSeconds" -}}
+{{- $value := toString .value -}}
+{{- if not (regexMatch "^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$" $value) -}}
+{{- fail (printf "%s must be a duration such as 500ms, 5s or 2m, got %q" .key $value) -}}
+{{- end -}}
+{{- $scale := dict "ms" 0.001 "s" 1.0 "m" 60.0 "h" 3600.0 -}}
+{{- $seconds := 0.0 -}}
+{{- range $part := regexFindAll "[0-9]+(\\.[0-9]+)?(ms|s|m|h)" $value -1 -}}
+{{- $number := regexFind "^[0-9]+(\\.[0-9]+)?" $part -}}
+{{- $seconds = addf $seconds (mulf (float64 $number) (get $scale (trimPrefix $number $part))) -}}
+{{- end -}}
+{{- $seconds -}}
+{{- end -}}
+
+{{/*
 Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay
-и drain timeout с запасом, иначе kubelet отправит SIGKILL посреди drain.
+и drain timeout файла конфигурации с запасом, иначе kubelet отправит SIGKILL посреди drain.
+Технический порт отличается от бизнес-порта.
 */}}
 {{- define "delivery.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds -}}
-{{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- $spec := .Values.config.spec -}}
+{{- $readinessDelay := required "config.spec.shutdown.readinessDelay is required: the chart checks the shutdown budget" (dig "shutdown" "readinessDelay" nil $spec) -}}
+{{- $drainTimeout := required "config.spec.shutdown.drainTimeout is required: the chart checks the shutdown budget" (dig "shutdown" "drainTimeout" nil $spec) -}}
+{{- $readiness := include "delivery.durationSeconds" (dict "key" "config.spec.shutdown.readinessDelay" "value" $readinessDelay) | float64 -}}
+{{- $drain := include "delivery.durationSeconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" $drainTimeout) | float64 -}}
+{{- if le $drain 0.0 -}}
+{{- fail "config.spec.shutdown.drainTimeout must be positive" -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
-{{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- $budget := addf $readiness $drain -}}
+{{- if le (float64 .Values.terminationGracePeriodSeconds) $budget -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than config.spec.shutdown.readinessDelay + config.spec.shutdown.drainTimeout (%vs)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
-{{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
-{{- fail "management.port must differ from service.targetPort" -}}
+{{- if eq (int (include "delivery.managementPort" .)) (int .Values.service.targetPort) -}}
+{{- fail "config.spec.management.port must differ from service.targetPort" -}}
 {{- end -}}
+{{- with dig "server" "port" nil $spec -}}
+{{- if ne (int .) (int $.Values.service.targetPort) -}}
+{{- fail "config.spec.server.port must equal service.targetPort" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Технический порт процесса (контейнерный порт metrics) из файла конфигурации.
+*/}}
+{{- define "delivery.managementPort" -}}
+{{- required "config.spec.management.port is required: the chart declares the metrics port" (dig "management" "port" nil .Values.config.spec) -}}
 {{- end -}}
 
 {{/*
@@ -81,87 +117,100 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 /etc/nomnom/user-identity/jwks.json
 {{- end -}}
 
+{{/*
+Путь к файлу конфигурации процесса в контейнере (env CONFIG_FILE).
+*/}}
+{{- define "delivery.configFile" -}}
+/etc/nomnom/config.yaml
+{{- end -}}
 
 {{/*
-SpiceDB (ADR 18): при заданном endpoint preshared key обязателен и берётся только из Secret,
-иначе приложение не стартует.
+Файл конфигурации процесса (ADR 17): apiVersion, kind chart, metadata.name — role, spec —
+config.spec как есть. Chart дописывает только то, чем владеет: пути смонтированных JWKS в
+spec.identity и service.version (image.tag) в spec.telemetry.resourceAttributes; такой ключ в
+values — ошибка рендера.
+*/}}
+{{- define "delivery.config" -}}
+{{- $spec := deepCopy (required "config.spec is required" .Values.config.spec) -}}
+{{- $identity := get $spec "identity" -}}
+{{- if kindIs "map" $identity -}}
+{{- range $key := list "jwksFile" "userJwksFile" -}}
+{{- if hasKey $identity $key -}}
+{{- fail (printf "config.spec.identity.%s is set by the chart from identity.jwksConfigMap and identity.userJwksConfigMap; remove it from values" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.identity.jwksConfigMap -}}
+{{- if not (kindIs "map" $identity) -}}
+{{- $identity = dict -}}
+{{- $_ := set $spec "identity" $identity -}}
+{{- end -}}
+{{- $_ := set $identity "jwksFile" (include "delivery.identityJwksFile" .) -}}
+{{- $_ := set $identity "userJwksFile" (include "delivery.identityUserJwksFile" .) -}}
+{{- end -}}
+{{- $telemetry := get $spec "telemetry" -}}
+{{- if kindIs "map" $telemetry -}}
+{{- $values := get $telemetry "resourceAttributes" -}}
+{{- if and (kindIs "map" $values) (hasKey $values "service.version") -}}
+{{- fail "config.spec.telemetry.resourceAttributes.service.version is set by the chart from image.tag; remove it from values" -}}
+{{- end -}}
+{{- end -}}
+{{- with .Values.image.tag -}}
+{{- if not (kindIs "map" $telemetry) -}}
+{{- $telemetry = dict -}}
+{{- $_ := set $spec "telemetry" $telemetry -}}
+{{- end -}}
+{{- $attributes := get $telemetry "resourceAttributes" -}}
+{{- if not (kindIs "map" $attributes) -}}
+{{- $attributes = dict -}}
+{{- $_ := set $telemetry "resourceAttributes" $attributes -}}
+{{- end -}}
+{{- $_ := set $attributes "service.version" (toString .) -}}
+{{- end -}}
+{{- $metadata := dict "name" (required "role is required: metadata.name of the config file" .Values.role) -}}
+{{- toYaml (dict "apiVersion" "config.nomnom.dev/v1alpha1" "kind" "Delivery" "metadata" $metadata "spec" $spec) -}}
+{{- end -}}
+
+{{/*
+Temporal (FR-708) обязателен API (start и signals Assignment Workflow) и worker: адрес и
+namespace задаёт окружение.
+*/}}
+{{- define "delivery.validateTemporal" -}}
+{{- range $key := list "hostPort" "namespace" -}}
+{{- if not (dig "temporal" $key nil $.Values.config.spec) -}}
+{{- fail (printf "config.spec.temporal.%s is required (FR-708)" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+SpiceDB (ADR 18): при заданном config.spec.spicedb.endpoint preshared key обязателен и берётся
+только из Secret, иначе приложение не стартует.
 */}}
 {{- define "delivery.validateSpiceDb" -}}
 {{- if not .Values.spicedb.presharedKeySecret.name -}}
-{{- fail "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" -}}
+{{- fail "spicedb.presharedKeySecret.name is required when config.spec.spicedb.endpoint is set" -}}
 {{- end -}}
 {{- if not .Values.spicedb.presharedKeySecret.key -}}
-{{- fail "spicedb.presharedKeySecret.key is required when spicedb.endpoint is set" -}}
-{{- end -}}
-{{- if not .Values.spicedb.timeout -}}
-{{- fail "spicedb.timeout is required when spicedb.endpoint is set" -}}
+{{- fail "spicedb.presharedKeySecret.key is required when config.spec.spicedb.endpoint is set" -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-PostgreSQL (ADR 8, ADR 31): connection URI только из Secret database.uriSecret и лимиты пула
-database.pool. Общий env процесса и init container миграций; dict:
-root — контекст chart, maxConns — размер пула этого контейнера.
-*/}}
-{{- define "delivery.databaseEnv" -}}
-{{- with .root.Values.database }}
-{{- if .uriSecret.name }}
-- name: DATABASE__URI
-  valueFrom:
-    secretKeyRef:
-      name: {{ .uriSecret.name | quote }}
-      key: {{ .uriSecret.key | quote }}
-- name: DATABASE__MAX_CONNS
-  value: {{ $.maxConns | quote }}
-- name: DATABASE__MIN_CONNS
-  value: {{ .pool.minConns | quote }}
-- name: DATABASE__MAX_LIFETIME
-  value: {{ .pool.maxLifetime | quote }}
-- name: DATABASE__IDLE_TIMEOUT
-  value: {{ .pool.idleTimeout | quote }}
-- name: DATABASE__ACQUIRE_TIMEOUT
-  value: {{ .pool.acquireTimeout | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/*
-OpenTelemetry (ADR 9): OTLP endpoint из telemetry.otlpEndpoint (пусто — экспорта нет);
-resource: service.instance.id — имя pod (downward API), service.version — неизменяемый
-image.tag, остальные атрибуты окружения — telemetry.resourceAttributes. Явная env имеет
-приоритет над envFrom, поэтому OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
-*/}}
-{{- define "delivery.otelEnv" -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "latest" .Values.image.tag)) -}}
-{{- range $key, $value := .Values.telemetry.resourceAttributes }}
-{{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
-{{- end }}
-- name: POD_NAME
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.name
-- name: OTEL_RESOURCE_ATTRIBUTES
-  value: {{ join "," $attrs | quote }}
-{{- with .Values.telemetry.otlpEndpoint }}
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ . | quote }}
-{{- end }}
-{{- with .Values.telemetry.serviceName }}
-- name: OTEL_SERVICE_NAME
-  value: {{ . | quote }}
-{{- end }}
-{{- end }}
-
-{{/*
-Service identity (ADR 27): процесс с gRPC API (service.enabled) проверяет token, поэтому JWKS, issuer, audience
-и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32) обязательны так же:
-JWKS BFF, issuer BFF и делегаты.
+Service identity (ADR 27): процесс с gRPC API (service.enabled) проверяет token, поэтому JWKS,
+issuer, audience и allowlist обязательны — иначе процесс не стартует. User assertions (ADR 32)
+обязательны так же: JWKS BFF, issuer BFF и делегаты.
 */}}
 {{- define "delivery.validateIdentity" -}}
 {{- if .Values.service.enabled -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
+{{- range $key := list "jwksConfigMap" "userJwksConfigMap" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- range $key := list "issuer" "audience" "serviceAccounts" "userIssuer" "userDelegates" -}}
+{{- if not (dig "identity" $key nil $.Values.config.spec) -}}
+{{- fail (printf "config.spec.identity.%s is required" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

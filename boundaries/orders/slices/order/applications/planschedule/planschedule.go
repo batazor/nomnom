@@ -54,8 +54,8 @@ type Handler struct {
 	policy      order.SchedulePolicy
 }
 
-// NewHandler takes SCHEDULED_ORDER__PREPARATION_BUFFER and
-// SCHEDULED_ORDER__REPLAN_LEAD as policy, validated at startup.
+// NewHandler takes spec.scheduledOrder.preparationBuffer and
+// spec.scheduledOrder.replanLead as policy, validated at startup.
 func NewHandler(orders Orders, preparation Preparation, delivery DeliveryDuration, policy order.SchedulePolicy) Handler {
 	return Handler{orders: orders, preparation: preparation, delivery: delivery, policy: policy}
 }

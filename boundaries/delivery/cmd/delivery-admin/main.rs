@@ -1,5 +1,6 @@
 //! Операторские действия `delivery`, запускается разово в pod `delivery`
-//! (`kubectl exec`), где уже есть конфигурация Kafka:
+//! (`kubectl exec`) и читает его файл `CONFIG_FILE` (секции `spec.kafka` и
+//! `spec.schemaRegistry`); сверяются только `apiVersion` и `kind`, не роль:
 //!
 //! ```text
 //! delivery-admin dlq list --stream <topic>

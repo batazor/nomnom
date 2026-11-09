@@ -1,0 +1,104 @@
+# Файл конфигурации процесса restaurants для локального запуска (npm start задаёт
+# CONFIG_FILE=config.example.yaml и POD_NAME). Формат — ADR 17: apiVersion, kind, metadata.name
+# (роль процесса) и spec; неизвестный ключ на любом уровне останавливает старт. Секреты
+# (MONGODB__URI, VALKEY__URL, SPICEDB__PRESHARED_KEY) в файл не входят: только env или .env.
+# Ключи без значения ниже действуют со значением по умолчанию из pkg/config/defaults.ts.
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Restaurants
+metadata:
+  name: restaurants
+spec:
+  server:
+    port: 8082
+  management:
+    port: 9082
+  shutdown:
+    readinessDelay: 5s
+    drainTimeout: 20s
+    telemetryFlushTimeout: 5s
+  # OpenTelemetry (ADR 9). Экспорт traces и metrics включают только флаги tracing.enabled и
+  # metrics.enabled; с любым из них endpoint обязателен. protocol — grpc (4317) или
+  # http/protobuf (4318). Логи всегда JSON в stdout.
+  telemetry:
+    protocol: grpc
+    resourceAttributes:
+      deployment.environment.name: local
+  tracing:
+    enabled: false
+  metrics:
+    enabled: false
+    exportInterval: 60s
+  logging:
+    level: info
+  # Service identity (ADR 27) и user assertions BFF (ADR 32): обязательны процессу с gRPC API.
+  # Пути — к JWKS кластера и BFF; serviceAccounts — namespace/serviceaccount=service-name через
+  # запятую, userDelegates — services через запятую.
+  identity:
+    issuer: https://kubernetes.default.svc.cluster.local
+    audience: nomnom.restaurants
+    jwksFile: ../../tests/identity/fixtures/jwks.json
+    serviceAccounts: nomnom-orders/orders=orders,nomnom-bff/bff=bff
+    userIssuer: nomnom-bff
+    userJwksFile: ../../tests/identity/fixtures/bff-jwks.json
+    userDelegates: bff
+  # SpiceDB (ADR 18): endpoint обязателен; preshared key — env SPICEDB__PRESHARED_KEY.
+  spicedb:
+    endpoint: localhost:50051
+    insecure: true
+    timeout: 2s
+  # MongoDB replica set (ADR 8): connection string — env MONGODB__URI, например
+  # mongodb://localhost:27017/?replicaSet=rs0&directConnection=true.
+  mongodb:
+    database: restaurants
+    timeout: 5s
+    # Без maxPoolSize — default процесса: restaurants 20, restaurants-consumer 5.
+    minPoolSize: 0
+    maxIdleTime: 5m
+    waitQueueTimeout: 5s
+  # Valkey, кеш GetRestaurant/GetMenu/ListRestaurants (ADR 43): URL — env VALKEY__URL,
+  # например redis://localhost:6379.
+  valkey:
+    commandTimeout: 50ms
+  cache:
+    ttl: 1m
+    # Consumer group restaurants-consumer, которая обновляет кеш по restaurant-events и menu-events.
+    refreshGroup: restaurants-cache
+  # Reconciliation restaurant#owner/staff (FR-445); фоновый цикл в процессе.
+  reconciler:
+    interval: 5m
+    grace: 10m
+    pageSize: 500
+  # Открытые продуктовые решения команд кухни: начальный expected_ready_at, повтор Start
+  # Preparation/Mark Ready, отмена во время Preparation.
+  kitchen:
+    preparationTime: 20m
+    repeatPolicy: succeed-without-event
+    cancellationDuringPreparation: reject
+  # Kitchen Queue (FR-241): обычный заказ, ждущий дольше стольких базовых времён ожидания,
+  # идёт вместе с премиум-заказами.
+  kitchenQueue:
+    agingFactor: 2
+  # Wait Time Statistics (FR-645, FR-657): выборка базового времени, окно недавней медианы и
+  # пороги уровня (ELEVATED выше elevatedFactor базовых, NORMAL снова не выше normalFactor).
+  # Те же значения нужны restaurants-consumer.
+  waitTime:
+    sampleSize: 50
+    recentWindow: 30m
+    elevatedFactor: 1.5
+    normalFactor: 1.2
+  # Demo Simulator кухни (FR-605, FR-606): обязателен, без default — период прохода и границы
+  # случайной задержки действия (minDelay <= maxDelay).
+  simulator:
+    interval: 5s
+    minDelay: 30s
+    maxDelay: 2m
+  # Окна доставки запланированных заказов (FR-694): обязательны, без default — ширина окна
+  # (MUST делить 30 минут), первое окно не раньше now + minLead, окна до now + maxHorizon
+  # (minLead < maxHorizon; maxHorizon MUST быть меньше срока жизни Authorization hold у
+  # provider), срок hold резервации и число альтернативных окон при заполненном окне.
+  scheduledSlot:
+    width: 15m
+    minLead: 45m
+    maxHorizon: 48h
+    holdTtl: 10m
+    alternatives: 3

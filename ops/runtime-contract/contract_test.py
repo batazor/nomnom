@@ -2,8 +2,8 @@
 
 Один набор сценариев запускается против реального процесса каждого backend-приложения:
 startup/live/ready на техническом порту, SIGTERM/SIGINT, прекращение приёма запросов,
-exit code и fail fast. Процесс видится только снаружи: через environment, порты,
-сигналы и код выхода.
+exit code и fail fast. Процесс видится только снаружи: через файл конфигурации
+(`CONFIG_FILE`), секреты в environment, порты, сигналы и код выхода.
 
     python3 ops/runtime-contract/contract_test.py              # все приложения
     python3 ops/runtime-contract/contract_test.py orders delivery
@@ -26,10 +26,11 @@ import time
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 BOUNDARIES = ROOT / "boundaries"
+IDENTITY_FIXTURES = ROOT / "tests" / "identity" / "fixtures"
 BUILD_DIR = Path(tempfile.mkdtemp(prefix="nomnom-runtime-contract-"))
 
 READINESS_DELAY_S = 1.0
@@ -39,6 +40,9 @@ STARTUP_TIMEOUT_S = 30.0
 EXIT_MARGIN_S = 3.0
 
 
+API_VERSION = "config.nomnom.dev/v1alpha1"
+
+
 @dataclass(frozen=True)
 class Service:
     name: str
@@ -46,6 +50,18 @@ class Service:
     build: Callable[[], None]
     command: Callable[[], list[str]]
     business_protocol: str
+    # Файл конфигурации процесса (ADR 17): kind сервиса, роль и spec без портов и
+    # shutdown — их задаёт ServiceProcess.
+    kind: str
+    spec: dict[str, Any]
+    # Секреты передаются только через environment.
+    secrets: dict[str, str]
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def run_build(cwd: Path, *argv: str) -> None:
@@ -61,6 +77,27 @@ def orders() -> Service:
         lambda: run_build(cwd, "go", "build", "-o", str(binary), "./cmd/orders"),
         lambda: [str(binary)],
         "grpc",
+        "Orders",
+        {
+            "cancellation": {"window": "5m", "scheduledCutoff": "60m"},
+            "scheduledOrder": {"preparationBuffer": "5m", "replanLead": "30m"},
+            "internalGateway": {"address": "127.0.0.1:8080"},
+            # SpiceDB обязателен (ADR 18); клиенты подключаются лениво, поэтому
+            # контракт lifecycle проверяется без запущенного SpiceDB.
+            "spicedb": {"endpoint": "127.0.0.1:50051", "insecure": True},
+            "simulator": {
+                "interval": "5s",
+                "minDelay": "30s",
+                "maxDelay": "2m",
+                "customerId": "runtime-contract",
+                "marketIds": "berlin",
+            },
+        },
+        {
+            "SPICEDB__PRESHARED_KEY": "runtime-contract",
+            # PostgreSQL обязателен для orders (ADR 8); pool подключается лениво.
+            "POSTGRES__DSN": "postgres://runtime:contract@127.0.0.1:1/orders?sslmode=disable",
+        },
     )
 
 
@@ -72,6 +109,32 @@ def restaurants() -> Service:
         lambda: None if (cwd / "node_modules").exists() else run_build(cwd, "npm", "ci"),
         lambda: ["node", "cmd/restaurants/main.ts"],
         "grpc",
+        "Restaurants",
+        {
+            "identity": {
+                "issuer": "https://kubernetes.default.svc.cluster.local",
+                "audience": "nomnom.restaurants",
+                "jwksFile": str(IDENTITY_FIXTURES / "jwks.json"),
+                "serviceAccounts": "nomnom-orders/orders=orders",
+                "userIssuer": "nomnom-bff",
+                "userJwksFile": str(IDENTITY_FIXTURES / "bff-jwks.json"),
+                "userDelegates": "bff",
+            },
+            "spicedb": {"endpoint": "127.0.0.1:50051", "insecure": True},
+            "simulator": {"interval": "5s", "minDelay": "30s", "maxDelay": "2m"},
+            "scheduledSlot": {
+                "width": "15m",
+                "minLead": "45m",
+                "maxHorizon": "48h",
+                "holdTtl": "10m",
+                "alternatives": 3,
+            },
+        },
+        {
+            "SPICEDB__PRESHARED_KEY": "runtime-contract",
+            "MONGODB__URI": "mongodb://127.0.0.1:1/restaurants",
+            "VALKEY__URL": "redis://127.0.0.1:1",
+        },
     )
 
 
@@ -83,6 +146,53 @@ def delivery() -> Service:
         lambda: run_build(cwd, "cargo", "build", "--quiet", "--bin", "delivery"),
         lambda: [str(cwd / "target" / "debug" / "delivery")],
         "grpc",
+        "Delivery",
+        {
+            "identity": {
+                "issuer": "https://kubernetes.default.svc.cluster.local",
+                "audience": "nomnom.delivery",
+                "jwksFile": str(IDENTITY_FIXTURES / "jwks.json"),
+                "serviceAccounts": "nomnom-orders/orders-worker=orders-worker",
+                "userIssuer": "nomnom-bff",
+                "userJwksFile": str(IDENTITY_FIXTURES / "bff-jwks.json"),
+                "userDelegates": "bff",
+            },
+            "spicedb": {"endpoint": "127.0.0.1:50051", "insecure": True},
+            "temporal": {
+                "hostPort": "127.0.0.1:7233",
+                "namespace": "default",
+                "connectTimeout": "10s",
+            },
+            "simulator": {
+                "interval": "5s",
+                "minDelay": "30s",
+                "maxDelay": "2m",
+                "trackInterval": "1s",
+            },
+            "tracking": {
+                "cityOriginLatitude": 52.515,
+                "cityOriginLongitude": 13.385,
+                "cityBlocks": 12,
+                "blockMeters": 150.0,
+                "persistInterval": "15s",
+            },
+            "kafka": {
+                "brokers": "127.0.0.1:9092",
+                "consumerGroup": "delivery",
+                "initialOffset": "oldest",
+            },
+            "schemaRegistry": {"url": "http://127.0.0.1:8081"},
+            "deliveryEstimate": {
+                "sampleSize": 50,
+                "baselineCourierLead": "15m",
+                "baselineTransit": "20m",
+            },
+        },
+        {
+            "SPICEDB__PRESHARED_KEY": "runtime-contract",
+            "DATABASE__URI": "postgres://runtime:contract@127.0.0.1:1/delivery",
+            "VALKEY__URL": "redis://127.0.0.1:1",
+        },
     )
 
 
@@ -95,16 +205,33 @@ def payments() -> Service:
         lambda: run_build(cwd, "uv", "sync", "--frozen", "--quiet"),
         lambda: [str(cwd / ".venv" / "bin" / "python"), "-m", "entrypoints.payments.main"],
         "grpc",
+        "Payments",
+        {
+            "identity": {
+                "issuer": "https://kubernetes.default.svc.cluster.local",
+                "audience": "nomnom.payments",
+                "jwksFile": str(IDENTITY_FIXTURES / "jwks.json"),
+                "serviceAccounts": "nomnom-orders/orders-worker=orders-worker",
+                "userIssuer": "nomnom-bff",
+                "userJwksFile": str(IDENTITY_FIXTURES / "bff-jwks.json"),
+                "userDelegates": "bff",
+            },
+            "spicedb": {"endpoint": "127.0.0.1:50051", "insecure": True},
+            # Webhook-порт провайдера свободный, как и остальные порты процесса.
+            "provider": {"kind": "fake", "webhookPort": free_port()},
+            "eventStore": {"snapshotEvery": 5},
+        },
+        {
+            "SPICEDB__PRESHARED_KEY": "runtime-contract",
+            "DATABASE__URI": "postgresql://runtime:contract@127.0.0.1:1/payments",
+            "EVENT_STORE__SUBJECT_KEKS": json.dumps({"1": "runtime-contract-kek-0123456789abcdef"}),
+            "EVENT_STORE__SUBJECT_REF_KEY": "runtime-contract-ref-key-0123456789abcdef",
+            "PROVIDER__WEBHOOK_SECRET": "runtime-contract-webhook-secret",
+        },
     )
 
 
 SERVICES = {s.name: s for s in (orders(), restaurants(), delivery(), payments())}
-
-
-def free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def get(port: int, path: str, timeout: float = 1.0) -> tuple[int, bytes]:
@@ -147,30 +274,64 @@ def wait_until(predicate: Callable[[], bool], timeout: float, interval: float = 
     return predicate()
 
 
+def merged(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    result = dict(base)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = merged(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 class ServiceProcess:
-    def __init__(self, service: Service, **overrides: str) -> None:
+    def __init__(
+        self,
+        service: Service,
+        spec: dict[str, Any] | None = None,
+        env: dict[str, str] | None = None,
+        config_file: bool = True,
+    ) -> None:
         self.server_port = free_port()
         self.management_port = free_port()
-        env = {
-            **os.environ,
-            "SERVER__PORT": str(self.server_port),
-            "MANAGEMENT__PORT": str(self.management_port),
-            "SHUTDOWN__READINESS_DELAY": f"{int(READINESS_DELAY_S * 1000)}ms",
-            "SHUTDOWN__DRAIN_TIMEOUT": f"{int(DRAIN_TIMEOUT_S * 1000)}ms",
-            # SpiceDB обязателен (ADR 18); клиенты подключаются лениво, поэтому
-            # контракт lifecycle проверяется без запущенного SpiceDB.
-            "SPICEDB__ENDPOINT": "127.0.0.1:50051",
-            "SPICEDB__PRESHARED_KEY": "runtime-contract",
-            "SPICEDB__INSECURE": "true",
-            # PostgreSQL обязателен для orders (ADR 8); pool подключается лениво.
-            "POSTGRES__DSN": "postgres://runtime:contract@127.0.0.1:1/orders?sslmode=disable",
-            **overrides,
+        config = {
+            "apiVersion": API_VERSION,
+            "kind": service.kind,
+            "metadata": {"name": service.name},
+            "spec": merged(
+                merged(
+                    service.spec,
+                    {
+                        "server": {"port": self.server_port},
+                        "management": {"port": self.management_port},
+                        "shutdown": {
+                            "readinessDelay": f"{int(READINESS_DELAY_S * 1000)}ms",
+                            "drainTimeout": f"{int(DRAIN_TIMEOUT_S * 1000)}ms",
+                        },
+                    },
+                ),
+                spec or {},
+            ),
         }
-        env.pop("PORT", None)
-        env.pop("CONFIG_FILE", None)
+        # JSON — подмножество YAML, поэтому тест обходится stdlib.
+        self.config = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+        json.dump(config, self.config)
+        self.config.close()
+        environment = {
+            name: value
+            for name, value in os.environ.items()
+            if "__" not in name and not name.startswith("OTEL_")
+        }
+        environment.update(service.secrets)
+        environment["POD_NAME"] = f"{service.name}-runtime-contract"
+        if config_file:
+            environment["CONFIG_FILE"] = self.config.name
+        else:
+            environment.pop("CONFIG_FILE", None)
+        environment.update(env or {})
         self.log = tempfile.TemporaryFile()
         self.process = subprocess.Popen(
-            service.command(), cwd=service.cwd, env=env, stdout=self.log, stderr=self.log
+            service.command(), cwd=service.cwd, env=environment, stdout=self.log, stderr=self.log
         )
 
     def output(self) -> str:
@@ -200,13 +361,19 @@ class ServiceProcess:
             self.process.kill()
             self.process.wait()
         self.log.close()
+        os.unlink(self.config.name)
 
 
 class RuntimeContract(unittest.TestCase):
     service: Service
 
-    def start(self, **overrides: str) -> ServiceProcess:
-        proc = ServiceProcess(self.service, **overrides)
+    def start(
+        self,
+        spec: dict[str, Any] | None = None,
+        env: dict[str, str] | None = None,
+        config_file: bool = True,
+    ) -> ServiceProcess:
+        proc = ServiceProcess(self.service, spec, env, config_file)
         self.addCleanup(proc.stop)
         return proc
 
@@ -278,28 +445,48 @@ class RuntimeContract(unittest.TestCase):
         )
 
     def test_sigint_exits_zero(self) -> None:
-        proc = self.start(SHUTDOWN__READINESS_DELAY="0ms")
+        proc = self.start(spec={"shutdown": {"readinessDelay": "0ms"}})
         proc.wait_started()
 
         proc.signal(signal.SIGINT)
         self.assertExitCode(proc, True, DRAIN_TIMEOUT_S + EXIT_MARGIN_S)
 
     def test_invalid_config_fails_fast(self) -> None:
-        proc = self.start(SHUTDOWN__DRAIN_TIMEOUT="0ms")
+        proc = self.start(spec={"shutdown": {"drainTimeout": "0ms"}})
 
         self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
         self.assertIsNone(status_or_none(proc.management_port, "/health/startup"))
 
+    def test_unknown_key_fails_fast(self) -> None:
+        proc = self.start(spec={"shutdown": {"drainTimout": "20s"}})
+
+        self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
+        self.assertIn("drainTimout", proc.output())
+        self.assertIsNone(status_or_none(proc.management_port, "/health/startup"))
+
+    def test_missing_config_file_fails_fast(self) -> None:
+        proc = self.start(config_file=False)
+
+        self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
+        self.assertIsNone(status_or_none(proc.management_port, "/health/startup"))
+
+    def test_non_secret_env_is_ignored(self) -> None:
+        # Несекретная настройка задаётся только файлом: env её не перекрывает.
+        proc = self.start(env={"SHUTDOWN__DRAIN_TIMEOUT": "0ms"})
+        proc.wait_started()
+
+        self.assertEqual(get(proc.management_port, "/health/ready")[0], 200)
+
     def test_missing_postgres_dsn_fails_fast(self) -> None:
         if self.service.name != "orders":
             self.skipTest("only orders keeps its state in PostgreSQL")
-        proc = self.start(POSTGRES__DSN="")
+        proc = self.start(env={"POSTGRES__DSN": ""})
 
         self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
 
     def test_missing_spicedb_endpoint_fails_fast(self) -> None:
         # ADR 18: процесс, проверяющий права, не стартует без SpiceDB.
-        proc = self.start(SPICEDB__ENDPOINT="")
+        proc = self.start(spec={"spicedb": {"endpoint": ""}})
 
         self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
         self.assertIsNone(status_or_none(proc.management_port, "/health/startup"))
@@ -314,7 +501,7 @@ class RuntimeContract(unittest.TestCase):
         blocker.listen()
         busy_port = blocker.getsockname()[1]
 
-        proc = self.start(SERVER__PORT=str(busy_port))
+        proc = self.start(spec={"server": {"port": busy_port}})
         self.assertExitCode(proc, False, STARTUP_TIMEOUT_S)
 
 

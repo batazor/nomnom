@@ -20,8 +20,9 @@ import (
 )
 
 func main() {
-	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов.
-	telemetry.SetupLogging(di.ConsumerServiceName)
+	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов;
+	// после загрузки его заменяет logger из spec.telemetry и spec.logging.
+	telemetry.SetupStartupLogging(config.RoleConsumer)
 	if err := run(); err != nil {
 		slog.Error("orders-consumer stopped", telemetry.LogErrorKey, err)
 		os.Exit(1)
@@ -29,9 +30,12 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	cfg, err := config.Load(config.RoleConsumer)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+	if _, err := telemetry.SetupLogging(context.Background(), cfg.Observability); err != nil {
+		return fmt.Errorf("setup logging: %w", err)
 	}
 
 	consumer, cleanup, err := di.InitializeConsumer(cfg)

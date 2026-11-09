@@ -1,12 +1,26 @@
-import {
-  IDENTITY_AUDIENCE_ENV,
-  IDENTITY_ISSUER_ENV,
-  IDENTITY_JWKS_FILE_ENV,
-  IDENTITY_SERVICE_ACCOUNTS_ENV,
-  IDENTITY_USER_DELEGATES_ENV,
-  IDENTITY_USER_ISSUER_ENV,
-  IDENTITY_USER_JWKS_FILE_ENV,
-} from "./env.ts";
+import { z } from "zod";
+
+import type { Spec } from "./file.ts";
+import { optionalStringSchema } from "./schemas.ts";
+
+/**
+ * `spec.identity`: issuer, audience, путь JWKS и allowlist кластера, issuer,
+ * путь JWKS и делегаты BFF. Пути JWKS в kind задаёт chart по смонтированным
+ * ConfigMap.
+ */
+export const identitySectionSchema = z
+  .strictObject({
+    issuer: optionalStringSchema,
+    audience: optionalStringSchema,
+    jwksFile: optionalStringSchema,
+    /** `namespace/serviceaccount=service-name` через запятую. */
+    serviceAccounts: optionalStringSchema,
+    userIssuer: optionalStringSchema,
+    userJwksFile: optionalStringSchema,
+    /** Имена services через запятую. */
+    userDelegates: optionalStringSchema,
+  })
+  .prefault({});
 
 /**
  * Проверка service identity по projected ServiceAccount token (ADR 27) и user
@@ -36,44 +50,41 @@ const SERVICE_NAME = /^[A-Za-z0-9]([-A-Za-z0-9._]*[A-Za-z0-9])?$/;
 const SERVICE_ACCOUNT_ENTRY = /^([^/=]*)\/([^/=]*)=([^/=]*)$/;
 
 export function loadIdentityConfig(
-  environment: Record<string, string | undefined>,
+  spec: Pick<Spec, "identity">,
 ): IdentityConfig {
-  const issuer = environment[IDENTITY_ISSUER_ENV]?.trim() ?? "";
-  const audience = environment[IDENTITY_AUDIENCE_ENV]?.trim() ?? "";
-  const jwksFile = environment[IDENTITY_JWKS_FILE_ENV]?.trim() ?? "";
-  const serviceAccounts = parseServiceAccounts(
-    environment[IDENTITY_SERVICE_ACCOUNTS_ENV] ?? "",
-  );
+  const { identity } = spec;
+  const issuer = identity.issuer ?? "";
+  const audience = identity.audience ?? "";
+  const jwksFile = identity.jwksFile ?? "";
+  const serviceAccounts = parseServiceAccounts(identity.serviceAccounts ?? "");
 
   if (issuer === "" || audience === "" || jwksFile === "") {
     throw new Error(
-      `${IDENTITY_ISSUER_ENV}, ${IDENTITY_AUDIENCE_ENV} and ${IDENTITY_JWKS_FILE_ENV} are required`,
+      "spec.identity.issuer, spec.identity.audience and spec.identity.jwksFile are required",
     );
   }
   if (serviceAccounts.size === 0) {
-    throw new Error(`${IDENTITY_SERVICE_ACCOUNTS_ENV} must not be empty`);
+    throw new Error("spec.identity.serviceAccounts must not be empty");
   }
   return Object.freeze({
     issuer,
     audience,
     jwksFile,
     serviceAccounts,
-    user: loadUserIdentityConfig(environment),
+    user: loadUserIdentityConfig(identity),
   });
 }
 
 function loadUserIdentityConfig(
-  environment: Record<string, string | undefined>,
+  identity: Spec["identity"],
 ): UserIdentityConfig {
-  const issuer = environment[IDENTITY_USER_ISSUER_ENV]?.trim() ?? "";
-  const jwksFile = environment[IDENTITY_USER_JWKS_FILE_ENV]?.trim() ?? "";
-  const delegates = parseDelegates(
-    environment[IDENTITY_USER_DELEGATES_ENV] ?? "",
-  );
+  const issuer = identity.userIssuer ?? "";
+  const jwksFile = identity.userJwksFile ?? "";
+  const delegates = parseDelegates(identity.userDelegates ?? "");
   const missing = [
-    issuer === "" ? IDENTITY_USER_ISSUER_ENV : "",
-    jwksFile === "" ? IDENTITY_USER_JWKS_FILE_ENV : "",
-    delegates.size === 0 ? IDENTITY_USER_DELEGATES_ENV : "",
+    issuer === "" ? "spec.identity.userIssuer" : "",
+    jwksFile === "" ? "spec.identity.userJwksFile" : "",
+    delegates.size === 0 ? "spec.identity.userDelegates" : "",
   ].filter((name) => name !== "");
   if (missing.length > 0) {
     throw new Error(`${missing.join(", ")} must be set`);
@@ -91,7 +102,7 @@ function parseDelegates(value: string): ReadonlySet<string> {
     const entry = rawEntry.trim();
     if (!SERVICE_NAME.test(entry)) {
       throw new Error(
-        `${IDENTITY_USER_DELEGATES_ENV}: malformed service name "${entry}"`,
+        `spec.identity.userDelegates: malformed service name "${entry}"`,
       );
     }
     delegates.add(entry);
@@ -117,14 +128,14 @@ function parseServiceAccounts(value: string): ReadonlyMap<string, string> {
       !SERVICE_NAME.test(service)
     ) {
       throw new Error(
-        `${IDENTITY_SERVICE_ACCOUNTS_ENV}: malformed entry "${entry}", expected namespace/serviceaccount=service-name`,
+        `spec.identity.serviceAccounts: malformed entry "${entry}", expected namespace/serviceaccount=service-name`,
       );
     }
     const subject = `system:serviceaccount:${namespace}:${name}`;
     const known = allowlist.get(subject);
     if (known !== undefined && known !== service) {
       throw new Error(
-        `${IDENTITY_SERVICE_ACCOUNTS_ENV}: ${namespace}/${name} is mapped to both ${known} and ${service}`,
+        `spec.identity.serviceAccounts: ${namespace}/${name} is mapped to both ${known} and ${service}`,
       );
     }
     allowlist.set(subject, service);

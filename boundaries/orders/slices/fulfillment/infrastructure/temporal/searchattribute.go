@@ -35,7 +35,7 @@ func EnsureStageSearchAttribute(ctx context.Context, operator SearchAttributes, 
 	case ok:
 		return fmt.Errorf("search attribute %s in namespace %s has type %s, want Keyword", name, namespace, kind)
 	case !register:
-		return fmt.Errorf("%w: %s in namespace %s; create it with `temporal operator search-attribute create --namespace %s --name %s --type Keyword`, set TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true or FULFILLMENT__PUBLISH_STAGE=false",
+		return fmt.Errorf("%w: %s in namespace %s; create it with `temporal operator search-attribute create --namespace %s --name %s --type Keyword`, set spec.temporal.registerSearchAttributes: true or spec.fulfillment.publishStage: false",
 			ErrSearchAttributeMissing, name, namespace, namespace, name)
 	}
 

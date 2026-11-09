@@ -1,98 +1,122 @@
-server:
-  port: 8081
-management:
-  port: 9081
-shutdown:
-  readiness_delay: 5s
-  drain_timeout: 20s
-kafka:
-  brokers:
-    - localhost:9092
-  client_id: orders
-  consumer_group: orders
-# Schema Registry записей стримов (env SCHEMA_REGISTRY__URL): обязателен orders-consumer (FR-715).
-schema_registry:
-  url: http://127.0.0.1:8081
-  timeout: 5s
-temporal:
-  host_port: localhost:7233
-  namespace: default
-  connect_timeout: 10s
-  # Создание Search Attribute требует прав оператора namespace; включать локально.
-  register_search_attributes: false
-# Окно отмены от момента Place Order (env CANCELLATION__WINDOW). Placeholder до
-# продуктового решения; значение должно быть положительным. У запланированного заказа окно
-# закрывается в window_start − scheduled_cutoff (env CANCELLATION__SCHEDULED_CUTOFF,
-# обязателен, без значения по умолчанию).
-cancellation:
-  window: 5m
-  scheduled_cutoff: 60m
-# План запланированного заказа (env SCHEDULED_ORDER__*), обязателен, без значений по
-# умолчанию: start_at = planned_ready_at − baseline preparation − preparation_buffer,
-# контрольная точка пересчёта — за replan_lead до start_at.
-scheduled_order:
-  preparation_buffer: 5m
-  replan_lead: 30m
-# Catalog Place Order (env CATALOG__*): лимиты суммы заказа в валюте меню — placeholders,
-# пока restaurants их не публикует; timeout — общий deadline GetRestaurant и GetMenu.
-catalog:
-  minimum_total: "0"
-  maximum_total: "100000"
-  timeout: 2s
-# Policy Order Fulfillment Workflow. Значения — placeholders, не продуктовые сроки.
-fulfillment:
-  acceptance_timeout: 10m
-  preparation_timeout: 90m
-  max_preparation_extension: 60m
-  pickup_timeout: 60m
-  delivery_timeout: 120m
-  publish_stage: true
-  # grpc | unavailable | simulated (grpc — по умолчанию, командные API соседей через
-  # internal gateway; unavailable — явное отключение; simulated — только локальная проверка маршрута).
-  neighbours: grpc
-# Адрес internal gateway (env INTERNAL_GATEWAY_ADDR); обязателен при neighbours: grpc.
-internal_gateway:
-  address: ""
-# Service identity (ADR 27). issuer, audience и jwks_file обязательны для gRPC API.
-identity:
-  issuer: ""
-  audience: nomnom.orders
-  jwks_file: ""
-  # namespace/serviceaccount=service-name через запятую.
-  service_accounts: ""
-  # Каталог projected tokens по audience целевых контекстов (worker).
-  token_dir: ""
-  # User assertions BFF (ADR 32): user_issuer, user_jwks_file и user_delegates обязательны для gRPC API.
-  user_issuer: ""
-  user_jwks_file: ""
-  # Services, которым разрешено передавать user, через запятую (в развёртываниях bff).
-  user_delegates: ""
-# SpiceDB (ADR 18). Пустой endpoint — все authorization checks отклоняются.
-spicedb:
-  endpoint: ""
-  # Preshared key передаётся через SPICEDB__PRESHARED_KEY из Secret, не через файл.
-  preshared_key: ""
-  insecure: false
-  timeout: 2s
-# PostgreSQL (ADR 8). DSN обязателен; передаётся через POSTGRES__DSN из Secret.
-postgres:
-  dsn: ""
-  # Пул процесса за пулером в session mode (README, «Пулер PostgreSQL»).
-  max_conns: 10
-  min_conns: 0
-  max_conn_lifetime: 30m
-  max_conn_lifetime_jitter: 5m
-  max_conn_idle_time: 5m
-  connect_timeout: 5s
-  health_check_period: 1m
-# Demo customer Simulator (FR-604..FR-606), только cmd/orders; значений по умолчанию нет,
-# пустое или невалидное значение и min_delay > max_delay останавливают процесс на старте.
-# Включается RPC SetSimulatorEnabled (platform#operate_simulator); новый сервис — выключен.
-simulator:
-  interval: 5s
-  min_delay: 30s
-  max_delay: 2m
-  # user, от имени которого Simulator оформляет и отменяет заказы.
-  customer_id: ""
-  # Markets (ADR 41) через запятую, рестораны которых видит Simulator, например "berlin".
-  market_ids: ""
+# Файл конфигурации процесса orders (CONFIG_FILE). Формат ресурса Kubernetes, в Kubernetes API
+# не регистрируется. Ключи spec — camelCase, длительности — строки Go (500ms, 5s, 2m, 1h);
+# неизвестный ключ на любом уровне — ошибка старта. Секреты в файл не входят: POSTGRES__DSN и
+# SPICEDB__PRESHARED_KEY — только env (postgres.dsn в spec — неизвестный ключ). service.instance.id —
+# env POD_NAME, обязателен. `make run` запускает API с этим файлом.
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Orders
+metadata:
+  # Роль процесса: orders, orders-worker или orders-consumer. Процесс не стартует с файлом чужой
+  # роли; orders-admin сверяет только apiVersion и kind.
+  name: orders
+spec:
+  server:
+    port: 8081
+  management:
+    port: 9081
+  shutdown:
+    readinessDelay: 5s
+    drainTimeout: 20s
+  kafka:
+    brokers:
+      - localhost:9092
+    clientId: orders
+    consumerGroup: orders
+    initialOffset: oldest
+  # Schema Registry записей стримов: обязателен orders-consumer (FR-715).
+  schemaRegistry:
+    url: http://127.0.0.1:8081
+    timeout: 5s
+  temporal:
+    hostPort: localhost:7233
+    namespace: default
+    connectTimeout: 10s
+    # Создание Search Attribute требует прав оператора namespace; включать локально.
+    registerSearchAttributes: false
+  # Окно отмены от момента Place Order. Placeholder до продуктового решения; значение должно быть
+  # положительным. У запланированного заказа окно закрывается в window_start − scheduledCutoff
+  # (обязателен, без значения по умолчанию).
+  cancellation:
+    window: 5m
+    scheduledCutoff: 60m
+  # План запланированного заказа, обязателен, без значений по умолчанию: start_at =
+  # planned_ready_at − baseline preparation − preparationBuffer, контрольная точка пересчёта — за
+  # replanLead до start_at.
+  scheduledOrder:
+    preparationBuffer: 5m
+    replanLead: 30m
+  # Catalog Place Order: лимиты суммы заказа в валюте меню — placeholders, пока restaurants их не
+  # публикует; timeout — общий deadline GetRestaurant и GetMenu.
+  catalog:
+    minimumTotal: "0"
+    maximumTotal: "100000"
+    timeout: 2s
+  # Policy Order Fulfillment Workflow. Значения — placeholders, не продуктовые сроки.
+  fulfillment:
+    acceptanceTimeout: 10m
+    preparationTimeout: 90m
+    maxPreparationExtension: 60m
+    pickupTimeout: 60m
+    deliveryTimeout: 120m
+    publishStage: true
+  # Адрес internal gateway для синхронных вызовов других контекстов; обязателен всем процессам.
+  internalGateway:
+    address: localhost:8080
+  # Service identity (ADR 27). issuer, audience и jwksFile обязательны для gRPC API.
+  identity:
+    issuer: ""
+    audience: nomnom.orders
+    jwksFile: ""
+    # namespace/serviceaccount=service-name через запятую.
+    serviceAccounts: ""
+    # Каталог projected tokens по audience целевых контекстов (worker).
+    tokenDir: ""
+    # User assertions BFF (ADR 32): userIssuer, userJwksFile и userDelegates обязательны для gRPC API.
+    userIssuer: ""
+    userJwksFile: ""
+    # Services, которым разрешено передавать user, через запятую (в развёртываниях bff).
+    userDelegates: ""
+  # SpiceDB (ADR 18): обязателен API и consumer. Preshared key — env SPICEDB__PRESHARED_KEY.
+  spicedb:
+    endpoint: localhost:50051
+    insecure: true
+    timeout: 2s
+  # PostgreSQL (ADR 8). DSN — env POSTGRES__DSN. Пул процесса за пулером в session mode
+  # (README, «Пулер PostgreSQL»).
+  postgres:
+    maxConns: 10
+    minConns: 0
+    maxConnLifetime: 30m
+    maxConnLifetimeJitter: 5m
+    maxConnIdleTime: 5m
+    connectTimeout: 5s
+    healthCheckPeriod: 1m
+  # Demo customer Simulator (FR-604..FR-606), только cmd/orders; значений по умолчанию нет,
+  # пустое или невалидное значение и minDelay > maxDelay останавливают процесс на старте.
+  # Включается RPC SetSimulatorEnabled (platform#operate_simulator); новый сервис — выключен.
+  simulator:
+    interval: 5s
+    minDelay: 30s
+    maxDelay: 2m
+    # user, от имени которого Simulator оформляет и отменяет заказы.
+    customerId: local-customer
+    # Markets (ADR 41) через запятую, рестораны которых видит Simulator, например "berlin".
+    marketIds: berlin
+  # OpenTelemetry (ADR 9). Экспорт включают только tracing.enabled и metrics.enabled; endpoint —
+  # базовый URL OTLP коллектора, обязателен при включённом экспорте. protocol — grpc или
+  # http/protobuf. serviceName по умолчанию — роль. resourceAttributes не задают service.name и
+  # service.instance.id.
+  telemetry:
+    endpoint: ""
+    protocol: grpc
+    serviceName: orders
+    resourceAttributes:
+      deployment.environment.name: local
+  tracing:
+    enabled: false
+  metrics:
+    enabled: false
+    exportInterval: 60s
+  # debug | info | warn | error.
+  logging:
+    level: info

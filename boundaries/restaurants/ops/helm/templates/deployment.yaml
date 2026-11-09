@@ -11,15 +11,12 @@ spec:
       {{- include "common.labels.matchLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- if or .Values.env .Values.podAnnotations }}
       annotations:
-        {{- if .Values.env }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- end }}
+        # Изменение файла конфигурации перезапускает pod: subPath-монтирование не обновляется.
+        checksum/config: {{ include "restaurants.configFile" . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
-      {{- end }}
       labels:
         {{- include "restaurants.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
@@ -59,61 +56,22 @@ spec:
               protocol: TCP
             {{- end }}
             - name: metrics
-              containerPort: {{ .Values.management.port }}
+              containerPort: {{ include "restaurants.managementPort" . }}
               protocol: TCP
-          {{- if or .Values.env .Values.envFrom }}
+          {{- with .Values.envFrom }}
           envFrom:
-            {{- if .Values.env }}
-            - configMapRef:
-                name: {{ include "common.names.fullname" . }}
-            {{- end }}
-            {{- with .Values.envFrom }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
-            {{- end }}
           {{- end }}
           env:
-            - name: MANAGEMENT__PORT
-              value: {{ .Values.management.port | quote }}
-            - name: SHUTDOWN__READINESS_DELAY
-              value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
-            - name: SHUTDOWN__DRAIN_TIMEOUT
-              value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
-            - name: SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT
-              value: {{ printf "%ds" (int .Values.shutdown.telemetryFlushTimeoutSeconds) | quote }}
-            {{- include "restaurants.otelEnv" . | nindent 12 }}
-            {{- if .Values.identity.jwksConfigMap }}
-            - name: IDENTITY__ISSUER
-              value: {{ .Values.identity.issuer | quote }}
-            - name: IDENTITY__AUDIENCE
-              value: {{ .Values.identity.audience | quote }}
-            - name: IDENTITY__JWKS_FILE
-              value: "/etc/nomnom/identity/jwks.json"
-            - name: IDENTITY__SERVICE_ACCOUNTS
-              value: {{ .Values.identity.serviceAccounts | quote }}
-            - name: IDENTITY__USER_ISSUER
-              value: {{ .Values.identity.userIssuer | quote }}
-            - name: IDENTITY__USER_JWKS_FILE
-              value: "/etc/nomnom/user-identity/jwks.json"
-            - name: IDENTITY__USER_DELEGATES
-              value: {{ .Values.identity.userDelegates | quote }}
-            {{- end }}
-            {{- with .Values.spicedb }}
-            {{- if .endpoint }}
-            - name: SPICEDB__ENDPOINT
-              value: {{ .endpoint | quote }}
-            - name: SPICEDB__INSECURE
-              value: {{ .insecure | toString | quote }}
-            - name: SPICEDB__TIMEOUT
-              value: {{ .timeout | quote }}
-            - name: SPICEDB__PRESHARED_KEY
+            # Файл конфигурации процесса (ADR 17); env SECTION__KEY несекретных настроек процесс не читает.
+            - name: CONFIG_FILE
+              value: /etc/nomnom/config.yaml
+            # service.instance.id телеметрии — имя pod (downward API).
+            - name: POD_NAME
               valueFrom:
-                secretKeyRef:
-                  name: {{ .presharedKeySecret.name | quote }}
-                  key: {{ .presharedKeySecret.key | quote }}
-            {{- end }}
-            {{- end }}
-            {{- include "restaurants.mongodbEnv" (dict "context" . "pool" .Values.mongodb.pool) | trim | nindent 12 }}
-            {{- include "restaurants.valkeyEnv" . | trim | nindent 12 }}
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- include "restaurants.secretEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
@@ -129,8 +87,11 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap }}
           volumeMounts:
+            - name: config
+              mountPath: /etc/nomnom/config.yaml
+              subPath: config.yaml
+              readOnly: true
             {{- if .Values.identity.jwksConfigMap }}
             - name: identity-jwks
               mountPath: /etc/nomnom/identity
@@ -142,9 +103,13 @@ spec:
             {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
-          {{- end }}
-      {{- if or .Values.volumes .Values.identity.jwksConfigMap }}
       volumes:
+        - name: config
+          configMap:
+            name: {{ include "common.names.fullname" . }}
+            items:
+              - key: config.yaml
+                path: config.yaml
         {{- if .Values.identity.jwksConfigMap }}
         - name: identity-jwks
           configMap:
@@ -162,7 +127,6 @@ spec:
         {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
-      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}

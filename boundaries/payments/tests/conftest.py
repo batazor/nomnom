@@ -34,15 +34,13 @@ def database_uri() -> Iterator[str]:
         POSTGRES_IMAGE, username="payments", password="payments", dbname="payments", driver=None
     ) as container:
         uri = container.get_connection_url(host=LOOPBACK)
-        migrate(config.database.Config(DATABASE__URI=uri), MIGRATIONS)
+        migrate(config.database.Config(uri=uri), MIGRATIONS)
         yield uri
 
 
 @pytest.fixture(scope="session")
 def session_database(database_uri: str) -> Iterator[Database]:
-    database = create_database(
-        config.database.Config(DATABASE__URI=database_uri, DATABASE__MAX_CONNS=8)
-    )
+    database = create_database(config.database.Config(uri=database_uri, max_conns=8))
     database.check()
     yield database
     database.close()

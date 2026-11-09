@@ -5,10 +5,10 @@ GOLANGCI_LINT ?= golangci-lint
 
 check: crd-check test lint format-check
 
-# Реестр и маршруты (ROUTES__*, ADR 41) доступны через in-cluster config: процесс стартует только
-# в pod кластера. ROUTES__* задаёт окружение или CONFIG_FILE (config.example.yaml).
+# Реестр и маршруты (spec.routes, ADR 41) доступны через in-cluster config: процесс стартует только
+# в pod кластера. Конфигурация — файл CONFIG_FILE (config.example.yaml), service.instance.id — POD_NAME.
 run:
-	$(GO) run ./cmd/controlplane
+	CONFIG_FILE=config.example.yaml POD_NAME=controlplane-local $(GO) run ./cmd/controlplane
 
 generate:
 	$(GO) tool controller-gen object paths=./infrastructure/kubernetes/api/...

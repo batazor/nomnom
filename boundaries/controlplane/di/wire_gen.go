@@ -34,7 +34,7 @@ func InitializeApp(cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	app := NewApp(module)
+	app := NewApp(cfg, module)
 	return app, nil
 }
 

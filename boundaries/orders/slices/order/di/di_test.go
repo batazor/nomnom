@@ -10,5 +10,5 @@ import (
 
 func TestNewAuthorizerRequiresEndpoint(t *testing.T) {
 	_, _, err := NewAuthorizer(config.SpiceDBConfig{}, nil)
-	require.ErrorContains(t, err, config.EnvSpiceDBEndpoint)
+	require.ErrorContains(t, err, config.KeySpiceDBEndpoint)
 }

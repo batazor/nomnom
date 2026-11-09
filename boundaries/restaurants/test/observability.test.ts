@@ -54,6 +54,7 @@ import {
   AUTHZ_DURATION_BUCKETS,
   ObservedPermissionsClient,
 } from "../infrastructure/spicedb/check-telemetry.ts";
+import { loadTelemetryConfig, specSchema } from "../pkg/config/config.ts";
 import type { Outbox } from "../pkg/outbox/outbox.ts";
 import { createLogger, REDACTED } from "../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../pkg/telemetry/resource.ts";
@@ -89,17 +90,31 @@ class TestReader extends MetricReader {
   protected async onShutdown(): Promise<void> {}
 }
 
+/** Telemetry of a process from the file sections, as cmd/* loads it. */
+const telemetryConfig = (
+  serviceName: string,
+  resourceAttributes: Record<string, string> = {},
+) =>
+  loadTelemetryConfig(
+    specSchema.parse({ telemetry: { resourceAttributes } }),
+    { POD_NAME: `${serviceName}-abc` },
+    serviceName,
+  );
+
 /** Telemetry of one test with in-memory span exporter and metric reader. */
 const startTestTelemetry = (
   serviceName: string,
-  environment: Record<string, string> = {},
+  resourceAttributes: Record<string, string> = {},
 ) => {
   const exporter = new InMemorySpanExporter();
   const reader = new TestReader();
-  const telemetry = startTelemetry(serviceName, environment, {
-    spanProcessors: [new SimpleSpanProcessor({ exporter })],
-    metricReaders: [reader],
-  });
+  const telemetry = startTelemetry(
+    telemetryConfig(serviceName, resourceAttributes),
+    {
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
+      metricReaders: [reader],
+    },
+  );
   const collect = async (): Promise<ResourceMetrics> =>
     (await reader.collect()).resourceMetrics;
   return { exporter, telemetry, collect };
@@ -619,8 +634,8 @@ test("MongoDB commands outside a trace record the metric but open no root span",
 
 test("runtime and process metrics share the resource of the traces", async () => {
   const { exporter, telemetry, collect } = startTestTelemetry("restaurants", {
-    OTEL_RESOURCE_ATTRIBUTES:
-      "service.version=1.2.3,deployment.environment.name=local,service.instance.id=restaurants-abc",
+    "service.version": "1.2.3",
+    "deployment.environment.name": "local",
   });
   try {
     // Event loop delay is reported after five samples; force one GC.
@@ -677,10 +692,12 @@ test("logs are one JSON line with the service identity and trace_id only inside 
   try {
     const lines: string[] = [];
     const logger = createLogger({
-      resource: telemetryResource("restaurants-consumer", {
-        OTEL_RESOURCE_ATTRIBUTES:
-          "service.version=1.2.3,deployment.environment.name=local",
-      }),
+      resource: telemetryResource(
+        telemetryConfig("restaurants-consumer", {
+          "service.version": "1.2.3",
+          "deployment.environment.name": "local",
+        }),
+      ),
       write: (line) => lines.push(line),
       now: () => new Date("2026-10-25T12:00:00+08:00"),
     });
@@ -719,6 +736,7 @@ test("logs are one JSON line with the service identity and trace_id only inside 
       "service.namespace": "nomnom",
       "service.name": "restaurants-consumer",
       "service.version": "1.2.3",
+      "service.instance.id": "restaurants-consumer-abc",
       "deployment.environment.name": "local",
       operation: "consumer",
     });
@@ -1033,11 +1051,10 @@ test("telemetry shutdown is bounded by the flush timeout", async () => {
     forceFlush: () => new Promise(() => {}),
     shutdown: () => new Promise(() => {}),
   };
-  const telemetry = startTelemetry(
-    "restaurants",
-    {},
-    { spanProcessors: [hanging], metricReaders: [new TestReader()] },
-  );
+  const telemetry = startTelemetry(telemetryConfig("restaurants"), {
+    spanProcessors: [hanging],
+    metricReaders: [new TestReader()],
+  });
   const started = performance.now();
   await telemetry.shutdown(50);
   assert.ok(performance.now() - started < 1000);

@@ -1,12 +1,10 @@
 import json
-import os
 import tempfile
 import time
 import unittest
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast, override
-from unittest.mock import patch
 
 import grpc
 import jwt
@@ -18,7 +16,7 @@ from pydantic import ValidationError
 from test_service_identity import (
     FIXTURES,
     JWKS_FILE,
-    REQUIRED_ENV,
+    REQUIRED_SPEC,
     FakeContext,
     _AbortedError,
     _handlers,
@@ -42,7 +40,7 @@ from infrastructure.grpc.service import (
 )
 from infrastructure.repository import Database
 from pkg.authz import Subject, SubjectKind
-from pkg.config import IdentitySettings, load_settings
+from pkg.config import IdentitySettings, parse_spec
 from slices.payment.domains.payment import PaymentState
 
 # Shared vectors of ADR 32: user assertions are checked with the clock fixed on ``now``.
@@ -54,7 +52,7 @@ NOW = float(USER_VECTORS["now"])
 CUSTOMER = Subject(SubjectKind.USER, USER_VECTORS["expected_subject"])
 BFF = Subject(SubjectKind.SERVICE, "bff")
 LOGGER = "infrastructure.grpc.identity"
-USER_ENV = ("IDENTITY__USER_ISSUER", "IDENTITY__USER_JWKS_FILE", "IDENTITY__USER_DELEGATES")
+USER_KEYS = ("userIssuer", "userJwksFile", "userDelegates")
 
 
 def _metadata(service_token: str, *assertions: str) -> list[tuple[str, str]]:
@@ -69,17 +67,16 @@ def _context(service_token: str, *assertions: str) -> FakeContext:
 
 def _settings(**overrides: str) -> IdentitySettings:
     values = {
-        "IDENTITY__ISSUER": USER_VECTORS["service_issuer"],
-        "IDENTITY__AUDIENCE": USER_VECTORS["audience"],
-        "IDENTITY__JWKS_FILE": str(JWKS_FILE),
-        "IDENTITY__SERVICE_ACCOUNTS": USER_VECTORS["service_accounts"],
-        "IDENTITY__USER_ISSUER": USER_VECTORS["issuer"],
-        "IDENTITY__USER_JWKS_FILE": str(BFF_JWKS_FILE),
-        "IDENTITY__USER_DELEGATES": USER_VECTORS["delegates"],
+        "issuer": USER_VECTORS["service_issuer"],
+        "audience": USER_VECTORS["audience"],
+        "jwksFile": str(JWKS_FILE),
+        "serviceAccounts": USER_VECTORS["service_accounts"],
+        "userIssuer": USER_VECTORS["issuer"],
+        "userJwksFile": str(BFF_JWKS_FILE),
+        "userDelegates": USER_VECTORS["delegates"],
     }
     values.update(overrides)
-    with patch.dict(os.environ, {**REQUIRED_ENV, **values}, clear=True):
-        return IdentitySettings(_env_file=None)  # type: ignore[call-arg]
+    return IdentitySettings.model_validate(values)
 
 
 def _resolver(**overrides: str) -> ServiceTokenSubjectResolver:
@@ -221,7 +218,7 @@ class SignedAssertionTest(_ResolverCase):
         self.addCleanup(self.directory.cleanup)
         jwks_file = Path(self.directory.name) / "bff-jwks.json"
         jwks_file.write_text(json.dumps({"keys": [jwk]}), encoding="utf-8")
-        self.resolver = _resolver(IDENTITY__USER_JWKS_FILE=str(jwks_file))
+        self.resolver = _resolver(userJwksFile=str(jwks_file))
 
     def _assertion(self, **overrides: object) -> str:
         claims: dict[str, object] = {
@@ -273,13 +270,12 @@ class UserIdentityConfigTest(unittest.TestCase):
     """FR-473: user assertion settings are required, an invalid BFF JWKS stops startup."""
 
     def test_user_settings_are_missing_by_default(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            identity = load_settings().identity
-        for env in USER_ENV:
-            self.assertIn(env, identity.missing)
+        identity = parse_spec(REQUIRED_SPEC).identity
+        for key in USER_KEYS:
+            self.assertIn(f"spec.identity.{key}", identity.missing)
 
-    def test_reads_user_identity_from_environment(self) -> None:
-        settings = _settings(IDENTITY__USER_DELEGATES=" bff , admin-bff ")
+    def test_reads_user_identity_from_the_file(self) -> None:
+        settings = _settings(userDelegates=" bff , admin-bff ")
         self.assertEqual(settings.missing, [])
         self.assertEqual(settings.user_issuer, "nomnom-bff")
         self.assertEqual(settings.user_jwks_file, str(BFF_JWKS_FILE))
@@ -288,20 +284,20 @@ class UserIdentityConfigTest(unittest.TestCase):
     def test_malformed_delegates_are_a_config_error(self) -> None:
         for value in ("bff,", ",bff", "bff,,orders", "bff orders", "bff,bff"):
             with self.subTest(value=value), self.assertRaises(ValidationError):
-                _settings(IDENTITY__USER_DELEGATES=value)
+                _settings(userDelegates=value)
 
     def test_missing_user_settings_are_a_startup_error(self) -> None:
         with self.assertRaises(IdentityConfigError) as raised:
-            create_subject_resolver(_settings(**dict.fromkeys(USER_ENV, "")))
-        for env in USER_ENV:
+            create_subject_resolver(_settings(**dict.fromkeys(USER_KEYS, "")))
+        for env in USER_KEYS:
             self.assertIn(env, str(raised.exception))
 
     def test_partial_user_settings_are_a_startup_error(self) -> None:
-        for env in USER_ENV:
+        for env in USER_KEYS:
             with self.subTest(empty=env), self.assertRaises(IdentityConfigError) as raised:
                 create_subject_resolver(_settings(**{env: ""}))
             self.assertIn(env, str(raised.exception))
-            for other in USER_ENV:
+            for other in USER_KEYS:
                 if other != env:
                     self.assertNotIn(other, str(raised.exception))
 
@@ -322,7 +318,7 @@ class UserIdentityConfigTest(unittest.TestCase):
                 if content is not None:
                     path.write_text(content, encoding="utf-8")
                 with self.subTest(jwks=name), self.assertRaises(IdentityConfigError):
-                    create_subject_resolver(_settings(IDENTITY__USER_JWKS_FILE=str(path)))
+                    create_subject_resolver(_settings(userJwksFile=str(path)))
 
 
 @pytest.mark.usefixtures("database")

@@ -1,15 +1,33 @@
 import { z } from "zod";
+
 import {
   DEFAULT_WAIT_TIME_ELEVATED_FACTOR,
   DEFAULT_WAIT_TIME_NORMAL_FACTOR,
   DEFAULT_WAIT_TIME_RECENT_WINDOW,
   DEFAULT_WAIT_TIME_SAMPLE_SIZE,
-  WAIT_TIME_ELEVATED_FACTOR_ENV,
-  WAIT_TIME_NORMAL_FACTOR_ENV,
-  WAIT_TIME_RECENT_WINDOW_ENV,
-  WAIT_TIME_SAMPLE_SIZE_ENV,
-} from "./env.ts";
-import { durationSchema } from "./schemas.ts";
+} from "./defaults.ts";
+import type { Spec } from "./file.ts";
+import { positiveDurationSchema } from "./schemas.ts";
+
+const factorSchema = z
+  .number({ error: "expected a number" })
+  .positive("expected a positive number");
+
+/** `spec.waitTime`: Wait Time Statistics (FR-645, FR-657). */
+export const waitTimeSectionSchema = z
+  .strictObject({
+    sampleSize: z
+      .number()
+      .int()
+      .min(1, "expected a positive integer")
+      .prefault(DEFAULT_WAIT_TIME_SAMPLE_SIZE),
+    recentWindow: positiveDurationSchema.prefault(
+      DEFAULT_WAIT_TIME_RECENT_WINDOW,
+    ),
+    elevatedFactor: factorSchema.prefault(DEFAULT_WAIT_TIME_ELEVATED_FACTOR),
+    normalFactor: factorSchema.prefault(DEFAULT_WAIT_TIME_NORMAL_FACTOR),
+  })
+  .prefault({});
 
 /**
  * Wait Time Statistics of a restaurant (FR-645, FR-657): sample of the
@@ -24,45 +42,19 @@ export interface WaitTimeConfig {
   readonly normalFactor: number;
 }
 
-const factorSchema = (name: string) =>
-  z.coerce
-    .number({ error: `${name}: expected a number` })
-    .positive(`${name}: expected a positive number`);
-
 export function loadWaitTimeConfig(
-  environment: Record<string, string | undefined>,
+  spec: Pick<Spec, "waitTime">,
 ): WaitTimeConfig {
-  const sampleSize = z.coerce
-    .number()
-    .int()
-    .min(1, `${WAIT_TIME_SAMPLE_SIZE_ENV}: expected a positive integer`)
-    .parse(
-      environment[WAIT_TIME_SAMPLE_SIZE_ENV]?.trim() ||
-        DEFAULT_WAIT_TIME_SAMPLE_SIZE,
-    );
-  const recentWindowMs = durationSchema
-    .refine((value) => value > 0, "recent window must be positive")
-    .parse(
-      environment[WAIT_TIME_RECENT_WINDOW_ENV]?.trim() ||
-        DEFAULT_WAIT_TIME_RECENT_WINDOW,
-    );
-  const elevatedFactor = factorSchema(WAIT_TIME_ELEVATED_FACTOR_ENV).parse(
-    environment[WAIT_TIME_ELEVATED_FACTOR_ENV]?.trim() ||
-      DEFAULT_WAIT_TIME_ELEVATED_FACTOR,
-  );
-  const normalFactor = factorSchema(WAIT_TIME_NORMAL_FACTOR_ENV).parse(
-    environment[WAIT_TIME_NORMAL_FACTOR_ENV]?.trim() ||
-      DEFAULT_WAIT_TIME_NORMAL_FACTOR,
-  );
-  if (normalFactor >= elevatedFactor) {
+  const { waitTime } = spec;
+  if (waitTime.normalFactor >= waitTime.elevatedFactor) {
     throw new Error(
-      `${WAIT_TIME_NORMAL_FACTOR_ENV} must be less than ${WAIT_TIME_ELEVATED_FACTOR_ENV}`,
+      "spec.waitTime.normalFactor must be less than spec.waitTime.elevatedFactor",
     );
   }
   return Object.freeze({
-    sampleSize,
-    recentWindowMs,
-    elevatedFactor,
-    normalFactor,
+    sampleSize: waitTime.sampleSize,
+    recentWindowMs: waitTime.recentWindow,
+    elevatedFactor: waitTime.elevatedFactor,
+    normalFactor: waitTime.normalFactor,
   });
 }

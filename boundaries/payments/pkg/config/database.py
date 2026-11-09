@@ -7,14 +7,9 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .duration import _duration
+from .section import Section
 
 DATABASE_URI_ENV = "DATABASE__URI"
-DATABASE_MAX_CONNS_ENV = "DATABASE__MAX_CONNS"
-DATABASE_MIN_CONNS_ENV = "DATABASE__MIN_CONNS"
-DATABASE_MAX_CONN_LIFETIME_ENV = "DATABASE__MAX_CONN_LIFETIME"
-DATABASE_MAX_CONN_IDLE_TIME_ENV = "DATABASE__MAX_CONN_IDLE_TIME"
-DATABASE_CONNECT_TIMEOUT_ENV = "DATABASE__CONNECT_TIMEOUT"
-DATABASE_ACQUIRE_TIMEOUT_ENV = "DATABASE__ACQUIRE_TIMEOUT"
 
 # Префиксы connection URI libpq; key=value и другие схемы не принимаются.
 DATABASE_URI_SCHEMES = ("postgresql://", "postgres://")
@@ -32,58 +27,20 @@ DEFAULT_DATABASE_ACQUIRE_TIMEOUT = timedelta(seconds=5)
 MAX_DATABASE_MIN_CONNS = 1
 
 
-class Config(BaseSettings):
-    """Connection to the payments PostgreSQL database (ADR 8, local ADR 1).
+class DatabaseSpec(Section):
+    """``spec.database``: limits of the process pool, validated at startup.
 
-    The connection URI is required and must be a PostgreSQL connection URI
-    (``postgresql://`` or ``postgres://``); an empty value, the libpq ``key=value`` form or
-    another scheme stops the process at startup. In the cluster it comes from a Secret and
-    is never stored in values. Pool limits are validated at
-    startup as well: every pooled connection pins a server connection of the
-    session-mode pooler.
+    Every pooled connection pins a server connection of the session-mode pooler.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    uri: str = Field(default="", validation_alias=DATABASE_URI_ENV, repr=False)
-    max_conns: int = Field(
-        default=DEFAULT_DATABASE_MAX_CONNS, ge=1, validation_alias=DATABASE_MAX_CONNS_ENV
-    )
-    min_conns: int = Field(
-        default=DEFAULT_DATABASE_MIN_CONNS,
-        ge=0,
-        le=MAX_DATABASE_MIN_CONNS,
-        validation_alias=DATABASE_MIN_CONNS_ENV,
-    )
-    max_conn_lifetime: timedelta = Field(
-        default=DEFAULT_DATABASE_MAX_CONN_LIFETIME, validation_alias=DATABASE_MAX_CONN_LIFETIME_ENV
-    )
-    max_conn_idle_time: timedelta = Field(
-        default=DEFAULT_DATABASE_MAX_CONN_IDLE_TIME,
-        validation_alias=DATABASE_MAX_CONN_IDLE_TIME_ENV,
-    )
+    max_conns: int = Field(default=DEFAULT_DATABASE_MAX_CONNS, ge=1)
+    min_conns: int = Field(default=DEFAULT_DATABASE_MIN_CONNS, ge=0, le=MAX_DATABASE_MIN_CONNS)
+    max_conn_lifetime: timedelta = DEFAULT_DATABASE_MAX_CONN_LIFETIME
+    max_conn_idle_time: timedelta = DEFAULT_DATABASE_MAX_CONN_IDLE_TIME
     # connect_timeout libpq: целые секунды, округляются вверх.
-    connect_timeout: timedelta = Field(
-        default=DEFAULT_DATABASE_CONNECT_TIMEOUT, validation_alias=DATABASE_CONNECT_TIMEOUT_ENV
-    )
+    connect_timeout: timedelta = DEFAULT_DATABASE_CONNECT_TIMEOUT
     # Ожидание свободного соединения пула; по истечении запрос получает PoolTimeout.
-    acquire_timeout: timedelta = Field(
-        default=DEFAULT_DATABASE_ACQUIRE_TIMEOUT, validation_alias=DATABASE_ACQUIRE_TIMEOUT_ENV
-    )
-
-    @field_validator("uri")
-    @classmethod
-    def _require_uri(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError(f"{DATABASE_URI_ENV} must not be empty")
-        if not value.startswith(DATABASE_URI_SCHEMES):
-            raise ValueError(
-                f"{DATABASE_URI_ENV} must be a PostgreSQL connection URI "
-                "(postgresql://user@host:port/dbname); the libpq key=value form and other "
-                "schemes are not accepted"
-            )
-        return value
+    acquire_timeout: timedelta = DEFAULT_DATABASE_ACQUIRE_TIMEOUT
 
     @field_validator(
         "max_conn_lifetime",
@@ -109,7 +66,48 @@ class Config(BaseSettings):
     def _min_within_max(self) -> Self:
         if self.min_conns > self.max_conns:
             raise ValueError(
-                f"{DATABASE_MIN_CONNS_ENV} ({self.min_conns}) must not exceed "
-                f"{DATABASE_MAX_CONNS_ENV} ({self.max_conns})"
+                f"spec.database.minConns ({self.min_conns}) must not exceed "
+                f"spec.database.maxConns ({self.max_conns})"
             )
         return self
+
+
+class DatabaseSecrets(BaseSettings):
+    """Connection URI of the database: only from env, in the cluster from a Secret.
+
+    The URI is required and must be a PostgreSQL connection URI (``postgresql://`` or
+    ``postgres://``); an empty value, the libpq ``key=value`` form or another scheme stops
+    the process at startup.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    uri: str = Field(default="", validation_alias=DATABASE_URI_ENV, repr=False)
+
+    @field_validator("uri")
+    @classmethod
+    def _require_uri(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError(f"{DATABASE_URI_ENV} must not be empty")
+        if not value.startswith(DATABASE_URI_SCHEMES):
+            raise ValueError(
+                f"{DATABASE_URI_ENV} must be a PostgreSQL connection URI "
+                "(postgresql://user@host:port/dbname); the libpq key=value form and other "
+                "schemes are not accepted"
+            )
+        return value
+
+
+class Config(DatabaseSpec):
+    """Connection to the payments PostgreSQL database (ADR 8, local ADR 1).
+
+    ``spec.database`` pool limits plus the connection URI of ``DATABASE__URI``.
+    """
+
+    uri: str = Field(repr=False)
+
+    @classmethod
+    def from_spec(cls, spec: DatabaseSpec) -> Config:
+        """``spec.database`` with the connection URI of the environment."""
+        return cls(**spec.model_dump(), uri=DatabaseSecrets().uri)

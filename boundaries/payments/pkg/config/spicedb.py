@@ -6,30 +6,22 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .duration import _duration
+from .section import Section
 
-SPICEDB_ENDPOINT_ENV = "SPICEDB__ENDPOINT"
 SPICEDB_PRESHARED_KEY_ENV = "SPICEDB__PRESHARED_KEY"
-SPICEDB_INSECURE_ENV = "SPICEDB__INSECURE"
-SPICEDB_TIMEOUT_ENV = "SPICEDB__TIMEOUT"
 DEFAULT_SPICEDB_TIMEOUT = timedelta(seconds=2)
 
 
-class SpiceDBSettings(BaseSettings):
-    """Connection to SpiceDB (ADR 18); an empty endpoint denies every permission."""
+class SpiceDBSpec(Section):
+    """``spec.spicedb``: endpoint, transport and deadline; the key comes from env."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    endpoint: str = Field(default="", validation_alias=SPICEDB_ENDPOINT_ENV)
-    # Bearer preshared key; в кластере приходит из Secret, в values не хранится.
-    preshared_key: str = Field(default="", validation_alias=SPICEDB_PRESHARED_KEY_ENV, repr=False)
+    endpoint: str = ""
     # Plaintext gRPC только для kind и локального запуска.
-    insecure: bool = Field(default=False, validation_alias=SPICEDB_INSECURE_ENV)
+    insecure: bool = False
     # Deadline одного CheckPermission.
-    timeout: timedelta = Field(
-        default=DEFAULT_SPICEDB_TIMEOUT, validation_alias=SPICEDB_TIMEOUT_ENV
-    )
+    timeout: timedelta = DEFAULT_SPICEDB_TIMEOUT
 
-    @field_validator("endpoint", "preshared_key")
+    @field_validator("endpoint")
     @classmethod
     def _strip(cls, value: str) -> str:
         return value.strip()
@@ -46,11 +38,35 @@ class SpiceDBSettings(BaseSettings):
             raise ValueError("SpiceDB timeout must be positive")
         return value
 
+
+class SpiceDBSecrets(BaseSettings):
+    """Bearer preshared key of SpiceDB: only from env, in the cluster from a Secret."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    preshared_key: str = Field(default="", validation_alias=SPICEDB_PRESHARED_KEY_ENV, repr=False)
+
+    @field_validator("preshared_key")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+
+class SpiceDBSettings(SpiceDBSpec):
+    """Connection to SpiceDB (ADR 18); an empty endpoint denies every permission."""
+
+    preshared_key: str = Field(default="", repr=False)
+
+    @classmethod
+    def from_spec(cls, spec: SpiceDBSpec) -> SpiceDBSettings:
+        """``spec.spicedb`` with the preshared key of the environment."""
+        return cls(**spec.model_dump(), preshared_key=SpiceDBSecrets().preshared_key)
+
     @model_validator(mode="after")
     def _require_key(self) -> SpiceDBSettings:
         if self.endpoint and not self.preshared_key:
             raise ValueError(
-                f"{SPICEDB_PRESHARED_KEY_ENV} must not be empty when {SPICEDB_ENDPOINT_ENV} is set",
+                f"{SPICEDB_PRESHARED_KEY_ENV} must not be empty when spec.spicedb.endpoint is set",
             )
         return self
 

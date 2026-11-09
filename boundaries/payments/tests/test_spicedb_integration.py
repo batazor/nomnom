@@ -26,10 +26,10 @@ def _checker(
 ) -> SpiceDBPermissionChecker:
     settings = SpiceDBSettings.model_validate(
         {
-            "SPICEDB__ENDPOINT": endpoint,
-            "SPICEDB__PRESHARED_KEY": key,
-            "SPICEDB__INSECURE": True,
-            "SPICEDB__TIMEOUT": timeout,
+            "endpoint": endpoint,
+            "preshared_key": key,
+            "insecure": True,
+            "timeout": timeout,
         }
     )
     return SpiceDBPermissionChecker(

@@ -11,10 +11,10 @@ import (
 
 func TestManagerRequiresTheRoutesConfig(t *testing.T) {
 	_, err := NewManager(&rest.Config{}, config.RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public"}, config.ShutdownConfig{})
-	require.ErrorContains(t, err, config.EnvRoutesListener)
+	require.ErrorContains(t, err, "spec.routes.listener")
 }
 
 func TestRouteApplierRequiresTheRoutesConfig(t *testing.T) {
 	_, err := NewRouteApplier(&rest.Config{}, config.RoutesConfig{Namespace: "nomnom-gateway", Gateway: "public"})
-	require.ErrorContains(t, err, config.EnvRoutesListener)
+	require.ErrorContains(t, err, "spec.routes.listener")
 }

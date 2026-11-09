@@ -1,32 +1,37 @@
 """OpenTelemetry pipeline of a payments process: traces, metrics and JSON logs (ADR 9).
 
-``setup`` registers the W3C propagator and, per signal, an OTLP gRPC exporter:
+``setup`` registers the W3C propagator and, per signal enabled in the configuration file,
+an OTLP exporter over ``spec.telemetry.protocol`` (``grpc`` or ``http/protobuf``) to
+``spec.telemetry.endpoint``:
 
 * traces — ``TracerProvider`` with a bounded ``BatchSpanProcessor``, only when
-  ``OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set
-  (PostgreSQL statements are traced by the cursor of the pool,
+  ``spec.tracing.enabled`` (PostgreSQL statements are traced by the cursor of the pool,
   ``infrastructure/repository/statements.py``);
-* metrics — ``MeterProvider`` with a periodic OTLP reader and the CPython runtime
-  metrics, only when ``OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`` or
-  ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set.
+* metrics — ``MeterProvider`` with a periodic OTLP reader every
+  ``spec.metrics.exportInterval`` and the CPython runtime metrics, only when
+  ``spec.metrics.enabled``.
 
 Both providers share one resource (``service.namespace=nomnom``, ``service.name`` of the
-process, ``OTEL_RESOURCE_ATTRIBUTES``); JSON log records repeat its identity. Without an
-endpoint instruments stay no-op and nothing is exported.
+process, ``service.instance.id`` from ``POD_NAME``, ``spec.telemetry.resourceAttributes``);
+JSON log records repeat its identity. Endpoint, protocol, resource, interval and the
+processor limits are passed to the SDK explicitly, so ``OTEL_*`` variables do not change
+them. With both flags off instruments stay no-op and nothing is exported.
 """
 
 import logging
-import os
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
+from datetime import timedelta
 from typing import override
+from urllib.parse import urlparse
 
 from opentelemetry import metrics, trace
 from opentelemetry.context import Context
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import MetricReader
+from opentelemetry.sdk.metrics.export import MetricExporter, MetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace.export import SpanExporter
 from opentelemetry.sdk.trace.sampling import (
     Decision,
     ParentBased,
@@ -35,6 +40,8 @@ from opentelemetry.sdk.trace.sampling import (
 )
 from opentelemetry.trace import Link, SpanKind
 from opentelemetry.util.types import Attributes
+
+from pkg.config import LogLevel, TelemetrySettings
 
 from .buckets import SECONDS_BUCKETS
 from .logs import JsonFormatter, configure_logging, redact
@@ -56,6 +63,8 @@ __all__ = [
     "configure_logging",
     "configure_process_logging",
     "create_meter_provider",
+    "create_metric_exporter",
+    "create_span_exporter",
     "create_tracer_provider",
     "current_traceparent",
     "identity",
@@ -65,18 +74,25 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_TRACES_ENDPOINT_ENVS = ("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
-_METRICS_ENDPOINT_ENVS = ("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+# Уровни spec.logging.level.
+LOG_LEVELS: dict[LogLevel, int] = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warn": logging.WARNING,
+    "error": logging.ERROR,
+}
 
 # Границы очереди span processor: при недоступном collector теряются spans, а не память.
 MAX_QUEUED_SPANS = 2048
 MAX_EXPORT_BATCH = 512
 SPAN_SCHEDULE_DELAY_MS = 5000
-# Один export (с retries exporter) укладывается в SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT (5s).
+# Один export (с retries exporter) укладывается в shutdown.telemetryFlushTimeout (5s).
 EXPORT_TIMEOUT_S = 3.0
 SPAN_EXPORT_TIMEOUT_MS = 3_000
-METRIC_EXPORT_INTERVAL_MS = 60_000
 METRIC_EXPORT_TIMEOUT_MS = 3_000
+# Пути сигналов OTLP/HTTP относительно spec.telemetry.endpoint.
+HTTP_TRACES_PATH = "v1/traces"
+HTTP_METRICS_PATH = "v1/metrics"
 
 
 class Telemetry:
@@ -171,41 +187,100 @@ def create_meter_provider(resource: Resource, readers: Sequence[MetricReader]) -
     return provider
 
 
-def setup(service_name: str = "payments", environ: Mapping[str, str] | None = None) -> Telemetry:
-    """Register the propagator and the OTLP providers configured by the environment.
+def setup(settings: TelemetrySettings) -> Telemetry:
+    """Register the propagator and the OTLP providers of the enabled signals.
 
     Returns:
-        A ``Telemetry`` owning the registered providers; disabled when no OTLP endpoint
-        variable is set.
+        A ``Telemetry`` owning the registered providers; disabled when neither
+        ``spec.tracing.enabled`` nor ``spec.metrics.enabled`` is set.
     """
-    env = os.environ if environ is None else environ
     install_propagator()
-    resource = build_resource(service_name, env)
+    resource = build_resource(settings)
     shutdowns: list[Callable[[], object]] = []
-    traces_endpoint = _endpoint(env, _TRACES_ENDPOINT_ENVS)
-    if traces_endpoint is not None:
-        shutdowns.extend(_setup_traces(resource, traces_endpoint))
-    metrics_endpoint = _endpoint(env, _METRICS_ENDPOINT_ENVS)
-    if metrics_endpoint is not None:
-        shutdowns.extend(_setup_metrics(resource, metrics_endpoint))
+    if settings.tracing_enabled:
+        shutdowns.extend(_setup_traces(resource, create_span_exporter(settings)))
+    if settings.metrics_enabled:
+        shutdowns.extend(
+            _setup_metrics(
+                resource, create_metric_exporter(settings), settings.metrics_export_interval
+            )
+        )
     if shutdowns:
-        logger.info("telemetry exporting via OTLP")
+        logger.info("telemetry exporting via OTLP %s to %s", settings.protocol, settings.endpoint)
     return Telemetry(shutdowns, resource)
 
 
-def _endpoint(env: Mapping[str, str], names: Sequence[str]) -> str | None:
-    """First set endpoint variable: the signal-specific one wins over the general one."""
-    return next((value for name in names if (value := env.get(name, "").strip())), None)
+def create_span_exporter(settings: TelemetrySettings) -> SpanExporter:
+    """OTLP span exporter of ``spec.telemetry.protocol`` to ``spec.telemetry.endpoint``."""
+    match settings.protocol:
+        case "grpc":
+            from grpc import Compression
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+            return OTLPSpanExporter(
+                endpoint=settings.endpoint,
+                insecure=_plaintext(settings.endpoint),
+                timeout=EXPORT_TIMEOUT_S,
+                compression=Compression.NoCompression,
+            )
+        case "http/protobuf":
+            from opentelemetry.exporter.otlp.proto.http import Compression
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,
+            )
+
+            return OTLPSpanExporter(
+                endpoint=_signal_url(settings.endpoint, HTTP_TRACES_PATH),
+                timeout=EXPORT_TIMEOUT_S,
+                compression=Compression.NoCompression,
+            )
 
 
-def _setup_traces(resource: Resource, endpoint: str) -> list[Callable[[], object]]:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+def create_metric_exporter(settings: TelemetrySettings) -> MetricExporter:
+    """OTLP metric exporter of ``spec.telemetry.protocol`` to ``spec.telemetry.endpoint``."""
+    match settings.protocol:
+        case "grpc":
+            from grpc import Compression
+            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+                OTLPMetricExporter,
+            )
+
+            return OTLPMetricExporter(
+                endpoint=settings.endpoint,
+                insecure=_plaintext(settings.endpoint),
+                timeout=EXPORT_TIMEOUT_S,
+                compression=Compression.NoCompression,
+            )
+        case "http/protobuf":
+            from opentelemetry.exporter.otlp.proto.http import Compression
+            from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+                OTLPMetricExporter,
+            )
+
+            return OTLPMetricExporter(
+                endpoint=_signal_url(settings.endpoint, HTTP_METRICS_PATH),
+                timeout=EXPORT_TIMEOUT_S,
+                compression=Compression.NoCompression,
+            )
+
+
+def _plaintext(endpoint: str) -> bool:
+    """GRPC without TLS for an ``http://`` endpoint, as the OTLP exporter decides by scheme."""
+    return urlparse(endpoint).scheme == "http"
+
+
+def _signal_url(endpoint: str, path: str) -> str:
+    """URL of one OTLP/HTTP signal: the base endpoint plus ``v1/traces`` or ``v1/metrics``."""
+    return f"{endpoint.rstrip('/')}/{path}"
+
+
+def _setup_traces(resource: Resource, exporter: SpanExporter) -> list[Callable[[], object]]:
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
     provider = create_tracer_provider(
         resource,
         BatchSpanProcessor(
-            OTLPSpanExporter(endpoint=endpoint, timeout=EXPORT_TIMEOUT_S),
+            exporter,
             max_queue_size=MAX_QUEUED_SPANS,
             max_export_batch_size=MAX_EXPORT_BATCH,
             schedule_delay_millis=SPAN_SCHEDULE_DELAY_MS,
@@ -216,16 +291,17 @@ def _setup_traces(resource: Resource, endpoint: str) -> list[Callable[[], object
     return [provider.shutdown]
 
 
-def _setup_metrics(resource: Resource, endpoint: str) -> list[Callable[[], object]]:
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+def _setup_metrics(
+    resource: Resource, exporter: MetricExporter, interval: timedelta
+) -> list[Callable[[], object]]:
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 
     provider = create_meter_provider(
         resource,
         [
             PeriodicExportingMetricReader(
-                OTLPMetricExporter(endpoint=endpoint, timeout=EXPORT_TIMEOUT_S),
-                export_interval_millis=METRIC_EXPORT_INTERVAL_MS,
+                exporter,
+                export_interval_millis=interval.total_seconds() * 1000,
                 export_timeout_millis=METRIC_EXPORT_TIMEOUT_MS,
             )
         ],
@@ -234,12 +310,10 @@ def _setup_metrics(resource: Resource, endpoint: str) -> list[Callable[[], objec
     return [provider.shutdown]
 
 
-def configure_process_logging(
-    service_name: str, environ: Mapping[str, str] | None = None, level: int = logging.INFO
-) -> None:
-    """JSON logs on stdout with the identity of the process resource.
+def configure_process_logging(settings: TelemetrySettings) -> None:
+    """JSON logs on stdout at ``spec.logging.level`` with the identity of the process resource.
 
-    Called by the entrypoint before anything else, so startup errors are JSON too.
+    Called by the entrypoint once the configuration is loaded; before that it logs through
+    ``configure_logging`` with the process name only, so startup errors are JSON too.
     """
-    env = os.environ if environ is None else environ
-    configure_logging(identity(build_resource(service_name, env)), level)
+    configure_logging(identity(build_resource(settings)), LOG_LEVELS[settings.log_level])

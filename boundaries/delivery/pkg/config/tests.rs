@@ -1,280 +1,595 @@
 use super::*;
-use config::Config as ConfigLoader;
+use std::cell::RefCell;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
 
+/// Обязательные секции процесса `delivery` тестовых файлов (под `spec:`).
+const IDENTITY_YAML: &str = "  identity:
+    issuer: https://kubernetes.default.svc.cluster.local
+    audience: nomnom.delivery
+    jwksFile: /etc/nomnom/identity/jwks.json
+    serviceAccounts: nomnom-orders/orders-worker=orders-worker
+    userIssuer: nomnom-bff
+    userJwksFile: /etc/nomnom/user-identity/jwks.json
+    userDelegates: bff
+";
+const SPICEDB_YAML: &str = "  spicedb:\n    endpoint: spicedb:50051\n";
+const TEMPORAL_YAML: &str =
+    "  temporal:\n    hostPort: temporal:7233\n    namespace: default\n    connectTimeout: 10s\n";
+const SIMULATOR_YAML: &str =
+    "  simulator:\n    interval: 5s\n    minDelay: 30s\n    maxDelay: 2m\n    trackInterval: 1s\n";
+const TRACKING_YAML: &str = "  tracking:
+    cityOriginLatitude: 52.515
+    cityOriginLongitude: 13.385
+    cityBlocks: 12
+    blockMeters: 150.0
+    persistInterval: 15s
+";
+const KAFKA_YAML: &str =
+    "  kafka:\n    brokers: kafka:9092\n    consumerGroup: delivery\n    initialOffset: oldest\n";
+const SCHEMA_REGISTRY_YAML: &str = "  schemaRegistry:\n    url: http://kafka:8081\n";
+const DELIVERY_ESTIMATE_YAML: &str = "  deliveryEstimate:\n    sampleSize: 50\n    baselineCourierLead: 15m\n    baselineTransit: 20m\n";
+
+/// Секции без значений по умолчанию и их начало в файле.
+const REQUIRED_SECTIONS: [(&str, &str); 8] = [
+    ("  identity:", IDENTITY_YAML),
+    ("  spicedb:", SPICEDB_YAML),
+    ("  temporal:", TEMPORAL_YAML),
+    ("  simulator:", SIMULATOR_YAML),
+    ("  tracking:", TRACKING_YAML),
+    ("  kafka:", KAFKA_YAML),
+    ("  schemaRegistry:", SCHEMA_REGISTRY_YAML),
+    ("  deliveryEstimate:", DELIVERY_ESTIMATE_YAML),
+];
+
+const DATABASE_URI: &str = "postgresql://u:p@db:5432/delivery";
+const VALKEY_URL: &str = "redis://delivery:p@valkey:6379";
+
+/// Секреты и имя pod процесса.
+fn process_env(name: &str) -> Option<String> {
+    match name {
+        DATABASE_URI_ENV => Some(DATABASE_URI),
+        VALKEY_URL_ENV => Some(VALKEY_URL),
+        SPICEDB_PRESHARED_KEY_ENV => Some("key"),
+        POD_NAME_ENV => Some("delivery-7d9f"),
+        _ => None,
+    }
+    .map(str::to_owned)
+}
+
+fn header(role: &str) -> String {
+    format!("apiVersion: {API_VERSION}\nkind: {KIND}\nmetadata:\n  name: {role}\n")
+}
+
+/// Временный файл с уникальным именем; удаляется при drop.
+struct ConfigFile(PathBuf);
+
+impl ConfigFile {
+    fn new(name: &str, contents: &str) -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "nomnom-delivery-{name}-{}.yaml",
+            std::process::id()
+        ));
+        fs::write(&path, contents).expect("write config");
+        Self(path)
+    }
+}
+
+impl Drop for ConfigFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// Файл роли `delivery` с секциями `sections` под `spec:`; недостающие
+/// обязательные секции берутся из [`REQUIRED_SECTIONS`].
+fn delivery_file(sections: &str) -> String {
+    let mut spec = sections.to_owned();
+    for (start, section) in REQUIRED_SECTIONS {
+        if !spec.contains(start) {
+            spec.push_str(section);
+        }
+    }
+    format!("{}spec:\n{spec}", header(SERVER_ROLE))
+}
+
+fn load_yaml(name: &str, sections: &str) -> Result<AppConfig, ConfigError> {
+    let file = ConfigFile::new(name, &delivery_file(sections));
+    load_from(Some(&file.0), process_env)
+}
+
+fn load_error(name: &str, sections: &str) -> String {
+    load_yaml(name, sections)
+        .expect_err("config must be rejected")
+        .to_string()
+}
+
+/// AC-1067: файл своей роли загружается; отсутствующие секции со значениями
+/// по умолчанию получают их, секреты приходят из env.
 #[test]
-fn loads_port_from_toml() {
-    let name = format!(
-        "nomnom-delivery-config-{}-{}.toml",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock before epoch")
-            .as_nanos()
-    );
-    let path = std::env::temp_dir().join(name);
-    fs::write(
-        &path,
-        format!(
-            "[server]\nport = 9003\n{DATABASE_TOML}{TEMPORAL_TOML}{SIMULATOR_TOML}{TRACKING_TOML}{VALKEY_TOML}{KAFKA_TOML}{DELIVERY_ESTIMATE_TOML}"
-        ),
-    )
-    .expect("write config");
-
-    let config = load_from(Some(&path)).expect("load config");
-    fs::remove_file(path).expect("remove config");
+fn loads_own_role_file_with_defaults_and_secrets() {
+    let config = load_yaml("defaults", "  server:\n    port: 9003\n").expect("load config");
 
     assert_eq!(config.server.port, 9003);
     assert_eq!(config.management.port, DEFAULT_MANAGEMENT_PORT);
+    assert_eq!(config.shutdown, ShutdownConfig::default());
     assert_eq!(config.shutdown.drain_timeout, Duration::from_secs(20));
     assert_eq!(config.shutdown.readiness_delay, Duration::from_secs(5));
+    assert_eq!(config.reconciler, ReconcilerConfig::default());
+    assert_eq!(
+        config.spicedb,
+        SpiceDbConfig {
+            endpoint: "spicedb:50051".to_owned(),
+            preshared_key: "key".to_owned(),
+            insecure: false,
+            timeout: DEFAULT_SPICEDB_TIMEOUT,
+        }
+    );
+    assert_eq!(
+        config.database,
+        database::Config {
+            uri: DATABASE_URI.to_owned(),
+            ..database::Config::default()
+        }
+    );
+    assert_eq!(config.valkey.url, VALKEY_URL);
+    assert_eq!(config.identity.user_delegates, "bff");
+    assert_eq!(
+        config.telemetry,
+        TelemetryConfig {
+            service_name: SERVER_ROLE.to_owned(),
+            instance_id: "delivery-7d9f".to_owned(),
+            endpoint: None,
+            protocol: OtlpProtocol::Grpc,
+            resource_attributes: std::collections::BTreeMap::new(),
+            tracing: false,
+            metrics: false,
+            metrics_export_interval: DEFAULT_METRICS_EXPORT_INTERVAL,
+            log_level: LogLevel::Info,
+        }
+    );
 }
 
-/// Обязательная секция Simulator (FR-606) тестовых конфигов.
-const SIMULATOR_TOML: &str = "\n[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\ntrack_interval = \"1s\"\n";
+/// The example file of the repository is a valid `delivery` config.
+#[test]
+fn example_config_loads() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("config.example.yaml");
 
-/// Обязательная секция tracking (FR-658, FR-665) тестовых конфигов.
-const TRACKING_TOML: &str = "\n[tracking]\ncity_origin_latitude = 52.515\ncity_origin_longitude = 13.385\ncity_blocks = 12\nblock_meters = 150.0\npersist_interval = \"15s\"\n";
+    let config = load_from(Some(&path), process_env).expect("config.example.yaml");
 
-/// Обязательный URL Valkey потока позиций (FR-666) тестовых конфигов.
-const VALKEY_TOML: &str = "\n[valkey]\nurl = \"redis://delivery:p@valkey:6379\"\n";
+    assert_eq!(config.server.port, DEFAULT_PORT);
+    assert_eq!(config.temporal.host_port, "localhost:7233");
+}
 
-/// Обязательный Kafka consumer (ADR 11) тестовых конфигов.
-const KAFKA_TOML: &str = "\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://kafka:8081\"\n";
-
-/// Обязательная секция Delivery Duration Estimate (FR-691) тестовых конфигов.
-const DELIVERY_ESTIMATE_TOML: &str = "\n[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n";
-
-/// Обязательный Temporal (FR-708) тестовых конфигов.
-const TEMPORAL_TOML: &str = "\n[temporal]\nhost_port = \"temporal:7233\"\nnamespace = \"default\"\nconnect_timeout = \"10s\"\n";
-
-/// Обязательный URI PostgreSQL тестовых конфигов.
-const DATABASE_TOML: &str = "\n[database]\nuri = \"postgresql://u:p@db:5432/delivery\"\n";
-
-/// Пишет TOML во временный файл с уникальным именем и загружает его; без
-/// своих секций `[database]`, `[temporal]`, `[simulator]`, `[tracking]`, `[valkey]`,
-/// `[kafka]` и `[delivery_estimate]` к нему добавляются [`DATABASE_TOML`], [`TEMPORAL_TOML`],
-/// [`SIMULATOR_TOML`], [`TRACKING_TOML`], [`VALKEY_TOML`], [`KAFKA_TOML`] и
-/// [`DELIVERY_ESTIMATE_TOML`].
-fn load_toml(name: &str, contents: &str) -> Result<AppConfig, ConfigError> {
-    let path = std::env::temp_dir().join(format!(
-        "nomnom-delivery-{name}-{}.toml",
-        std::process::id()
-    ));
-    let mut contents = contents.to_owned();
-    for (section, toml) in [
-        ("[database]", DATABASE_TOML),
-        ("[temporal]", TEMPORAL_TOML),
-        ("[simulator]", SIMULATOR_TOML),
-        ("[tracking]", TRACKING_TOML),
-        ("[valkey]", VALKEY_TOML),
-        ("[kafka]", KAFKA_TOML),
-        ("[delivery_estimate]", DELIVERY_ESTIMATE_TOML),
+/// AC-1068: чужая версия или kind — ошибка с ожидаемыми значениями.
+#[test]
+fn foreign_api_version_or_kind_is_rejected() {
+    for (name, contents) in [
+        (
+            "api-version",
+            delivery_file("").replace(API_VERSION, "config.nomnom.dev/v1beta1"),
+        ),
+        (
+            "kind",
+            delivery_file("").replace("kind: Delivery", "kind: Orders"),
+        ),
     ] {
-        if !contents.contains(section) {
-            contents.push_str(toml);
+        let file = ConfigFile::new(name, &contents);
+        let error = load_from(Some(&file.0), process_env)
+            .expect_err(name)
+            .to_string();
+        assert!(error.contains(API_VERSION), "{name}: {error}");
+        assert!(error.contains(KIND), "{name}: {error}");
+    }
+}
+
+/// AC-1069: файл другой роли того же kind не принимается.
+#[test]
+fn file_of_another_role_is_rejected() {
+    let file = ConfigFile::new(
+        "worker-role",
+        &delivery_file("").replace("name: delivery", "name: delivery-worker"),
+    );
+    let error = load_from(Some(&file.0), process_env)
+        .expect_err("delivery must reject delivery-worker")
+        .to_string();
+    assert!(error.contains("delivery-worker"), "{error}");
+
+    let file = ConfigFile::new("delivery-role", &delivery_file(""));
+    assert!(load_worker_from(Some(&file.0), process_env).is_err());
+}
+
+/// AC-1070: `delivery-admin` принимает файл pod любой роли kind `Delivery`,
+/// но не чужой kind.
+#[test]
+fn admin_accepts_a_file_of_any_role() {
+    let file = ConfigFile::new(
+        "admin-role",
+        &delivery_file("").replace("name: delivery", "name: delivery-worker"),
+    );
+
+    let kafka = load_kafka_from(Some(&file.0)).expect("load kafka config");
+
+    assert_eq!(
+        kafka,
+        KafkaConfig {
+            brokers: "kafka:9092".to_owned(),
+            consumer_group: "delivery".to_owned(),
+            initial_offset: InitialOffset::Oldest,
+            schema_registry_url: "http://kafka:8081".to_owned(),
+        }
+    );
+
+    let file = ConfigFile::new(
+        "admin-kind",
+        &delivery_file("").replace("kind: Delivery", "kind: Payments"),
+    );
+    assert!(load_kafka_from(Some(&file.0)).is_err());
+}
+
+/// AC-1071: без `CONFIG_FILE` или с путём к несуществующему файлу процесс
+/// не стартует.
+#[test]
+fn missing_config_file_fails_startup() {
+    let error = load_from(None, process_env)
+        .expect_err("CONFIG_FILE is required")
+        .to_string();
+    assert!(error.contains(CONFIG_FILE_ENV), "{error}");
+
+    let missing = std::env::temp_dir().join("nomnom-delivery-missing-config.yaml");
+    assert!(load_from(Some(&missing), process_env).is_err());
+    assert!(load_worker_from(None, process_env).is_err());
+    assert!(load_kafka_from(None).is_err());
+}
+
+/// AC-1072: опечатка в ключе — ошибка с путём ключа.
+#[test]
+fn unknown_key_error_has_the_key_path() {
+    let error = load_error("typo", "  shutdown:\n    drainTimout: 20s\n");
+
+    assert!(error.contains("spec.shutdown.drainTimout"), "{error}");
+}
+
+/// AC-1073: неизвестная секция верхнего уровня и неизвестная секция `spec`.
+#[test]
+fn unknown_top_level_and_spec_sections_are_rejected() {
+    let file = ConfigFile::new("status", &format!("{}status: {{}}\n", delivery_file("")));
+    let error = load_from(Some(&file.0), process_env)
+        .expect_err("status is not a key")
+        .to_string();
+    assert!(error.contains("status"), "{error}");
+
+    let error = load_error(
+        "unknown-section",
+        "  fulfillment:\n    acceptanceTimeout: 10m\n",
+    );
+    assert!(error.contains("spec.fulfillment"), "{error}");
+}
+
+/// AC-1075: у секретов нет полей в `spec`, секрет в файле — неизвестный ключ.
+#[test]
+fn secret_in_file_is_an_unknown_key() {
+    for (name, sections, path) in [
+        (
+            "secret-database",
+            "  database:\n    uri: postgresql://u:p@db/delivery\n",
+            "spec.database.uri",
+        ),
+        (
+            "secret-spicedb",
+            "  spicedb:\n    endpoint: spicedb:50051\n    presharedKey: key\n",
+            "spec.spicedb.presharedKey",
+        ),
+        (
+            "secret-valkey",
+            "  valkey:\n    url: redis://valkey:6379\n",
+            "spec.valkey",
+        ),
+    ] {
+        let error = load_error(name, sections);
+        assert!(error.contains(path), "{name}: {error}");
+        assert!(!error.contains("p@db"), "{name}: {error}");
+    }
+}
+
+/// AC-1076: отсутствующий или пустой обязательный секрет — ошибка startup.
+#[test]
+fn empty_required_secret_fails_startup() {
+    let file = ConfigFile::new("secrets", &delivery_file(""));
+    for secret in [DATABASE_URI_ENV, VALKEY_URL_ENV, SPICEDB_PRESHARED_KEY_ENV] {
+        for value in [None, Some(" ")] {
+            let env = |name: &str| {
+                if name == secret {
+                    value.map(str::to_owned)
+                } else {
+                    process_env(name)
+                }
+            };
+            let error = load_from(Some(&file.0), env).expect_err(secret).to_string();
+            assert!(error.contains(secret), "{secret}: {error}");
         }
     }
-    fs::write(&path, contents).expect("write config");
-    let result = load_from(Some(&path));
-    fs::remove_file(path).expect("remove config");
-    result
+}
+
+/// AC-1074, AC-1079: env несекретных настроек, `OTEL_*` и `LOG__LEVEL` не
+/// действуют — загрузчик спрашивает у env только секреты и `POD_NAME`.
+#[test]
+fn only_secrets_and_pod_name_are_read_from_env() {
+    let file = ConfigFile::new(
+        "env-ignored",
+        &delivery_file(
+            "  shutdown:\n    drainTimeout: 20s\n  telemetry:\n    serviceName: delivery-api\n",
+        ),
+    );
+    let requested = RefCell::new(Vec::new());
+    let env = |name: &str| {
+        requested.borrow_mut().push(name.to_owned());
+        match name {
+            "SHUTDOWN__DRAIN_TIMEOUT" => Some("0ms".to_owned()),
+            "SERVER__PORT" | "PORT" => Some("1".to_owned()),
+            "OTEL_SERVICE_NAME" => Some("other".to_owned()),
+            "OTEL_EXPORTER_OTLP_ENDPOINT" => Some("http://other:4317".to_owned()),
+            "LOG__LEVEL" => Some("error".to_owned()),
+            other => process_env(other),
+        }
+    };
+
+    let config = load_from(Some(&file.0), env).expect("load config");
+
+    assert_eq!(config.shutdown.drain_timeout, Duration::from_secs(20));
+    assert_eq!(config.server.port, DEFAULT_PORT);
+    assert_eq!(config.telemetry.service_name, "delivery-api");
+    assert_eq!(config.telemetry.endpoint, None);
+    assert_eq!(config.telemetry.log_level, LogLevel::Info);
+    let mut requested = requested.into_inner();
+    requested.sort();
+    assert_eq!(
+        requested,
+        vec![
+            DATABASE_URI_ENV,
+            POD_NAME_ENV,
+            SPICEDB_PRESHARED_KEY_ENV,
+            VALKEY_URL_ENV
+        ]
+    );
+}
+
+/// Fail fast: `spec.shutdown.drainTimeout: 0ms` завершает процесс до портов.
+#[test]
+fn zero_drain_timeout_fails_startup() {
+    let error = load_error("zero-drain", "  shutdown:\n    drainTimeout: 0ms\n");
+
+    assert!(error.contains("spec.shutdown.drainTimeout"), "{error}");
 }
 
 #[test]
-fn rejects_zero_management_port() {
-    assert!(load_toml("zero-management", "[management]\nport = 0\n").is_err());
+fn telemetry_settings_are_read_from_the_file() {
+    let config = load_yaml(
+        "telemetry",
+        "  telemetry:
+    endpoint: http://alloy:4318
+    protocol: http/protobuf
+    serviceName: delivery-api
+    resourceAttributes:
+      deployment.environment.name: kind
+      service.version: abc123
+  tracing:
+    enabled: true
+  metrics:
+    enabled: true
+    exportInterval: 15s
+  logging:
+    level: debug
+",
+    )
+    .expect("load config");
+
+    assert_eq!(
+        config.telemetry,
+        TelemetryConfig {
+            service_name: "delivery-api".to_owned(),
+            instance_id: "delivery-7d9f".to_owned(),
+            endpoint: Some("http://alloy:4318".to_owned()),
+            protocol: OtlpProtocol::HttpProtobuf,
+            resource_attributes: [
+                ("deployment.environment.name", "kind"),
+                ("service.version", "abc123")
+            ]
+            .into_iter()
+            .map(|(key, value)| (key.to_owned(), value.to_owned()))
+            .collect(),
+            tracing: true,
+            metrics: true,
+            metrics_export_interval: Duration::from_secs(15),
+            log_level: LogLevel::Debug,
+        }
+    );
 }
 
+/// AC-1077: экспорт включён без endpoint.
 #[test]
-fn rejects_management_port_equal_to_server_port() {
-    let result = load_toml(
-        "same-ports",
-        "[server]\nport = 9200\n\n[management]\nport = 9200\n",
+fn export_without_endpoint_fails_startup() {
+    for (name, sections) in [
+        ("tracing-no-endpoint", "  tracing:\n    enabled: true\n"),
+        (
+            "tracing-empty-endpoint",
+            "  telemetry:\n    endpoint: \"\"\n  tracing:\n    enabled: true\n",
+        ),
+        ("metrics-no-endpoint", "  metrics:\n    enabled: true\n"),
+    ] {
+        let error = load_error(name, sections);
+        assert!(error.contains("spec.telemetry.endpoint"), "{name}: {error}");
+    }
+}
+
+/// AC-1078: неизвестный протокол — ошибка с обоими допустимыми значениями.
+#[test]
+fn unknown_protocol_lists_the_known_ones() {
+    let error = load_error(
+        "protocol",
+        "  telemetry:\n    endpoint: http://alloy:4318\n    protocol: http/json\n",
     );
 
-    assert!(result.is_err());
+    assert!(error.contains("spec.telemetry.protocol"), "{error}");
+    assert!(error.contains("grpc"), "{error}");
+    assert!(error.contains("http/protobuf"), "{error}");
+}
+
+/// AC-1080: endpoint без флагов не включает экспорт.
+#[test]
+fn endpoint_without_flags_exports_nothing() {
+    let config = load_yaml(
+        "endpoint-only",
+        "  telemetry:\n    endpoint: http://alloy:4317\n",
+    )
+    .expect("load config");
+
+    assert_eq!(
+        config.telemetry.endpoint.as_deref(),
+        Some("http://alloy:4317")
+    );
+    assert!(!config.telemetry.tracing);
+    assert!(!config.telemetry.metrics);
+}
+
+/// AC-1081: `resourceAttributes` не переопределяют идентичность процесса.
+#[test]
+fn resource_attributes_must_not_override_process_identity() {
+    for attribute in ["service.name", "service.instance.id"] {
+        let error = load_error(
+            "identity-attribute",
+            &format!("  telemetry:\n    resourceAttributes:\n      {attribute}: other\n"),
+        );
+        assert!(error.contains(attribute), "{attribute}: {error}");
+    }
+}
+
+/// AC-1082: без `POD_NAME` процесс не стартует.
+#[test]
+fn missing_pod_name_fails_startup() {
+    let file = ConfigFile::new("pod-name", &delivery_file(""));
+    let env = |name: &str| {
+        if name == POD_NAME_ENV {
+            None
+        } else {
+            process_env(name)
+        }
+    };
+
+    let error = load_from(Some(&file.0), env)
+        .expect_err("POD_NAME is required")
+        .to_string();
+
+    assert!(error.contains(POD_NAME_ENV), "{error}");
 }
 
 #[test]
-fn loads_readiness_delay_from_toml() {
-    let config =
-        load_toml("readiness", "[shutdown]\nreadiness_delay = \"500ms\"\n").expect("load config");
+fn invalid_telemetry_values_fail_startup() {
+    for (name, sections, needle) in [
+        (
+            "zero-interval",
+            "  metrics:\n    exportInterval: 0s\n",
+            "spec.metrics.exportInterval",
+        ),
+        (
+            "log-level",
+            "  logging:\n    level: trace\n",
+            "spec.logging.level",
+        ),
+        (
+            "empty-service-name",
+            "  telemetry:\n    serviceName: \" \"\n",
+            "spec.telemetry.serviceName",
+        ),
+    ] {
+        let error = load_error(name, sections);
+        assert!(error.contains(needle), "{name}: {error}");
+    }
+}
 
+#[test]
+fn rejects_invalid_ports() {
+    for (name, sections) in [
+        ("zero-port", "  server:\n    port: 0\n"),
+        ("zero-management", "  management:\n    port: 0\n"),
+        (
+            "same-ports",
+            "  server:\n    port: 9200\n  management:\n    port: 9200\n",
+        ),
+    ] {
+        assert!(load_yaml(name, sections).is_err(), "{name}");
+    }
+}
+
+#[test]
+fn readiness_delay_is_read_and_may_be_zero() {
+    let config =
+        load_yaml("readiness", "  shutdown:\n    readinessDelay: 500ms\n").expect("load config");
     assert_eq!(config.shutdown.readiness_delay, Duration::from_millis(500));
-}
 
-#[test]
-fn allows_zero_readiness_delay() {
     let config =
-        load_toml("zero-readiness", "[shutdown]\nreadiness_delay = \"0s\"\n").expect("load config");
-
+        load_yaml("zero-readiness", "  shutdown:\n    readinessDelay: 0s\n").expect("load config");
     assert_eq!(config.shutdown.readiness_delay, Duration::ZERO);
+
+    let error = load_error("bad-readiness", "  shutdown:\n    readinessDelay: soon\n");
+    assert!(error.contains("spec.shutdown.readinessDelay"), "{error}");
 }
 
+/// Identity обязательна процессу с gRPC API: секция и каждый ключ.
 #[test]
-fn rejects_invalid_readiness_delay() {
-    assert!(load_toml("bad-readiness", "[shutdown]\nreadiness_delay = \"soon\"\n").is_err());
-}
-
-#[test]
-fn rejects_zero_drain_timeout() {
-    let name = format!("nomnom-delivery-zero-drain-{}.toml", std::process::id());
-    let path = std::env::temp_dir().join(name);
-    fs::write(&path, "[shutdown]\ndrain_timeout = \"0s\"\n").expect("write config");
-
-    let result = load_from(Some(&path));
-    fs::remove_file(path).expect("remove config");
-
-    assert!(result.is_err());
-}
-
-#[test]
-fn identity_is_disabled_by_default() {
-    let config = load_toml("identity-default", "").expect("load config");
-
-    assert_eq!(config.identity, IdentityConfig::default());
-}
-
-#[test]
-fn identity_env_overrides_file_values() {
-    let env = std::collections::HashMap::from([
-        (ISSUER_ENV, "https://env-issuer"),
-        (AUDIENCE_ENV, "nomnom.delivery"),
-        (JWKS_FILE_ENV, "/etc/nomnom/identity/jwks.json"),
-        (SERVICE_ACCOUNTS_ENV, "nomnom/orders-worker=orders-worker"),
-    ]);
-    let builder = ConfigLoader::builder()
-        .set_default("identity.issuer", "https://file-issuer")
-        .expect("default");
-    let identity: IdentityConfig = configure_identity(builder, |name| {
-        env.get(name).map(|value| (*value).to_owned())
-    })
-    .expect("configure")
-    .build()
-    .expect("build")
-    .get("identity")
-    .expect("identity section");
-
-    assert_eq!(
-        identity,
-        IdentityConfig {
-            issuer: "https://env-issuer".to_owned(),
-            audience: "nomnom.delivery".to_owned(),
-            jwks_file: "/etc/nomnom/identity/jwks.json".to_owned(),
-            service_accounts: "nomnom/orders-worker=orders-worker".to_owned(),
-            ..IdentityConfig::default()
-        }
+fn identity_is_required() {
+    let file = ConfigFile::new(
+        "identity-missing",
+        &delivery_file("").replace(IDENTITY_YAML, ""),
     );
-}
+    let error = load_from(Some(&file.0), process_env)
+        .expect_err("identity is required")
+        .to_string();
+    assert!(error.contains("spec.identity"), "{error}");
 
-#[test]
-fn user_assertion_env_overrides_file_values() {
-    let env = std::collections::HashMap::from([
-        (USER_ISSUER_ENV, "nomnom-bff"),
-        (USER_JWKS_FILE_ENV, "/etc/nomnom/identity/bff-jwks.json"),
-        (USER_DELEGATES_ENV, "bff,admin-bff"),
-    ]);
-    let builder = ConfigLoader::builder()
-        .set_default("identity.user_issuer", "file-issuer")
-        .expect("default");
-    let identity: IdentityConfig = configure_identity(builder, |name| {
-        env.get(name).map(|value| (*value).to_owned())
-    })
-    .expect("configure")
-    .build()
-    .expect("build")
-    .get("identity")
-    .expect("identity section");
-
-    assert_eq!(
-        identity,
-        IdentityConfig {
-            user_issuer: "nomnom-bff".to_owned(),
-            user_jwks_file: "/etc/nomnom/identity/bff-jwks.json".to_owned(),
-            user_delegates: "bff,admin-bff".to_owned(),
-            ..IdentityConfig::default()
-        }
+    let error = load_error(
+        "identity-partial",
+        "  identity:\n    issuer: https://kubernetes.default.svc.cluster.local\n",
     );
+    assert!(error.contains("spec.identity"), "{error}");
 }
 
 #[test]
-fn spicedb_is_disabled_by_default() {
-    let config = load_toml("spicedb-default", "").expect("load config");
-
-    assert_eq!(config.spicedb, SpiceDbConfig::default());
-    assert!(!config.spicedb.enabled());
-    assert_eq!(config.spicedb.timeout, Duration::from_secs(2));
-}
-
-#[test]
-fn loads_spicedb_from_toml() {
-    let config = load_toml(
+fn loads_spicedb_settings() {
+    let config = load_yaml(
         "spicedb",
-        "[spicedb]\nendpoint = \"spicedb:50051\"\npreshared_key = \"key\"\n\
-         insecure = true\ntimeout = \"500ms\"\n",
+        "  spicedb:\n    endpoint: spicedb:50051\n    insecure: true\n    timeout: 500ms\n",
     )
     .expect("load config");
 
     assert!(config.spicedb.enabled());
-    assert_eq!(config.spicedb.endpoint, "spicedb:50051");
-    assert_eq!(config.spicedb.preshared_key, "key");
     assert!(config.spicedb.insecure);
     assert_eq!(config.spicedb.timeout, Duration::from_millis(500));
+    assert_eq!(config.spicedb.preshared_key, "key");
 }
 
 #[test]
-fn rejects_spicedb_endpoint_without_preshared_key() {
-    let error = load_toml(
-        "spicedb-no-key",
-        "[spicedb]\nendpoint = \"spicedb:50051\"\n",
-    )
-    .expect_err("key is required");
-
-    assert!(error.to_string().contains(SPICEDB_PRESHARED_KEY_ENV));
-}
-
-#[test]
-fn rejects_zero_spicedb_timeout() {
-    assert!(
-        load_toml(
+fn missing_or_invalid_spicedb_fails_startup() {
+    for (name, sections, needle) in [
+        (
+            "spicedb-empty",
+            "  spicedb:\n    endpoint: \"\"\n",
+            SPICEDB_ENDPOINT_KEY,
+        ),
+        (
+            "spicedb-no-endpoint",
+            "  spicedb:\n    insecure: true\n",
+            "endpoint",
+        ),
+        (
             "spicedb-zero-timeout",
-            "[spicedb]\nendpoint = \"spicedb:50051\"\npreshared_key = \"key\"\ntimeout = \"0s\"\n",
-        )
-        .is_err()
-    );
-}
-
-#[test]
-fn spicedb_env_overrides_file_values() {
-    let env = std::collections::HashMap::from([
-        (SPICEDB_ENDPOINT_ENV, "localhost:50051"),
-        (SPICEDB_PRESHARED_KEY_ENV, "devkey"),
-        (SPICEDB_INSECURE_ENV, "true"),
-        (SPICEDB_TIMEOUT_ENV, "250ms"),
-    ]);
-    let builder = ConfigLoader::builder()
-        .set_default("spicedb.endpoint", "file:50051")
-        .expect("default");
-    let spicedb: SpiceDbConfig = configure_spicedb(builder, |name| {
-        env.get(name).map(|value| (*value).to_owned())
-    })
-    .expect("configure")
-    .build()
-    .expect("build")
-    .get("spicedb")
-    .expect("spicedb section");
-
-    assert_eq!(
-        spicedb,
-        SpiceDbConfig {
-            endpoint: "localhost:50051".to_owned(),
-            preshared_key: "devkey".to_owned(),
-            insecure: true,
-            timeout: Duration::from_millis(250),
-        }
-    );
+            "  spicedb:\n    endpoint: spicedb:50051\n    timeout: 0s\n",
+            "spec.spicedb.timeout",
+        ),
+    ] {
+        let error = load_error(name, sections);
+        assert!(error.contains(needle), "{name}: {error}");
+    }
 }
 
 #[test]
@@ -290,7 +605,7 @@ fn spicedb_debug_redacts_preshared_key() {
 /// FR-708, AC-967: Temporal is required, without defaults.
 #[test]
 fn missing_or_invalid_temporal_fails_startup() {
-    let config = load_toml("temporal", "").expect("load config");
+    let config = load_yaml("temporal", "").expect("load config");
     assert_eq!(
         config.temporal,
         TemporalConfig {
@@ -300,202 +615,139 @@ fn missing_or_invalid_temporal_fails_startup() {
         }
     );
 
-    for (name, contents, env) in [
+    for (name, sections, needle) in [
         (
             "temporal-missing",
-            "[temporal]
-",
-            None,
+            "  temporal:\n    namespace: default\n",
+            "hostPort",
         ),
         (
             "temporal-empty-host",
-            "[temporal]\nhost_port = \"\"\nnamespace = \"default\"\nconnect_timeout = \"10s\"\n",
-            Some(TEMPORAL_HOST_PORT_ENV),
+            "  temporal:\n    hostPort: \"\"\n    namespace: default\n    connectTimeout: 10s\n",
+            TEMPORAL_HOST_PORT_KEY,
         ),
         (
             "temporal-empty-namespace",
-            "[temporal]\nhost_port = \"temporal:7233\"\nnamespace = \" \"\nconnect_timeout = \"10s\"\n",
-            Some(TEMPORAL_NAMESPACE_ENV),
+            "  temporal:\n    hostPort: temporal:7233\n    namespace: \" \"\n    connectTimeout: 10s\n",
+            TEMPORAL_NAMESPACE_KEY,
         ),
         (
             "temporal-zero-timeout",
-            "[temporal]\nhost_port = \"temporal:7233\"\nnamespace = \"default\"\nconnect_timeout = \"0s\"\n",
-            Some(TEMPORAL_CONNECT_TIMEOUT_ENV),
+            "  temporal:\n    hostPort: temporal:7233\n    namespace: default\n    connectTimeout: 0s\n",
+            TEMPORAL_CONNECT_TIMEOUT_KEY,
         ),
     ] {
-        let Err(error) = load_toml(name, contents) else {
-            panic!("{name} must fail startup");
-        };
-        if let Some(env) = env {
-            assert!(error.to_string().contains(env), "{name}: {error}");
+        let error = load_error(name, sections);
+        assert!(error.contains(needle), "{name}: {error}");
+    }
+}
+
+/// FR-708: `delivery-worker` reads only its sections of the shared kind and
+/// accepts the sections of `delivery`; it needs neither identity, SpiceDB,
+/// Valkey nor Kafka.
+#[test]
+fn worker_loads_its_sections_only() {
+    let file = ConfigFile::new(
+        "worker",
+        &format!(
+            "{}spec:\n  management:\n    port: 9084\n  database:\n    maxConns: 5\n{TEMPORAL_YAML}{IDENTITY_YAML}{KAFKA_YAML}",
+            header(WORKER_ROLE)
+        ),
+    );
+    let env = |name: &str| match name {
+        DATABASE_URI_ENV | POD_NAME_ENV => process_env(name),
+        _ => None,
+    };
+
+    let config = load_worker_from(Some(&file.0), env).expect("load worker config");
+
+    assert_eq!(config.management.port, 9084);
+    assert_eq!(config.database.max_conns, 5);
+    assert_eq!(config.database.uri, DATABASE_URI);
+    assert_eq!(config.temporal.namespace, "default");
+    assert_eq!(config.shutdown.drain_timeout, Duration::from_secs(20));
+    assert_eq!(config.telemetry.service_name, WORKER_ROLE);
+
+    let file = ConfigFile::new(
+        "worker-no-temporal",
+        &format!(
+            "{}spec:\n  management:\n    port: 9084\n",
+            header(WORKER_ROLE)
+        ),
+    );
+    let error = load_worker_from(Some(&file.0), env)
+        .expect_err("a worker without Temporal must fail startup")
+        .to_string();
+    assert!(error.contains("spec.temporal"), "{error}");
+
+    let file = ConfigFile::new(
+        "worker-unknown",
+        &format!(
+            "{}spec:\n{TEMPORAL_YAML}  temporal2: {{}}\n",
+            header(WORKER_ROLE)
+        ),
+    );
+    assert!(load_worker_from(Some(&file.0), env).is_err());
+}
+
+/// `delivery-admin` needs the Kafka and Schema Registry sections.
+#[test]
+fn admin_requires_kafka_sections() {
+    let file = ConfigFile::new(
+        "admin-incomplete",
+        &format!("{}spec:\n{KAFKA_YAML}", header(SERVER_ROLE)),
+    );
+
+    let error = load_kafka_from(Some(&file.0))
+        .expect_err("an incomplete config must fail the command")
+        .to_string();
+
+    assert!(error.contains("spec.schemaRegistry"), "{error}");
+}
+
+#[test]
+fn loads_reconciler_and_validates() {
+    let config = load_yaml(
+        "reconciler",
+        "  reconciler:\n    interval: 30s\n    grace: 1m\n    pageSize: 100\n",
+    )
+    .expect("load config");
+    assert_eq!(
+        config.reconciler,
+        ReconcilerConfig {
+            interval: Duration::from_secs(30),
+            grace: Duration::from_secs(60),
+            page_size: 100,
         }
+    );
+
+    for (name, sections) in [
+        ("reconciler-zero", "  reconciler:\n    interval: 0s\n"),
+        ("reconciler-page", "  reconciler:\n    pageSize: 0\n"),
+        ("reconciler-big", "  reconciler:\n    pageSize: 5000\n"),
+    ] {
+        assert!(load_yaml(name, sections).is_err(), "{name}");
     }
 }
 
 #[test]
-fn temporal_env_sets_values() {
-    let builder = configure_temporal(ConfigLoader::builder(), |name| match name {
-        TEMPORAL_HOST_PORT_ENV => Some("temporal-frontend.temporal:7233".to_owned()),
-        TEMPORAL_NAMESPACE_ENV => Some("nomnom".to_owned()),
-        TEMPORAL_CONNECT_TIMEOUT_ENV => Some("5s".to_owned()),
-        _ => None,
-    })
-    .expect("configure temporal");
-    let temporal: TemporalConfig = builder
-        .build()
-        .expect("build config")
-        .get("temporal")
-        .expect("temporal");
-
-    assert_eq!(temporal.host_port, "temporal-frontend.temporal:7233");
-    assert_eq!(temporal.namespace, "nomnom");
-    assert_eq!(temporal.connect_timeout, Duration::from_secs(5));
-}
-
-/// FR-708: `delivery-worker` reads only its sections of the shared file and
-/// needs neither identity, SpiceDB, Valkey nor Kafka.
-#[test]
-fn worker_loads_its_sections_only() {
-    let path = std::env::temp_dir().join(format!(
-        "nomnom-delivery-worker-{}.toml",
-        std::process::id()
-    ));
-    fs::write(
-        &path,
-        format!("[management]\nport = 9084\n{DATABASE_TOML}{TEMPORAL_TOML}"),
-    )
-    .expect("write config");
-    let config = load_worker_from(Some(&path));
-    fs::remove_file(&path).expect("remove config");
-    let config = config.expect("load worker config");
-
-    assert_eq!(config.management.port, 9084);
-    assert_eq!(config.temporal.namespace, "default");
-    assert_eq!(config.shutdown.drain_timeout, Duration::from_secs(20));
-
-    fs::write(&path, format!("{DATABASE_TOML}[temporal]\n")).expect("write config");
-    let missing = load_worker_from(Some(&path));
-    fs::remove_file(path).expect("remove config");
-    assert!(
-        missing.is_err(),
-        "a worker without Temporal must fail startup"
-    );
-}
-
-/// `delivery-admin` reads only the Kafka section of the shared file.
-#[test]
-fn admin_loads_the_kafka_section_only() {
-    let path =
-        std::env::temp_dir().join(format!("nomnom-delivery-admin-{}.toml", std::process::id()));
-    fs::write(
-        &path,
-        "[server]\nport = 8083\n[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://registry:8081\"\n",
-    )
-    .expect("write config");
-    let config = load_kafka_from(Some(&path));
-    fs::write(&path, "[kafka]\nbrokers = \"kafka:9092\"\n").expect("write config");
-    let missing = load_kafka_from(Some(&path));
-    fs::remove_file(path).expect("remove config");
-
-    assert_eq!(
-        config.expect("load kafka config").consumer_group,
-        "delivery"
-    );
-    assert!(
-        missing.is_err(),
-        "an incomplete section must fail the command"
-    );
-}
-
-#[test]
-fn loads_reconciler_from_toml_and_validates() {
-    let config = load_toml(
-        "reconciler",
-        "[reconciler]\ninterval = \"30s\"\ngrace = \"1m\"\npage_size = 100\n",
+fn loads_database_pool_settings() {
+    let config = load_yaml(
+        "database-pool",
+        "  database:
+    maxConns: 2
+    minConns: 1
+    maxLifetime: 10m
+    idleTimeout: 1m
+    acquireTimeout: 750ms
+",
     )
     .expect("load config");
-    assert_eq!(config.reconciler.interval, Duration::from_secs(30));
-    assert_eq!(config.reconciler.grace, Duration::from_secs(60));
-    assert_eq!(config.reconciler.page_size, 100);
-
-    assert!(load_toml("reconciler-zero", "[reconciler]\ninterval = \"0s\"\n").is_err());
-    assert!(load_toml("reconciler-page", "[reconciler]\npage_size = 0\n").is_err());
-    assert!(load_toml("reconciler-big", "[reconciler]\npage_size = 5000\n").is_err());
-}
-
-#[test]
-fn reconciler_env_overrides_file_values() {
-    let env = std::collections::HashMap::from([
-        (RECONCILER_INTERVAL_ENV, "1m"),
-        (RECONCILER_GRACE_ENV, "2m"),
-        (RECONCILER_PAGE_SIZE_ENV, "50"),
-    ]);
-    let reconciler: ReconcilerConfig = configure_reconciler(ConfigLoader::builder(), |name| {
-        env.get(name).map(|value| (*value).to_owned())
-    })
-    .expect("configure")
-    .build()
-    .expect("build")
-    .get("reconciler")
-    .expect("reconciler section");
 
     assert_eq!(
-        reconciler,
-        ReconcilerConfig {
-            interval: Duration::from_secs(60),
-            grace: Duration::from_secs(120),
-            page_size: 50,
-        }
-    );
-}
-
-#[test]
-fn rejects_zero_port() {
-    let name = format!("nomnom-delivery-invalid-{}.toml", std::process::id());
-    let path = std::env::temp_dir().join(name);
-    fs::write(&path, "[server]\nport = 0\n").expect("write config");
-
-    let result = load_from(Some(&path));
-    fs::remove_file(path).expect("remove config");
-
-    assert!(result.is_err());
-}
-
-#[test]
-fn database_pool_defaults_and_env_overrides() {
-    let defaults: database::Config =
-        configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |_| None)
-            .expect("defaults")
-            .build()
-            .expect("build")
-            .get("database")
-            .expect("database");
-    assert_eq!(defaults, database::Config::default());
-    let error = defaults.validate().expect_err("the URI has no default");
-    assert!(error.to_string().contains(DATABASE_URI_ENV), "{error}");
-
-    let builder = configure_settings(ConfigLoader::builder(), &DATABASE_SETTINGS, |name| {
-        match name {
-            DATABASE_URI_ENV => Some("postgres://u:p@db/delivery"),
-            DATABASE_MAX_CONNS_ENV => Some("2"),
-            DATABASE_MIN_CONNS_ENV => Some("1"),
-            DATABASE_MAX_LIFETIME_ENV => Some("10m"),
-            DATABASE_IDLE_TIMEOUT_ENV => Some("1m"),
-            DATABASE_ACQUIRE_TIMEOUT_ENV => Some("750ms"),
-            _ => None,
-        }
-        .map(str::to_owned)
-    })
-    .expect("env");
-    let database: database::Config = builder
-        .build()
-        .expect("build")
-        .get("database")
-        .expect("database");
-    assert_eq!(
-        database,
+        config.database,
         database::Config {
-            uri: "postgres://u:p@db/delivery".to_owned(),
+            uri: DATABASE_URI.to_owned(),
             max_conns: 2,
             min_conns: 1,
             max_lifetime: Duration::from_secs(600),
@@ -503,7 +755,6 @@ fn database_pool_defaults_and_env_overrides() {
             acquire_timeout: Duration::from_millis(750),
         }
     );
-    database.validate().expect("valid");
 }
 
 #[test]
@@ -518,21 +769,21 @@ fn invalid_database_pool_limits_fail_startup() {
                 max_conns: 0,
                 ..valid.clone()
             },
-            "max_conns",
+            "maxConns",
         ),
         (
             database::Config {
                 max_conns: database::MAX_MAX_CONNS + 1,
                 ..valid.clone()
             },
-            "max_conns",
+            "maxConns",
         ),
         (
             database::Config {
                 min_conns: database::MAX_MIN_CONNS + 1,
                 ..valid.clone()
             },
-            "min_conns",
+            "minConns",
         ),
         (
             database::Config {
@@ -547,21 +798,21 @@ fn invalid_database_pool_limits_fail_startup() {
                 acquire_timeout: Duration::ZERO,
                 ..valid.clone()
             },
-            "acquire_timeout",
+            "acquireTimeout",
         ),
         (
             database::Config {
                 max_lifetime: Duration::ZERO,
                 ..valid.clone()
             },
-            "max_lifetime",
+            "maxLifetime",
         ),
         (
             database::Config {
                 idle_timeout: Duration::from_secs(3600),
                 ..valid.clone()
             },
-            "idle_timeout",
+            "idleTimeout",
         ),
     ] {
         match invalid.validate() {
@@ -576,64 +827,77 @@ fn invalid_database_pool_limits_fail_startup() {
 
 #[test]
 fn malformed_database_duration_fails_startup() {
-    let error = load_toml(
+    let error = load_error(
         "database-duration",
-        "[database]\nuri = \"postgresql://u:p@db/delivery\"\nacquire_timeout = \"soon\"\n",
-    )
-    .expect_err("malformed duration");
-    assert!(error.to_string().contains("acquire_timeout"), "{error}");
+        "  database:\n    acquireTimeout: soon\n",
+    );
+    assert!(error.contains("spec.database.acquireTimeout"), "{error}");
 }
 
 #[test]
 fn database_uri_accepts_postgresql_and_postgres_schemes() {
+    let file = ConfigFile::new("database-uri", &delivery_file(""));
     for uri in [
         "postgresql://u:p@db:5432/delivery",
         "postgres://u:p@db/delivery?sslmode=require",
     ] {
-        let contents = format!("[database]\nuri = \"{uri}\"\n");
-        let config = load_toml("database-uri", &contents).expect(uri);
+        let env = |name: &str| {
+            if name == DATABASE_URI_ENV {
+                Some(uri.to_owned())
+            } else {
+                process_env(name)
+            }
+        };
+        let config = load_from(Some(&file.0), env).expect(uri);
         assert_eq!(config.database.uri, uri);
     }
 }
 
-/// Только PostgreSQL connection URI: пустое значение, libpq key=value и
-/// чужая схема завершают загрузку конфига с ошибкой про DATABASE__URI.
+/// Только PostgreSQL connection URI: libpq key=value и чужая схема
+/// завершают загрузку конфига с ошибкой про DATABASE__URI без его значения.
 #[test]
-fn database_uri_rejects_empty_and_non_uri_values() {
-    for (name, uri) in [
-        ("database-uri-empty", ""),
-        ("database-uri-blank", "  "),
-        (
-            "database-uri-key-value",
-            "host=db port=5432 user=u password=p dbname=delivery",
-        ),
-        ("database-uri-no-scheme", "u:p@db:5432/delivery"),
-        ("database-uri-mysql", "mysql://u:p@db/delivery"),
-        ("database-uri-scheme-only", "postgresql://"),
+fn database_uri_rejects_non_uri_values() {
+    let file = ConfigFile::new("database-uri-invalid", &delivery_file(""));
+    for uri in [
+        "host=db port=5432 user=u password=p dbname=delivery",
+        "u:p@db:5432/delivery",
+        "mysql://u:p@db/delivery",
+        "postgresql://",
     ] {
-        let contents = format!("[database]\nuri = \"{uri}\"\n");
-        let error = load_toml(name, &contents).expect_err(name);
-        assert!(
-            error.to_string().contains(DATABASE_URI_ENV),
-            "{name}: {error}"
-        );
-        assert!(!error.to_string().contains("password=p"), "{name}: {error}");
+        let env = |name: &str| {
+            if name == DATABASE_URI_ENV {
+                Some(uri.to_owned())
+            } else {
+                process_env(name)
+            }
+        };
+        let error = load_from(Some(&file.0), env).expect_err(uri).to_string();
+        assert!(error.contains(DATABASE_URI_ENV), "{uri}: {error}");
+        assert!(!error.contains("password=p"), "{uri}: {error}");
     }
 }
 
 #[test]
-fn database_url_key_is_unknown() {
-    let error = load_toml(
-        "database-url-key",
-        "[database]\nurl = \"postgresql://u:p@db/delivery\"\n",
-    )
-    .expect_err("database.url is not a key");
-    assert!(error.to_string().contains("url"), "{error}");
+fn invalid_valkey_url_fails_startup() {
+    let file = ConfigFile::new("valkey-url", &delivery_file(""));
+    let env = |name: &str| {
+        if name == VALKEY_URL_ENV {
+            Some("valkey:6379".to_owned())
+        } else {
+            process_env(name)
+        }
+    };
+
+    let error = load_from(Some(&file.0), env)
+        .expect_err("not a redis URL")
+        .to_string();
+
+    assert!(error.contains(VALKEY_URL_ENV), "{error}");
 }
 
 #[test]
-fn loads_simulator_from_toml() {
-    let config = load_toml("simulator", "").expect("load config");
+fn loads_simulator() {
+    let config = load_yaml("simulator", "").expect("load config");
 
     assert_eq!(
         config.simulator,
@@ -649,11 +913,15 @@ fn loads_simulator_from_toml() {
 /// FR-606: no defaults, a missing value fails startup.
 #[test]
 fn missing_simulator_settings_fail_startup() {
-    assert!(load_toml("simulator-missing", "[simulator]\n").is_err());
+    let file = ConfigFile::new(
+        "simulator-missing",
+        &delivery_file("").replace(SIMULATOR_YAML, ""),
+    );
+    assert!(load_from(Some(&file.0), process_env).is_err());
     assert!(
-        load_toml(
+        load_yaml(
             "simulator-no-max",
-            "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\n"
+            "  simulator:\n    interval: 5s\n    minDelay: 30s\n"
         )
         .is_err()
     );
@@ -662,67 +930,48 @@ fn missing_simulator_settings_fail_startup() {
 /// AC-765
 #[test]
 fn min_delay_above_max_delay_fails_startup() {
-    let error = load_toml(
+    let error = load_error(
         "simulator-inverted",
-        "[simulator]\ninterval = \"5s\"\nmin_delay = \"3m\"\nmax_delay = \"1m\"\ntrack_interval = \"1s\"\n",
-    )
-    .expect_err("MIN_DELAY > MAX_DELAY must fail");
+        "  simulator:\n    interval: 5s\n    minDelay: 3m\n    maxDelay: 1m\n    trackInterval: 1s\n",
+    );
 
-    assert!(error.to_string().contains(SIMULATOR_MIN_DELAY_ENV));
+    assert!(error.contains(SIMULATOR_MIN_DELAY_KEY), "{error}");
 }
 
 #[test]
 fn zero_or_malformed_simulator_values_fail_startup() {
-    for (name, contents) in [
+    for (name, sections) in [
         (
             "simulator-zero-interval",
-            "[simulator]\ninterval = \"0s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\ntrack_interval = \"0s\"\n",
+            "  simulator:\n    interval: 0s\n    minDelay: 30s\n    maxDelay: 2m\n    trackInterval: 0s\n",
         ),
         (
             "simulator-zero-min",
-            "[simulator]\ninterval = \"5s\"\nmin_delay = \"0s\"\nmax_delay = \"2m\"\ntrack_interval = \"1s\"\n",
+            "  simulator:\n    interval: 5s\n    minDelay: 0s\n    maxDelay: 2m\n    trackInterval: 1s\n",
         ),
         (
             "simulator-bad-max",
-            "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"soon\"\ntrack_interval = \"1s\"\n",
+            "  simulator:\n    interval: 5s\n    minDelay: 30s\n    maxDelay: soon\n    trackInterval: 1s\n",
         ),
     ] {
-        assert!(load_toml(name, contents).is_err(), "{name}");
+        assert!(load_yaml(name, sections).is_err(), "{name}");
     }
-}
-
-#[test]
-fn simulator_env_sets_values() {
-    let builder = configure_simulator(ConfigLoader::builder(), |name| match name {
-        SIMULATOR_INTERVAL_ENV => Some("1s".to_owned()),
-        SIMULATOR_MIN_DELAY_ENV => Some("2s".to_owned()),
-        SIMULATOR_MAX_DELAY_ENV => Some("3s".to_owned()),
-        _ => None,
-    })
-    .expect("configure simulator");
-    let config = builder.build().expect("build config");
-
-    assert_eq!(
-        config.get_string("simulator.min_delay").expect("min delay"),
-        "2s"
-    );
 }
 
 /// AC-890
 #[test]
 fn track_interval_above_interval_fails_startup() {
-    let error = load_toml(
+    let error = load_error(
         "simulator-slow-track",
-        "[simulator]\ninterval = \"5s\"\nmin_delay = \"30s\"\nmax_delay = \"2m\"\ntrack_interval = \"6s\"\n",
-    )
-    .expect_err("TRACK_INTERVAL > INTERVAL must fail");
+        "  simulator:\n    interval: 5s\n    minDelay: 30s\n    maxDelay: 2m\n    trackInterval: 6s\n",
+    );
 
-    assert!(error.to_string().contains(SIMULATOR_TRACK_INTERVAL_ENV));
+    assert!(error.contains(SIMULATOR_TRACK_INTERVAL_KEY), "{error}");
 }
 
 #[test]
-fn loads_tracking_and_valkey_from_toml() {
-    let config = load_toml("tracking", "").expect("load config");
+fn loads_tracking() {
+    let config = load_yaml("tracking", "").expect("load config");
 
     assert_eq!(
         config.tracking,
@@ -734,60 +983,43 @@ fn loads_tracking_and_valkey_from_toml() {
             persist_interval: Duration::from_secs(15),
         }
     );
-    assert_eq!(config.valkey.url, "redis://delivery:p@valkey:6379");
 }
 
-/// FR-665, FR-666: no defaults; a missing or malformed value, a zero persist
-/// interval or a bad Valkey URL fails startup. The grid rules belong to
-/// VirtualCity (AC-871, di::server).
+/// FR-665: no defaults; a missing or malformed value or a zero persist
+/// interval fails startup. The grid rules belong to VirtualCity (AC-871,
+/// di::server).
 #[test]
 fn missing_or_invalid_tracking_settings_fail_startup() {
-    for (name, contents) in [
-        ("tracking-missing", "[tracking]\n"),
+    for (name, sections) in [
+        ("tracking-missing", "  tracking:\n    cityBlocks: 12\n"),
         (
             "tracking-malformed-blocks",
-            "[tracking]
-city_origin_latitude = 52.5
-city_origin_longitude = 13.4
-city_blocks = \"many\"
-block_meters = 150.0
-persist_interval = \"15s\"
+            "  tracking:
+    cityOriginLatitude: 52.5
+    cityOriginLongitude: 13.4
+    cityBlocks: many
+    blockMeters: 150.0
+    persistInterval: 15s
 ",
         ),
         (
             "tracking-zero-persist",
-            "[tracking]\ncity_origin_latitude = 52.5\ncity_origin_longitude = 13.4\ncity_blocks = 12\nblock_meters = 150.0\npersist_interval = \"0s\"\n",
+            "  tracking:
+    cityOriginLatitude: 52.5
+    cityOriginLongitude: 13.4
+    cityBlocks: 12
+    blockMeters: 150.0
+    persistInterval: 0s
+",
         ),
-        ("valkey-missing", "[valkey]\n"),
-        ("valkey-empty", "[valkey]\nurl = \"\"\n"),
     ] {
-        assert!(load_toml(name, contents).is_err(), "{name}");
+        assert!(load_yaml(name, sections).is_err(), "{name}");
     }
 }
 
 #[test]
-fn tracking_env_sets_values() {
-    let builder = configure_tracking(ConfigLoader::builder(), |name| match name {
-        TRACKING_CITY_BLOCKS_ENV => Some("8".to_owned()),
-        VALKEY_URL_ENV => Some("redis://valkey:6379".to_owned()),
-        _ => None,
-    })
-    .expect("configure tracking");
-    let config = builder.build().expect("build config");
-
-    assert_eq!(
-        config.get_string("tracking.city_blocks").expect("blocks"),
-        "8"
-    );
-    assert_eq!(
-        config.get_string("valkey.url").expect("valkey url"),
-        "redis://valkey:6379"
-    );
-}
-
-#[test]
-fn loads_kafka_and_delivery_estimate_from_toml() {
-    let config = load_toml("estimate", "").expect("load config");
+fn loads_kafka_and_delivery_estimate() {
+    let config = load_yaml("estimate", "").expect("load config");
 
     assert_eq!(
         config.kafka,
@@ -808,120 +1040,79 @@ fn loads_kafka_and_delivery_estimate_from_toml() {
     );
 }
 
-/// FR-691: an empty or invalid `DELIVERY_ESTIMATE__*` stops the process at
+/// FR-691: an empty or invalid `spec.deliveryEstimate` stops the process at
 /// startup; a zero value is rejected by the estimate policy when the process
 /// is composed (`di::server::estimate_policy`).
 #[test]
 fn missing_or_invalid_delivery_estimate_fails_startup() {
-    for (name, contents) in [
-        ("estimate-missing", "[delivery_estimate]\n"),
+    for (name, sections) in [
+        ("estimate-missing", "  deliveryEstimate: {}\n"),
         (
             "estimate-no-transit",
-            "[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\n",
+            "  deliveryEstimate:\n    sampleSize: 50\n    baselineCourierLead: 15m\n",
         ),
         (
             "estimate-negative-sample",
-            "[delivery_estimate]\nsample_size = -1\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n",
+            "  deliveryEstimate:\n    sampleSize: -1\n    baselineCourierLead: 15m\n    baselineTransit: 20m\n",
         ),
         (
             "estimate-malformed-sample",
-            "[delivery_estimate]\nsample_size = \"many\"\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"20m\"\n",
+            "  deliveryEstimate:\n    sampleSize: many\n    baselineCourierLead: 15m\n    baselineTransit: 20m\n",
         ),
         (
             "estimate-malformed-lead",
-            "[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"soon\"\nbaseline_transit = \"20m\"\n",
+            "  deliveryEstimate:\n    sampleSize: 50\n    baselineCourierLead: soon\n    baselineTransit: 20m\n",
         ),
         (
             "estimate-empty-transit",
-            "[delivery_estimate]\nsample_size = 50\nbaseline_courier_lead = \"15m\"\nbaseline_transit = \"\"\n",
+            "  deliveryEstimate:\n    sampleSize: 50\n    baselineCourierLead: 15m\n    baselineTransit: \"\"\n",
         ),
     ] {
-        assert!(load_toml(name, contents).is_err(), "{name}");
+        assert!(load_yaml(name, sections).is_err(), "{name}");
     }
-}
-
-#[test]
-fn delivery_estimate_env_sets_values() {
-    let builder = configure_delivery_estimate(ConfigLoader::builder(), |name| match name {
-        DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV => Some("30".to_owned()),
-        DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV => Some("10m".to_owned()),
-        DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV => Some("25m".to_owned()),
-        _ => None,
-    })
-    .expect("configure delivery estimate");
-    let config = builder.build().expect("build config");
-
-    assert_eq!(
-        config
-            .get_string("delivery_estimate.sample_size")
-            .expect("sample size"),
-        "30"
-    );
-    assert_eq!(
-        config
-            .get_string("delivery_estimate.baseline_transit")
-            .expect("baseline transit"),
-        "25m"
-    );
 }
 
 #[test]
 fn missing_or_invalid_kafka_fails_startup() {
-    for (name, contents, env) in [
-        ("kafka-missing", "[kafka]\n", None),
+    for (name, sections, needle) in [
+        (
+            "kafka-missing",
+            "  kafka:\n    brokers: kafka:9092\n",
+            "consumerGroup",
+        ),
         (
             "kafka-empty-brokers",
-            "[kafka]\nbrokers = \" \"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://kafka:8081\"\n",
-            Some(KAFKA_BROKERS_ENV),
+            "  kafka:\n    brokers: \" \"\n    consumerGroup: delivery\n    initialOffset: oldest\n",
+            KAFKA_BROKERS_KEY,
         ),
         (
             "kafka-empty-group",
-            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"http://kafka:8081\"\n",
-            Some(KAFKA_CONSUMER_GROUP_ENV),
+            "  kafka:\n    brokers: kafka:9092\n    consumerGroup: \"\"\n    initialOffset: oldest\n",
+            KAFKA_CONSUMER_GROUP_KEY,
         ),
         (
             "kafka-unknown-offset",
-            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"middle\"\nschema_registry_url = \"http://kafka:8081\"\n",
-            None,
+            "  kafka:\n    brokers: kafka:9092\n    consumerGroup: delivery\n    initialOffset: middle\n",
+            "spec.kafka.initialOffset",
         ),
         // FR-719: the Schema Registry is required and must be an http(s) URL.
         (
             "kafka-no-schema-registry",
-            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"\"\n",
-            Some(SCHEMA_REGISTRY_URL_ENV),
+            "  schemaRegistry:\n    url: \"\"\n",
+            SCHEMA_REGISTRY_URL_KEY,
         ),
         (
             "kafka-schema-registry-not-http",
-            "[kafka]\nbrokers = \"kafka:9092\"\nconsumer_group = \"delivery\"\ninitial_offset = \"oldest\"\nschema_registry_url = \"kafka:8081\"\n",
-            Some(SCHEMA_REGISTRY_URL_ENV),
+            "  schemaRegistry:\n    url: kafka:8081\n",
+            SCHEMA_REGISTRY_URL_KEY,
+        ),
+        (
+            "kafka-schema-registry-old-key",
+            "  kafka:\n    brokers: kafka:9092\n    consumerGroup: delivery\n    initialOffset: oldest\n    schemaRegistryUrl: http://kafka:8081\n",
+            "spec.kafka.schemaRegistryUrl",
         ),
     ] {
-        let Err(error) = load_toml(name, contents) else {
-            panic!("{name} must fail startup");
-        };
-        if let Some(env) = env {
-            assert!(error.to_string().contains(env), "{name}: {error}");
-        }
+        let error = load_error(name, sections);
+        assert!(error.contains(needle), "{name}: {error}");
     }
-}
-
-#[test]
-fn kafka_env_sets_values() {
-    let builder = configure_kafka(ConfigLoader::builder(), |name| match name {
-        KAFKA_BROKERS_ENV => Some("kafka.nomnom-infra:9092".to_owned()),
-        KAFKA_CONSUMER_GROUP_ENV => Some("delivery".to_owned()),
-        KAFKA_INITIAL_OFFSET_ENV => Some("newest".to_owned()),
-        _ => None,
-    })
-    .expect("configure kafka");
-    let config = builder.build().expect("build config");
-
-    assert_eq!(
-        config.get_string("kafka.brokers").expect("brokers"),
-        "kafka.nomnom-infra:9092"
-    );
-    assert_eq!(
-        config.get_string("kafka.initial_offset").expect("offset"),
-        "newest"
-    );
 }

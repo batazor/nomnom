@@ -2,16 +2,18 @@
 
 import re
 
-from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator, model_validator
 
-IDENTITY_ISSUER_ENV = "IDENTITY__ISSUER"
-IDENTITY_AUDIENCE_ENV = "IDENTITY__AUDIENCE"
-IDENTITY_JWKS_FILE_ENV = "IDENTITY__JWKS_FILE"
-IDENTITY_SERVICE_ACCOUNTS_ENV = "IDENTITY__SERVICE_ACCOUNTS"
-IDENTITY_USER_ISSUER_ENV = "IDENTITY__USER_ISSUER"
-IDENTITY_USER_JWKS_FILE_ENV = "IDENTITY__USER_JWKS_FILE"
-IDENTITY_USER_DELEGATES_ENV = "IDENTITY__USER_DELEGATES"
+from .section import Section
+
+# Пути ключей в файле конфигурации: их называют ошибки.
+IDENTITY_ISSUER_KEY = "spec.identity.issuer"
+IDENTITY_AUDIENCE_KEY = "spec.identity.audience"
+IDENTITY_JWKS_FILE_KEY = "spec.identity.jwksFile"
+IDENTITY_SERVICE_ACCOUNTS_KEY = "spec.identity.serviceAccounts"
+IDENTITY_USER_ISSUER_KEY = "spec.identity.userIssuer"
+IDENTITY_USER_JWKS_FILE_KEY = "spec.identity.userJwksFile"
+IDENTITY_USER_DELEGATES_KEY = "spec.identity.userDelegates"
 
 # Сегмент имени Kubernetes (namespace, ServiceAccount): без разделителей ``/``, ``:``, ``=``.
 _SERVICE_ACCOUNT_ENTRY = re.compile(r"^([^/:=\s]+)/([^/:=\s]+)=(\S+)$")
@@ -35,20 +37,20 @@ def parse_service_accounts(value: str) -> dict[str, str]:
         match = _SERVICE_ACCOUNT_ENTRY.match(entry)
         if match is None:
             raise ValueError(
-                f"invalid {IDENTITY_SERVICE_ACCOUNTS_ENV} entry {entry!r}: "
+                f"invalid {IDENTITY_SERVICE_ACCOUNTS_KEY} entry {entry!r}: "
                 "expected namespace/serviceaccount=service-name",
             )
         namespace, account, service = match.groups()
         subject = f"system:serviceaccount:{namespace}:{account}"
         if subject in accounts:
             raise ValueError(
-                f"duplicate {IDENTITY_SERVICE_ACCOUNTS_ENV} entry for {namespace}/{account}",
+                f"duplicate {IDENTITY_SERVICE_ACCOUNTS_KEY} entry for {namespace}/{account}",
             )
         accounts[subject] = service
     return accounts
 
 
-# Имя сервиса из правой части IDENTITY__SERVICE_ACCOUNTS: без пробелов и запятых.
+# Имя сервиса из правой части identity.serviceAccounts: без пробелов и запятых.
 _USER_DELEGATE_ENTRY = re.compile(r"^[^\s,]+$")
 
 
@@ -65,34 +67,32 @@ def parse_user_delegates(value: str) -> frozenset[str]:
         entry = raw.strip()
         if _USER_DELEGATE_ENTRY.match(entry) is None:
             raise ValueError(
-                f"invalid {IDENTITY_USER_DELEGATES_ENV} entry {entry!r}: expected service-name",
+                f"invalid {IDENTITY_USER_DELEGATES_KEY} entry {entry!r}: expected service-name",
             )
         if entry in delegates:
-            raise ValueError(f"duplicate {IDENTITY_USER_DELEGATES_ENV} entry {entry!r}")
+            raise ValueError(f"duplicate {IDENTITY_USER_DELEGATES_KEY} entry {entry!r}")
         delegates.add(entry)
     return frozenset(delegates)
 
 
-class IdentitySettings(BaseSettings):
-    """Verification of callers: service identity and BFF user assertions.
+class IdentitySettings(Section):
+    """Verification of callers: service identity and BFF user assertions (``spec.identity``).
 
     Service identity comes from a projected ServiceAccount token (ADR 27), users from
     BFF user assertions (ADR 32). All of them are required: the resolver refuses to start
     while any is empty (see ``missing``).
     """
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    issuer: str = Field(default="", validation_alias=IDENTITY_ISSUER_ENV)
-    audience: str = Field(default="", validation_alias=IDENTITY_AUDIENCE_ENV)
-    jwks_file: str = Field(default="", validation_alias=IDENTITY_JWKS_FILE_ENV)
+    issuer: str = ""
+    audience: str = ""
+    jwks_file: str = ""
     # ``namespace/serviceaccount=service-name`` через запятую.
-    service_accounts: str = Field(default="", validation_alias=IDENTITY_SERVICE_ACCOUNTS_ENV)
+    service_accounts: str = ""
     # Ожидаемый ``iss`` и JWKS (ES256) user assertions BFF.
-    user_issuer: str = Field(default="", validation_alias=IDENTITY_USER_ISSUER_ENV)
-    user_jwks_file: str = Field(default="", validation_alias=IDENTITY_USER_JWKS_FILE_ENV)
+    user_issuer: str = ""
+    user_jwks_file: str = ""
     # Имена сервисов, которым разрешено передавать user, через запятую.
-    user_delegates: str = Field(default="", validation_alias=IDENTITY_USER_DELEGATES_ENV)
+    user_delegates: str = ""
 
     @field_validator(
         "issuer",
@@ -112,25 +112,25 @@ class IdentitySettings(BaseSettings):
         accounts = parse_service_accounts(self.service_accounts)
         if self.issuer and not accounts:
             raise ValueError(
-                f"{IDENTITY_SERVICE_ACCOUNTS_ENV} must not be empty when "
-                f"{IDENTITY_ISSUER_ENV} is set",
+                f"{IDENTITY_SERVICE_ACCOUNTS_KEY} must not be empty when "
+                f"{IDENTITY_ISSUER_KEY} is set",
             )
         parse_user_delegates(self.user_delegates)
         return self
 
     @property
     def missing(self) -> list[str]:
-        """Environment variables of required identity settings that are empty."""
+        """Keys of required identity settings that are empty."""
         required = {
-            IDENTITY_ISSUER_ENV: self.issuer,
-            IDENTITY_AUDIENCE_ENV: self.audience,
-            IDENTITY_JWKS_FILE_ENV: self.jwks_file,
-            IDENTITY_SERVICE_ACCOUNTS_ENV: self.service_accounts,
-            IDENTITY_USER_ISSUER_ENV: self.user_issuer,
-            IDENTITY_USER_JWKS_FILE_ENV: self.user_jwks_file,
-            IDENTITY_USER_DELEGATES_ENV: self.user_delegates,
+            IDENTITY_ISSUER_KEY: self.issuer,
+            IDENTITY_AUDIENCE_KEY: self.audience,
+            IDENTITY_JWKS_FILE_KEY: self.jwks_file,
+            IDENTITY_SERVICE_ACCOUNTS_KEY: self.service_accounts,
+            IDENTITY_USER_ISSUER_KEY: self.user_issuer,
+            IDENTITY_USER_JWKS_FILE_KEY: self.user_jwks_file,
+            IDENTITY_USER_DELEGATES_KEY: self.user_delegates,
         }
-        return [env for env, value in required.items() if not value]
+        return [key for key, value in required.items() if not value]
 
     @property
     def service_account_map(self) -> dict[str, str]:

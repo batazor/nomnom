@@ -11,8 +11,8 @@ use delivery::pkg::telemetry::log;
 #[tokio::main]
 async fn main() -> ExitCode {
     // Логи — JSON с первой записи, ошибки конфигурации тоже.
-    log::init_logs(SERVICE_NAME);
-    match run().await {
+    let logs = log::init_logs(SERVICE_NAME);
+    match run(&logs).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(operation = "startup", error.message = %error, "delivery stopped with an error");
@@ -22,9 +22,11 @@ async fn main() -> ExitCode {
 }
 
 /// `Ok(())` — штатный shutdown (exit 0), любая ошибка — non-zero exit.
-async fn run() -> Result<(), Box<dyn Error>> {
+async fn run(logs: &log::Logs) -> Result<(), Box<dyn Error>> {
     // Невалидная конфигурация завершает процесс до открытия портов.
     let config = config::load().map_err(|error| format!("load config: {error}"))?;
+    // Уровень логов и resource — из файла конфигурации.
+    logs.configure(&config.telemetry)?;
     // Identity, SpiceDB и PostgreSQL обязательны: ошибка прерывает startup.
     let process = di::server::compose(&config)?;
 

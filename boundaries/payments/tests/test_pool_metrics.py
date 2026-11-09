@@ -202,13 +202,13 @@ class CreateDatabaseTest(unittest.TestCase):
     def test_pool_follows_settings(self) -> None:
         settings = database.Config.model_validate(
             {
-                "DATABASE__URI": "postgresql://payments@127.0.0.1:1/x",
-                "DATABASE__MAX_CONNS": "3",
-                "DATABASE__MIN_CONNS": "0",
-                "DATABASE__MAX_CONN_LIFETIME": "30m",
-                "DATABASE__MAX_CONN_IDLE_TIME": "5m",
-                "DATABASE__CONNECT_TIMEOUT": "2500ms",
-                "DATABASE__ACQUIRE_TIMEOUT": "4s",
+                "uri": "postgresql://payments@127.0.0.1:1/x",
+                "maxConns": 3,
+                "minConns": 0,
+                "maxConnLifetime": "30m",
+                "maxConnIdleTime": "5m",
+                "connectTimeout": "2500ms",
+                "acquireTimeout": "4s",
             }
         )
         db = create_database(settings)

@@ -29,7 +29,7 @@ import {
 } from "../infrastructure/grpc/subject.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
 import type { Subject } from "../pkg/authz/subject.ts";
-import { loadIdentityConfig } from "../pkg/config/config.ts";
+import { loadIdentityConfig, specSchema } from "../pkg/config/config.ts";
 import { BatchGetRestaurantsHandler } from "../slices/restaurant/applications/batch-get/batch-get.ts";
 import { GetRestaurantHandler } from "../slices/restaurant/applications/get/get.ts";
 import { ListRestaurantsHandler } from "../slices/restaurant/applications/list/list.ts";
@@ -61,13 +61,13 @@ const bffJwks = JSON.parse(
 
 /** Конфигурация из векторов; audience векторов — `nomnom.payments`. */
 const identityEnvironment = {
-  IDENTITY__ISSUER: vectors.issuer,
-  IDENTITY__AUDIENCE: vectors.audience,
-  IDENTITY__JWKS_FILE: JWKS_FILE,
-  IDENTITY__SERVICE_ACCOUNTS: vectors.service_accounts,
-  IDENTITY__USER_ISSUER: "nomnom-bff",
-  IDENTITY__USER_JWKS_FILE: BFF_JWKS_FILE,
-  IDENTITY__USER_DELEGATES: "bff",
+  issuer: vectors.issuer,
+  audience: vectors.audience,
+  jwksFile: JWKS_FILE,
+  serviceAccounts: vectors.service_accounts,
+  userIssuer: "nomnom-bff",
+  userJwksFile: BFF_JWKS_FILE,
+  userDelegates: "bff",
 };
 
 const contextWith = (headers: Record<string, string> = {}): HandlerContext =>
@@ -81,7 +81,10 @@ const silent = () => {};
 const createResolver = async (
   log: (message: string) => void = silent,
 ): Promise<SubjectResolver> =>
-  createSubjectResolver(loadIdentityConfig(identityEnvironment), log);
+  createSubjectResolver(
+    loadIdentityConfig(specSchema.parse({ identity: identityEnvironment })),
+    log,
+  );
 
 const unauthenticated = (error: unknown) =>
   error instanceof ConnectError &&
@@ -167,10 +170,14 @@ test("expiry and not-before honour the 30s clock tolerance", async () => {
 
 test("an allowlisted token for another audience is rejected (AC-460)", async () => {
   const resolver = await createSubjectResolver(
-    loadIdentityConfig({
-      ...identityEnvironment,
-      IDENTITY__AUDIENCE: "nomnom.restaurants",
-    }),
+    loadIdentityConfig(
+      specSchema.parse({
+        identity: {
+          ...identityEnvironment,
+          audience: "nomnom.restaurants",
+        },
+      }),
+    ),
     silent,
   );
 
@@ -181,19 +188,15 @@ test("an allowlisted token for another audience is rejected (AC-460)", async () 
 });
 
 test("requires issuer, audience and JWKS (AC-462)", () => {
-  for (const missing of [
-    "IDENTITY__ISSUER",
-    "IDENTITY__AUDIENCE",
-    "IDENTITY__JWKS_FILE",
-  ]) {
-    const environment: Record<string, string> = { ...identityEnvironment };
-    delete environment[missing];
-    if (missing === "IDENTITY__ISSUER") {
-      delete environment.IDENTITY__SERVICE_ACCOUNTS;
+  for (const missing of ["issuer", "audience", "jwksFile"] as const) {
+    const identity: Record<string, string> = { ...identityEnvironment };
+    delete identity[missing];
+    if (missing === "issuer") {
+      delete identity.serviceAccounts;
     }
 
     assert.throws(
-      () => loadIdentityConfig(environment),
+      () => loadIdentityConfig(specSchema.parse({ identity })),
       /are required/,
       missing,
     );
@@ -201,11 +204,15 @@ test("requires issuer, audience and JWKS (AC-462)", () => {
 });
 
 test("parses the ServiceAccount allowlist", () => {
-  const config = loadIdentityConfig({
-    ...identityEnvironment,
-    IDENTITY__SERVICE_ACCOUNTS:
-      " nomnom/orders-worker=orders-worker , nomnom/orders-api=orders ",
-  });
+  const config = loadIdentityConfig(
+    specSchema.parse({
+      identity: {
+        ...identityEnvironment,
+        serviceAccounts:
+          " nomnom/orders-worker=orders-worker , nomnom/orders-api=orders ",
+      },
+    }),
+  );
 
   assert.deepEqual(
     [...config.serviceAccounts],
@@ -219,11 +226,15 @@ test("parses the ServiceAccount allowlist", () => {
 test("rejects an empty allowlist", () => {
   assert.throws(
     () =>
-      loadIdentityConfig({
-        ...identityEnvironment,
-        IDENTITY__SERVICE_ACCOUNTS: "",
-      }),
-    /IDENTITY__SERVICE_ACCOUNTS/,
+      loadIdentityConfig(
+        specSchema.parse({
+          identity: {
+            ...identityEnvironment,
+            serviceAccounts: "",
+          },
+        }),
+      ),
+    /spec\.identity\.serviceAccounts/,
   );
 });
 
@@ -242,11 +253,15 @@ test("rejects a malformed allowlist", () => {
   ]) {
     assert.throws(
       () =>
-        loadIdentityConfig({
-          ...identityEnvironment,
-          IDENTITY__SERVICE_ACCOUNTS: serviceAccounts,
-        }),
-      /IDENTITY__SERVICE_ACCOUNTS/,
+        loadIdentityConfig(
+          specSchema.parse({
+            identity: {
+              ...identityEnvironment,
+              serviceAccounts: serviceAccounts,
+            },
+          }),
+        ),
+      /spec\.identity\.serviceAccounts/,
       serviceAccounts,
     );
   }
@@ -316,10 +331,14 @@ test("an unreadable or invalid JWKS is a startup error", async () => {
   for (const file of files) {
     await assert.rejects(
       createSubjectResolver(
-        loadIdentityConfig({
-          ...identityEnvironment,
-          IDENTITY__JWKS_FILE: file,
-        }),
+        loadIdentityConfig(
+          specSchema.parse({
+            identity: {
+              ...identityEnvironment,
+              jwksFile: file,
+            },
+          }),
+        ),
         silent,
       ),
       /JWKS/,

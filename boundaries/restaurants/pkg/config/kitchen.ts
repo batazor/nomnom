@@ -1,15 +1,40 @@
 import { z } from "zod";
+
 import {
   DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION,
   DEFAULT_KITCHEN_PREPARATION_TIME,
   DEFAULT_KITCHEN_QUEUE_AGING_FACTOR,
   DEFAULT_KITCHEN_REPEAT_POLICY,
-  KITCHEN_CANCELLATION_DURING_PREPARATION_ENV,
-  KITCHEN_PREPARATION_TIME_ENV,
-  KITCHEN_QUEUE_AGING_FACTOR_ENV,
-  KITCHEN_REPEAT_POLICY_ENV,
-} from "./env.ts";
-import { durationSchema } from "./schemas.ts";
+} from "./defaults.ts";
+import type { Spec } from "./file.ts";
+import { positiveDurationSchema } from "./schemas.ts";
+
+/** `spec.kitchen`: open product decisions of Kitchen Order commands. */
+export const kitchenSectionSchema = z
+  .strictObject({
+    preparationTime: positiveDurationSchema.prefault(
+      DEFAULT_KITCHEN_PREPARATION_TIME,
+    ),
+    repeatPolicy: z
+      .enum(["succeed-without-event", "reject"], {
+        error: "expected succeed-without-event or reject",
+      })
+      .prefault(DEFAULT_KITCHEN_REPEAT_POLICY),
+    cancellationDuringPreparation: z
+      .enum(["allow", "reject"], { error: "expected allow or reject" })
+      .prefault(DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION),
+  })
+  .prefault({});
+
+/** `spec.kitchenQueue`: Kitchen Queue (FR-241). */
+export const kitchenQueueSectionSchema = z
+  .strictObject({
+    agingFactor: z
+      .number({ error: "expected a number" })
+      .positive("expected a positive number")
+      .prefault(DEFAULT_KITCHEN_QUEUE_AGING_FACTOR),
+  })
+  .prefault({});
 
 /**
  * Open product decisions of Kitchen Order commands. Handlers take them as
@@ -36,41 +61,12 @@ export interface KitchenConfig {
 }
 
 export function loadKitchenConfig(
-  environment: Record<string, string | undefined>,
+  spec: Pick<Spec, "kitchen" | "kitchenQueue">,
 ): KitchenConfig {
-  const preparationTimeMs = durationSchema
-    .refine((value) => value > 0, "preparation time must be positive")
-    .parse(
-      environment[KITCHEN_PREPARATION_TIME_ENV]?.trim() ||
-        DEFAULT_KITCHEN_PREPARATION_TIME,
-    );
-  const repeatPolicy = z
-    .enum(["succeed-without-event", "reject"], {
-      error: `${KITCHEN_REPEAT_POLICY_ENV}: expected succeed-without-event or reject`,
-    })
-    .parse(
-      environment[KITCHEN_REPEAT_POLICY_ENV]?.trim() ||
-        DEFAULT_KITCHEN_REPEAT_POLICY,
-    );
-  const cancellationDuringPreparation = z
-    .enum(["allow", "reject"], {
-      error: `${KITCHEN_CANCELLATION_DURING_PREPARATION_ENV}: expected allow or reject`,
-    })
-    .parse(
-      environment[KITCHEN_CANCELLATION_DURING_PREPARATION_ENV]?.trim() ||
-        DEFAULT_KITCHEN_CANCELLATION_DURING_PREPARATION,
-    );
-  const queueAgingFactor = z.coerce
-    .number({ error: `${KITCHEN_QUEUE_AGING_FACTOR_ENV}: expected a number` })
-    .positive(`${KITCHEN_QUEUE_AGING_FACTOR_ENV}: expected a positive number`)
-    .parse(
-      environment[KITCHEN_QUEUE_AGING_FACTOR_ENV]?.trim() ||
-        DEFAULT_KITCHEN_QUEUE_AGING_FACTOR,
-    );
   return Object.freeze({
-    preparationTimeMs,
-    repeatPolicy,
-    cancellationDuringPreparation,
-    queueAgingFactor,
+    preparationTimeMs: spec.kitchen.preparationTime,
+    repeatPolicy: spec.kitchen.repeatPolicy,
+    cancellationDuringPreparation: spec.kitchen.cancellationDuringPreparation,
+    queueAgingFactor: spec.kitchenQueue.agingFactor,
   });
 }

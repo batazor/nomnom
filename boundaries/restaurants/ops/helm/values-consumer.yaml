@@ -2,8 +2,11 @@
 #   helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml
 # Читает собственный restaurants.v1.restaurant-order-events через Inbox в MongoDB и
 # обновляет кеш каталога по собственным событиям. Restaurant Order создаёт только workflow
-# orders после оплаты (RPC ReceiveOrderRequest). Brokers (KAFKA__BROKERS), Schema Registry (SCHEMA_REGISTRY__URL, FR-715) и хранилище (mongodb.uriSecret) задаются values окружения;
-# без них процесс не стартует.
+# orders после оплаты (RPC ReceiveOrderRequest). Brokers (config.spec.kafka.brokers), Schema
+# Registry (config.spec.schemaRegistry.url, FR-715) и хранилище (mongodb.uriSecret) задаются
+# values окружения; без них процесс не стартует.
+role: restaurants-consumer
+
 component: consumer
 
 # Реплики делят одну consumer group; порядок событий одного Order сохраняет partition key.
@@ -11,31 +14,28 @@ replicaCount: 1
 
 command: ["/usr/bin/tini", "--", "node", "dist/cmd/restaurants-consumer/main.js"]
 
-# KAFKA__CLIENT_ID — client id consumer и producer dead letters. Группа restaurants читает
-# стрим с начала: Restaurant Order создаётся и для заказов, оформленных до первого запуска;
-# повтор истории идемпотентен через Inbox.
-# CACHE__REFRESH_GROUP — группа обновления кеша каталога (ADR 43): читает restaurant-events и
-# menu-events с конца стрима.
-env:
-  KAFKA__CLIENT_ID: restaurants-consumer
-  CACHE__REFRESH_GROUP: restaurants-cache
-  KAFKA__CONSUMER_GROUP: restaurants
-  KAFKA__INITIAL_OFFSET: oldest
-
-telemetry:
-  serviceName: restaurants-consumer
-
 # Consumer не обслуживает бизнес-API: без Service и бизнес-порта, только metrics и probes.
 service:
   enabled: false
 
-# Начатое сообщение завершается в пределах drainTimeout; offsets подтверждаются только для
-# обработанных сообщений, остальные доставляются повторно.
-shutdown:
-  readinessDelaySeconds: 2
-  drainTimeoutSeconds: 20
-
-mongodb:
-  pool:
-    # Одно сообщение за раз: транзакция Inbox и Restaurant Order плюс запас на dead letters и health.
-    maxPoolSize: 5
+config:
+  spec:
+    # Начатое сообщение завершается в пределах drainTimeout; offsets подтверждаются только для
+    # обработанных сообщений, остальные доставляются повторно.
+    shutdown:
+      readinessDelay: 2s
+      drainTimeout: 20s
+    mongodb:
+      # Одно сообщение за раз: транзакция Inbox и Restaurant Order плюс запас на dead letters и health.
+      maxPoolSize: 5
+    # clientId — client id consumer и producer dead letters. Группа restaurants читает стрим с
+    # начала: Restaurant Order создаётся и для заказов, оформленных до первого запуска; повтор
+    # истории идемпотентен через Inbox.
+    kafka:
+      clientId: restaurants-consumer
+      consumerGroup: restaurants
+      initialOffset: oldest
+    # refreshGroup — группа обновления кеша каталога (ADR 43): читает restaurant-events и
+    # menu-events с конца стрима.
+    cache:
+      refreshGroup: restaurants-cache

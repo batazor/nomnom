@@ -4,20 +4,18 @@ WorkerDeployment of Temporal Worker Controller for the worker (ADR 5).
 */}}
 {{- define "orders.podTemplate" -}}
 metadata:
-  {{- if or .Values.env .Values.podAnnotations }}
   annotations:
-    {{- if .Values.env }}
-    checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-    {{- end }}
+    # Изменение файла конфигурации перезапускает pod: процесс читает его только при старте.
+    checksum/config: {{ include "orders.configFile" . | sha256sum }}
     {{- with .Values.podAnnotations }}
     {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
     {{- end }}
-  {{- end }}
   labels:
     {{- include "orders.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 4 }}
 spec:
   {{- include "orders.validateShutdownBudget" . }}
   {{- include "orders.validateIdentity" . }}
+  {{- include "orders.validatePostgres" . }}
   terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
@@ -44,74 +42,26 @@ spec:
       ports:
         {{- if .Values.service.enabled }}
         - name: {{ .Values.service.portName }}
-          containerPort: {{ .Values.service.targetPort }}
+          containerPort: {{ include "orders.serverPort" . }}
           protocol: TCP
         {{- end }}
         - name: metrics
-          containerPort: {{ .Values.management.port }}
+          containerPort: {{ include "orders.managementPort" . }}
           protocol: TCP
-      {{- if or .Values.env .Values.envFrom }}
+      {{- with .Values.envFrom }}
       envFrom:
-        {{- if .Values.env }}
-        - configMapRef:
-            name: {{ include "common.names.fullname" . }}
-        {{- end }}
-        {{- with .Values.envFrom }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
-        {{- end }}
       {{- end }}
       env:
-        {{- if eq .Values.component "worker" }}
-        # Same server and namespace as the Connection of the WorkerDeployment.
-        - name: TEMPORAL__HOST_PORT
-          value: {{ .Values.temporal.hostPort | quote }}
-        - name: TEMPORAL__NAMESPACE
-          value: {{ .Values.temporal.namespace | quote }}
-        {{- end }}
-        - name: MANAGEMENT__PORT
-          value: {{ .Values.management.port | quote }}
-        - name: SHUTDOWN__READINESS_DELAY
-          value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
-        - name: SHUTDOWN__DRAIN_TIMEOUT
-          value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
-        {{- with .Values.identity }}
-        {{- if .jwksConfigMap }}
-        - name: IDENTITY__ISSUER
-          value: {{ .issuer | quote }}
-        - name: IDENTITY__AUDIENCE
-          value: {{ .audience | quote }}
-        - name: IDENTITY__JWKS_FILE
-          value: /etc/nomnom/identity/jwks.json
-        - name: IDENTITY__SERVICE_ACCOUNTS
-          value: {{ .serviceAccounts | quote }}
-        - name: IDENTITY__USER_ISSUER
-          value: {{ .userIssuer | quote }}
-        - name: IDENTITY__USER_JWKS_FILE
-          value: /etc/nomnom/user-identity/jwks.json
-        - name: IDENTITY__USER_DELEGATES
-          value: {{ .userDelegates | quote }}
-        {{- end }}
-        {{- if .tokenAudiences }}
-        - name: IDENTITY__TOKEN_DIR
-          value: /var/run/secrets/nomnom/identity
-        {{- end }}
-        {{- end }}
-        {{- include "orders.postgresEnv" (dict "context" .) | nindent 8 }}
-        {{- include "orders.otelEnv" (dict "context" . "serviceName" "") | nindent 8 }}
-        {{- with .Values.spicedb }}
-        {{- if .endpoint }}
-        - name: SPICEDB__ENDPOINT
-          value: {{ .endpoint | quote }}
-        - name: SPICEDB__INSECURE
-          value: {{ .insecure | quote }}
-        - name: SPICEDB__TIMEOUT
-          value: {{ .timeout | quote }}
-        - name: SPICEDB__PRESHARED_KEY
+        - name: CONFIG_FILE
+          value: /etc/nomnom/config.yaml
+        # service.instance.id процесса (FR-768).
+        - name: POD_NAME
           valueFrom:
-            secretKeyRef:
-              name: {{ required "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" .presharedKeySecret.name }}
-              key: {{ .presharedKeySecret.key }}
-        {{- end }}
+            fieldRef:
+              fieldPath: metadata.name
+        {{- with include "orders.secretEnv" . | trim }}
+        {{- . | nindent 8 }}
         {{- end }}
         {{- with .Values.extraEnv }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
@@ -128,27 +78,32 @@ spec:
       resources:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap .Values.identity.tokenAudiences }}
       volumeMounts:
+        # subPath: каталог /etc/nomnom остаётся доступным для монтирования JWKS.
+        - name: config
+          mountPath: /etc/nomnom/config.yaml
+          subPath: config.yaml
+          readOnly: true
         {{- if .Values.identity.jwksConfigMap }}
         - name: identity-jwks
-          mountPath: /etc/nomnom/identity
+          mountPath: {{ include "orders.identityJwksFile" . | dir }}
           readOnly: true
         - name: identity-user-jwks
-          mountPath: /etc/nomnom/user-identity
+          mountPath: {{ include "orders.identityUserJwksFile" . | dir }}
           readOnly: true
         {{- end }}
         {{- if .Values.identity.tokenAudiences }}
         - name: identity-tokens
-          mountPath: /var/run/secrets/nomnom/identity
+          mountPath: {{ include "orders.identityTokenDir" . }}
           readOnly: true
         {{- end }}
         {{- with .Values.volumeMounts }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
-      {{- end }}
-  {{- if or .Values.volumes .Values.identity.jwksConfigMap .Values.identity.tokenAudiences }}
   volumes:
+    - name: config
+      configMap:
+        name: {{ include "common.names.fullname" . }}
     {{- with .Values.identity }}
     {{- if .jwksConfigMap }}
     - name: identity-jwks
@@ -180,7 +135,6 @@ spec:
     {{- with .Values.volumes }}
     {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
     {{- end }}
-  {{- end }}
   {{- with .Values.nodeSelector }}
   nodeSelector:
     {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}

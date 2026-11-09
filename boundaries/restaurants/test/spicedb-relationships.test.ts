@@ -4,7 +4,7 @@ import test from "node:test";
 import { v1 } from "@authzed/authzed-node";
 import { AuthorizationUnavailableError } from "../infrastructure/spicedb/errors.ts";
 import { SpiceDbRelationshipWriter } from "../infrastructure/spicedb/relationships.ts";
-import { loadConfig } from "../pkg/config/config.ts";
+import { loadConfig, specSchema } from "../pkg/config/config.ts";
 import { FakeRelationshipsClient } from "./support/relationships.ts";
 
 test("FR-443 writer maps owner and staff to restaurant relationships", async () => {
@@ -68,30 +68,33 @@ test("writer fails closed when SpiceDB does not answer within the timeout", asyn
 });
 
 test("reconciler config defaults to 5m interval, 10m grace and 500 page size", () => {
-  assert.deepEqual(loadConfig({}).reconciler, {
+  assert.deepEqual(loadConfig(specSchema.parse({})).reconciler, {
     intervalMs: 300_000,
     graceMs: 600_000,
     pageSize: 500,
   });
   assert.deepEqual(
-    loadConfig({
-      RECONCILER__INTERVAL: "30s",
-      RECONCILER__GRACE: "1m",
-      RECONCILER__PAGE_SIZE: "100",
-    }).reconciler,
+    loadConfig(
+      specSchema.parse({
+        reconciler: { interval: "30s", grace: "1m", pageSize: 100 },
+      }),
+    ).reconciler,
     { intervalMs: 30_000, graceMs: 60_000, pageSize: 100 },
   );
 });
 
 test("reconciler config rejects invalid values", () => {
-  for (const environment of [
-    { RECONCILER__INTERVAL: "0s" },
-    { RECONCILER__INTERVAL: "5" },
-    { RECONCILER__GRACE: "0m" },
-    { RECONCILER__PAGE_SIZE: "0" },
-    { RECONCILER__PAGE_SIZE: "1001" },
-    { RECONCILER__PAGE_SIZE: "ten" },
+  for (const reconciler of [
+    { interval: "0s" },
+    { interval: "5" },
+    { grace: "0m" },
+    { pageSize: 0 },
+    { pageSize: 1001 },
+    { pageSize: "ten" },
   ]) {
-    assert.throws(() => loadConfig(environment), JSON.stringify(environment));
+    assert.throws(
+      () => specSchema.parse({ reconciler }),
+      JSON.stringify(reconciler),
+    );
   }
 });

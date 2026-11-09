@@ -242,7 +242,7 @@ func TestGetOrderMapsExpectedTimes(t *testing.T) {
 }
 
 // FR-681: GetOrder carries the Delivery Window of a Scheduled Order and the
-// cancellation window closing CANCELLATION__SCHEDULED_CUTOFF before it.
+// cancellation window closing spec.cancellation.scheduledCutoff before it.
 func TestGetOrderMapsDeliveryWindow(t *testing.T) {
 	store := repositorytest.Open(t)
 	windowStart := ordertest.PlacedAt.Add(7 * time.Hour)

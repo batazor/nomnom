@@ -50,7 +50,7 @@ func (e SlotUnavailable) Error() string {
 // repeat with the same order id returns the same reservation. Refusals are
 // SlotUnavailable, ErrScheduledOrdersUnavailable and invalid input for a
 // window off the grid, the horizon or the schedule. A hold of an Order that
-// is not committed expires in restaurants (SCHEDULED_SLOT__HOLD_TTL).
+// is not committed expires in restaurants (spec.scheduledSlot.holdTtl).
 type SlotReservations interface {
 	Reserve(ctx context.Context, restaurantID order.RestaurantID, windowStart time.Time, orderID order.ID) (order.DeliveryWindow, error)
 }

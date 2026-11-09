@@ -14,8 +14,13 @@ generate-spicedb:
 proto-check:
 	$(MAKE) -C ../.. buf-check
 
+# Локальный запуск с config.example.yaml (ADR 17): секреты DATABASE__URI, VALKEY__URL и
+# SPICEDB__PRESHARED_KEY задаются в env вызывающей оболочки.
+CONFIG_FILE ?= config.example.yaml
+POD_NAME ?= delivery-local
+
 run:
-	$(CARGO) run
+	CONFIG_FILE=$(CONFIG_FILE) POD_NAME=$(POD_NAME) $(CARGO) run --bin delivery
 
 test:
 	$(CARGO) test

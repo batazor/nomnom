@@ -2,10 +2,10 @@
 
 ## Сценарий
 
-- **Тип:** Фоновый процесс (`PeriodicLoop` процесса `restaurants`, период `SIMULATOR__INTERVAL`).
+- **Тип:** Фоновый процесс (`PeriodicLoop` процесса `restaurants`, период `spec.simulator.interval`).
 - **Actor:** Demo Simulator от имени владельца ресторана.
 - **Намерение:** Продвигать Restaurant Orders без участника, пока Simulator включён.
-- **Результат:** Для заказа в `RECEIVED` через случайную задержку `[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` от момента, когда Simulator его увидел, вызывается настоящий kitchen use case; для `QUEUED`/`PREPARING`/`ASSEMBLED` — в запланированный момент шага (см. «План готовки»). Веса: `RECEIVED` — accept 90 / reject 10; `QUEUED` — start preparation 90 / delay 10; `PREPARING` — assemble 92 / failure 5 / delay 3; `ASSEMBLED` — ready. Выключенный Simulator ничего не делает и забывает расписание (AC-764).
+- **Результат:** Для заказа в `RECEIVED` через случайную задержку `[spec.simulator.minDelay, spec.simulator.maxDelay]` от момента, когда Simulator его увидел, вызывается настоящий kitchen use case; для `QUEUED`/`PREPARING`/`ASSEMBLED` — в запланированный момент шага (см. «План готовки»). Веса: `RECEIVED` — accept 90 / reject 10; `QUEUED` — start preparation 90 / delay 10; `PREPARING` — assemble 92 / failure 5 / delay 3; `ASSEMBLED` — ready. Выключенный Simulator ничего не делает и забывает расписание (AC-764).
 
 ## План готовки (FR-609)
 

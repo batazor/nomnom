@@ -292,14 +292,14 @@ message ReserveScheduledSlotRequest {
 
 message ReserveScheduledSlotResponse {
   oneof result {
-    // Held until confirmed or expired (SCHEDULED_SLOT__HOLD_TTL).
+    // Held until confirmed or expired (spec.scheduledSlot.holdTtl).
     DeliveryWindow reserved = 1;
     SlotUnavailable slot_unavailable = 2;
   }
 }
 
 // The window is full; the nearest available windows, at most
-// SCHEDULED_SLOT__ALTERNATIVES.
+// spec.scheduledSlot.alternatives.
 message SlotUnavailable {
   repeated DeliveryWindow alternatives = 1;
 }

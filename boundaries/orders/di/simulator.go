@@ -16,7 +16,7 @@ import (
 func NewDatabasePool(store *repository.Store) *pgxpool.Pool { return store.Pool() }
 
 // SimulatorRunner вызывает демо-покупателя (FR-605) каждые
-// SIMULATOR__INTERVAL в процессе cmd/orders: ему принадлежат use cases Place
+// spec.simulator.interval в процессе cmd/orders: ему принадлежат use cases Place
 // Order и Request Order Cancellation. Владелец — App (ADR 17): Run стартует
 // вместе с gRPC-сервером, Shutdown прерывает тик и ждёт выхода цикла.
 type SimulatorRunner struct {

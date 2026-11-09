@@ -12,7 +12,7 @@ import {
   ServiceTokenSubjectResolver,
   USER_ASSERTION_HEADER,
 } from "../infrastructure/grpc/subject.ts";
-import { loadIdentityConfig } from "../pkg/config/config.ts";
+import { loadIdentityConfig, specSchema } from "../pkg/config/config.ts";
 
 /** Общие тестовые векторы ADR 27 и ADR 32: `<repo>/tests/identity/fixtures`. */
 const FIXTURES = new URL("../../../tests/identity/fixtures/", import.meta.url);
@@ -48,17 +48,17 @@ const bffJwks = JSON.parse(
 const now = () => new Date(vectors.now * 1000);
 
 const serviceEnvironment = {
-  IDENTITY__ISSUER: vectors.service_issuer,
-  IDENTITY__AUDIENCE: vectors.audience,
-  IDENTITY__JWKS_FILE: JWKS_FILE,
-  IDENTITY__SERVICE_ACCOUNTS: vectors.service_accounts,
+  issuer: vectors.service_issuer,
+  audience: vectors.audience,
+  jwksFile: JWKS_FILE,
+  serviceAccounts: vectors.service_accounts,
 };
 
 const userEnvironment = {
   ...serviceEnvironment,
-  IDENTITY__USER_ISSUER: vectors.issuer,
-  IDENTITY__USER_JWKS_FILE: BFF_JWKS_FILE,
-  IDENTITY__USER_DELEGATES: vectors.delegates,
+  userIssuer: vectors.issuer,
+  userJwksFile: BFF_JWKS_FILE,
+  userDelegates: vectors.delegates,
 };
 
 const silent = () => {};
@@ -68,7 +68,11 @@ const createResolver = (
   log: (message: string) => void = silent,
   audit: (message: string) => void = silent,
 ) =>
-  createSubjectResolver(loadIdentityConfig(environment), log, { audit, now });
+  createSubjectResolver(
+    loadIdentityConfig(specSchema.parse({ identity: environment })),
+    log,
+    { audit, now },
+  );
 
 const call = (serviceToken: string, assertion?: string): HandlerContext => {
   const headers = new Headers({ authorization: `Bearer ${serviceToken}` });
@@ -224,11 +228,15 @@ test("a service token without an assertion resolves to the service subject (ADR 
 });
 
 test("loads the user assertion settings", () => {
-  const config = loadIdentityConfig({
-    ...userEnvironment,
-    IDENTITY__USER_ISSUER: " nomnom-bff ",
-    IDENTITY__USER_DELEGATES: " bff , support-console ",
-  });
+  const config = loadIdentityConfig(
+    specSchema.parse({
+      identity: {
+        ...userEnvironment,
+        userIssuer: " nomnom-bff ",
+        userDelegates: " bff , support-console ",
+      },
+    }),
+  );
 
   assert.equal(config.user.issuer, "nomnom-bff");
   assert.equal(config.user.jwksFile, BFF_JWKS_FILE);
@@ -237,28 +245,20 @@ test("loads the user assertion settings", () => {
 
 test("missing user assertion settings are a startup error (FR-473)", () => {
   assert.throws(
-    () => loadIdentityConfig(serviceEnvironment),
+    () =>
+      loadIdentityConfig(specSchema.parse({ identity: serviceEnvironment })),
     (error: unknown) =>
       error instanceof Error &&
       error.message ===
-        "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE, IDENTITY__USER_DELEGATES must be set",
+        "spec.identity.userIssuer, spec.identity.userJwksFile, spec.identity.userDelegates must be set",
   );
   for (const [missing, environment] of [
-    [
-      "IDENTITY__USER_ISSUER",
-      { ...userEnvironment, IDENTITY__USER_ISSUER: "" },
-    ],
-    [
-      "IDENTITY__USER_JWKS_FILE",
-      { ...userEnvironment, IDENTITY__USER_JWKS_FILE: " " },
-    ],
-    [
-      "IDENTITY__USER_DELEGATES",
-      { ...userEnvironment, IDENTITY__USER_DELEGATES: "" },
-    ],
+    ["spec.identity.userIssuer", { ...userEnvironment, userIssuer: "" }],
+    ["spec.identity.userJwksFile", { ...userEnvironment, userJwksFile: " " }],
+    ["spec.identity.userDelegates", { ...userEnvironment, userDelegates: "" }],
   ] as const) {
     assert.throws(
-      () => loadIdentityConfig(environment),
+      () => loadIdentityConfig(specSchema.parse({ identity: environment })),
       (error: unknown) =>
         error instanceof Error && error.message === `${missing} must be set`,
       missing,
@@ -270,11 +270,15 @@ test("rejects a malformed delegate list", () => {
   for (const delegates of ["bff,", ",bff", "bff,,orders", "b f f", "-bff"]) {
     assert.throws(
       () =>
-        loadIdentityConfig({
-          ...userEnvironment,
-          IDENTITY__USER_DELEGATES: delegates,
-        }),
-      /IDENTITY__USER_DELEGATES/,
+        loadIdentityConfig(
+          specSchema.parse({
+            identity: {
+              ...userEnvironment,
+              userDelegates: delegates,
+            },
+          }),
+        ),
+      /spec\.identity\.userDelegates/,
       delegates,
     );
   }
@@ -311,7 +315,7 @@ test("an unreadable or invalid BFF JWKS is a startup error (FR-473)", async () =
 
   for (const file of files) {
     await assert.rejects(
-      createResolver({ ...userEnvironment, IDENTITY__USER_JWKS_FILE: file }),
+      createResolver({ ...userEnvironment, userJwksFile: file }),
       /JWKS/,
       file,
     );

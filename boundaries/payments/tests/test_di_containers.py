@@ -19,9 +19,12 @@ from dependency_injector import providers
 from payment_fakes import (
     MARKET,
     NOW,
+    REQUIRED_SECRETS,
+    REQUIRED_SPEC,
     PaymentsTestKit,
     close_container,
     payments_container,
+    write_config,
 )
 from psycopg import sql
 from yoyo.migrations import MigrationList
@@ -49,27 +52,25 @@ from slices.payment.infrastructure.provider import (
 )
 from slices.payment.infrastructure.repository import DatabasePaymentOutbox
 
-SPICEDB_ENV = {
-    "SPICEDB__ENDPOINT": "127.0.0.1:1",
-    "SPICEDB__PRESHARED_KEY": "devkey",
-    "SPICEDB__INSECURE": "true",
-}
+SPICEDB_SPEC = {"spicedb": {"endpoint": "127.0.0.1:1", "insecure": True}}
 SECRET = "whsec_test"
 _FIXTURES = Path(__file__).resolve().parents[1].parent.parent / "tests" / "identity" / "fixtures"
 _VECTORS = json.loads((_FIXTURES / "vectors.json").read_text(encoding="utf-8"))
 _USER_VECTORS = json.loads((_FIXTURES / "user-vectors.json").read_text(encoding="utf-8"))
 # Process settings the payments container requires besides SpiceDB.
-PROCESS_ENV = {
-    "IDENTITY__ISSUER": _VECTORS["issuer"],
-    "IDENTITY__AUDIENCE": _VECTORS["audience"],
-    "IDENTITY__JWKS_FILE": str(_FIXTURES / "jwks.json"),
-    "IDENTITY__SERVICE_ACCOUNTS": _VECTORS["service_accounts"],
-    "IDENTITY__USER_ISSUER": _USER_VECTORS["issuer"],
-    "IDENTITY__USER_JWKS_FILE": str(_FIXTURES / "bff-jwks.json"),
-    "IDENTITY__USER_DELEGATES": _USER_VECTORS["delegates"],
-    "PROVIDER__KIND": "fake",
-    "PROVIDER__WEBHOOK_SECRET": SECRET,
+PROCESS_SPEC = {
+    "identity": {
+        "issuer": _VECTORS["issuer"],
+        "audience": _VECTORS["audience"],
+        "jwksFile": str(_FIXTURES / "jwks.json"),
+        "serviceAccounts": _VECTORS["service_accounts"],
+        "userIssuer": _USER_VECTORS["issuer"],
+        "userJwksFile": str(_FIXTURES / "bff-jwks.json"),
+        "userDelegates": _USER_VECTORS["delegates"],
+    },
+    "provider": {"kind": "fake"},
 }
+PROCESS_SECRETS = {"SPICEDB__PRESHARED_KEY": "devkey", "PROVIDER__WEBHOOK_SECRET": SECRET}
 WORKER = Subject(SubjectKind.SERVICE, "orders-worker")
 
 
@@ -81,13 +82,13 @@ def _shutdown_workers(container: PaymentsContainer) -> None:
 class PaymentsContainerTest(unittest.TestCase):
     database: Database
 
-    def container(self, **environment: str) -> PaymentsContainer:
-        container = payments_container({**SPICEDB_ENV, **PROCESS_ENV, **environment})
+    def container(self) -> PaymentsContainer:
+        container = payments_container({**SPICEDB_SPEC, **PROCESS_SPEC}, PROCESS_SECRETS)
         self.addCleanup(close_container, container)
         return container
 
     def test_resolves_the_process_graph(self) -> None:
-        container = self.container(PROVIDER__KIND="fake")
+        container = self.container()
         workers = container.workers()
         self.addCleanup(_shutdown_workers, container)
 
@@ -108,9 +109,9 @@ class PaymentsContainerTest(unittest.TestCase):
         self.assertIs(container.workers(), workers)
 
     def test_empty_spicedb_endpoint_fails_startup(self) -> None:
-        container = payments_container(PROCESS_ENV)
+        container = payments_container(PROCESS_SPEC, PROCESS_SECRETS)
         self.addCleanup(close_container, container)
-        with self.assertRaisesRegex(SpiceDBConfigurationError, "SPICEDB__ENDPOINT is required"):
+        with self.assertRaisesRegex(SpiceDBConfigurationError, "spec.spicedb.endpoint is required"):
             container.workers()
 
     def test_override_substitutes_fakes_in_use_cases(self) -> None:
@@ -144,7 +145,7 @@ class PaymentsContainerTest(unittest.TestCase):
         kit = PaymentsTestKit(self.database)
         payment_id = kit.given_payment(PaymentState.AUTHORIZED)
         operation_id = kit.given_operation(payment_id, OperationKind.CAPTURE, "order-1:capture")
-        container = self.container(PROVIDER__WEBHOOK_SECRET=SECRET)
+        container = self.container()
         for name, fake in {
             "uow": kit.uow,
             "payments": kit.payments,
@@ -188,7 +189,7 @@ class StartupMigrationTest(unittest.TestCase):
     uri: str
 
     def start(self, uri: str) -> list[str]:
-        resource = ProcessResource(migrated_database, database.Config(DATABASE__URI=uri))
+        resource = ProcessResource(migrated_database, database.Config(uri=uri))
         with self.assertLogs("di.resources", logging.INFO) as logs:
             resource.init()
         resource.shutdown()
@@ -223,7 +224,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_yoyo_tables_are_named_by_storage_id_only(self) -> None:
         uri = self._empty_database()
-        migrate(database.Config(DATABASE__URI=uri), MIGRATIONS)
+        migrate(database.Config(uri=uri), MIGRATIONS)
         with psycopg.connect(uri) as conn:
             tables = conn.execute(
                 "SELECT table_name FROM information_schema.tables"
@@ -253,7 +254,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_replicas_starting_together_apply_migrations_once(self) -> None:
         uri = self._empty_database()
-        settings = database.Config(DATABASE__URI=uri)
+        settings = database.Config(uri=uri)
         results: list[list[str]] = []
         threads = [
             threading.Thread(target=lambda: results.append(migrate(settings, MIGRATIONS)))
@@ -274,7 +275,7 @@ class StartupMigrationTest(unittest.TestCase):
         holder.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
         results: list[list[str]] = []
         waiting = threading.Thread(
-            target=lambda: results.append(migrate(database.Config(DATABASE__URI=uri), MIGRATIONS))
+            target=lambda: results.append(migrate(database.Config(uri=uri), MIGRATIONS))
         )
         waiting.start()
         waiting.join(timeout=1)
@@ -285,7 +286,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_payments_before_markets_are_backfilled_with_the_launch_market(self) -> None:
         uri = self._empty_database()
-        settings = database.Config(DATABASE__URI=uri)
+        settings = database.Config(uri=uri)
         messaging, payments = MIGRATIONS
         migrate(
             settings, [messaging, _PaymentsBeforeMarkets(payments.storage_id, payments.package)]
@@ -321,7 +322,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_ac_1044_payments_without_a_stream_stop_the_migration(self) -> None:
         uri = self._empty_database()
-        settings = database.Config(DATABASE__URI=uri)
+        settings = database.Config(uri=uri)
         messaging, payments = MIGRATIONS
         migrate(settings, [messaging, _PaymentsBeforeEvents(payments.storage_id, payments.package)])
         with psycopg.connect(uri) as conn:
@@ -339,7 +340,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_plaintext_user_in_the_stream_stops_the_subject_keys_migration(self) -> None:
         uri = self._empty_database()
-        settings = database.Config(DATABASE__URI=uri)
+        settings = database.Config(uri=uri)
         messaging, payments = MIGRATIONS
         before = _PaymentsBeforeSubjectKeys(payments.storage_id, payments.package)
         migrate(settings, [messaging, before])
@@ -356,7 +357,7 @@ class StartupMigrationTest(unittest.TestCase):
 
     def test_migration_gives_up_on_a_locked_table(self) -> None:
         uri = self._empty_database()
-        settings = database.Config(DATABASE__URI=uri)
+        settings = database.Config(uri=uri)
         migrate(settings, MIGRATIONS)
         with psycopg.connect(uri) as traffic:
             traffic.execute("SELECT * FROM payments")
@@ -480,12 +481,7 @@ class EntrypointResourceOrderTest(unittest.TestCase):
 
     def run_payments(self, container: PaymentsContainer) -> tuple[int, str]:
         stdout = io.StringIO()
-        env = {
-            "DATABASE__URI": "postgresql://payments@127.0.0.1:1/x",
-            "EVENT_STORE__SNAPSHOT_EVERY": "5",
-            "EVENT_STORE__SUBJECT_KEKS": '{"1": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}',
-            "EVENT_STORE__SUBJECT_REF_KEY": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
-        }
+        env = {**REQUIRED_SECRETS, "CONFIG_FILE": write_config(self, REQUIRED_SPEC)}
         with (
             patch.dict(os.environ, env, clear=True),
             patch.object(payments_main, "PaymentsContainer", lambda: container),

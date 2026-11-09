@@ -1,5 +1,4 @@
 import json
-import os
 import tempfile
 import time
 import unittest
@@ -35,7 +34,7 @@ from infrastructure.grpc.service import (
 )
 from infrastructure.repository import Database
 from pkg.authz import Subject, SubjectKind
-from pkg.config import IdentitySettings, load_settings
+from pkg.config import IdentitySettings, parse_spec
 from slices.payment.applications.authorize import AuthorizePaymentHandler
 from slices.payment.applications.cancel_authorization import CancelAuthorizationHandler
 from slices.payment.applications.capture import CapturePaymentHandler
@@ -53,23 +52,18 @@ BFF_JWKS_FILE = FIXTURES / "bff-jwks.json"
 USER_VECTORS: dict[str, Any] = json.loads(
     (FIXTURES / "user-vectors.json").read_text(encoding="utf-8")
 )
-USER_IDENTITY_ENV = {
-    "IDENTITY__USER_ISSUER": USER_VECTORS["issuer"],
-    "IDENTITY__USER_JWKS_FILE": str(BFF_JWKS_FILE),
-    "IDENTITY__USER_DELEGATES": USER_VECTORS["delegates"],
+USER_IDENTITY_SPEC = {
+    "userIssuer": USER_VECTORS["issuer"],
+    "userJwksFile": str(BFF_JWKS_FILE),
+    "userDelegates": USER_VECTORS["delegates"],
 }
 
 ORDERS_WORKER = Subject(SubjectKind.SERVICE, VECTORS["expected_service"])
 VALID_NBF = 1_700_000_000
 VALID_EXP = 4_102_444_800
 
-# DATABASE__URI обязателен: без него load_settings падает.
-REQUIRED_ENV = {
-    "DATABASE__URI": "postgresql://payments@localhost/payments",
-    "EVENT_STORE__SNAPSHOT_EVERY": "5",
-    "EVENT_STORE__SUBJECT_KEKS": '{"1": "test-subject-kek-with-at-least-32-characters"}',
-    "EVENT_STORE__SUBJECT_REF_KEY": "test-subject-ref-key-with-at-least-32-characters",
-}
+# spec.eventStore обязателен: без него файл конфигурации не принимается.
+REQUIRED_SPEC = {"eventStore": {"snapshotEvery": 5}}
 
 
 class _AbortedError(Exception):
@@ -99,15 +93,14 @@ def _bearer(token: str) -> FakeContext:
 
 def _vector_settings(**overrides: str) -> IdentitySettings:
     values = {
-        "IDENTITY__ISSUER": VECTORS["issuer"],
-        "IDENTITY__AUDIENCE": VECTORS["audience"],
-        "IDENTITY__JWKS_FILE": str(JWKS_FILE),
-        "IDENTITY__SERVICE_ACCOUNTS": VECTORS["service_accounts"],
-        **USER_IDENTITY_ENV,
+        "issuer": VECTORS["issuer"],
+        "audience": VECTORS["audience"],
+        "jwksFile": str(JWKS_FILE),
+        "serviceAccounts": VECTORS["service_accounts"],
+        **USER_IDENTITY_SPEC,
     }
     values.update(overrides)
-    with patch.dict(os.environ, {**REQUIRED_ENV, **values}, clear=True):
-        return IdentitySettings(_env_file=None)  # type: ignore[call-arg]
+    return IdentitySettings.model_validate(values)
 
 
 def _vector_resolver(clock: float | None = None) -> ServiceTokenSubjectResolver:
@@ -279,26 +272,25 @@ class IdentityConfigTest(unittest.TestCase):
     """FR-432, AC-462: missing or invalid configuration fails startup."""
 
     def test_identity_settings_are_empty_by_default(self) -> None:
-        with patch.dict(os.environ, REQUIRED_ENV, clear=True):
-            identity = load_settings().identity
+        identity = parse_spec(REQUIRED_SPEC).identity
         self.assertEqual(
             identity.missing,
             [
-                "IDENTITY__ISSUER",
-                "IDENTITY__AUDIENCE",
-                "IDENTITY__JWKS_FILE",
-                "IDENTITY__SERVICE_ACCOUNTS",
-                "IDENTITY__USER_ISSUER",
-                "IDENTITY__USER_JWKS_FILE",
-                "IDENTITY__USER_DELEGATES",
+                "spec.identity.issuer",
+                "spec.identity.audience",
+                "spec.identity.jwksFile",
+                "spec.identity.serviceAccounts",
+                "spec.identity.userIssuer",
+                "spec.identity.userJwksFile",
+                "spec.identity.userDelegates",
             ],
         )
-        with self.assertRaisesRegex(IdentityConfigError, "IDENTITY__ISSUER"):
+        with self.assertRaisesRegex(IdentityConfigError, "spec.identity.issuer"):
             create_subject_resolver(identity)
 
     def test_parses_several_service_accounts(self) -> None:
         settings = _vector_settings(
-            IDENTITY__SERVICE_ACCOUNTS=" nomnom/orders-worker=orders-worker , ops/job=refunds-job"
+            serviceAccounts=" nomnom/orders-worker=orders-worker , ops/job=refunds-job"
         )
         self.assertEqual(
             settings.service_account_map,
@@ -309,19 +301,19 @@ class IdentityConfigTest(unittest.TestCase):
         )
 
     def test_missing_issuer_audience_or_jwks_is_a_config_error(self) -> None:
-        for env in ("IDENTITY__ISSUER", "IDENTITY__AUDIENCE", "IDENTITY__JWKS_FILE"):
-            with self.subTest(empty=env):
-                overrides = {env: ""}
-                if env == "IDENTITY__ISSUER":
-                    overrides["IDENTITY__SERVICE_ACCOUNTS"] = ""
-                with self.assertRaisesRegex(IdentityConfigError, env):
+        for key in ("issuer", "audience", "jwksFile"):
+            with self.subTest(empty=key):
+                overrides = {key: ""}
+                if key == "issuer":
+                    overrides["serviceAccounts"] = ""
+                with self.assertRaisesRegex(IdentityConfigError, f"spec.identity.{key}"):
                     create_subject_resolver(_vector_settings(**overrides))
 
     def test_issuer_with_empty_allowlist_is_a_config_error(self) -> None:
         with self.assertRaises(ValidationError):
-            _vector_settings(IDENTITY__SERVICE_ACCOUNTS="")
+            _vector_settings(serviceAccounts="")
         with self.assertRaises(ValidationError):
-            _vector_settings(IDENTITY__SERVICE_ACCOUNTS="", IDENTITY__AUDIENCE="")
+            _vector_settings(serviceAccounts="", audience="")
 
     def test_malformed_allowlist_is_a_config_error(self) -> None:
         for value in (
@@ -334,7 +326,7 @@ class IdentityConfigTest(unittest.TestCase):
             "nomnom/orders-worker=a,nomnom/orders-worker=b",
         ):
             with self.subTest(value=value), self.assertRaises(ValidationError):
-                _vector_settings(IDENTITY__SERVICE_ACCOUNTS=value)
+                _vector_settings(serviceAccounts=value)
 
     def test_unreadable_or_invalid_jwks_is_a_startup_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -352,7 +344,7 @@ class IdentityConfigTest(unittest.TestCase):
                 if content is not None:
                     path.write_text(content, encoding="utf-8")
                 with self.subTest(jwks=name), self.assertRaises(IdentityConfigError):
-                    create_subject_resolver(_vector_settings(IDENTITY__JWKS_FILE=str(path)))
+                    create_subject_resolver(_vector_settings(jwksFile=str(path)))
 
     def test_unsupported_key_next_to_a_valid_one_is_a_startup_error(self) -> None:
         valid = json.loads(Path(JWKS_FILE).read_text(encoding="utf-8"))["keys"][0]
@@ -381,9 +373,7 @@ class IdentityConfigTest(unittest.TestCase):
     def test_default_worker_fails_before_listening_on_invalid_jwks(self) -> None:
         container = payments_container()
         self.addCleanup(close_container, container)
-        container.config.identity.from_value(
-            _vector_settings(IDENTITY__JWKS_FILE="/nonexistent/jwks.json")
-        )
+        container.config.identity.from_value(_vector_settings(jwksFile="/nonexistent/jwks.json"))
         with self.assertRaises(IdentityConfigError):
             container.grpc_worker()
 

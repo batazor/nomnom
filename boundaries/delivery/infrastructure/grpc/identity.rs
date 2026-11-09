@@ -8,7 +8,7 @@
 //! User identity от BFF (ADR 32): после service token resolver смотрит
 //! metadata `x-nomnom-user-assertion`. Без неё вызов остаётся
 //! [`Subject::Service`]; с ней вызывающий service должен входить в
-//! `IDENTITY__USER_DELEGATES`, а assertion — пройти
+//! `spec.identity.userDelegates`, а assertion — пройти
 //! [`UserAssertionVerifier`]. Результат — [`Subject::User`], service identity
 //! делегата остаётся в [`Caller::delegate`] для log.
 //!

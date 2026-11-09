@@ -34,7 +34,7 @@ pub trait CourierPorts: Interface {
 
 /// Числовые параметры слайса; значения задаёт корневой `di`.
 pub trait CourierSettings: Interface {
-    /// `TRACKING__PERSIST_INTERVAL` in seconds.
+    /// `spec.tracking.persistInterval` in seconds.
     fn persist_interval_seconds(&self) -> i64;
 }
 

@@ -49,23 +49,63 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end }}
 
 {{/*
-Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay
-и drain timeout с запасом, иначе kubelet отправит SIGKILL посреди drain.
+Длительность <int>(ms|s|m) в миллисекундах; другой формат — ошибка с ключом.
+Usage: {{ include "payments.durationMilliseconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" $value) }}
+*/}}
+{{- define "payments.durationMilliseconds" -}}
+{{- $value := toString (required (printf "%s is required" .key) .value) -}}
+{{- if not (regexMatch "^[0-9]+(ms|s|m)$" $value) -}}
+{{- fail (printf "%s %q must be a duration <int>(ms|s|m), e.g. 5s" .key $value) -}}
+{{- end -}}
+{{- $amount := int (regexFind "^[0-9]+" $value) -}}
+{{- if hasSuffix "ms" $value -}}
+{{- $amount -}}
+{{- else if hasSuffix "s" $value -}}
+{{- mul $amount 1000 -}}
+{{- else -}}
+{{- mul $amount 60000 -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay,
+drain timeout и flush telemetry из config.spec.shutdown с запасом, иначе kubelet отправит
+SIGKILL посреди drain. Порты процесса из config.spec различны.
 */}}
 {{- define "payments.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds .Values.shutdown.telemetryFlushTimeoutSeconds -}}
-{{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds + shutdown.telemetryFlushTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- $shutdown := required "config.spec.shutdown is required" .Values.config.spec.shutdown -}}
+{{- $ms := dict -}}
+{{- range $key := list "readinessDelay" "drainTimeout" "telemetryFlushTimeout" -}}
+{{- $_ := set $ms $key (int (include "payments.durationMilliseconds" (dict "key" (printf "config.spec.shutdown.%s" $key) "value" (get $shutdown $key)))) -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
-{{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- $budget := add $ms.readinessDelay $ms.drainTimeout $ms.telemetryFlushTimeout -}}
+{{- if le (mul (int .Values.terminationGracePeriodSeconds) 1000) (int $budget) -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than config.spec.shutdown.readinessDelay + drainTimeout + telemetryFlushTimeout (%vms)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.telemetryFlushTimeoutSeconds) 0 -}}
-{{- fail "shutdown.telemetryFlushTimeoutSeconds must be positive" -}}
+{{- if le (int $ms.drainTimeout) 0 -}}
+{{- fail "config.spec.shutdown.drainTimeout must be positive" -}}
 {{- end -}}
-{{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
-{{- fail "management.port must differ from service.targetPort" -}}
+{{- if le (int $ms.telemetryFlushTimeout) 0 -}}
+{{- fail "config.spec.shutdown.telemetryFlushTimeout must be positive" -}}
 {{- end -}}
+{{- $server := int (include "payments.port" (dict "context" . "section" "server" "key" "port")) -}}
+{{- $management := int (include "payments.port" (dict "context" . "section" "management" "key" "port")) -}}
+{{- $webhooks := int (include "payments.port" (dict "context" . "section" "provider" "key" "webhookPort")) -}}
+{{- if eq $management $server -}}
+{{- fail "config.spec.management.port must differ from config.spec.server.port" -}}
+{{- end -}}
+{{- if or (eq $webhooks $server) (eq $webhooks $management) -}}
+{{- fail "config.spec.provider.webhookPort must differ from config.spec.server.port and config.spec.management.port" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Порт процесса из config.spec: chart объявляет по нему порты контейнера и Service.
+Usage: {{ include "payments.port" (dict "context" $ "section" "server" "key" "port") }}
+*/}}
+{{- define "payments.port" -}}
+{{- $value := dig .section .key "" .context.Values.config.spec -}}
+{{- required (printf "config.spec.%s.%s is required" .section .key) $value | int -}}
 {{- end -}}
 
 {{/*
@@ -74,9 +114,14 @@ assertion, поэтому JWKS, issuer, audience, allowlist, JWKS BFF, issuer BF
 обязательны — иначе процесс не стартует.
 */}}
 {{- define "payments.validateIdentity" -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
+{{- range $key := list "jwksConfigMap" "userJwksConfigMap" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- range $key := list "issuer" "audience" "serviceAccounts" "userIssuer" "userDelegates" -}}
+{{- if not (dig "identity" $key "" $.Values.config.spec) -}}
+{{- fail (printf "config.spec.identity.%s is required" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -86,91 +131,75 @@ SpiceDB (ADR 18): endpoint, preshared key из Secret и timeout в формат
 обязательны — иначе процесс не стартует.
 */}}
 {{- define "payments.validateSpiceDB" -}}
-{{- with .Values.spicedb -}}
-{{- if not .endpoint -}}
-{{- fail "spicedb.endpoint is required" -}}
+{{- if not (dig "spicedb" "endpoint" "" .Values.config.spec) -}}
+{{- fail "config.spec.spicedb.endpoint is required" -}}
 {{- end -}}
-{{- if .endpoint -}}
-{{- if not .presharedKeySecret.name -}}
-{{- fail "spicedb.presharedKeySecret.name is required when spicedb.endpoint is set" -}}
+{{- if not .Values.spicedb.presharedKeySecret.name -}}
+{{- fail "spicedb.presharedKeySecret.name is required" -}}
 {{- end -}}
-{{- if not .presharedKeySecret.key -}}
-{{- fail "spicedb.presharedKeySecret.key is required when spicedb.endpoint is set" -}}
+{{- if not .Values.spicedb.presharedKeySecret.key -}}
+{{- fail "spicedb.presharedKeySecret.key is required" -}}
 {{- end -}}
-{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
-{{- fail (printf "spicedb.timeout %q must be a positive duration <int>(ms|s|m), e.g. 2s" (toString .timeout)) -}}
-{{- end -}}
+{{- with dig "spicedb" "timeout" "" .Values.config.spec -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .)) -}}
+{{- fail (printf "config.spec.spicedb.timeout %q must be a positive duration <int>(ms|s|m), e.g. 2s" (toString .)) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-PostgreSQL env (ADR 8): connection URI из внешнего Secret и лимиты пула процесса. Без
-database.uriSecret.name переменные не задаются, и процесс payments не стартует
-(DATABASE__URI обязателен). За пулером в session mode каждое соединение пула держит
-server-соединение, поэтому maxConns задаётся values каждого release.
-Usage: {{ include "payments.databaseEnv" . }}
+Пул PostgreSQL (ADR 8) из config.spec.database: за пулером в session mode каждое
+соединение пула держит server-соединение, поэтому maxConns задаётся values каждого release.
 */}}
-{{- define "payments.databaseEnv" -}}
-{{- with .Values.database }}
-{{- if .uriSecret.name -}}
-{{- if lt (int .maxConns) 1 -}}
-{{- fail (printf "database.maxConns must be positive, got %v" .maxConns) -}}
+{{- define "payments.validateDatabase" -}}
+{{- $database := dig "database" dict .Values.config.spec -}}
+{{- if and (hasKey $database "maxConns") (lt (int $database.maxConns) 1) -}}
+{{- fail (printf "config.spec.database.maxConns must be positive, got %v" $database.maxConns) -}}
 {{- end -}}
-{{- if or (lt (int .minConns) 0) (gt (int .minConns) 1) -}}
-{{- fail (printf "database.minConns must be 0 or 1, got %v" .minConns) -}}
+{{- if and (hasKey $database "minConns") (or (lt (int $database.minConns) 0) (gt (int $database.minConns) 1)) -}}
+{{- fail (printf "config.spec.database.minConns must be 0 or 1, got %v" $database.minConns) -}}
 {{- end -}}
 {{- range $key := list "maxConnLifetime" "maxConnIdleTime" "connectTimeout" "acquireTimeout" -}}
-{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString (get $.Values.database $key))) -}}
-{{- fail (printf "database.%s %q must be a positive duration <int>(ms|s|m), e.g. 5s" $key (toString (get $.Values.database $key))) -}}
+{{- if hasKey $database $key -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString (get $database $key))) -}}
+{{- fail (printf "config.spec.database.%s %q must be a positive duration <int>(ms|s|m), e.g. 5s" $key (toString (get $database $key))) -}}
 {{- end -}}
-{{- end }}
-- name: DATABASE__URI
-  valueFrom:
-    secretKeyRef:
-      name: {{ .uriSecret.name | quote }}
-      key: {{ .uriSecret.key | quote }}
-- name: DATABASE__MAX_CONNS
-  value: {{ .maxConns | quote }}
-- name: DATABASE__MIN_CONNS
-  value: {{ .minConns | quote }}
-- name: DATABASE__MAX_CONN_LIFETIME
-  value: {{ .maxConnLifetime | quote }}
-- name: DATABASE__MAX_CONN_IDLE_TIME
-  value: {{ .maxConnIdleTime | quote }}
-- name: DATABASE__CONNECT_TIMEOUT
-  value: {{ .connectTimeout | quote }}
-- name: DATABASE__ACQUIRE_TIMEOUT
-  value: {{ .acquireTimeout | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 
 {{/*
-OpenTelemetry env (ADR 9): service.instance.id — имя pod (downward API), service.version —
-неизменяемый image.tag, остальные атрибуты — telemetry.resourceAttributes. Явная env
-имеет приоритет над envFrom, поэтому OTEL_RESOURCE_ATTRIBUTES в env была бы перекрыта.
-Usage: {{ include "payments.otelEnv" . }}
+Файл конфигурации процесса (ADR 17): config.spec как есть плюс ключи, которыми владеет
+chart, — пути смонтированных JWKS и service.version из image.tag. Ключ chart в values —
+ошибка: у значения один источник.
+Usage: {{ include "payments.config" . }}
 */}}
-{{- define "payments.otelEnv" -}}
-{{- with .Values.telemetry }}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "latest" $.Values.image.tag)) -}}
-{{- range $key, $value := .resourceAttributes }}
-{{- $attrs = append $attrs (printf "%s=%s" $key (toString $value)) -}}
-{{- end }}
-- name: POD_NAME
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.name
-- name: OTEL_RESOURCE_ATTRIBUTES
-  value: {{ join "," $attrs | quote }}
-{{- if .serviceName }}
-- name: OTEL_SERVICE_NAME
-  value: {{ .serviceName | quote }}
-{{- end }}
-{{- if .endpoint }}
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ .endpoint | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
+{{- define "payments.config" -}}
+{{- $spec := deepCopy .Values.config.spec -}}
+{{- $identity := required "config.spec.identity is required" $spec.identity -}}
+{{- range $key := list "jwksFile" "userJwksFile" -}}
+{{- if hasKey $identity $key -}}
+{{- fail (printf "config.spec.identity.%s is set by the chart from identity.jwksConfigMap and identity.userJwksConfigMap; remove it from values" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $identity "jwksFile" "/etc/nomnom/identity/jwks.json" -}}
+{{- $_ := set $identity "userJwksFile" "/etc/nomnom/user-identity/jwks.json" -}}
+{{- if not (hasKey $spec "telemetry") -}}
+{{- $_ := set $spec "telemetry" dict -}}
+{{- end -}}
+{{- if not (hasKey $spec.telemetry "resourceAttributes") -}}
+{{- $_ := set $spec.telemetry "resourceAttributes" dict -}}
+{{- end -}}
+{{- if hasKey $spec.telemetry.resourceAttributes "service.version" -}}
+{{- fail "config.spec.telemetry.resourceAttributes[\"service.version\"] is set by the chart from image.tag; remove it from values" -}}
+{{- end -}}
+{{- with .Values.image.tag -}}
+{{- $_ := set $spec.telemetry.resourceAttributes "service.version" (toString .) -}}
+{{- end -}}
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Payments
+metadata:
+  name: {{ required "role is required" .Values.role }}
+spec:
+  {{- toYaml $spec | nindent 2 }}
+{{- end -}}

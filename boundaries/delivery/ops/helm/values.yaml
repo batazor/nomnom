@@ -5,6 +5,10 @@
 
 replicaCount: 1
 
+# Роль процесса — metadata.name файла конфигурации (ADR 17); процесс сверяет её со своей.
+# values.yaml — роль API delivery, values-worker.yaml — delivery-worker.
+role: delivery
+
 image:
   # Имя образа из документации локальной сборки (docker build -t nomnom/<service>:local).
   # Registry и publishing pipeline ещё не определены и задаются values окружения.
@@ -69,8 +73,8 @@ service:
   enabled: true
   type: ClusterIP
   # Порт Service и порт приложения. Приложение слушает 8083 по умолчанию
-  # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,
-  # на котором фактически запускается процесс.
+  # (config.spec.server.port); targetPort должен совпадать с портом, на котором фактически
+  # запускается процесс.
   port: 8083
   targetPort: 8083
   # Имя порта. Сейчас приложение отвечает по HTTP; при переходе на gRPC
@@ -84,28 +88,8 @@ resources:
   requests: {}
   limits: {}
 
-# Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# OpenTelemetry задаётся блоком telemetry, а не здесь.
-# SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY и SIMULATOR__TRACK_INTERVAL
-# обязательны (FR-606, FR-667), как и TRACKING__CITY_ORIGIN_LATITUDE,
-# TRACKING__CITY_ORIGIN_LONGITUDE, TRACKING__CITY_BLOCKS, TRACKING__BLOCK_METERS и
-# TRACKING__PERSIST_INTERVAL (FR-658): без них процесс не стартует, значения задаёт окружение
-# (kind: 5s, 30s, 2m, 1s; Virtual City 12 × 12 по 150 м у демо-курьеров, 15s).
-# KAFKA__BROKERS и SCHEMA_REGISTRY__URL обязательны (ADR 11, FR-715): адреса брокеров и
-# Schema Registry задаёт окружение.
-env:
-  # Kafka consumer собственных фактов Delivery (delivery.v1.delivery-events) для Delivery
-  # Duration Statistics (FR-676): группа delivery; новая группа читает стрим с начала.
-  KAFKA__CONSUMER_GROUP: delivery
-  KAFKA__INITIAL_OFFSET: oldest
-  # Delivery Duration Estimate (FR-691): медианы последних SAMPLE_SIZE длительностей Market,
-  # до набора выборки — базовые courier_lead (Create Delivery → Pickup) и transit
-  # (Pickup → вручение). Пустое, нечисловое или нулевое значение завершает startup.
-  DELIVERY_ESTIMATE__SAMPLE_SIZE: "50"
-  DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD: 15m
-  DELIVERY_ESTIMATE__BASELINE_TRANSIT: 20m
-
-# Дополнительные источники переменных окружения, в том числе внешние Secret:
+# Дополнительные источники переменных окружения — только внешние Secret: несекретная
+# конфигурация задаётся блоком config.spec.
 # envFrom:
 #   - secretRef:
 #       name: delivery-secrets
@@ -120,22 +104,8 @@ envFrom: []
 #         key: password
 extraEnv: []
 
-# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
-# Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется; номер передаётся
-# приложению через MANAGEMENT__PORT. Порт не входит в Service и не публикуется через gateway.
-management:
-  port: 9083
-
-# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY и
-# SHUTDOWN__DRAIN_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
-# readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
-# EndpointSlice и конфигурации internal gateway.
-shutdown:
-  readinessDelaySeconds: 5
-  drainTimeoutSeconds: 20
-
-# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds с запасом на выход процесса;
-# chart отказывается рендериться при нарушении.
+# Должен быть больше config.spec.shutdown.readinessDelay + drainTimeout с запасом на выход
+# процесса; chart отказывается рендериться при нарушении.
 terminationGracePeriodSeconds: 30
 
 # Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
@@ -169,53 +139,24 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
-# Service identity (ADR 27): проверка projected ServiceAccount token входящих gRPC-вызовов.
-# Для release с gRPC API (service.enabled) jwksConfigMap, issuer и serviceAccounts
-# обязательны. Ключ jwks.json (публичные
-# ключи кластера из /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json.
+# Service identity (ADR 27): ConfigMap с ключом jwks.json (публичные ключи кластера из
+# /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json; chart пишет этот путь
+# в config.spec.identity.jwksFile. User assertions BFF (ADR 32): ключ jwks.json ConfigMap
+# userJwksConfigMap (публичные ключи BFF, EC P-256; в kind — bff-jwks) монтируется в
+# /etc/nomnom/user-identity/jwks.json (config.spec.identity.userJwksFile). Для release с gRPC API
+# (service.enabled) оба ConfigMap обязательны; создаются развёртыванием, не этим chart.
+# issuer, audience, serviceAccounts, userIssuer и userDelegates — в config.spec.identity.
 identity:
-  # Ожидаемый iss token: issuer кластера из /.well-known/openid-configuration.
-  issuer: ""
-  # Audience контекста, которую должен содержать aud token.
-  audience: "nomnom.delivery"
-  # Allowlist "namespace/serviceaccount=service-name" через запятую,
-  # например "nomnom/orders-worker=orders-worker". Пустой при заданном issuer — ошибка startup.
-  serviceAccounts: ""
-  # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
   jwksConfigMap: ""
-  # User assertions BFF (ADR 32), обязательны при service.enabled. Ключ jwks.json
-  # ConfigMap (публичные ключи BFF, EC P-256; в kind — bff-jwks) монтируется read-only
-  # в /etc/nomnom/user-identity/jwks.json.
   userJwksConfigMap: ""
-  # Ожидаемый iss assertion, например "nomnom-bff".
-  userIssuer: ""
-  # Services через запятую, которым разрешено передавать user subject, например "bff".
-  userDelegates: ""
 
-# Авторизация в SpiceDB (ADR 18). Пока endpoint пуст, SPICEDB__* не задаются и приложение
-# использует локальную авторизацию с предупреждением. Если endpoint задан, передаются
-# SPICEDB__ENDPOINT, SPICEDB__INSECURE, SPICEDB__TIMEOUT, а SPICEDB__PRESHARED_KEY берётся
-# из Secret presharedKeySecret (secretKeyRef); ключ в values не хранится.
+# Авторизация в SpiceDB (ADR 18): endpoint, insecure и timeout — в config.spec.spicedb. При
+# заданном endpoint SPICEDB__PRESHARED_KEY берётся из Secret presharedKeySecret (secretKeyRef);
+# ключ в values не хранится. Secret создаётся развёртыванием, не этим chart.
 spicedb:
-  # gRPC endpoint "host:port", например "spicedb.nomnom-authz.svc:50051".
-  endpoint: ""
-  # true — plaintext без TLS; только для kind и локального запуска.
-  insecure: false
-  # Deadline одного CheckPermission; ошибка или timeout — отказ (fail closed).
-  timeout: "2s"
-  # Secret с preshared key; создаётся развёртыванием, не этим chart. Обязателен при endpoint.
   presharedKeySecret:
     name: ""
     key: "preshared-key"
-
-# Temporal Assignment Workflow (FR-704…FR-708): процесс API запускает и будит workflow,
-# release worker (values-worker.yaml) его исполняет. Значений по умолчанию нет: адрес и
-# namespace задаёт окружение; пусто — chart не рендерится, процесс без них не стартует.
-temporal:
-  # host:port frontend, например temporal.nomnom-infra.svc.cluster.local:7233.
-  hostPort: ""
-  namespace: ""
-  connectTimeout: 10s
 
 # Поток позиций курьеров (FR-661, FR-666): Valkey pub/sub. VALKEY__URL берётся из Secret
 # valkey.urlSecret (secretKeyRef, URL ACL-пользователя, который только публикует в
@@ -230,26 +171,13 @@ valkey:
 # database.uriSecret (secretKeyRef); без него процесс не стартует (fail fast). Значение —
 # только PostgreSQL connection URI postgresql:// или postgres://; libpq key=value завершает
 # startup. Secret создаётся развёртыванием (root ops/kind: delivery-postgres, ключ dsn), не
-# этим chart.
+# этим chart. Лимиты пула — config.spec.database.
 # Миграции встроены в образ: процесс применяет их при старте до открытия портов; advisory
 # lock sqlx сериализует старт реплик, ошибка миграции завершает процесс.
-# pool — лимиты пула одного pod (DATABASE__*); невалидные значения завершают startup.
-# Соединений на сервер: replicas × maxConns. Pooler перед PostgreSQL — только session
-# mode: миграции держат session advisory lock.
 database:
   uriSecret:
     name: delivery-postgres
     key: dsn
-  pool:
-    # API: Unit of Work держит соединение всю транзакцию (DATABASE__MAX_CONNS, 1..100).
-    maxConns: 10
-    # Idle-минимум 0..1 (DATABASE__MIN_CONNS): idle не держат соединения pooler.
-    minConns: 0
-    maxLifetime: 30m
-    # Не больше maxLifetime.
-    idleTimeout: 5m
-    # Ожидание соединения пула; затем UNAVAILABLE и db.client.connection.timeouts.
-    acquireTimeout: 5s
 
 # ADR 37: коннектор Debezium в Kafka Connect публикует Outbox из WAL (CDC); процесса relay
 # нет. Release создаёт ресурс KafkaConnector (templates/cdc-connector.yaml).
@@ -313,15 +241,71 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# ADR 9, docs/observability.md: OpenTelemetry процесса. Все три сигнала (traces, metrics
-# OTLP gRPC, логи JSON в stdout) идентифицируются одним resource.
-telemetry:
-  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
-  # "http://alloy.observability.svc:4317". Пусто — traces и metrics не экспортируются.
-  otlpEndpoint: ""
-  # service.name (OTEL_SERVICE_NAME); пусто — имя процесса по умолчанию (delivery).
-  serviceName: ""
-  # service.instance.id (имя pod) и service.version (image.tag) chart задаёт сам; здесь —
-  # атрибуты окружения, например deployment.environment.name: local. Не задавать
-  # OTEL_RESOURCE_ATTRIBUTES через env: явная переменная chart её перекроет.
-  resourceAttributes: {}
+# Файл конфигурации процесса (ADR 17): ConfigMap config.yaml монтируется в
+# /etc/nomnom/config.yaml (env CONFIG_FILE). Chart задаёт apiVersion config.nomnom.dev/v1alpha1,
+# kind Delivery и metadata.name из role; config.spec попадает в файл как есть. Ключи —
+# camelCase, длительности — строки Go-формата; неизвестный ключ завершает startup. Секретов
+# здесь нет (DATABASE__URI, VALKEY__URL, SPICEDB__PRESHARED_KEY — только из Secret). Chart сам
+# дописывает пути JWKS (spec.identity.jwksFile, userJwksFile) и service.version из image.tag
+# (spec.telemetry.resourceAttributes); задать их в values — ошибка рендера.
+config:
+  spec:
+    # Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
+    # Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется. Порт не входит в
+    # Service и не публикуется через gateway.
+    management:
+      port: 9083
+    # Бюджет graceful shutdown. readinessDelay должен превышать время, за которое readinessProbe
+    # замечает not ready (periodSeconds × failureThreshold), плюс распространение EndpointSlice
+    # и конфигурации internal gateway.
+    shutdown:
+      readinessDelay: 5s
+      drainTimeout: 20s
+    # Audience контекста, которую должен содержать aud token (ADR 27). Остальные ключи
+    # identity задаёт окружение: issuer кластера, allowlist serviceAccounts
+    # ("namespace/serviceaccount=service-name" через запятую), userIssuer ("nomnom-bff") и
+    # userDelegates (services через запятую, например "bff").
+    identity:
+      audience: nomnom.delivery
+    # SpiceDB (ADR 18): endpoint "host:port" задаёт окружение; insecure — plaintext без TLS,
+    # только для kind и локального запуска; timeout — deadline одного CheckPermission.
+    spicedb:
+      insecure: false
+      timeout: 2s
+    # Temporal Assignment Workflow (FR-704…FR-708): процесс API запускает и будит workflow,
+    # release worker (values-worker.yaml) его исполняет. Адрес (hostPort) и namespace задаёт
+    # окружение; без них chart не рендерится.
+    temporal:
+      connectTimeout: 10s
+    # Лимиты пула одного pod (1..100 и 0..1); соединений на сервер: replicas × maxConns.
+    # Pooler перед PostgreSQL — только session mode: миграции держат session advisory lock.
+    database:
+      # API: Unit of Work держит соединение всю транзакцию.
+      maxConns: 10
+      # Idle-минимум: idle не держат соединения pooler.
+      minConns: 0
+      maxLifetime: 30m
+      # Не больше maxLifetime.
+      idleTimeout: 5m
+      # Ожидание соединения пула; затем UNAVAILABLE и db.client.connection.timeouts.
+      acquireTimeout: 5s
+    # Kafka consumer собственных фактов Delivery (delivery.v1.delivery-events) для Delivery
+    # Duration Statistics (FR-676): группа delivery; новая группа читает стрим с начала.
+    # Брокеры (brokers) и Schema Registry (schemaRegistry.url, FR-715) задаёт окружение.
+    kafka:
+      consumerGroup: delivery
+      initialOffset: oldest
+    # Delivery Duration Estimate (FR-691): медианы последних sampleSize длительностей Market,
+    # до набора выборки — базовые courier_lead (Create Delivery → Pickup) и transit
+    # (Pickup → вручение). Пустое, нечисловое или нулевое значение завершает startup.
+    deliveryEstimate:
+      sampleSize: 50
+      baselineCourierLead: 15m
+      baselineTransit: 20m
+    # Simulator (FR-606, FR-667: interval, minDelay, maxDelay, trackInterval) и tracking
+    # (FR-658: cityOriginLatitude, cityOriginLongitude, cityBlocks, blockMeters,
+    # persistInterval) обязательны API без значений по умолчанию: задаёт окружение.
+    # OpenTelemetry (ADR 9): telemetry.endpoint (URL OTLP Alloy), telemetry.protocol
+    # (grpc | http/protobuf), telemetry.serviceName (по умолчанию роль процесса),
+    # telemetry.resourceAttributes (например deployment.environment.name), tracing.enabled и
+    # metrics.enabled (по умолчанию false), metrics.exportInterval, logging.level.

@@ -40,7 +40,7 @@ spec:
 - `spec` — секции процесса. Ключи — camelCase, длительности — строки Go-формата (`500ms`, `5s`, `2m`, `1h`), как сейчас.
 - Неизвестный ключ на любом уровне, включая верхний (`status`, опечатка в секции), — ошибка старта с путём ключа. Процесс читает только нужные ему секции `spec`, но проверяет на неизвестные ключи весь `spec` своего kind: секции других ролей того же kind допустимы.
 
-Формат файла — только YAML. Delivery переходит с TOML на YAML.
+Формат файла — только YAML. Delivery переходит с TOML на YAML. Длительности — только строки: число `20` в YAML было бы 20 наносекунд.
 
 ## Источники значений
 
@@ -49,6 +49,7 @@ spec:
 | Несекретные настройки | файл `CONFIG_FILE` | действует явный `DEFAULT_*`, если он есть; иначе ошибка старта |
 | Секреты | env из Secret под текущими именами | ошибка старта, если секрет обязателен процессу |
 | `service.instance.id` | env `POD_NAME` (Downward API) | ошибка старта |
+| Версия Temporal worker `orders-worker` | env `TEMPORAL_DEPLOYMENT_NAME`, `TEMPORAL_WORKER_BUILD_ID` — их внедряет Temporal Worker Controller в каждый versioned Deployment | как сейчас |
 | Путь к файлу | env `CONFIG_FILE` | ошибка старта |
 
 Переменные `SECTION__KEY` для несекретных настроек больше не читаются: у настройки один источник. Секреты — по сервисам:
@@ -75,6 +76,7 @@ spec:
 | `telemetry.resourceAttributes` | map атрибутов resource | пусто |
 | `tracing.enabled` | `true`, `false` | `false` |
 | `metrics.enabled` | `true`, `false` | `false` |
+| `metrics.exportInterval` | длительность больше нуля | `60s`, как у OpenTelemetry SDK |
 | `logging.level` | `debug`, `info`, `warn`, `error` | `info` |
 
 - Процесс передаёт SDK endpoint, протокол и resource явно. `OTEL_*` и `LOG__LEVEL` процесс не читает, chart их не задаёт. Если SDK языка сам читает `OTEL_*`, явные параметры имеют приоритет.
@@ -83,6 +85,9 @@ spec:
 - `service.version` — revision сборки, как сейчас; chart добавляет `service.version` из `image.tag` в `resourceAttributes`. `service.instance.id` — env `POD_NAME`.
 - `resourceAttributes` не может переопределить `service.name` и `service.instance.id`: такой ключ — ошибка старта.
 - Логи остаются JSON в stdout, их собирает Alloy.
+- `telemetry.endpoint` — базовый URL `http://` или `https://` с хостом, как `OTEL_EXPORTER_OTLP_ENDPOINT`; для `http/protobuf` процесс добавляет `/v1/traces` и `/v1/metrics`. Иной URL — ошибка старта: exporters Go при неверном URL молча берут localhost.
+- До загрузки файла процесс пишет JSON-логи уровня `info` с именем процесса, чтобы ошибка загрузки конфигурации тоже следовала схеме логов.
+- SDK сами читают настройки, которых нет в `spec`: `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_BSP_*`, лимиты spans. Chart их не задаёт. Go SDK, кроме того, всегда добавляет в resource `resource.Environment()`: явные атрибуты файла имеют приоритет, но лишний ключ `OTEL_RESOURCE_ATTRIBUTES` попадёт в resource. Отключить это в SDK нельзя.
 
 ## Загрузка по языкам
 
@@ -114,11 +119,15 @@ config:
 # values-worker.yaml переопределяет секции роли
 ```
 
-- `apiVersion`, `kind` и `metadata.name` задаёт chart: kind — константа chart, имя — роль из `values-<role>.yaml`.
+- `apiVersion`, `kind` и `metadata.name` задаёт chart: kind — константа chart, имя — обязательное значение `role` (`values.yaml` задаёт основную роль, `values-<role>.yaml` переопределяет).
+- Форма `config.spec` одинакова во всех chart, поэтому общий файл values профиля (`ops/kind/values/grafana-cloud.yaml`) включает экспорт для всех сервисов одним блоком `config.spec.telemetry`, `tracing`, `metrics`.
+- Имена секций и ключей механически следуют текущим env: префикс и ключ переводятся в camelCase (`SCHEDULED_ORDER__REPLAN_LEAD` → `scheduledOrder.replanLead`, `IDENTITY__JWKS_FILE` → `identity.jwksFile`). Общие секции (`server`, `management`, `shutdown`, `identity`, `spicedb`, `kafka`, `temporal`, `telemetry`, `tracing`, `metrics`, `logging`) поэтому совпадают у всех сервисов.
 - `config.spec` попадает в файл как есть (`toYaml`). Chart сам дописывает только то, чем владеет: пути смонтированных JWKS и token dir в `spec.identity`, `service.version` в `spec.telemetry.resourceAttributes`. Если такой ключ задан в values, `helm template` падает.
 - Структурные блоки values, которые сейчас превращаются в env (`spicedb.endpoint`, `spicedb.insecure`, `postgres.maxConns` и т. п., `telemetry.*`), переезжают в `config.spec`. На уровне chart остаются только ссылки на Secret (`spicedb.presharedKeySecret`, `postgres.dsnSecret`) и имена ConfigMap JWKS.
 - Блок values `env:` для несекретных настроек удаляется. `envFrom` и `extraEnv` остаются для секретов окружения.
 - `ops/kind/values/*.yaml` сервисов переносят `env:` в `config.spec`.
+- Chart читает из `config.spec` то, что нужно ему самому: порты контейнера и Service (`server.port`, `management.port`, `provider.webhookPort`), бюджет `terminationGracePeriodSeconds` (длительности `shutdown`), адрес Temporal для `WorkerDeployment`. Поэтому эти ключи в values chart обязательны, хотя у процесса для них есть значения по умолчанию.
+- Роль без части секций (например `delivery-worker`) обнуляет в `values-<role>.yaml` секции основной роли (`identity: null`), иначе неполные секции попали бы в её файл.
 
 ## Тесты
 

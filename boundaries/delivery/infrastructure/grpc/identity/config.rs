@@ -37,7 +37,7 @@ impl ServiceTokenVerifier {
         let jwks_file = config.jwks_file.trim();
         if issuer.is_empty() || audience.is_empty() || jwks_file.is_empty() {
             return Err(config_error(
-                "IDENTITY__ISSUER, IDENTITY__AUDIENCE and IDENTITY__JWKS_FILE are required",
+                "spec.identity.issuer, spec.identity.audience and spec.identity.jwksFile are required",
             ));
         }
         let jwks = std::fs::read_to_string(jwks_file)
@@ -56,8 +56,8 @@ impl UserAssertionVerifier {
         let audience = config.audience.trim();
         if issuer.is_empty() || jwks_file.is_empty() || delegates.is_empty() {
             return Err(config_error(
-                "IDENTITY__USER_ISSUER, IDENTITY__USER_JWKS_FILE and \
-                 IDENTITY__USER_DELEGATES are required",
+                "spec.identity.userIssuer, spec.identity.userJwksFile and \
+                 spec.identity.userDelegates are required",
             ));
         }
         let jwks = std::fs::read_to_string(jwks_file)
@@ -75,7 +75,7 @@ pub(super) fn parse_delegates(value: &str) -> Result<HashSet<String>, IdentityCo
             || entry.contains(char::is_whitespace)
         {
             return Err(config_error(format!(
-                "malformed IDENTITY__USER_DELEGATES entry {entry:?}, expected service-name"
+                "malformed spec.identity.userDelegates entry {entry:?}, expected service-name"
             )));
         }
         delegates.insert(entry.to_owned());
@@ -89,7 +89,7 @@ pub(super) fn parse_service_accounts(
     let mut accounts = HashMap::new();
     if value.trim().is_empty() {
         return Err(config_error(
-            "IDENTITY__SERVICE_ACCOUNTS must not be empty when IDENTITY__ISSUER is set",
+            "spec.identity.serviceAccounts must not be empty when spec.identity.issuer is set",
         ));
     }
     for entry in value.split(',') {

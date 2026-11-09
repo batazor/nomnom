@@ -29,32 +29,51 @@ import {
   loadKafkaConfig,
   loadLocalEnv,
   loadSchemaRegistryConfig,
+  loadTelemetryConfig,
   loadValkeyConfig,
+  readConfigFile,
 } from "../../pkg/config/config.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
-import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
+import {
+  createLogger,
+  logStartupFailure,
+  logUncaughtErrors,
+} from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
 const SERVICE_NAME = "restaurants-consumer";
 
+// Secrets of a local run from .env; everything else comes from CONFIG_FILE.
 loadLocalEnv();
-const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
-logUncaughtErrors(logger);
-const config = loadConfig(process.env);
-// Required infrastructure: an empty or invalid value stops startup. MongoDB
+// The configuration file (ADR 17) is read before anything else; an invalid
+// one is one ERROR record and exit 1 before the management port is opened.
+// Required infrastructure: a missing or invalid value stops startup. MongoDB
 // holds the Inbox and Restaurant Orders; collections and indexes, the Inbox
 // included, are migrated by the process itself before it consumes (local
 // ADR 2). Kafka carries the Integration Events (ADR 28). Valkey (ADR 43) is
 // the catalog read cache the consumer refreshes; while it is down the refresh
 // waits and its offsets stay uncommitted. The Schema Registry resolves the
 // schema of every record (FR-715).
-const mongodb = databaseConfig.load(process.env, "consumer");
-const kafka = loadKafkaConfig(process.env);
-const valkeyConfig = loadValkeyConfig(process.env);
-const schemaRegistry = loadSchemaRegistryConfig(process.env);
+const loaded = logStartupFailure(SERVICE_NAME, () => {
+  const spec = readConfigFile(process.env, SERVICE_NAME);
+  return {
+    config: loadConfig(spec),
+    telemetry: loadTelemetryConfig(spec, process.env, SERVICE_NAME),
+    mongodb: databaseConfig.load(spec, process.env, "consumer"),
+    kafka: loadKafkaConfig(spec),
+    valkeyConfig: loadValkeyConfig(spec, process.env),
+    schemaRegistry: loadSchemaRegistryConfig(spec),
+  };
+});
+const { config, mongodb, kafka, valkeyConfig, schemaRegistry } = loaded;
+const logger = createLogger({
+  resource: telemetryResource(loaded.telemetry),
+  level: loaded.telemetry.logLevel,
+});
+logUncaughtErrors(logger);
 
-const telemetry = startTelemetry(SERVICE_NAME);
+const telemetry = startTelemetry(loaded.telemetry);
 const database = await connectDatabase(mongodb);
 const valkey = connectValkey(valkeyConfig, {
   connectionName: SERVICE_NAME,

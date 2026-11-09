@@ -22,6 +22,7 @@ import {
   loadSchemaRegistryConfig,
   loadSimulatorConfig,
   loadSpiceDbConfig,
+  specSchema,
 } from "../pkg/config/config.ts";
 import { silentLogger } from "../pkg/telemetry/logger.ts";
 import { RESTAURANT_CONSUMER_USE_CASES } from "../slices/restaurant/di/registrations.ts";
@@ -30,26 +31,18 @@ import { databaseUri } from "./support/database.ts";
 import { rejectingSubjects } from "./support/grpc.ts";
 import { offlineValkey, testValkeyConfig } from "./support/valkey.ts";
 
-const simulatorEnvironment = {
-  SIMULATOR__INTERVAL: "5s",
-  SIMULATOR__MIN_DELAY: "30s",
-  SIMULATOR__MAX_DELAY: "2m",
-};
-
-/** SCHEDULED_SLOT__* of .env.example: required in cmd/restaurants. */
-const scheduledSlotEnvironment = {
-  SCHEDULED_SLOT__WIDTH: "15m",
-  SCHEDULED_SLOT__MIN_LEAD: "45m",
-  SCHEDULED_SLOT__MAX_HORIZON: "48h",
-  SCHEDULED_SLOT__HOLD_TTL: "10m",
-  SCHEDULED_SLOT__ALTERNATIVES: "3",
-};
-
-const environment = {
-  SPICEDB__ENDPOINT: "127.0.0.1:1",
-  SPICEDB__PRESHARED_KEY: "test",
-  SPICEDB__INSECURE: "true",
-};
+/** Sections of config.example.yaml required in cmd/restaurants. */
+const spec = specSchema.parse({
+  spicedb: { endpoint: "127.0.0.1:1", insecure: true },
+  simulator: { interval: "5s", minDelay: "30s", maxDelay: "2m" },
+  scheduledSlot: {
+    width: "15m",
+    minLead: "45m",
+    maxHorizon: "48h",
+    holdTtl: "10m",
+    alternatives: 3,
+  },
+});
 
 /** A client that is never connected: building the graph opens no socket. */
 const offlineDatabase = (): DatabaseConnection => {
@@ -63,12 +56,12 @@ const resourcesOf = (
 ): RestaurantsResources => {
   return {
     server: config.server,
-    spicedb: loadSpiceDbConfig(environment),
+    spicedb: loadSpiceDbConfig(spec, { SPICEDB__PRESHARED_KEY: "test" }),
     reconciler: config.reconciler,
     kitchen: config.kitchen,
     waitTime: config.waitTime,
-    simulator: loadSimulatorConfig(simulatorEnvironment),
-    scheduledSlot: loadScheduledSlotConfig(scheduledSlotEnvironment),
+    simulator: loadSimulatorConfig(spec),
+    scheduledSlot: loadScheduledSlotConfig(spec),
     database,
     valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
     valkey: offlineValkey(),
@@ -80,7 +73,7 @@ const resourcesOf = (
 test("the restaurants container resolves every registration in the application scope", async () => {
   const database = offlineDatabase();
   const container = createRestaurantsContainer(
-    resourcesOf(loadConfig(environment), database),
+    resourcesOf(loadConfig(spec), database),
   );
   try {
     for (const name of Object.keys(container.registrations)) {
@@ -160,7 +153,7 @@ test("the kitchen and wait time tunables reach the composed policy from configur
     }
   };
   try {
-    const defaults = await policyOf(loadConfig(environment));
+    const defaults = await policyOf(loadConfig(spec));
     assert.deepEqual(
       {
         sampleSize: defaults.sampleSize,
@@ -178,12 +171,12 @@ test("the kitchen and wait time tunables reach the composed policy from configur
       },
     );
     const tuned = await policyOf(
-      loadConfig({
-        ...environment,
-        KITCHEN__PREPARATION_TIME: "35m",
-        WAIT_TIME__SAMPLE_SIZE: "10",
-        WAIT_TIME__ELEVATED_FACTOR: "2",
-      }),
+      loadConfig(
+        specSchema.parse({
+          kitchen: { preparationTime: "35m" },
+          waitTime: { sampleSize: 10, elevatedFactor: 2 },
+        }),
+      ),
     );
     assert.equal(tuned.preparationTimeMs, 35 * 60_000);
     assert.equal(tuned.sampleSize, 10);
@@ -196,9 +189,9 @@ test("the kitchen and wait time tunables reach the composed policy from configur
 test("the consumer container resolves every registration", async () => {
   const database = offlineDatabase();
   const container = createConsumerContainer({
-    consumer: loadConfig({}).consumer,
-    kitchen: loadConfig({}).kitchen,
-    waitTime: loadConfig({}).waitTime,
+    consumer: loadConfig(spec).consumer,
+    kitchen: loadConfig(spec).kitchen,
+    waitTime: loadConfig(spec).waitTime,
     database,
     kafkaConsumer: {
       connect: async () => {},
@@ -215,9 +208,9 @@ test("the consumer container resolves every registration", async () => {
     valkeyConfig: testValkeyConfig("redis://127.0.0.1:1"),
     valkey: offlineValkey(),
     deadLetters: { publish: async () => {} },
-    schemaRegistry: loadSchemaRegistryConfig({
-      SCHEMA_REGISTRY__URL: "http://127.0.0.1:1",
-    }),
+    schemaRegistry: loadSchemaRegistryConfig(
+      specSchema.parse({ schemaRegistry: { url: "http://127.0.0.1:1" } }),
+    ),
     logger: silentLogger,
   });
   try {
@@ -259,7 +252,7 @@ describe("composed processes against MongoDB", () => {
     await migrateRestaurantsDatabase(database.db);
 
     const container = createRestaurantsContainer(
-      resourcesOf(loadConfig(environment), database),
+      resourcesOf(loadConfig(spec), database),
     );
     try {
       const restaurant = Restaurant.register({

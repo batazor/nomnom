@@ -4,22 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestLoadReadsUserIdentityFromEnvironment(t *testing.T) {
-	clearConfigEnvironment(t)
-	t.Setenv(EnvIdentityUserIssuer, "nomnom-bff")
-	t.Setenv(EnvIdentityUserJWKSFile, "/etc/nomnom/user-identity/jwks.json")
-	t.Setenv(EnvIdentityUserDelegates, " bff, ,admin-api ")
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, "nomnom-bff", cfg.Identity.UserIssuer)
-	assert.Equal(t, "/etc/nomnom/user-identity/jwks.json", cfg.Identity.UserJWKSFile)
-	assert.Equal(t, map[string]bool{"bff": true, "admin-api": true}, cfg.Identity.Delegates())
-	assert.True(t, cfg.Identity.UserVerifying())
-}
 
 func TestUserVerifyingRequiresEverySetting(t *testing.T) {
 	full := IdentityConfig{UserIssuer: "nomnom-bff", UserJWKSFile: "jwks.json", UserDelegates: "bff"}

@@ -1,13 +1,13 @@
 {{- /*
 ADR 41: control plane применяет server-side apply маршруты Market и список Market публичного
-gateway — только в неймспейсе routes.namespace и только эти ресурсы. Он следит за ними (list, watch),
+gateway — только в неймспейсе config.spec.routes.namespace и только эти ресурсы. Он следит за ними (list, watch),
 чтобы восстанавливать при дрейфе, а маршруты архивных Market удаляет (delete).
 */ -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "common.names.fullname" . }}-routes
-  namespace: {{ .Values.routes.namespace }}
+  namespace: {{ .Values.config.spec.routes.namespace }}
   labels:
     {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 rules:
@@ -25,7 +25,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "common.names.fullname" . }}-routes
-  namespace: {{ .Values.routes.namespace }}
+  namespace: {{ .Values.config.spec.routes.namespace }}
   labels:
     {{- include "controlplane.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 roleRef:

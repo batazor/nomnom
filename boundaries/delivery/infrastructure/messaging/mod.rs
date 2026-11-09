@@ -1,5 +1,5 @@
 //! Kafka consumer of the process (ADR 4, ADR 11, docs/dlq.md) on `rdkafka`:
-//! one consumer group (`KAFKA__CONSUMER_GROUP`) reads one stream, the
+//! one consumer group (`spec.kafka.consumerGroup`) reads one stream, the
 //! offset of a message is committed only after its handler finished.
 //!
 //! Outcome of a message:

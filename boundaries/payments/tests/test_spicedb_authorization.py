@@ -13,10 +13,10 @@ from opentelemetry.sdk.metrics.export import (
     InMemoryMetricReader,
     NumberDataPoint,
 )
-from pydantic import ValidationError
+from payment_fakes import REQUIRED_SECRETS, REQUIRED_SPEC
 
 from pkg.authz import AuthorizationUnavailableError, PermissionDeniedError, Subject, SubjectKind
-from pkg.config import SpiceDBSettings, load_settings
+from pkg.config import ConfigError, SpiceDBSettings, parse_spec, settings
 from slices.payment.applications.access import require_permission
 from slices.payment.applications.ports import PaymentPermission, PaymentResource
 from slices.payment.di.payment import SpiceDBConfigurationError, create_permission_checker
@@ -37,14 +37,6 @@ MANAGE = (
     PaymentPermission.REFUND,
 )
 VIEW = (PaymentPermission.VIEW, PaymentPermission.VIEW_OPERATIONS)
-
-# DATABASE__URI обязателен: без него load_settings падает.
-REQUIRED_ENV = {
-    "DATABASE__URI": "postgresql://payments@localhost/payments",
-    "EVENT_STORE__SNAPSHOT_EVERY": "5",
-    "EVENT_STORE__SUBJECT_KEKS": '{"1": "test-subject-kek-with-at-least-32-characters"}',
-    "EVENT_STORE__SUBJECT_REF_KEY": "test-subject-ref-key-with-at-least-32-characters",
-}
 
 
 class _RpcFailure(grpc.RpcError):
@@ -245,42 +237,50 @@ class AuthorizationMetricsTest(unittest.TestCase):
 
 class CompositionTest(unittest.TestCase):
     def test_empty_endpoint_fails_startup(self) -> None:
-        with self.assertRaisesRegex(SpiceDBConfigurationError, "SPICEDB__ENDPOINT"):
+        with self.assertRaisesRegex(SpiceDBConfigurationError, "spec.spicedb.endpoint"):
             create_permission_checker(SpiceDBSettings.model_validate({}))
 
 
 class SettingsTest(unittest.TestCase):
-    def test_reads_environment(self) -> None:
-        environment = {
-            "SPICEDB__ENDPOINT": "spicedb.nomnom-authz:50051",
-            "SPICEDB__PRESHARED_KEY": "devkey",
-            "SPICEDB__INSECURE": "true",
-            "SPICEDB__TIMEOUT": "500ms",
+    def test_reads_the_file_and_the_key_from_environment(self) -> None:
+        spec = {
+            **REQUIRED_SPEC,
+            "spicedb": {
+                "endpoint": "spicedb.nomnom-authz:50051",
+                "insecure": True,
+                "timeout": "500ms",
+            },
         }
-        with patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True):
-            settings = load_settings().spicedb
-        self.assertTrue(settings.enabled)
-        self.assertEqual(settings.endpoint, "spicedb.nomnom-authz:50051")
-        self.assertTrue(settings.insecure)
-        self.assertEqual(settings.timeout, timedelta(milliseconds=500))
-        self.assertNotIn("devkey", repr(settings))
+        environment = {**REQUIRED_SECRETS, "SPICEDB__PRESHARED_KEY": "devkey"}
+        with patch.dict(os.environ, environment, clear=True):
+            spicedb = settings(parse_spec(spec)).spicedb
+        self.assertTrue(spicedb.enabled)
+        self.assertEqual(spicedb.endpoint, "spicedb.nomnom-authz:50051")
+        self.assertTrue(spicedb.insecure)
+        self.assertEqual(spicedb.timeout, timedelta(milliseconds=500))
+        self.assertEqual(spicedb.preshared_key, "devkey")
+        self.assertNotIn("devkey", repr(spicedb))
 
     def test_endpoint_without_key_is_startup_error(self) -> None:
-        environment = {"SPICEDB__ENDPOINT": "localhost:50051", "SPICEDB__PRESHARED_KEY": " "}
+        spec = {**REQUIRED_SPEC, "spicedb": {"endpoint": "localhost:50051"}}
+        environment = {**REQUIRED_SECRETS, "SPICEDB__PRESHARED_KEY": " "}
         with (
-            patch.dict(os.environ, {**REQUIRED_ENV, **environment}, clear=True),
-            self.assertRaises(ValidationError),
+            patch.dict(os.environ, environment, clear=True),
+            self.assertRaisesRegex(ConfigError, "SPICEDB__PRESHARED_KEY must not be empty"),
         ):
-            load_settings()
+            settings(parse_spec(spec))
 
     def test_rejects_invalid_timeout(self) -> None:
         for value in ("0s", "2", "PT2S", "-1s"):
             with (
                 self.subTest(value=value),
-                patch.dict(os.environ, {**REQUIRED_ENV, "SPICEDB__TIMEOUT": value}, clear=True),
-                self.assertRaises(ValidationError),
+                self.assertRaisesRegex(ConfigError, "spec.spicedb.timeout"),
             ):
-                load_settings()
+                parse_spec({**REQUIRED_SPEC, "spicedb": {"timeout": value}})
+
+    def test_preshared_key_in_the_file_is_unknown(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "spec.spicedb.presharedKey: unknown field"):
+            parse_spec({**REQUIRED_SPEC, "spicedb": {"presharedKey": "devkey"}})
 
 
 if __name__ == "__main__":

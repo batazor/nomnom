@@ -1,8 +1,8 @@
 {{- /*
-ConfigMap только для несекретной конфигурации. Секреты подключаются внешними
-Kubernetes Secret через envFrom или extraEnv[].valueFrom и этим chart не создаются.
+Файл конфигурации процесса (ADR 17): только несекретные настройки. Секреты подключаются
+внешними Kubernetes Secret через env (secretKeyRef, envFrom, extraEnv) и этим chart не
+создаются.
 */ -}}
-{{- if .Values.env -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,7 +10,5 @@ metadata:
   labels:
     {{- include "payments.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 data:
-  {{- range $key, $value := .Values.env }}
-  {{ $key }}: {{ $value | toString | quote }}
-  {{- end }}
-{{- end }}
+  config.yaml: |
+    {{- include "payments.config" . | nindent 4 }}

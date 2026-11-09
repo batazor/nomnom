@@ -6,12 +6,16 @@ use std::time::Duration;
 use config::ConfigError;
 use serde::Deserialize;
 
-use super::{MAX_RECONCILER_PAGE_SIZE, SPICEDB_ENDPOINT_ENV, SPICEDB_PRESHARED_KEY_ENV};
+use super::{
+    DEFAULT_RECONCILER_GRACE, DEFAULT_RECONCILER_INTERVAL, DEFAULT_RECONCILER_PAGE_SIZE,
+    DEFAULT_SPICEDB_TIMEOUT, MAX_RECONCILER_PAGE_SIZE, SPICEDB_ENDPOINT_KEY,
+    SPICEDB_PRESHARED_KEY_ENV,
+};
 
 /// Фоновая сверка relationships `courier#self` и `delivery#courier` с
-/// business state процесса.
+/// business state процесса, секция `spec.reconciler`.
 #[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase", default)]
 pub struct ReconcilerConfig {
     /// Интервал между проходами.
     #[serde(with = "humantime_serde")]
@@ -24,35 +28,52 @@ pub struct ReconcilerConfig {
     pub page_size: u32,
 }
 
+impl Default for ReconcilerConfig {
+    fn default() -> Self {
+        Self {
+            interval: DEFAULT_RECONCILER_INTERVAL,
+            grace: DEFAULT_RECONCILER_GRACE,
+            page_size: DEFAULT_RECONCILER_PAGE_SIZE,
+        }
+    }
+}
+
 impl ReconcilerConfig {
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
         if self.interval.is_zero() {
             return Err(ConfigError::Message(
-                "reconciler interval must be positive".to_owned(),
+                "spec.reconciler.interval must be positive".to_owned(),
             ));
         }
         if self.page_size == 0 || self.page_size > MAX_RECONCILER_PAGE_SIZE {
             return Err(ConfigError::Message(format!(
-                "reconciler page size must be between 1 and {MAX_RECONCILER_PAGE_SIZE}"
+                "spec.reconciler.pageSize must be between 1 and {MAX_RECONCILER_PAGE_SIZE}"
             )));
         }
         Ok(())
     }
 }
 
-/// Проверка прав в SpiceDB (ADR 18). Пустой `endpoint` — ошибка startup.
+/// Проверка прав в SpiceDB (ADR 18), секция `spec.spicedb`. Endpoint
+/// обязателен, preshared key — секрет из env `SPICEDB__PRESHARED_KEY`.
 #[derive(Clone, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SpiceDbConfig {
     /// `host:port` или URL gRPC endpoint SpiceDB.
     pub endpoint: String,
     /// Preshared key, передаваемый как `authorization: Bearer <key>`.
+    #[serde(skip)]
     pub preshared_key: String,
     /// Plaintext без TLS — только для kind и локального запуска.
+    #[serde(default)]
     pub insecure: bool,
     /// Deadline одного `CheckPermission`.
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "humantime_serde", default = "default_spicedb_timeout")]
     pub timeout: Duration,
+}
+
+fn default_spicedb_timeout() -> Duration {
+    DEFAULT_SPICEDB_TIMEOUT
 }
 
 impl Default for SpiceDbConfig {
@@ -61,7 +82,7 @@ impl Default for SpiceDbConfig {
             endpoint: String::new(),
             preshared_key: String::new(),
             insecure: false,
-            timeout: Duration::from_secs(2),
+            timeout: DEFAULT_SPICEDB_TIMEOUT,
         }
     }
 }
@@ -95,16 +116,18 @@ impl SpiceDbConfig {
 
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
         if !self.enabled() {
-            return Ok(());
+            return Err(ConfigError::Message(format!(
+                "{SPICEDB_ENDPOINT_KEY} is required"
+            )));
         }
         if self.preshared_key.is_empty() {
             return Err(ConfigError::Message(format!(
-                "{SPICEDB_PRESHARED_KEY_ENV} is required when {SPICEDB_ENDPOINT_ENV} is set"
+                "{SPICEDB_PRESHARED_KEY_ENV} is required"
             )));
         }
         if self.timeout.is_zero() {
             return Err(ConfigError::Message(
-                "spicedb timeout must be positive".to_owned(),
+                "spec.spicedb.timeout must be positive".to_owned(),
             ));
         }
         Ok(())

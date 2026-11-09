@@ -20,10 +20,11 @@ Service предназначен для internal gateway и технически
   kubectl --namespace {{ .Release.Namespace }} port-forward \
     svc/{{ include "common.names.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
 
-Health contract на техническом порту metrics ({{ .Values.management.port }}):
+{{- $management := include "payments.port" (dict "context" $ "section" "management" "key" "port") }}
+Health contract на техническом порту metrics ({{ $management }}):
   kubectl --namespace {{ .Release.Namespace }} port-forward \
-    deploy/{{ include "common.names.fullname" . }} {{ .Values.management.port }}:metrics
-  curl -i localhost:{{ .Values.management.port }}/health/ready
+    deploy/{{ include "common.names.fullname" . }} {{ $management }}:metrics
+  curl -i localhost:{{ $management }}/health/ready
 {{- if not (and .Values.startupProbe.enabled .Values.livenessProbe.enabled .Values.readinessProbe.enabled) }}
 
 ВНИМАНИЕ: часть probes отключена в values; runtime contract требует startup, liveness и readiness.

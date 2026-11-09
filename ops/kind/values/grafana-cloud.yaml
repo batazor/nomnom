@@ -1,13 +1,16 @@
 # Values профиля grafana-cloud поверх values окружения для всех releases сервисов: OTLP метрик
 # и traces в Alloy (manifests/observability/alloy.yaml); логи Alloy читает из stdout pods.
-# service.name задаёт процесс.
-env:
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4317
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://alloy.nomnom-observability.svc.cluster.local:4317
-  # Free tier Grafana Cloud считает data points per minute: одна точка на series в минуту.
-  OTEL_METRIC_EXPORT_INTERVAL: "60000"
-
+# Форма config.spec одинакова во всех charts; service.name задаёт процесс,
 # service.instance.id и service.version charts добавляют сами.
-telemetry:
-  resourceAttributes:
-    deployment.environment.name: kind
+config:
+  spec:
+    telemetry:
+      endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317
+      resourceAttributes:
+        deployment.environment.name: kind
+    tracing:
+      enabled: true
+    metrics:
+      enabled: true
+      # Free tier Grafana Cloud считает data points per minute: одна точка на series в минуту.
+      exportInterval: 60s

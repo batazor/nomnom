@@ -69,7 +69,11 @@ Kafka consumers подтверждают только успешно обраб�
 
 ### Конфигурация извне, fail fast
 
-Конфигурация передаётся через environment variables, смонтированные файлы и secrets: `build once, run with different configuration`. Конфигурация валидируется при старте; невалидная приводит к понятной ошибке и non-zero exit без перехода в ready. Секреты не попадают в image, исходный код, `ConfigMap`, logs и traces.
+Конфигурация передаётся извне: `build once, run with different configuration`. Несекретная конфигурация процесса — один версионированный YAML-файл по пути из `CONFIG_FILE` в форме ресурса Kubernetes: `apiVersion: config.nomnom.dev/v1alpha1`, `kind` — сервис (`Orders`, `Delivery`, `Payments`, `Restaurants`, `ControlPlane`), `metadata.name` — роль процесса, `spec` — секции с ключами в camelCase. Файл не регистрируется в Kubernetes API: это формат, а не CRD. Helm chart рендерит его в `ConfigMap` и монтирует в контейнер. Переменные окружения `SECTION__KEY` для несекретных настроек не читаются: у настройки один источник.
+
+Секреты передаются только через environment variables из Kubernetes `Secret` под фиксированными именами (`POSTGRES__DSN`, `SPICEDB__PRESHARED_KEY` и т. п.), полей для них в `spec` нет. Секреты не попадают в image, исходный код, `ConfigMap`, logs и traces.
+
+Конфигурация валидируется при старте; невалидная приводит к понятной ошибке и non-zero exit без перехода в ready. Ошибкой считаются отсутствие файла, чужие `apiVersion` или `kind`, `metadata.name` другой роли и любой неизвестный ключ — поэтому опечатка или секрет, по ошибке записанный в файл, не проходят молча. Несовместимое изменение структуры `spec` объявляется новой версией `apiVersion`.
 
 ### Учёт resource limits
 

@@ -1,10 +1,12 @@
 # Необязательное дополнение к values/payments.yaml: Stripe test mode вместо fake.
 # Secret payments-stripe создаётся вручную, порядок действий — boundaries/payments/README.md,
 # раздел «Stripe test mode». e2e и CI работают на fake и этот файл не используют.
-env:
-  PROVIDER__KIND: stripe
+config:
+  spec:
+    provider:
+      kind: stripe
 
-# Явная env перекрывает PROVIDER__WEBHOOK_SECRET из ConfigMap values/payments.yaml.
+# Список заменяет extraEnv values/payments.yaml целиком, вместе с тестовым секретом webhooks.
 extraEnv:
   - name: PROVIDER__STRIPE_API_KEY
     valueFrom:

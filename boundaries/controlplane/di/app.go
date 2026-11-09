@@ -15,12 +15,17 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/telemetry"
 	topologydi "github.com/batazor/nomnom/boundaries/controlplane/slices/topology/di"
 )
 
-// AppServiceName — service.name процесса по умолчанию; OTEL_SERVICE_NAME переопределяет.
-const AppServiceName = "controlplane"
+const (
+	// AppRole — роль процесса: metadata.name его файла конфигурации.
+	AppRole = "controlplane"
+	// AppServiceName — service.name процесса по умолчанию; spec.telemetry.serviceName переопределяет.
+	AppServiceName = "controlplane"
+)
 
 // NewRESTConfig подключает процесс к Kubernetes API кластера (in-cluster
 // ServiceAccount): реестр и маршруты живут там, а вне кластера процесс не стартует.
@@ -34,6 +39,7 @@ func NewRESTConfig() (*rest.Config, error) {
 
 // App — lifecycle.Worker контроллера.
 type App struct {
+	config    config.Config
 	manager   manager.Manager
 	published <-chan struct{}
 	telemetry *telemetry.Telemetry
@@ -42,8 +48,8 @@ type App struct {
 	err       error
 }
 
-func NewApp(module *topologydi.Module) *App {
-	return &App{manager: module.Manager, published: module.Published, stopped: make(chan struct{})}
+func NewApp(cfg config.Config, module *topologydi.Module) *App {
+	return &App{config: cfg, manager: module.Manager, published: module.Published, stopped: make(chan struct{})}
 }
 
 // Start поднимает telemetry pipeline, запускает контроллер и ждёт первой успешной
@@ -55,7 +61,7 @@ func (a *App) Start(ctx context.Context) error {
 	ctrl.SetLogger(logger)
 	klog.SetLogger(logger)
 
-	tel, err := telemetry.Start(ctx, AppServiceName)
+	tel, err := telemetry.Start(ctx, a.config)
 	if err != nil {
 		return fmt.Errorf("start telemetry: %w", err)
 	}

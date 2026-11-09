@@ -2,6 +2,11 @@ package telemetry_test
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,16 +18,22 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/trace"
+	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/protobuf/proto"
 
+	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
 )
 
 // Метрики Prometheus registry и OTel instruments собираются одним reader с общим resource.
 func TestBridgesPrometheusRegistryIntoOneOTelPipeline(t *testing.T) {
-	t.Setenv("OTEL_SERVICE_NAME", "")
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=test,service.version=1.2.3")
 	var reader *sdkmetric.ManualReader
-	m, err := telemetry.New(context.Background(), "orders-consumer", func(producer sdkmetric.Producer) (sdkmetric.Reader, error) {
+	m, err := telemetry.New(context.Background(), config.TelemetryConfig{
+		ServiceName:        "orders-consumer",
+		ResourceAttributes: map[string]string{"deployment.environment.name": "test", "service.version": "1.2.3"},
+		InstanceID:         "orders-consumer-0",
+	}, func(producer sdkmetric.Producer) (sdkmetric.Reader, error) {
 		reader = sdkmetric.NewManualReader(sdkmetric.WithProducer(producer))
 		return reader, nil
 	})
@@ -64,35 +75,53 @@ func TestBridgesPrometheusRegistryIntoOneOTelPipeline(t *testing.T) {
 	assert.Equal(t, "nomnom", attrs["service.namespace"])
 	assert.Equal(t, "test", attrs["deployment.environment.name"])
 	assert.Equal(t, "1.2.3", attrs["service.version"])
+	assert.Equal(t, "orders-consumer-0", attrs["service.instance.id"])
 }
 
-func TestEnvironmentOverridesServiceName(t *testing.T) {
-	t.Setenv("OTEL_SERVICE_NAME", "orders-consumer-canary")
+// AC-1079: OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES do not override the file.
+func TestEnvironmentDoesNotOverrideServiceName(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "other")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=other,deployment.environment.name=other")
 	reader := sdkmetric.NewManualReader()
-	m, err := telemetry.New(context.Background(), "orders-consumer", func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })
+	m, err := telemetry.New(context.Background(), config.TelemetryConfig{
+		ServiceName:        "orders-consumer",
+		ResourceAttributes: map[string]string{"deployment.environment.name": "kind"},
+	}, func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))
 	name, _ := rm.Resource.Set().Value("service.name")
-	assert.Equal(t, "orders-consumer-canary", name.AsString())
+	assert.Equal(t, "orders-consumer", name.AsString())
+	environment, _ := rm.Resource.Set().Value("deployment.environment.name")
+	assert.Equal(t, "kind", environment.AsString())
 }
 
-func TestStartWithoutEndpointDoesNotExport(t *testing.T) {
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
-	m, err := telemetry.Start(context.Background(), "orders-consumer")
+// AC-1080: an endpoint without tracing.enabled and metrics.enabled exports nothing.
+func TestStartWithoutFlagsDoesNotExport(t *testing.T) {
+	var requests atomic.Int32
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { requests.Add(1) }))
+	t.Cleanup(collector.Close)
+	m, err := telemetry.Start(context.Background(), config.ObservabilityConfig{
+		Telemetry: config.TelemetryConfig{Endpoint: collector.URL, Protocol: config.ProtocolHTTPProtobuf, ServiceName: "orders-consumer"},
+		Metrics:   config.MetricsConfig{ExportInterval: time.Minute},
+	})
 	require.NoError(t, err)
 	assert.Nil(t, m.TracerProvider)
+	_, span := otel.Tracer("test").Start(context.Background(), "rpc")
+	span.End()
 	require.NoError(t, m.Shutdown(context.Background()))
+	assert.Zero(t, requests.Load(), "no signal reaches the collector")
 }
 
-// traceparent вызывающего продолжается в процессе, а spans экспортируются по OTLP.
+// traceparent вызывающего продолжается в процессе, а spans экспортируются по OTLP gRPC.
 func TestStartContinuesW3CTraceContextAndExportsTraces(t *testing.T) {
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1")
-	m, err := telemetry.Start(context.Background(), "orders")
+	m, err := telemetry.Start(context.Background(), config.ObservabilityConfig{
+		Telemetry: config.TelemetryConfig{Endpoint: "http://127.0.0.1:1", Protocol: config.ProtocolGRPC, ServiceName: "orders"},
+		Tracing:   config.TracingConfig{Enabled: true},
+		Metrics:   config.MetricsConfig{ExportInterval: time.Minute},
+	})
 	require.NoError(t, err)
 	require.NotNil(t, m.TracerProvider)
 
@@ -108,10 +137,60 @@ func TestStartContinuesW3CTraceContextAndExportsTraces(t *testing.T) {
 	_ = m.Shutdown(shutdownCtx) // collector недоступен: важна только ограниченность shutdown
 }
 
+// AC-1079: spans and metrics go to telemetry.endpoint over OTLP/HTTP with
+// service.name from the file, whatever OTEL_* says.
+func TestStartExportsToConfiguredEndpointOverHTTP(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("OTEL_EXPORTER_OTLP_ENDPOINT must not receive signals")
+	}))
+	t.Cleanup(other.Close)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", other.URL)
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", other.URL)
+	t.Setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", other.URL)
+	t.Setenv("OTEL_SERVICE_NAME", "other")
+
+	var mu sync.Mutex
+	received := map[string][]byte{}
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		mu.Lock()
+		received[r.URL.Path] = body
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/x-protobuf")
+	}))
+	t.Cleanup(collector.Close)
+
+	m, err := telemetry.Start(context.Background(), config.ObservabilityConfig{
+		Telemetry: config.TelemetryConfig{Endpoint: collector.URL, Protocol: config.ProtocolHTTPProtobuf, ServiceName: "orders-worker", InstanceID: "orders-worker-0"},
+		Tracing:   config.TracingConfig{Enabled: true},
+		Metrics:   config.MetricsConfig{Enabled: true, ExportInterval: time.Minute},
+	})
+	require.NoError(t, err)
+	_, span := otel.Tracer("test").Start(context.Background(), "rpc")
+	span.End()
+	require.NoError(t, m.Shutdown(context.Background()))
+
+	mu.Lock()
+	defer mu.Unlock()
+	var traces collectortrace.ExportTraceServiceRequest
+	require.NoError(t, proto.Unmarshal(received["/v1/traces"], &traces))
+	require.NotEmpty(t, traces.ResourceSpans)
+	resource := map[string]string{}
+	for _, kv := range traces.ResourceSpans[0].Resource.Attributes {
+		resource[kv.Key] = kv.Value.GetStringValue()
+	}
+	assert.Equal(t, "orders-worker", resource["service.name"])
+	assert.Equal(t, "orders-worker-0", resource["service.instance.id"])
+	var metrics collectormetrics.ExportMetricsServiceRequest
+	require.NoError(t, proto.Unmarshal(received["/v1/metrics"], &metrics))
+	assert.NotEmpty(t, metrics.ResourceMetrics)
+}
+
 // Counters Temporal SDK монотонные: в Prometheus — counter с _total, а не gauge.
 func TestTemporalCountersAreMonotonic(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
-	m, err := telemetry.New(context.Background(), "orders-worker", func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })
+	m, err := telemetry.New(context.Background(), config.TelemetryConfig{ServiceName: "orders-worker"}, func(sdkmetric.Producer) (sdkmetric.Reader, error) { return reader, nil })
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 

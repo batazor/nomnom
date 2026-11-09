@@ -11,7 +11,7 @@ import (
 
 // grpcLogger направляет внутренние логи gRPC в JSON logger процесса. Как и
 // logger gRPC по умолчанию, info и warning — диагностика транспорта: они
-// пишутся на уровне debug (LOG__LEVEL=debug), error — на уровне error.
+// пишутся на уровне debug (spec.logging.level: debug), error — на уровне error.
 type grpcLogger struct{ logger *slog.Logger }
 
 var _ grpclog.LoggerV2 = grpcLogger{}
@@ -51,7 +51,7 @@ func (g grpcLogger) Fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
-// V сообщает gRPC, нужны ли подробные логи: только при LOG__LEVEL=debug.
+// V сообщает gRPC, нужны ли подробные логи: только при spec.logging.level: debug.
 func (g grpcLogger) V(level int) bool {
 	return level <= 0 || g.logger.Enabled(context.Background(), slog.LevelDebug)
 }

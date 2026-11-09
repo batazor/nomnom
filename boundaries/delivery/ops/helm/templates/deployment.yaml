@@ -11,20 +11,18 @@ spec:
       {{- include "common.labels.matchLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- if or .Values.env .Values.podAnnotations }}
       annotations:
-        {{- if .Values.env }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- end }}
+        # Изменение файла конфигурации перезапускает pod: процесс читает его только при старте.
+        checksum/config: {{ include "delivery.config" . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
-      {{- end }}
       labels:
         {{- include "delivery.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
       {{- include "delivery.validateShutdownBudget" . }}
       {{- include "delivery.validateIdentity" . }}
+      {{- include "delivery.validateTemporal" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -55,63 +53,38 @@ spec:
               protocol: TCP
             {{- end }}
             - name: metrics
-              containerPort: {{ .Values.management.port }}
+              containerPort: {{ include "delivery.managementPort" . }}
               protocol: TCP
-          {{- if or .Values.env .Values.envFrom }}
+          {{- with .Values.envFrom }}
           envFrom:
-            {{- if .Values.env }}
-            - configMapRef:
-                name: {{ include "common.names.fullname" . }}
-            {{- end }}
-            {{- with .Values.envFrom }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
-            {{- end }}
           {{- end }}
+          # Несекретная конфигурация — только файл CONFIG_FILE; env — его путь, имя pod
+          # (service.instance.id) и секреты из Secret.
           env:
-            - name: MANAGEMENT__PORT
-              value: {{ .Values.management.port | quote }}
-            - name: SHUTDOWN__READINESS_DELAY
-              value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
-            - name: SHUTDOWN__DRAIN_TIMEOUT
-              value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
-            {{- if .Values.identity.jwksConfigMap }}
-            - name: IDENTITY__ISSUER
-              value: {{ .Values.identity.issuer | quote }}
-            - name: IDENTITY__AUDIENCE
-              value: {{ .Values.identity.audience | quote }}
-            - name: IDENTITY__JWKS_FILE
-              value: {{ include "delivery.identityJwksFile" . | quote }}
-            - name: IDENTITY__SERVICE_ACCOUNTS
-              value: {{ .Values.identity.serviceAccounts | quote }}
-            - name: IDENTITY__USER_ISSUER
-              value: {{ .Values.identity.userIssuer | quote }}
-            - name: IDENTITY__USER_JWKS_FILE
-              value: {{ include "delivery.identityUserJwksFile" . | quote }}
-            - name: IDENTITY__USER_DELEGATES
-              value: {{ .Values.identity.userDelegates | quote }}
-            {{- end }}
-            {{- if .Values.spicedb.endpoint }}
+            - name: CONFIG_FILE
+              value: {{ include "delivery.configFile" . | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if dig "spicedb" "endpoint" nil .Values.config.spec }}
             {{- include "delivery.validateSpiceDb" . }}
-            - name: SPICEDB__ENDPOINT
-              value: {{ .Values.spicedb.endpoint | quote }}
-            - name: SPICEDB__INSECURE
-              value: {{ .Values.spicedb.insecure | toString | quote }}
-            - name: SPICEDB__TIMEOUT
-              value: {{ .Values.spicedb.timeout | quote }}
             - name: SPICEDB__PRESHARED_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
                   key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
             {{- end }}
-            {{- include "delivery.databaseEnv" (dict "root" . "maxConns" .Values.database.pool.maxConns) | nindent 12 }}
-            # FR-708: Temporal обязателен API (start и signals Assignment Workflow) и worker.
-            - name: TEMPORAL__HOST_PORT
-              value: {{ required "temporal.hostPort is required (FR-708)" .Values.temporal.hostPort | quote }}
-            - name: TEMPORAL__NAMESPACE
-              value: {{ required "temporal.namespace is required (FR-708)" .Values.temporal.namespace | quote }}
-            - name: TEMPORAL__CONNECT_TIMEOUT
-              value: {{ required "temporal.connectTimeout is required (FR-708)" .Values.temporal.connectTimeout | quote }}
+            {{- with .Values.database.uriSecret }}
+            {{- if .name }}
+            - name: DATABASE__URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name | quote }}
+                  key: {{ .key | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.service.enabled }}
             # FR-666: Valkey потока позиций курьеров обязателен процессу с gRPC API.
             - name: VALKEY__URL
@@ -120,7 +93,6 @@ spec:
                   name: {{ required "valkey.urlSecret.name is required (FR-666)" .Values.valkey.urlSecret.name | quote }}
                   key: {{ required "valkey.urlSecret.key is required (FR-666)" .Values.valkey.urlSecret.key | quote }}
             {{- end }}
-            {{- include "delivery.otelEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
@@ -136,8 +108,11 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.volumeMounts .Values.identity.jwksConfigMap }}
           volumeMounts:
+            - name: config
+              mountPath: {{ include "delivery.configFile" . }}
+              subPath: config.yaml
+              readOnly: true
             {{- if .Values.identity.jwksConfigMap }}
             - name: identity-jwks
               mountPath: /etc/nomnom/identity
@@ -149,9 +124,13 @@ spec:
             {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
-          {{- end }}
-      {{- if or .Values.volumes .Values.identity.jwksConfigMap }}
       volumes:
+        - name: config
+          configMap:
+            name: {{ include "common.names.fullname" . }}
+            items:
+              - key: config.yaml
+                path: config.yaml
         {{- if .Values.identity.jwksConfigMap }}
         - name: identity-jwks
           configMap:
@@ -169,7 +148,6 @@ spec:
         {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
-      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}

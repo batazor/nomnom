@@ -4,28 +4,11 @@
 image:
   pullPolicy: Never
 
-env:
-  KAFKA__BROKERS: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
-  # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
-  SCHEMA_REGISTRY__URL: http://schema-registry.nomnom-infra.svc.cluster.local:8081
-  # Wait Time Statistics (FR-645, FR-657): уровень ожидания считает consumer; значения
-  # совпадают с release restaurants, иначе каталог и уровень разойдутся.
-  KITCHEN__PREPARATION_TIME: 1m
-  WAIT_TIME__SAMPLE_SIZE: "50"
-  WAIT_TIME__RECENT_WINDOW: 30m
-  WAIT_TIME__ELEVATED_FACTOR: "1.5"
-  WAIT_TIME__NORMAL_FACTOR: "1.2"
-
 # ADR 8, ADR 31: Inbox и Restaurant Orders — в MongoDB restaurants; Secret restaurants-mongodb
 # создаёт chart ops/kind/bootstrap, коллекции и индексы процесс мигрирует сам при старте.
 mongodb:
   uriSecret:
     name: restaurants-mongodb
-  # Новый pod первые секунды живёт с identity init Cilium, пока label'ы не дошли до агента,
-  # а ingress MongoDB ещё не знает его настоящую identity: SYN отбрасываются. 5s server
-  # selection не переживали этого при выкатке (restart consumer, 2026-10-27); 20s — с запасом
-  # в бюджете startupProbe (60s).
-  timeout: 20s
 
 # ADR 43: обновление кеша каталога; Secret restaurants-valkey создаёт chart ops/kind/bootstrap.
 valkey:
@@ -41,3 +24,27 @@ resources:
     memory: 96Mi
   limits:
     memory: 512Mi
+
+# Файл конфигурации процесса restaurants-consumer (ADR 17) поверх config.spec chart.
+config:
+  spec:
+    kafka:
+      brokers: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
+    # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
+    schemaRegistry:
+      url: http://schema-registry.nomnom-infra.svc.cluster.local:8081
+    mongodb:
+      # Новый pod первые секунды живёт с identity init Cilium, пока label'ы не дошли до агента,
+      # а ingress MongoDB ещё не знает его настоящую identity: SYN отбрасываются. 5s server
+      # selection не переживали этого при выкатке (restart consumer, 2026-10-27); 20s — с запасом
+      # в бюджете startupProbe (60s).
+      timeout: 20s
+    # Wait Time Statistics (FR-645, FR-657): уровень ожидания считает consumer; значения
+    # совпадают с release restaurants, иначе каталог и уровень разойдутся.
+    kitchen:
+      preparationTime: 1m
+    waitTime:
+      sampleSize: 50
+      recentWindow: 30m
+      elevatedFactor: 1.5
+      normalFactor: 1.2

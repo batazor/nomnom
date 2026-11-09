@@ -1,28 +1,36 @@
 """Event store of the Payment streams (local ADR 2)."""
 
-from pydantic import Field, field_validator
+from pydantic import Field, Json, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-EVENT_STORE_SNAPSHOT_EVERY_ENV = "EVENT_STORE__SNAPSHOT_EVERY"
+from .section import Section
+
 EVENT_STORE_SUBJECT_KEKS_ENV = "EVENT_STORE__SUBJECT_KEKS"
 EVENT_STORE_SUBJECT_REF_KEY_ENV = "EVENT_STORE__SUBJECT_REF_KEY"
 # Ключи выводятся через HKDF, который не добавляет энтропии: значение должно быть случайным.
 MIN_SUBJECT_SECRET_LENGTH = 32
 
 
-class EventStoreSettings(BaseSettings):
-    """Snapshot policy and the secrets of per-user keys, required by the ``payments`` process.
+class EventStoreSpec(Section):
+    """``spec.eventStore``: snapshot policy, required by every payments process.
 
     A commit passing a multiple of ``snapshot_every`` writes the snapshot of its Payment. A
-    missing, empty or invalid value stops the process at startup.
+    missing or invalid value stops the process at startup.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    snapshot_every: int = Field(ge=1)
 
-    snapshot_every: int = Field(ge=1, validation_alias=EVENT_STORE_SNAPSHOT_EVERY_ENV)
+
+class EventStoreSecrets(BaseSettings):
+    """Secrets of per-user keys: only from env, in the cluster from a Secret."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
     # JSON {"<версия>": "<KEK>"}: новые ключи оборачивает старшая версия, младшие нужны до
-    # rewrap. Приходит из Secret; потеря версии делает нечитаемыми её ключи субъектов.
-    subject_keks: dict[int, str] = Field(validation_alias=EVENT_STORE_SUBJECT_KEKS_ENV, repr=False)
+    # rewrap. Потеря версии делает нечитаемыми её ключи субъектов.
+    subject_keks: Json[dict[int, str]] = Field(
+        validation_alias=EVENT_STORE_SUBJECT_KEKS_ENV, repr=False
+    )
     # HMAC поиска ключа пользователя: не меняется при ротации KEK, иначе пользователя не найти.
     subject_ref_key: str = Field(
         min_length=MIN_SUBJECT_SECRET_LENGTH,
@@ -44,3 +52,20 @@ class EventStoreSettings(BaseSettings):
                     f"{MIN_SUBJECT_SECRET_LENGTH} characters"
                 )
         return value
+
+
+class EventStoreSettings(EventStoreSpec):
+    """Snapshot policy of ``spec.eventStore`` and the secrets of per-user keys."""
+
+    subject_keks: dict[int, str] = Field(repr=False)
+    subject_ref_key: str = Field(repr=False)
+
+    @classmethod
+    def from_spec(cls, spec: EventStoreSpec) -> EventStoreSettings:
+        """``spec.eventStore`` with the subject key secrets of the environment."""
+        secrets = EventStoreSecrets()
+        return cls(
+            **spec.model_dump(),
+            subject_keks=secrets.subject_keks,
+            subject_ref_key=secrets.subject_ref_key,
+        )

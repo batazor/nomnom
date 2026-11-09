@@ -21,7 +21,7 @@ type Fixed struct {
 	scheduledCutoff time.Duration
 }
 
-// NewFixed takes CANCELLATION__WINDOW and CANCELLATION__SCHEDULED_CUTOFF; both
+// NewFixed takes spec.cancellation.window and spec.cancellation.scheduledCutoff; both
 // are positive.
 func NewFixed(window, scheduledCutoff time.Duration) (Fixed, error) {
 	if window <= 0 {

@@ -80,7 +80,7 @@ const FAILURE_REASONS: [DeliveryFailureCode; 4] = [
     DeliveryFailureCode::CustomerRefused,
 ];
 
-/// Расписание Simulator (`SIMULATOR__*`).
+/// Расписание Simulator (`spec.simulator`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SimulatorSchedule {
     pub interval: Duration,

@@ -8,7 +8,8 @@ metadata:
   labels:
     {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 spec:
-  hostPort: {{ required "temporal.hostPort is required for the worker" .Values.temporal.hostPort | quote }}
+  # Тот же сервер, что config.spec.temporal.hostPort файла конфигурации worker'а.
+  hostPort: {{ required "config.spec.temporal.hostPort is required for the worker" (dig "temporal" "hostPort" "" .Values.config.spec) | quote }}
 ---
 apiVersion: temporal.io/v1alpha1
 kind: WorkerDeployment
@@ -20,7 +21,7 @@ spec:
   workerOptions:
     connectionRef:
       name: {{ include "common.names.fullname" . }}
-    temporalNamespace: {{ required "temporal.namespace is required for the worker" .Values.temporal.namespace | quote }}
+    temporalNamespace: {{ required "config.spec.temporal.namespace is required for the worker" (dig "temporal" "namespace" "" .Values.config.spec) | quote }}
   rollout:
     {{- toYaml .Values.workerDeployment.rollout | nindent 4 }}
   sunset:

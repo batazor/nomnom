@@ -2,7 +2,9 @@
 #   helm upgrade --install delivery-worker ops/helm -f ops/helm/values-worker.yaml
 # Исполняет Assignment Workflow и его Activities на task queue delivery. gRPC API, SpiceDB,
 # Valkey и Kafka процессу не нужны: identity, spicedb, valkey и cdc не задаются. Адрес и
-# namespace Temporal (temporal.hostPort, temporal.namespace) задаются values окружения.
+# namespace Temporal (config.spec.temporal.hostPort, namespace) задаются values окружения.
+role: delivery-worker
+
 component: worker
 
 command:
@@ -11,10 +13,14 @@ command:
 service:
   enabled: false
 
-telemetry:
-  serviceName: delivery-worker
-
-# Activities берут соединение на шаг назначения; лишние ждут в пуле.
-database:
-  pool:
-    maxConns: 5
+config:
+  spec:
+    # Секции API из values.yaml неполны (обязательные ключи задаёт окружение release
+    # delivery): worker проверяет весь spec kind Delivery и неполную секцию не примет.
+    identity: null
+    spicedb: null
+    kafka: null
+    deliveryEstimate: null
+    # Activities берут соединение на шаг назначения; лишние ждут в пуле.
+    database:
+      maxConns: 5

@@ -30,7 +30,7 @@ TypeScript.
 | **Update Restaurant** | Авторизованный управляющий ресторана | Изменить название и доплату за премиум-приоритет | Название и `premiumFee` `Restaurant` (задать сумму больше 0 или убрать опцию); бизнес-факта нет | gRPC `UpdateRestaurant` (`restaurant#manage`, FR-649); slice `restaurant/update` |
 | **Set Opening Hours** | Авторизованный управляющий ресторана | Задать недельное расписание | Расписание заменено целиком: интервалы по дням недели в местном времени, через полночь допустимо, пересечения и пустой интервал — `INVALID_ARGUMENT`; бизнес-факта нет | gRPC `SetOpeningHours` (`restaurant#manage`, [FR-696, FR-697](../../openspec/changes/add-restaurant-opening-hours/)); slice `set-opening-hours` |
 | **Set Scheduled Order Settings** | Авторизованный управляющий ресторана | Задать или убрать настройки запланированных заказов | Ёмкость окна, `openingLead`, `closingGrace` заданы вместе или убраны; без настроек ресторан не берёт запланированные заказы; бизнес-факта нет | gRPC `SetScheduledOrderSettings` (`restaurant#manage`, [FR-672](../../openspec/changes/add-scheduled-orders/)); slice `set-scheduled-order-settings` |
-| **Reserve / Confirm / Release Scheduled Slot** | `service` identity `orders` | Удержать, закрепить после оплаты и освободить место заказа в окне доставки | Slot Reservation `held` на `SCHEDULED_SLOT__HOLD_TTL` → `confirmed`; заполненное окно — `slot_unavailable` с ближайшими окнами; освобождение отсутствующей — no-op | Slice `scheduleslot`, aggregate `ScheduleSlot` ([FR-674, FR-675, FR-695](../../openspec/changes/add-scheduled-orders/)); повтор Reserve по `order_id` возвращает ту же резервацию |
+| **Reserve / Confirm / Release Scheduled Slot** | `service` identity `orders` | Удержать, закрепить после оплаты и освободить место заказа в окне доставки | Slot Reservation `held` на `spec.scheduledSlot.holdTtl` → `confirmed`; заполненное окно — `slot_unavailable` с ближайшими окнами; освобождение отсутствующей — no-op | Slice `scheduleslot`, aggregate `ScheduleSlot` ([FR-674, FR-675, FR-695](../../openspec/changes/add-scheduled-orders/)); повтор Reserve по `order_id` возвращает ту же резервацию |
 | **Open Restaurant** | Авторизованный управляющий ресторана | Разрешить приём новых заказов | `Restaurant` открыт для новых `Restaurant Order` | Может опубликовать бизнес-факт через Outbox |
 | **Close Restaurant** | Авторизованный управляющий ресторана | Прекратить приём новых заказов | `Restaurant` закрыт для новых `Restaurant Order`; уже принятые заказы не отменяются автоматически | Может опубликовать бизнес-факт через Outbox |
 | **Assign Staff** | Пользователь с `restaurant#manage` (владелец) | Дать пользователю доступ персонала | User id добавлен в `Restaurant.staff`; `TOUCH restaurant#staff` до сохранения | Повтор — no-op без записи; см. [Relationships](#relationships-и-reconciliation) |
@@ -72,7 +72,7 @@ TypeScript.
 | **List Incoming Orders** | Авторизованный сотрудник ресторана | Увидеть новые заказы, ожидающие решения кухни | Заказы в `RECEIVED` по возрастанию `received_at` с позициями и версией; принятый заказ уходит из списка | Read model kitchen board |
 | **List Active Restaurant Orders** | Авторизованный сотрудник ресторана | Увидеть всю текущую работу кухни одним списком | Заказы в `RECEIVED`, `QUEUED`, `PREPARING`, `ASSEMBLED` и `READY` по возрастанию `received_at` с состоянием, позициями и версией | Read model kitchen board; порядок очереди — Get Kitchen Queue |
 | **List Scheduled Orders** | Авторизованный сотрудник ресторана | Увидеть принятые запланированные заказы до их старта | Заказы в `ACCEPTED` с окном по `planned_ready_at` | Read model kitchen board ([FR-684](../../openspec/changes/add-scheduled-orders/)); slice `restaurantorder/list-scheduled` |
-| **List Scheduled Slots** | Клиент | Узнать окна доставки ресторана | Окна сетки `SCHEDULED_SLOT__WIDTH` внутри расписания с `available`; без настроек или вне приёма — пусто | Публичный, как Get Restaurant ([FR-673, FR-703](../../openspec/changes/add-scheduled-orders/)); slice `scheduleslot` |
+| **List Scheduled Slots** | Клиент | Узнать окна доставки ресторана | Окна сетки `spec.scheduledSlot.width` внутри расписания с `available`; без настроек или вне приёма — пусто | Публичный, как Get Restaurant ([FR-673, FR-703](../../openspec/changes/add-scheduled-orders/)); slice `scheduleslot` |
 | **Get Kitchen Queue** | Авторизованный сотрудник ресторана | Увидеть заказы, ожидающие Preparation | Заказы в очереди в рекомендованном порядке; запланированный заказ — только после Queue Restaurant Order | Projection Kitchen Queue, не aggregate |
 | **Get Restaurant Order** | Авторизованный сотрудник ресторана или внутренний actor | Получить состав, State и timeline заказа | Представление одного `Restaurant Order` | Read model `restaurants` |
 | **List Active Preparations** | Авторизованный сотрудник ресторана | Увидеть заказы в работе кухни | Готовящиеся и собранные заказы с задержками | Read model kitchen board |
@@ -142,7 +142,7 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 | `CancelRestaurantOrder` | `restaurantorder/cancel` | `cancelled = true` (включая повтор) или `cancelled = false` + `rejection_reason` |
 | `AcceptRestaurantOrder` | `restaurantorder/accept` | `RestaurantOrder` в `QUEUED` с `expected_ready_at` из запроса или от Ready Time Estimator; срок не позже момента принятия — `INVALID_ARGUMENT`; публикует `RestaurantOrderAccepted` с `expected_ready_at` и `queued_at`. Запланированный заказ — в `ACCEPTED` с `expected_ready_at = planned_ready_at`, срок в запросе — `INVALID_ARGUMENT` |
 | `RejectRestaurantOrder` | `restaurantorder/reject` | `RestaurantOrder` в `REJECTED`; публикует `RestaurantOrderRejected` |
-| `StartNextPreparation` | `restaurantorder/start` | Голова Kitchen Queue в `PREPARING` с `cook_id` и `start_request_id`; публикует `PreparationStarted`; пустая очередь — ответ без `restaurant_order`; повтор с тем же `request_id` — по `KITCHEN__REPEAT_POLICY`, без нового повара; нет свободного повара — `RESOURCE_EXHAUSTED` |
+| `StartNextPreparation` | `restaurantorder/start` | Голова Kitchen Queue в `PREPARING` с `cook_id` и `start_request_id`; публикует `PreparationStarted`; пустая очередь — ответ без `restaurant_order`; повтор с тем же `request_id` — по `spec.kitchen.repeatPolicy`, без нового повара; нет свободного повара — `RESOURCE_EXHAUSTED` |
 | `MarkRestaurantOrderAssembled` | `mark-assembled` | `RestaurantOrder` в `ASSEMBLED`; локальный факт, без Outbox |
 | `MarkRestaurantOrderReady` | `mark-ready-for-pickup` | `RestaurantOrder` в `READY`; публикует `RestaurantOrderReady`, повтор — без факта |
 | `ReportPreparationDelay` | `restaurantorder/report-delay` | `RestaurantOrder` с новым `expected_ready_at`; публикует `PreparationDelayed` |
@@ -179,36 +179,36 @@ RPC, подключённые в `cmd/restaurants` (native gRPC/HTTP2 на би�
 
 Открытые продуктовые решения команд кухни handlers получают обязательными параметрами без значения по умолчанию; значения задаёт конфигурация основного процесса (`pkg/config`, секция `kitchen`):
 
-| Переменная | Назначение | По умолчанию |
+| Ключ | Назначение | По умолчанию |
 | --- | --- | --- |
-| `KITCHEN__PREPARATION_TIME` | Базовое время ожидания, пока выборка Wait Time Statistics не набрана; от него `WaitTimeReadyTimeEstimator` считает начальный `expected_ready_at`. Нужна обоим процессам | `20m` |
-| `WAIT_TIME__SAMPLE_SIZE` | Выборка базового времени ожидания (FR-645); обоим процессам | `50` |
-| `WAIT_TIME__RECENT_WINDOW` | Окно недавней медианы текущего ожидания | `30m` |
-| `WAIT_TIME__ELEVATED_FACTOR` | `ELEVATED`, когда текущее ожидание больше стольких базовых (FR-657) | `1.5` |
-| `WAIT_TIME__NORMAL_FACTOR` | Снова `NORMAL` не выше стольких базовых; меньше `ELEVATED_FACTOR`, иначе процесс не стартует | `1.2` |
-| `KITCHEN__REPEAT_POLICY` | Повтор `StartNextPreparation` с тем же `request_id`/`MarkRestaurantOrderReady`: `succeed-without-event` — текущий заказ без факта, `reject` — `FAILED_PRECONDITION` | `succeed-without-event` |
-| `KITCHEN__CANCELLATION_DURING_PREPARATION` | `CancelRestaurantOrder` во время Preparation: `reject` — отказ по стадии, Preparation продолжается; `allow` — отмена | `reject` |
-| `KITCHEN_QUEUE__AGING_FACTOR` | Kitchen Queue (FR-241): обычный заказ, ждущий дольше стольких базовых времён ожидания ресторана, идёт вместе с премиум-заказами | `2` |
+| `spec.kitchen.preparationTime` | Базовое время ожидания, пока выборка Wait Time Statistics не набрана; от него `WaitTimeReadyTimeEstimator` считает начальный `expected_ready_at`. Нужна обоим процессам | `20m` |
+| `spec.waitTime.sampleSize` | Выборка базового времени ожидания (FR-645); обоим процессам | `50` |
+| `spec.waitTime.recentWindow` | Окно недавней медианы текущего ожидания | `30m` |
+| `spec.waitTime.elevatedFactor` | `ELEVATED`, когда текущее ожидание больше стольких базовых (FR-657) | `1.5` |
+| `spec.waitTime.normalFactor` | Снова `NORMAL` не выше стольких базовых; меньше `elevatedFactor`, иначе процесс не стартует | `1.2` |
+| `spec.kitchen.repeatPolicy` | Повтор `StartNextPreparation` с тем же `request_id`/`MarkRestaurantOrderReady`: `succeed-without-event` — текущий заказ без факта, `reject` — `FAILED_PRECONDITION` | `succeed-without-event` |
+| `spec.kitchen.cancellationDuringPreparation` | `CancelRestaurantOrder` во время Preparation: `reject` — отказ по стадии, Preparation продолжается; `allow` — отмена | `reject` |
+| `spec.kitchenQueue.agingFactor` | Kitchen Queue (FR-241): обычный заказ, ждущий дольше стольких базовых времён ожидания ресторана, идёт вместе с премиум-заказами | `2` |
 
-Demo Simulator кухни ([FR-605, FR-606](../../openspec/changes/add-demo-simulator/)) — `PeriodicLoop` основного процесса рядом с reconciler. Проход: выключен — забыть расписание; включён — найти заказы всех ресторанов в `RECEIVED`/`QUEUED`/`PREPARING`/`ASSEMBLED` (`DatabaseKitchenBoard.listPendingKitchenOrders`, индекс `restaurant_orders_state_received`), заказу в `RECEIVED` назначить срок решения `первое появление + random[MIN_DELAY, MAX_DELAY]` и по сроку вызвать настоящий handler команды кухни с subject `user:<ownerId>` ресторана (проверка `restaurant#operate_kitchen` как у человека). Принимая заказ, Simulator планирует всю готовку (по random-задержке на шаги start → assemble → ready) и передаёт `expected_ready_at` = запланированный `READY` ([FR-609](../../openspec/changes/archive/2026-10-27-add-fulfillment-eta/)); дальше шаги идут в запланированные моменты, задержка сдвигает остаток плана к новому `expected_ready_at`. Заказ без плана (рестарт, принят человеком) планируется от текущего момента; если запланированный `READY` позже его `expected_ready_at`, Simulator сообщает задержку до него. План — только в памяти процесса. Ошибка use case пишется в log, запись отбрасывается. Переменные обязательны для `cmd/restaurants`, default нет: пустое или невалидное значение и `MIN_DELAY > MAX_DELAY` останавливают старт.
+Demo Simulator кухни ([FR-605, FR-606](../../openspec/changes/add-demo-simulator/)) — `PeriodicLoop` основного процесса рядом с reconciler. Проход: выключен — забыть расписание; включён — найти заказы всех ресторанов в `RECEIVED`/`QUEUED`/`PREPARING`/`ASSEMBLED` (`DatabaseKitchenBoard.listPendingKitchenOrders`, индекс `restaurant_orders_state_received`), заказу в `RECEIVED` назначить срок решения `первое появление + random[minDelay, maxDelay]` и по сроку вызвать настоящий handler команды кухни с subject `user:<ownerId>` ресторана (проверка `restaurant#operate_kitchen` как у человека). Принимая заказ, Simulator планирует всю готовку (по random-задержке на шаги start → assemble → ready) и передаёт `expected_ready_at` = запланированный `READY` ([FR-609](../../openspec/changes/archive/2026-10-27-add-fulfillment-eta/)); дальше шаги идут в запланированные моменты, задержка сдвигает остаток плана к новому `expected_ready_at`. Заказ без плана (рестарт, принят человеком) планируется от текущего момента; если запланированный `READY` позже его `expected_ready_at`, Simulator сообщает задержку до него. План — только в памяти процесса. Ошибка use case пишется в log, запись отбрасывается. Ключи обязательны для `cmd/restaurants`, default нет: отсутствующее или невалидное значение и `minDelay > maxDelay` останавливают старт.
 
-| Переменная | Назначение | В kind |
+| Ключ | Назначение | В kind |
 | --- | --- | --- |
-| `SIMULATOR__INTERVAL` | Пауза между проходами Simulator | `5s` |
-| `SIMULATOR__MIN_DELAY` | Нижняя граница случайной задержки действия | `30s` |
-| `SIMULATOR__MAX_DELAY` | Верхняя граница случайной задержки действия | `2m` |
+| `spec.simulator.interval` | Пауза между проходами Simulator | `5s` |
+| `spec.simulator.minDelay` | Нижняя граница случайной задержки действия | `30s` |
+| `spec.simulator.maxDelay` | Верхняя граница случайной задержки действия | `2m` |
 
 Запланированный заказ Simulator принимает без собственного срока: он остаётся в `ACCEPTED` и не планируется, в очередь его ставит `orders`.
 
-Окна доставки запланированных заказов ([FR-694](../../openspec/changes/add-scheduled-orders/)) — обязательная конфигурация `cmd/restaurants` без default в коде (`pkg/config/scheduled-slot.ts`): пустое или невалидное значение, ширина, не делящая 30 минут, и `MIN_LEAD ≥ MAX_HORIZON` останавливают старт. Значения задают `.env.example` и `ops/helm/values.yaml`.
+Окна доставки запланированных заказов ([FR-694](../../openspec/changes/add-scheduled-orders/)) — обязательная конфигурация `cmd/restaurants` без default в коде (`pkg/config/scheduled-slot.ts`): отсутствующее или невалидное значение, ширина, не делящая 30 минут, и `minLead ≥ maxHorizon` останавливают старт. Значения задают `config.example.yaml` и `ops/helm/values.yaml` (`config.spec.scheduledSlot`).
 
-| Переменная | Назначение | В chart |
+| Ключ | Назначение | В chart |
 | --- | --- | --- |
-| `SCHEDULED_SLOT__WIDTH` | Ширина окна; сетка выровнена по UTC | `15m` |
-| `SCHEDULED_SLOT__MIN_LEAD` | Первое окно не раньше `now + MIN_LEAD` | `45m` |
-| `SCHEDULED_SLOT__MAX_HORIZON` | Окна начинаются до `now + MAX_HORIZON`; MUST быть меньше срока Authorization hold у provider | `48h` |
-| `SCHEDULED_SLOT__HOLD_TTL` | Срок `held` Slot Reservation до подтверждения | `10m` |
-| `SCHEDULED_SLOT__ALTERNATIVES` | Сколько ближайших доступных окон отдаёт `slot_unavailable` | `3` |
+| `spec.scheduledSlot.width` | Ширина окна; сетка выровнена по UTC | `15m` |
+| `spec.scheduledSlot.minLead` | Первое окно не раньше `now + minLead` | `45m` |
+| `spec.scheduledSlot.maxHorizon` | Окна начинаются до `now + maxHorizon`; MUST быть меньше срока Authorization hold у provider | `48h` |
+| `spec.scheduledSlot.holdTtl` | Срок `held` Slot Reservation до подтверждения | `10m` |
+| `spec.scheduledSlot.alternatives` | Сколько ближайших доступных окон отдаёт `slot_unavailable` | `3` |
 
 ### Service identity
 
@@ -216,21 +216,21 @@ Demo Simulator кухни ([FR-605, FR-606](../../openspec/changes/add-demo-simu
 
 - metadata `authorization: Bearer <jwt>`;
 - header: `alg` только `RS256` или `ES256`, `kid` обязателен и есть в JWKS (`alg: none`, HMAC и неизвестный `kid` отклоняются);
-- подпись по локальному JWKS из `IDENTITY__JWKS_FILE` — Kubernetes API при проверке не используется;
-- `iss` равен `IDENTITY__ISSUER`, `aud` (строка или массив) содержит `IDENTITY__AUDIENCE`;
+- подпись по локальному JWKS из `spec.identity.jwksFile` — Kubernetes API при проверке не используется;
+- `iss` равен `spec.identity.issuer`, `aud` (строка или массив) содержит `spec.identity.audience`;
 - `exp`/`nbf` с допуском 30 s;
-- `sub` `system:serviceaccount:<namespace>:<name>` есть в allowlist `IDENTITY__SERVICE_ACCOUNTS` → `Subject{type: "service", id: <service-name>}`.
+- `sub` `system:serviceaccount:<namespace>:<name>` есть в allowlist `spec.identity.serviceAccounts` → `Subject{type: "service", id: <service-name>}`.
 
 Любой отказ — `UNAUTHENTICATED` с общим сообщением; причина пишется только в log. Что разрешено identity, решают authorization ports use case, а не resolver.
 
-| Переменная | Значение | По умолчанию |
+| Ключ | Значение | По умолчанию |
 | --- | --- | --- |
-| `IDENTITY__ISSUER` | Issuer токенов кластера, например `https://kubernetes.default.svc.cluster.local` | пусто |
-| `IDENTITY__AUDIENCE` | Audience этого контекста, в кластере `nomnom.restaurants` | пусто |
-| `IDENTITY__JWKS_FILE` | Путь к JWKS кластера (`/openid/v1/jwks`); в chart — `/etc/nomnom/identity/jwks.json` | пусто |
-| `IDENTITY__SERVICE_ACCOUNTS` | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker` | пусто |
+| `spec.identity.issuer` | Issuer токенов кластера, например `https://kubernetes.default.svc.cluster.local` | пусто |
+| `spec.identity.audience` | Audience этого контекста, в кластере `nomnom.restaurants` | пусто |
+| `spec.identity.jwksFile` | Путь к JWKS кластера (`/openid/v1/jwks`); в chart — `/etc/nomnom/identity/jwks.json` | пусто |
+| `spec.identity.serviceAccounts` | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker` | пусто |
 
-Если `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` или `IDENTITY__JWKS_FILE` пусты, сервер не стартует. Нечитаемый или невалидный JWKS, пустой allowlist при заданном issuer и неверный формат allowlist — ошибка startup. Тесты (`test/identity.test.ts`) проходят по общим векторам `tests/identity/fixtures` с audience векторов `nomnom.payments`.
+Если `spec.identity.issuer`, `spec.identity.audience` или `spec.identity.jwksFile` пусты, сервер не стартует. Нечитаемый или невалидный JWKS, пустой allowlist при заданном issuer и неверный формат allowlist — ошибка startup. Тесты (`test/identity.test.ts`) проходят по общим векторам `tests/identity/fixtures` с audience векторов `nomnom.payments`.
 
 ### User identity
 
@@ -238,18 +238,18 @@ Demo Simulator кухни ([FR-605, FR-606](../../openspec/changes/add-demo-simu
 
 1. service token, как выше; без него assertion не рассматривается;
 2. assertion нет → `Subject{type: "service"}`, как раньше;
-3. assertion повторён или пуст или service не входит в `IDENTITY__USER_DELEGATES` → `UNAUTHENTICATED`;
-4. assertion: `alg` только `ES256`, `kid` обязателен и есть в JWKS BFF, `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp - iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст → `Subject{type: "user", id: <sub>, delegate: <service>}`.
+3. assertion повторён или пуст или service не входит в `spec.identity.userDelegates` → `UNAUTHENTICATED`;
+4. assertion: `alg` только `ES256`, `kid` обязателен и есть в JWKS BFF, `iss` равен `spec.identity.userIssuer`, `aud` содержит `spec.identity.audience`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp - iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст → `Subject{type: "user", id: <sub>, delegate: <service>}`.
 
 `delegate` нужен только для log и audit. Принятие и отказ пишутся в log с delegate и `jti`, сами токены не пишутся; `jti` не дедуплицируется.
 
-| Переменная | Значение | По умолчанию |
+| Ключ | Значение | По умолчанию |
 | --- | --- | --- |
-| `IDENTITY__USER_ISSUER` | Ожидаемый `iss` assertion, `nomnom-bff` | обязательна |
-| `IDENTITY__USER_JWKS_FILE` | JWKS BFF (EC P-256); в chart — `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` | обязательна |
-| `IDENTITY__USER_DELEGATES` | Services через запятую, которым разрешено передавать пользователя, например `bff` | обязательна |
+| `spec.identity.userIssuer` | Ожидаемый `iss` assertion, `nomnom-bff` | обязательна |
+| `spec.identity.userJwksFile` | JWKS BFF (EC P-256); в chart — `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` | обязательна |
+| `spec.identity.userDelegates` | Services через запятую, которым разрешено передавать пользователя, например `bff` | обязательна |
 
-User-настройки обязательны вместе с service identity: пустая переменная — ошибка startup с именами недостающих переменных. Нечитаемый JWKS BFF, ключ не EC P-256 или неверный формат списка делегатов — тоже ошибка startup. Тесты (`test/user-identity.test.ts`) проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` векторов.
+User-настройки обязательны вместе с service identity: отсутствующий или пустой ключ — ошибка startup с путями недостающих ключей. Нечитаемый JWKS BFF, ключ не EC P-256 или неверный формат списка делегатов — тоже ошибка startup. Тесты (`test/user-identity.test.ts`) проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` векторов.
 
 ### Authorization: SpiceDB
 
@@ -265,16 +265,16 @@ Authorization ports слайсов (`applications/access-control/access-control.
 | `canViewRestaurantOrders(id)` | `restaurant:<id>#view_orders` |
 | `canManageCooks(id)` | `restaurant:<id>#manage_cooks` |
 
-Subject `user` → `user:<id>`, `service` → `service:<id>`. Consistency — см. [Authorization revisions](#authorization-revisions-zedtokens). Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional — отказ (`PERMISSION_DENIED`). Ошибка, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailableError` (fail closed, gRPC `UNAVAILABLE`, AC-466). Grants `service` identities (`platform:nomnom#fulfillment@service:orders-worker`) принадлежат развёртыванию (`authorization/bootstrap.yaml`), а не коду; связи `restaurant#owner`/`staff` пишут use cases ресторана (см. [Relationships и reconciliation](#relationships-и-reconciliation)).
+Subject `user` → `user:<id>`, `service` → `service:<id>`. Consistency — см. [Authorization revisions](#authorization-revisions-zedtokens). Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional — отказ (`PERMISSION_DENIED`). Ошибка, недоступность или превышение `spec.spicedb.timeout` — `AuthorizationUnavailableError` (fail closed, gRPC `UNAVAILABLE`, AC-466). Grants `service` identities (`platform:nomnom#fulfillment@service:orders-worker`) принадлежат развёртыванию (`authorization/bootstrap.yaml`), а не коду; связи `restaurant#owner`/`staff` пишут use cases ресторана (см. [Relationships и reconciliation](#relationships-и-reconciliation)).
 
-| Переменная | Значение | По умолчанию |
+| Ключ | Значение | По умолчанию |
 | --- | --- | --- |
-| `SPICEDB__ENDPOINT` | gRPC endpoint `host:port`, например `spicedb.nomnom-authz.svc.cluster.local:50051` | пусто |
-| `SPICEDB__PRESHARED_KEY` | Preshared key (bearer); в кластере — из Secret | пусто |
-| `SPICEDB__INSECURE` | `true` — plaintext gRPC без TLS, только kind и локально | `false` |
-| `SPICEDB__TIMEOUT` | Deadline одной проверки (`500ms`, `2s`, `1m`) | `2s` |
+| `spec.spicedb.endpoint` | gRPC endpoint `host:port`, например `spicedb.nomnom-authz.svc.cluster.local:50051` | пусто |
+| env `SPICEDB__PRESHARED_KEY` | Preshared key (bearer); секрет — только env из Secret, поля в файле нет | — |
+| `spec.spicedb.insecure` | `true` — plaintext gRPC без TLS, только kind и локально | `false` |
+| `spec.spicedb.timeout` | Deadline одной проверки (`500ms`, `2s`, `1m`) | `2s` |
 
-Пустой `SPICEDB__ENDPOINT` — ошибка startup: процесс без SpiceDB не стартует. Endpoint без preshared key, неверный `SPICEDB__INSECURE` или `SPICEDB__TIMEOUT` — ошибка startup.
+Пустой `spec.spicedb.endpoint` — ошибка startup: процесс без SpiceDB не стартует. Endpoint без preshared key, неверный `spec.spicedb.insecure` или `spec.spicedb.timeout` — ошибка startup.
 
 Unit-тесты маппинга и fail closed — `test/spicedb-access-control.test.ts` (fake клиент). Integration-тесты `test/spicedb-integration.test.ts` идут в `npm test` на SpiceDB testcontainer с `authorization/bootstrap.yaml` (ключ `devkey`, plaintext).
 
@@ -291,17 +291,17 @@ Change [`add-restaurant-delivery-relationships`](../../openspec/changes/archive/
 | `restaurant:<id>#owner@user:<ownerId>` | `Restaurant.ownerId` | Register Restaurant: `TOUCH` до сохранения |
 | `restaurant:<id>#staff@user:<userId>` | `Restaurant.staff` (множество user id) | Assign Staff: `TOUCH`, Revoke Staff: `DELETE` — до сохранения |
 
-Writer — `SpiceDbRelationshipWriter` (`infrastructure/spicedb/relationships.ts`), реализует порты `OwnerRelationshipWriter` и `StaffRelationshipWriter` слайса `restaurant`. Запись синхронная, с deadline `SPICEDB__TIMEOUT`; ошибка или timeout — `AuthorizationUnavailableError`, команда отменяется без сохранения (fail closed). Assign/Revoke Staff требуют `restaurant#manage`; повтор — no-op без записи. `cmd/restaurants` собирает Register Restaurant, Assign Staff и Revoke Staff с `SpiceDbAccessControl` и этим writer над одним SpiceDB-клиентом и той же MongoDB-коллекцией `restaurants`, что читает reconciler.
+Writer — `SpiceDbRelationshipWriter` (`infrastructure/spicedb/relationships.ts`), реализует порты `OwnerRelationshipWriter` и `StaffRelationshipWriter` слайса `restaurant`. Запись синхронная, с deadline `spec.spicedb.timeout`; ошибка или timeout — `AuthorizationUnavailableError`, команда отменяется без сохранения (fail closed). Assign/Revoke Staff требуют `restaurant#manage`; повтор — no-op без записи. `cmd/restaurants` собирает Register Restaurant, Assign Staff и Revoke Staff с `SpiceDbAccessControl` и этим writer над одним SpiceDB-клиентом и той же MongoDB-коллекцией `restaurants`, что читает reconciler.
 
 `RelationshipReconciler` (`slices/restaurant/infrastructure/reconcile`) повторяет алгоритм `orders`: graph → business — постраничный `ReadRelationships` (`fully_consistent`) по `restaurant#owner` и `restaurant#staff` с проверкой по хранилищу; business → graph — по всем ресторанам. Orphan или stale связь удаляется только если она была сиротой на двух проходах с интервалом не меньше grace. Missing связь восстанавливается `TOUCH` по тому же правилу — только если отсутствовала с тем же пользователем на двух проходах с интервалом не меньше grace (FR-445, AC-700): Revoke Staff делает `DELETE` до сохранения ресторана, а MongoDB не держит lock, которого reconciler мог бы дождаться (как `FOR SHARE` в `orders`), поэтому проход, прочитавший граф после `DELETE` и ресторан до сохранения, иначе вернул бы снятому сотруднику доступ к кухне и заказам до истечения orphan grace. Missing-кандидат дополнительно привязан к версии документа `Restaurant` (AC-710): если между проходами пользователя снова назначили и снова сняли (новый revoke ещё не сохранён), версия другая и grace начинается заново, а не восстанавливает только что удалённую связь. Любое другое сохранение ресторана тоже начинает grace заново (лишь откладывает исправление); собственная запись revision после восстановления другой relation переносит кандидатов этого ресторана на новую версию. Кандидат, ставший present или исчезнувший из ресторана (revoke сохранён), забывается без записи; кандидаты обоих видов хранятся в памяти процесса, restart лишь откладывает исправление на grace. id, не подходящие под SpiceDB object id `^[a-zA-Z0-9/_|\-=+]+$`, пропускаются и считаются `unrepairable`. Каждый проход пишет в log `checked`, `orphans_pending`, `orphans_deleted`, `missing_pending`, `missing_repaired`, `unrepairable`.
 
-Reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.ts`) внутри основного процесса: первый проход через `min(10s, RECONCILER__INTERVAL)` после старта, следующие — через интервал после окончания предыдущего; ошибка прохода пишется в log, цикл продолжается. При shutdown цикл останавливается (текущий проход прерывается между вызовами SpiceDB) до drain gRPC.
+Reconciler — фоновый цикл (`PeriodicLoop`, `pkg/lifecycle/periodic.ts`) внутри основного процесса: первый проход через `min(10s, spec.reconciler.interval)` после старта, следующие — через интервал после окончания предыдущего; ошибка прохода пишется в log, цикл продолжается. При shutdown цикл останавливается (текущий проход прерывается между вызовами SpiceDB) до drain gRPC.
 
-| Переменная | Значение | По умолчанию |
+| Ключ | Значение | По умолчанию |
 | --- | --- | --- |
-| `RECONCILER__INTERVAL` | Пауза между проходами (`30s`, `5m`) | `5m` |
-| `RECONCILER__GRACE` | Минимальное время, которое связь остаётся сиротой до удаления или missing до восстановления; должно превышать длительность Revoke Staff (`SPICEDB__TIMEOUT` + сохранение) | `10m` |
-| `RECONCILER__PAGE_SIZE` | Размер страницы `ReadRelationships` и хранилища, 1…1000 | `500` |
+| `spec.reconciler.interval` | Пауза между проходами (`30s`, `5m`) | `5m` |
+| `spec.reconciler.grace` | Минимальное время, которое связь остаётся сиротой до удаления или missing до восстановления; должно превышать длительность Revoke Staff (`spec.spicedb.timeout` + сохранение) | `10m` |
+| `spec.reconciler.pageSize` | Размер страницы `ReadRelationships` и хранилища, 1…1000 | `500` |
 
 Unit-тесты: `test/staff-applications.test.ts`, `test/spicedb-relationships.test.ts`, `test/reconcile.test.ts` (fake клиент), `test/periodic.test.ts`. Integration-тесты `test/spicedb-relationships-integration.test.ts` (AC-476, AC-478) используют уникальный префикс id и ограничивают reconciler им, чтобы не трогать чужие связи общего SpiceDB; `test/reconcile.test.ts` (AC-710) — повторное назначение и снятие между проходами; `test/reconcile-database-integration.test.ts` (AC-700) воспроизводит Revoke Staff в полёте над MongoDB replica set и SpiceDB ; все они идут на SpiceDB testcontainer global setup (`npm test`).
 
@@ -371,18 +371,18 @@ MongoDB предлагается как основное логическое х
 
 Реализация: официальный драйвер `mongodb` без ODM. Общие части — `infrastructure/repository` (`client.ts`, `unit-of-work.ts` — UoW как multi-document транзакция, `outbox.ts` — коллекция `outbox` по [ADR 31](../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md) в контракте CDC [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) с внедряемым mapper Domain Event → Protobuf (по умолчанию ничего не пишет; `cmd/restaurants` подключает mapper процесса, который по `aggregate_type` выбирает mappers слайсов `restaurant`, `menu` и `restaurantorder`), `versioned-collection.ts` — optimistic concurrency по `version`, `migrate.ts` — запуск [migrate-mongo](https://github.com/seppevs/migrate-mongo) по наборам миграций и шаг `ensureCollection`, `migrations/` — миграции набора `pkg`), адаптеры слайсов — `slices/<slice>/infrastructure/repository`, миграции слайса — `slices/<slice>/infrastructure/repository/migrations/`. Коллекции: `restaurants`, `menus`, `restaurant_orders`, `cooks`, `schedule_slots`, `simulator`, `outbox`, `inbox`, `migrations_changelog_<набор>`, `migrations_lock`. Транзакции требуют replica set.
 
-| Переменная | Значение | По умолчанию |
+| Ключ | Значение | По умолчанию |
 | --- | --- | --- |
-| `MONGODB__URI` | connection string replica set; обязателен — без него `restaurants` и `restaurants-consumer` не стартуют | — |
-| `MONGODB__DATABASE` | имя базы | `restaurants` |
-| `MONGODB__TIMEOUT` | server selection timeout; недоступная MongoDB останавливает старт | `5s` |
-| `MONGODB__MAX_POOL_SIZE` | соединений в пуле одного сервера replica set (1..100), `maxPoolSize` | `restaurants` 20, `restaurants-consumer` 5 |
-| `MONGODB__MIN_POOL_SIZE` | прогретые соединения (0..`MAX_POOL_SIZE`), `minPoolSize` | `0` |
-| `MONGODB__MAX_IDLE_TIME` | idle-соединение закрывается после этого срока, `maxIdleTimeMS` | `5m` |
-| `MONGODB__WAIT_QUEUE_TIMEOUT` | ожидание свободного соединения до ошибки checkout, `waitQueueTimeoutMS` | `5s` |
-| `MONGODB__MAX_CONNECTING` | одновременно устанавливаемые соединения (1..`MAX_POOL_SIZE`), `maxConnecting` | `2` (не больше `MAX_POOL_SIZE`) |
+| env `MONGODB__URI` | connection string replica set, секрет — только env из Secret; обязателен — без него `restaurants` и `restaurants-consumer` не стартуют | — |
+| `spec.mongodb.database` | имя базы | `restaurants` |
+| `spec.mongodb.timeout` | server selection timeout; недоступная MongoDB останавливает старт | `5s` |
+| `spec.mongodb.maxPoolSize` | соединений в пуле одного сервера replica set (1..100), `maxPoolSize` | `restaurants` 20, `restaurants-consumer` 5 |
+| `spec.mongodb.minPoolSize` | прогретые соединения (0..`maxPoolSize`), `minPoolSize` | `0` |
+| `spec.mongodb.maxIdleTime` | idle-соединение закрывается после этого срока, `maxIdleTimeMS` | `5m` |
+| `spec.mongodb.waitQueueTimeout` | ожидание свободного соединения до ошибки checkout, `waitQueueTimeoutMS` | `5s` |
+| `spec.mongodb.maxConnecting` | одновременно устанавливаемые соединения (1..`maxPoolSize`), `maxConnecting` | `2` (не больше `maxPoolSize`) |
 
-Connection pool — один `MongoClient` на процесс (`infrastructure/repository/client.ts`); драйвер держит пул на каждый сервер replica set, лимиты действуют на пул одного сервера и перекрывают одноимённые параметры URI. Default `MAX_POOL_SIZE` выбирает процесс (`loadConfig(env, { process })`); значение вне диапазона или нулевой таймаут (у драйвера 0 означает «без ограничения») останавливает старт. Метрики пула — CMAP events драйвера (`pool-metrics.ts`) по semconv `db.client.connection.*` (`count` по `state` idle | used, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`) с `db.client.connection.pool.name` = `<host:port>/<database>`, плюс `nomnom.db.client.connection.pool.clears` ([инвентарь](../../docs/observability/metric-inventory.md#db)); панели и alert rules пула — row Dependencies overview ([ops/grafana](ops/grafana/README.md)).
+Connection pool — один `MongoClient` на процесс (`infrastructure/repository/client.ts`); драйвер держит пул на каждый сервер replica set, лимиты действуют на пул одного сервера и перекрывают одноимённые параметры URI. Default `maxPoolSize` выбирает процесс (`database.load(spec, env, process)`); значение вне диапазона или нулевой таймаут (у драйвера 0 означает «без ограничения») останавливает старт. Метрики пула — CMAP events драйвера (`pool-metrics.ts`) по semconv `db.client.connection.*` (`count` по `state` idle | used, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`, `create_time`) с `db.client.connection.pool.name` = `<host:port>/<database>`, плюс `nomnom.db.client.connection.pool.clears` ([инвентарь](../../docs/observability/metric-inventory.md#db)); панели и alert rules пула — row Dependencies overview ([ops/grafana](ops/grafana/README.md)).
 
 Миграции встроены в приложение и выполняются библиотекой migrate-mongo ([ADR 39](../../docs/adr/0039-data-access-without-orm.md)): `restaurants` и `restaurants-consumer` при старте, до обслуживания, вызывают `migrateRestaurantsDatabase` своим `MongoClient`. Каждый слайс владеет своими миграциями: набор — каталог `<NNNN>-<изменение>.ts` (нумерация с 0001 в каждом наборе) со своим changelog `migrations_changelog_<id>`, где `id` — стабильный storage id набора по хранимым данным, часть контракта схемы БД: он не выводится из имён каталогов и слайсов и не меняется рефакторингом кода, смена требует миграции; общие коллекции (Outbox, Inbox) и чистки всего сервиса — набор `messaging` в `infrastructure/repository/migrations/`. Наборы применяются в порядке списка `RESTAURANTS_MIGRATION_SETS` (`infrastructure/repository/migrate.ts`): `messaging`, `restaurants`, `menus`, `restaurant_orders`, `cooks`, `schedule_slots`, `simulator`; применённые миграции логируются как `<id>/<файл>`; внутри набора — ещё не записанные в его changelog файлы по порядку имён. На актуальной базе процесс пишет `nothing to migrate` и продолжает. Ошибка миграции останавливает процесс. Одновременный старт процессов сериализует lock migrate-mongo в `migrations_lock`, захватываемый на каждый набор (атомарный за счёт unique index, занятый lock ждётся, lock упавшего процесса удаляет TTL); миграции идемпотентны и применимы к базе прежнего мигратора ([локальный ADR 2](docs/adr/0002-mongodb-collections-and-document-boundaries.md#эволюция-схемы)). Изменение validator или индексов — новый файл в наборе слайса-владельца, применённые файлы не редактируются; новый слайс с коллекциями добавляет свой набор в `RESTAURANTS_MIGRATION_SETS`; отдельного шага migrate нет.
 
@@ -397,11 +397,11 @@ Connection pool — один `MongoClient` на процесс (`infrastructure/
 
 ## Кеш чтения каталога: Valkey
 
-`GetRestaurant`, `GetMenu` и `ListRestaurants` читаются через cache-aside в Valkey ([ADR 43](../../docs/adr/0043-application-caching-policy.md), [локальный ADR 3](docs/adr/0003-catalog-read-cache-in-valkey.md)): ключи `restaurants:restaurant:<id>`, `restaurants:menu:<restaurantId>` и `restaurants:list:<поколение Market>:<marketId>:<open|all>:<limit>:<after>`; поколение страниц своё у каждого Market (`restaurants:list:generation:pages:<marketId>`), поэтому страницы разных Market не смешиваются ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)). Промах читает MongoDB и кладёт результат `SET NX` на `CACHE__TTL`. `BatchGetRestaurants` и `BatchGetMenus` читают те же ключи одним `MGET`, все промахи пачки — одним запросом MongoDB (`$in`), и кладут каждый найденный `SET NX` на `CACHE__TTL`.
+`GetRestaurant`, `GetMenu` и `ListRestaurants` читаются через cache-aside в Valkey ([ADR 43](../../docs/adr/0043-application-caching-policy.md), [локальный ADR 3](docs/adr/0003-catalog-read-cache-in-valkey.md)): ключи `restaurants:restaurant:<id>`, `restaurants:menu:<restaurantId>` и `restaurants:list:<поколение Market>:<marketId>:<open|all>:<limit>:<after>`; поколение страниц своё у каждого Market (`restaurants:list:generation:pages:<marketId>`), поэтому страницы разных Market не смешиваются ([ADR 41](../../docs/adr/0041-cell-based-architecture-with-control-plane.md)). Промах читает MongoDB и кладёт результат `SET NX` на `spec.cache.ttl`. `BatchGetRestaurants` и `BatchGetMenus` читают те же ключи одним `MGET`, все промахи пачки — одним запросом MongoDB (`$in`), и кладут каждый найденный `SET NX` на `spec.cache.ttl`.
 
-Открытие и закрытие ресторана, смена уровня ожидания и изменения меню меняют кеш сразу: `restaurants-consumer` (группа `CACHE__REFRESH_GROUP`, по умолчанию `restaurants-cache`) читает `RestaurantOpened`/`RestaurantClosed`/`RestaurantWaitLevelChanged` из `restaurants.v1.restaurant-events` и `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` из `restaurants.v1.menu-events`, перечитывает ресторан или меню из MongoDB и перезаписывает ключ; для ресторана начинается новое поколение страниц списка его Market (Market берётся из сохранённого ресторана), страницы других Market остаются. Изменения без Integration Event (переименование ресторана, новый ресторан) видны не позже `CACHE__TTL`. Общие части — `infrastructure/valkey` (клиент iovalkey, `ReadCache`, `CacheRefreshHandler`), адаптеры слайсов — `slices/<slice>/infrastructure/cache`.
+Открытие и закрытие ресторана, смена уровня ожидания и изменения меню меняют кеш сразу: `restaurants-consumer` (группа `spec.cache.refreshGroup`, по умолчанию `restaurants-cache`) читает `RestaurantOpened`/`RestaurantClosed`/`RestaurantWaitLevelChanged` из `restaurants.v1.restaurant-events` и `MenuItemAdded`, `MenuItemUpdated`, `MenuItemAvailabilityChanged` из `restaurants.v1.menu-events`, перечитывает ресторан или меню из MongoDB и перезаписывает ключ; для ресторана начинается новое поколение страниц списка его Market (Market берётся из сохранённого ресторана), страницы других Market остаются. Изменения без Integration Event (переименование ресторана, новый ресторан) видны не позже `spec.cache.ttl`. Общие части — `infrastructure/valkey` (клиент iovalkey, `ReadCache`, `CacheRefreshHandler`), адаптеры слайсов — `slices/<slice>/infrastructure/cache`.
 
-`VALKEY__URL` (`redis://` ACL-пользователя `restaurants`, из Secret) обязателен для `restaurants` и `restaurants-consumer`; `VALKEY__COMMAND_TIMEOUT` (50ms) и `CACHE__TTL` (1m) — с defaults. Недоступный Valkey процесс не останавливает: чтения идут в MongoDB (`nomnom.cache.lookups{nomnom_cache_result="bypass"}`), обновление повторяется с backoff и не коммитит offset.
+env `VALKEY__URL` (`redis://` ACL-пользователя `restaurants`, секрет из Secret) обязателен для `restaurants` и `restaurants-consumer`; `spec.valkey.commandTimeout` (50ms) и `spec.cache.ttl` (1m) — с defaults. Недоступный Valkey процесс не останавливает: чтения идут в MongoDB (`nomnom.cache.lookups{nomnom_cache_result="bypass"}`), обновление повторяется с backoff и не коммитит offset.
 
 ## Событийная интеграция
 
@@ -430,24 +430,24 @@ Consumers интеграционных событий `restaurants` исполь
 
 ### Потребление: Inbox и restaurants-consumer
 
-`cmd/restaurants-consumer` (`npm run consumer`, в образе — `node dist/cmd/restaurants-consumer/main.js`) читает собственный стрим `restaurants.v1.restaurant-order-events` consumer group `KAFKA__CONSUMER_GROUP` (по умолчанию `restaurants`) клиентом `@confluentinc/kafka-javascript` (ADR 31) и следует runtime contract `pkg/lifecycle` (только технический порт): по `SIGTERM` начатое сообщение дообрабатывается до `SHUTDOWN__DRAIN_TIMEOUT`, затем `disconnect` коммитит offsets. Пустой `MONGODB__URI`, `KAFKA__BROKERS` или `SCHEMA_REGISTRY__URL` — ошибка startup. Value записи — wire format Schema Registry: запись вне него или со схемой другого `event_type` уходит в `<stream>.dlq` как `deserialization`, недоступный Registry — повторная доставка (FR-715). `orders.v1.order-events` контекст не читает: Restaurant Order создаёт только RPC `ReceiveOrderRequest` из fulfillment workflow после оплаты, поэтому кухня не видит неоплаченных заказов.
+`cmd/restaurants-consumer` (`npm run consumer`, в образе — `node dist/cmd/restaurants-consumer/main.js`) читает собственный стрим `restaurants.v1.restaurant-order-events` consumer group `spec.kafka.consumerGroup` (по умолчанию `restaurants`) клиентом `@confluentinc/kafka-javascript` (ADR 31) и следует runtime contract `pkg/lifecycle` (только технический порт): по `SIGTERM` начатое сообщение дообрабатывается до `spec.shutdown.drainTimeout`, затем `disconnect` коммитит offsets. Пустой `MONGODB__URI`, `spec.kafka.brokers` или `spec.schemaRegistry.url` — ошибка startup. Value записи — wire format Schema Registry: запись вне него или со схемой другого `event_type` уходит в `<stream>.dlq` как `deserialization`, недоступный Registry — повторная доставка (FR-715). `orders.v1.order-events` контекст не читает: Restaurant Order создаёт только RPC `ReceiveOrderRequest` из fulfillment workflow после оплаты, поэтому кухня не видит неоплаченных заказов.
 
 - **Wait Time Statistics:** группа читает собственный стрим `restaurants.v1.restaurant-order-events`. Чужие стримы кухня не читает: Pickup приходит RPC `RecordRestaurantOrderPickup` из workflow `orders`. Handlers `slices/restaurant/infrastructure/integration/wait-time-facts.ts` (Inbox `restaurants.wait-time`) переводят `RestaurantOrderAccepted` с `queued_at` (заказ без окна, поставленный в очередь в UoW Acceptance; без `queued_at` — запланированный заказ, ничего не меняется), `PreparationStarted` (открывает запланированный заказ по его `queued_at`; для уже открытого — no-op), `RestaurantOrderReady`, `RestaurantOrderCancelled`, `PreparationFailed` в Command **Record Wait Time** — длительности от постановки в очередь ([FR-644](../../openspec/changes/add-scheduled-orders/)); событие без `restaurant_id` (опубликованное до FR-656) подтверждается без изменений, неизвестный ресторан — DLQ `restaurants.v1.restaurant-order-events.dlq`. Смена уровня пишет `RestaurantWaitLevelChanged` (`aggregate_type` `RestaurantWaitTime`, версия — номер смены) в Outbox, Debezium публикует его в `restaurants.v1.restaurant-events`.
 - **Inbox** (`infrastructure/repository/inbox.ts`, коллекция `inbox`): проверка `(consumer, event_id)`, запись Inbox и сохранение Restaurant Order — одна транзакция `DatabaseUnitOfWork`; unique index `{consumer, eventId}`, повтор — `duplicate` без бизнес-действия; конкурентная доставка даёт WriteConflict, driver повторяет транзакцию. Retention — TTL index `processedAt` 30 дней. Consumer — `restaurants.wait-time`; прежние записи `restaurants.delivery-picked-up` и `restaurants.order-placed` истекают по TTL.
-- **Ошибки** (`infrastructure/messaging/processor.ts`): битый envelope или payload и permanent-ошибки — DLQ стрима (`restaurants.v1.restaurant-order-events.dlq`) с metadata `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned` (как PoisonQueue в `orders`) и ack; бизнес-исходы — ack и log (см. событие выше); прочее (MongoDB) — transient: `CONSUMER__MAX_RETRIES` повторов с backoff `CONSUMER__RETRY_INITIAL_INTERVAL`…`CONSUMER__RETRY_MAX_INTERVAL`, затем Kafka доставляет сообщение снова.
+- **Ошибки** (`infrastructure/messaging/processor.ts`): битый envelope или payload и permanent-ошибки — DLQ стрима (`restaurants.v1.restaurant-order-events.dlq`) с metadata `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned` (как PoisonQueue в `orders`) и ack; бизнес-исходы — ack и log (см. событие выше); прочее (MongoDB) — transient: `spec.consumer.maxRetries` повторов с backoff `spec.consumer.retryInitialInterval`…`spec.consumer.retryMaxInterval`, затем Kafka доставляет сообщение снова.
 - **Разбор DLQ** (`cmd/restaurants-admin`, `infrastructure/kafka/dead-letters.ts`): `node dist/cmd/restaurants-admin/main.js dlq list|redrive|discard` в pod `restaurants-consumer`; разобранное хранит consumer group `restaurants.dlq` (ADR 28, runbook [Разбор DLQ](../../docs/dlq.md)).
 - **Метрики:** `nomnom_messaging_process_duration_seconds`, `nomnom_messaging_retry_attempts_total`, `nomnom_messaging_poison_messages_total`, `nomnom_messaging_message_age_seconds`, `nomnom_inbox_duplicates_total` (labels `handler_name`, `event_type`, `stream`, `error_class`).
 
-| Переменная | Назначение | По умолчанию |
+| Ключ | Назначение | По умолчанию |
 | --- | --- | --- |
-| `KAFKA__BROKERS` | обязателен для `restaurants-consumer` | — |
-| `KAFKA__CLIENT_ID` | client id consumer и producer dead letters | `restaurants-consumer` |
-| `SCHEMA_REGISTRY__URL` | обязателен для `restaurants-consumer`: value записей стримов — wire format Schema Registry, subject схемы сверяется с `event_type` (FR-715) | — |
-| `SCHEMA_REGISTRY__TIMEOUT` | deadline запроса subjects id схемы | `5s` |
-| `KAFKA__CONSUMER_GROUP` | consumer group | `restaurants` |
-| `KAFKA__INITIAL_OFFSET` | начало чтения новой группы: `oldest` или `newest` | `oldest` |
-| `CONSUMER__MAX_RETRIES` | повторы transient-ошибки в процессе, 0…100 | `5` |
-| `CONSUMER__RETRY_INITIAL_INTERVAL`, `CONSUMER__RETRY_MAX_INTERVAL` | экспоненциальный backoff повторов | `100ms`, `5s` |
+| `spec.kafka.brokers` | обязателен для `restaurants-consumer` | — |
+| `spec.kafka.clientId` | client id consumer и producer dead letters | `restaurants-consumer` |
+| `spec.schemaRegistry.url` | обязателен для `restaurants-consumer`: value записей стримов — wire format Schema Registry, subject схемы сверяется с `event_type` (FR-715) | — |
+| `spec.schemaRegistry.timeout` | deadline запроса subjects id схемы | `5s` |
+| `spec.kafka.consumerGroup` | consumer group | `restaurants` |
+| `spec.kafka.initialOffset` | начало чтения новой группы: `oldest` или `newest` | `oldest` |
+| `spec.consumer.maxRetries` | повторы transient-ошибки в процессе, 0…100 | `5` |
+| `spec.consumer.retryInitialInterval`, `spec.consumer.retryMaxInterval` | экспоненциальный backoff повторов | `100ms`, `5s` |
 
 Consumer `OrderPlaced` из change [`add-restaurants-order-placed-consumer`](../../openspec/changes/archive/2026-10-25-add-restaurants-order-placed-consumer/) удалён change [`start-fulfillment-and-pay-before-kitchen`](../../openspec/changes/archive/2026-10-27-start-fulfillment-and-pay-before-kitchen/). Общие правила — [ADR 11](../../docs/adr/0011-transactional-inbox-and-idempotent-event-processing.md), [документация событийного взаимодействия](../../docs/event-driven-architecture.md) и [Unit of Work](../../docs/unit-of-work.md#restaurants--mongodb).
 
@@ -471,9 +471,11 @@ Consumer `OrderPlaced` из change [`add-restaurants-order-placed-consumer`](../
 
 Контракт — [docs/observability.md](../../docs/observability.md), lifecycle — [cloud-native runtime](../../docs/cloud-native-runtime.md#observability-lifecycle). Bootstrap — `pkg/telemetry`; инструментирование транспорта, MongoDB, Kafka и внешних клиентов — в `infrastructure/` и `infrastructure/`; logger и use case decorator собираются в composition root (`cmd/*`, `di/`). Одинаково для `restaurants`, `restaurants-consumer` и `restaurants-relay`.
 
-**Resource** (`pkg/telemetry/resource.ts`) один для traces, metrics и logs: `service.name` (по умолчанию имя процесса; `OTEL_SERVICE_NAME` > `OTEL_RESOURCE_ATTRIBUTES` > default), `service.namespace=nomnom` всегда, `service.version`, `service.instance.id`, `deployment.environment.name` из `OTEL_RESOURCE_ATTRIBUTES`, плюс `telemetry.sdk.*` и `process.runtime.*`.
+**Конфигурация** — только файл процесса ([ADR 9](../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md)): `spec.telemetry` (`endpoint` OTLP collector, `protocol` `grpc` | `http/protobuf`, по умолчанию `grpc`; `serviceName`; `resourceAttributes`), `spec.tracing.enabled` и `spec.metrics.enabled` (по умолчанию `false`; с любым из них `endpoint` обязателен), `spec.metrics.exportInterval` (`60s`) и `spec.logging.level` (`debug|info|warn|error`, `info`). `OTEL_*` и `LOG__LEVEL` процесс не читает: endpoint, протокол, credentials, compression, timeout и resource передаются SDK явно (`pkg/telemetry/otlp.ts`); endpoint без флагов ничего не экспортирует.
 
-**Traces** (`pkg/telemetry/tracing.ts`): `startTelemetry` всегда регистрирует AsyncLocalStorage context manager и W3C Trace Context; Baggage — только ключи `BAGGAGE_ALLOWLIST` (сейчас пусто), некорректный `traceparent` начинает новый trace. `TracerProvider` с OTLP/gRPC exporter и `BatchSpanProcessor` с ограниченной очередью (`SPAN_EXPORT_LIMITS`: 2048 spans, batch 512) создаётся только при `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Spans (semconv v1.44):
+**Resource** (`pkg/telemetry/resource.ts`) один для traces, metrics и logs: `service.name` (`spec.telemetry.serviceName`, по умолчанию имя процесса), `service.namespace=nomnom` всегда, `service.instance.id` — env `POD_NAME` (обязателен), атрибуты `spec.telemetry.resourceAttributes` (в chart — `service.version` из `image.tag` и, например, `deployment.environment.name`; `service.name` и `service.instance.id` в них — ошибка старта), плюс `telemetry.sdk.*` и `process.runtime.*`.
+
+**Traces** (`pkg/telemetry/tracing.ts`): `startTelemetry` всегда регистрирует AsyncLocalStorage context manager и W3C Trace Context; Baggage — только ключи `BAGGAGE_ALLOWLIST` (сейчас пусто), некорректный `traceparent` начинает новый trace. `TracerProvider` с OTLP exporter протокола `spec.telemetry.protocol` и `BatchSpanProcessor` с ограниченной очередью (`SPAN_EXPORT_LIMITS`: 2048 spans, batch 512) создаётся только при `spec.tracing.enabled`. Spans (semconv v1.44):
 
 - SERVER `nomnom.restaurants.v1.RestaurantsService/<Method>` (`infrastructure/grpc/tracing.ts`): `rpc.system.name`, `rpc.method`, `rpc.response.status_code` (имя кода); статус Error только для серверных кодов (`UNKNOWN`, `DEADLINE_EXCEEDED`, `UNIMPLEMENTED`, `INTERNAL`, `UNAVAILABLE`, `DATA_LOSS`);
 - `usecase <name>` — декоратор `UseCaseTelemetry` (`pkg/telemetry/usecase.ts`), подключаемый `di/usecases.ts` к handlers из списков, которые слайсы объявляют в своём `di` (FR-730);
@@ -485,13 +487,13 @@ Consumer `OrderPlaced` из change [`add-restaurants-order-placed-consumer`](../
 
 Ошибка в span — только `error.type` (stable `code` или имя класса) и статус; текст ошибки и exception events не пишутся.
 
-**Metrics** (OTLP gRPC при `OTEL_EXPORTER_OTLP_ENDPOINT` или `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, интервал 15 s): `rpc.server.call.duration` (`rpc.system.name`, `rpc.method`, `rpc.response.status_code`), `rpc.client.call.duration` (+ `server.address`, `server.port`, `error.type` при неуспехе) — `pkg/telemetry/rpc.ts`, buckets в секундах; `nomnom.usecase.duration` (`nomnom.usecase.name`, `nomnom.usecase.kind`, `nomnom.outcome` ∈ `success|rejected|error`, `error.type` при неуспехе; классификация — `classifyByCode`); `db.client.operation.duration` (`db.system.name`, `db.operation.name`, `db.collection.name`, `error.type`); runtime — `@opentelemetry/instrumentation-runtime-node` (`v8js.memory.heap.used`, `v8js.memory.heap.space.*`, `v8js.gc.duration`, `nodejs.eventloop.delay.*`, `nodejs.eventloop.utilization`) и `pkg/telemetry/process-metrics.ts` (`process.cpu.time`, `process.memory.usage`, `v8js.memory.heap.limit`); пул MongoDB, Outbox, consumer и domain-метрики — см. разделы выше.
+**Metrics** (OTLP протокола `spec.telemetry.protocol` при `spec.metrics.enabled`, интервал `spec.metrics.exportInterval`, по умолчанию 60 s): `rpc.server.call.duration` (`rpc.system.name`, `rpc.method`, `rpc.response.status_code`), `rpc.client.call.duration` (+ `server.address`, `server.port`, `error.type` при неуспехе) — `pkg/telemetry/rpc.ts`, buckets в секундах; `nomnom.usecase.duration` (`nomnom.usecase.name`, `nomnom.usecase.kind`, `nomnom.outcome` ∈ `success|rejected|error`, `error.type` при неуспехе; классификация — `classifyByCode`); `db.client.operation.duration` (`db.system.name`, `db.operation.name`, `db.collection.name`, `error.type`); runtime — `@opentelemetry/instrumentation-runtime-node` (`v8js.memory.heap.used`, `v8js.memory.heap.space.*`, `v8js.gc.duration`, `nodejs.eventloop.delay.*`, `nodejs.eventloop.utilization`) и `pkg/telemetry/process-metrics.ts` (`process.cpu.time`, `process.memory.usage`, `v8js.memory.heap.limit`); пул MongoDB, Outbox, consumer и domain-метрики — см. разделы выше.
 
-**Logs** (`pkg/telemetry/logger.ts`): одна JSON-запись на строку в stdout — `timestamp` (UTC), `severity` (`DEBUG|INFO|WARN|ERROR`), `message`, `service.namespace`, `service.name`, `service.version`, `service.instance.id`, `deployment.environment.name`, `trace_id`/`span_id` только внутри span, `operation` (`lifecycle`, `identity`, `reconcile`, `kafka.consume`, `migrate`, `process`) и поля ошибки `error.type`, `error.message`, `error.stack` (массив frames), `error.cause`. Значения ключей вида token/password/secret/authorization/cookie/credential/preshared/assertion заменяются на `[REDACTED]`, пароли в URL и bearer/basic tokens вырезаются из текста. Необработанная ошибка (в том числе при старте) — одна запись ERROR и exit 1. Библиотечный код по умолчанию не пишет логов (тесты тихие).
+**Logs** (`pkg/telemetry/logger.ts`): одна JSON-запись на строку в stdout с уровня `spec.logging.level` — `timestamp` (UTC), `severity` (`DEBUG|INFO|WARN|ERROR`), `message`, `service.namespace`, `service.name`, `service.version`, `service.instance.id`, `deployment.environment.name`, `trace_id`/`span_id` только внутри span, `operation` (`lifecycle`, `identity`, `reconcile`, `kafka.consume`, `migrate`, `process`) и поля ошибки `error.type`, `error.message`, `error.stack` (массив frames), `error.cause`. Значения ключей вида token/password/secret/authorization/cookie/credential/preshared/assertion заменяются на `[REDACTED]`, пароли в URL и bearer/basic tokens вырезаются из текста. Необработанная ошибка и невалидный файл конфигурации (`operation: config`, до открытия портов) — одна запись ERROR и exit 1. Библиотечный код по умолчанию не пишет логов (тесты тихие).
 
-**Shutdown**: telemetry стартует до приложения и завершается последней — `telemetry.shutdown(SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT)` (по умолчанию `5s`) выполняет финальный export traces и metrics и не ждёт недоступный collector дольше deadline.
+**Shutdown**: telemetry стартует до приложения и завершается последней — `telemetry.shutdown(spec.shutdown.telemetryFlushTimeout)` (по умолчанию `5s`) выполняет финальный export traces и metrics и не ждёт недоступный collector дольше deadline.
 
-Тесты — `test/observability.test.ts` (in-memory span exporter и metric reader: trace через gRPC → use case → Outbox → Kafka headers → consumer, grpc-js client, MongoDB, runtime-метрики, JSON-логи, baggage, bounded flush) и `test/tracing.test.ts`. Profiles (`@pyroscope/nodejs`) пока не подключены.
+Тесты — `test/observability.test.ts` (in-memory span exporter и metric reader: trace через gRPC → use case → Outbox → Kafka headers → consumer, grpc-js client, MongoDB, runtime-метрики, JSON-логи, baggage, bounded flush) и `test/tracing.test.ts` (экспорт по `spec.telemetry` в OTLP/HTTP collector мимо `OTEL_*`). Profiles (`@pyroscope/nodejs`) пока не подключены.
 
 ## Статус реализации
 
@@ -499,25 +501,29 @@ Consumer `OrderPlaced` из change [`add-restaurants-order-placed-consumer`](../
 
 - **Domain:** aggregate `Restaurant`; VO `Money` на `decimal.js` в слайсе `restaurant`; aggregate `Menu` с entity `MenuItem` (меню — отдельный aggregate slice `menu`, одно на ресторан); aggregate `RestaurantOrder` с чистой FSM в виде transition table, VO `Quantity`, domain service `evaluateOrderAcceptance` поверх `RestaurantAcceptingOrders` и `MenuItemAvailable`, Domain Events с `pullEvents()`; исход Cancel (`cancelled`, `repeated`, `rejected` с причиной по стадии) возвращает `RestaurantOrder.cancel()` как `CancellationDecision`; контракты repositories в `domains/`.
 - **Application:** по одному handler на use case в `slices/<slice>/applications/<usecase>/`: Register/Update/Open/Close Restaurant, Assign/Revoke Staff, Get/Batch Get/List Restaurants, List Owned Restaurants; Create Menu, Add/Update Menu Item, Set Menu Item Availability, Get Menu, Batch Get Menus; Set Opening Hours, Set Scheduled Order Settings; List/Reserve/Confirm/Release Scheduled Slot; Receive Order Request, Accept Order (заказ без окна — с Queue в одной UoW), Reject Order, Queue Restaurant Order, List Scheduled Orders, Start Preparation, Mark Assembled, Mark Ready for Pickup, Report Preparation Delay/Failure, Cancel Restaurant Order, Record Pickup, Record Wait Time, Get Restaurant Order, List Incoming Orders, Get Kitchen Queue, List Active Preparations, List Ready Orders.
-- **Порты:** `UnitOfWork`, `Outbox`, `Subject` и общий шаг `publishAggregateChange` (save → отбор опубликованных фактов → Outbox) в `pkg/authz`, `pkg/unit-of-work` и `pkg/outbox`; `Clock` и application errors, включая `PermissionDeniedError`, у каждого слайса свои: `applications/clock`, `applications/failure`; `AuthorizationUnavailableError` принадлежит адаптеру `infrastructure/spicedb`; узкие authorization ports в `applications/access-control/access-control.ts` каждого слайса (в `restaurantorder` — по одному на вид вызывающего: персонал кухни, fulfillment `orders`, чтение заказов) и `OwnerRelationshipWriter`; `restaurantorder` читает чужие слайсы только через `RestaurantMarkets` (Receive Order Request: Market зарегистрированного ресторана) и `AcceptanceFactsReader` (Accept Order: открыт ли ресторан и доступность позиций), а не через их repositories; общие модули слайса `restaurantorder` — `restaurant-order-view.ts`, `load-restaurant-order.ts`, `publish-order-change.ts`, `kitchen-command.ts` (шаблон команды кухни и `RepeatPolicy`); query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию; значения задаёт конфигурация (`KITCHEN__*`, см. [gRPC-адаптер](#grpc-адаптер)).
-- **Адаптеры:** MongoDB (`infrastructure/repository`, `slices/*/infrastructure/repository`, см. [Хранилище: MongoDB](#хранилище-mongodb)) — UoW как транзакция, Outbox-коллекция, optimistic concurrency по `version`, уникальность `orderId` и меню на ресторан индексами; in-memory адаптеров хранилища нет — тесты application-слоя и transport идут через MongoDB-адаптеры на testcontainer (см. [Проверка](#проверка)); SpiceDB adapter authorization ports подключается при заданном `SPICEDB__ENDPOINT` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); mappers Integration Events Kitchen Order, Restaurant и Menu с доставкой в Kafka через Debezium (см. [Публикация](#публикация-outbox-и-debezium)); consumer `OrderPlaced` с Inbox — `cmd/restaurants-consumer` (см. [Потребление](#потребление-inbox-и-restaurants-consumer)). Через transport в Outbox пишут `CancelRestaurantOrder`, команды кухни, Open/Close Restaurant и команды меню. `GetRestaurant`, `GetMenu`, `BatchGetRestaurants`, `BatchGetMenus`, `ListRestaurants`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, команды кухни (`AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure`, change [`add-kitchen-command-rpcs`](../../openspec/changes/archive/2026-10-25-add-kitchen-command-rpcs/)), `RegisterRestaurant`, `AssignStaff`, `RevokeStaff`, `OpenRestaurant`, `CloseRestaurant` и команды меню (`CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability`, change [`add-restaurant-menu-command-rpcs`](../../openspec/changes/archive/2026-10-25-add-restaurant-menu-command-rpcs/)) и queries `ListIncomingOrders`, `GetKitchenQueue` (change [`close-order-lifecycle-in-kind`](../../openspec/changes/archive/2026-10-25-close-order-lifecycle-in-kind/)) подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver`; без конфигурации identity процесс не стартует), к transport пока не подключены Update Restaurant, Get Restaurant Order, List Active Preparations и List Ready Orders.
+- **Порты:** `UnitOfWork`, `Outbox`, `Subject` и общий шаг `publishAggregateChange` (save → отбор опубликованных фактов → Outbox) в `pkg/authz`, `pkg/unit-of-work` и `pkg/outbox`; `Clock` и application errors, включая `PermissionDeniedError`, у каждого слайса свои: `applications/clock`, `applications/failure`; `AuthorizationUnavailableError` принадлежит адаптеру `infrastructure/spicedb`; узкие authorization ports в `applications/access-control/access-control.ts` каждого слайса (в `restaurantorder` — по одному на вид вызывающего: персонал кухни, fulfillment `orders`, чтение заказов) и `OwnerRelationshipWriter`; `restaurantorder` читает чужие слайсы только через `RestaurantMarkets` (Receive Order Request: Market зарегистрированного ресторана) и `AcceptanceFactsReader` (Accept Order: открыт ли ресторан и доступность позиций), а не через их repositories; общие модули слайса `restaurantorder` — `restaurant-order-view.ts`, `load-restaurant-order.ts`, `publish-order-change.ts`, `kitchen-command.ts` (шаблон команды кухни и `RepeatPolicy`); query/read-model ports рядом с queries; ports открытых решений — `AcceptanceConditionsProvider`, `ReadyTimeEstimator`, `KitchenQueueOrdering`. Политика повтора Start Preparation/Mark Ready и политика отмены во время Preparation — обязательные параметры handlers без значения по умолчанию; значения задаёт конфигурация (`spec.kitchen`, см. [gRPC-адаптер](#grpc-адаптер)).
+- **Адаптеры:** MongoDB (`infrastructure/repository`, `slices/*/infrastructure/repository`, см. [Хранилище: MongoDB](#хранилище-mongodb)) — UoW как транзакция, Outbox-коллекция, optimistic concurrency по `version`, уникальность `orderId` и меню на ресторан индексами; in-memory адаптеров хранилища нет — тесты application-слоя и transport идут через MongoDB-адаптеры на testcontainer (см. [Проверка](#проверка)); SpiceDB adapter authorization ports подключается при заданном `spec.spicedb.endpoint` (см. [Authorization: SpiceDB](#authorization-spicedb)); writer relationships `restaurant#owner`/`staff` и фоновый reconciler (см. [Relationships и reconciliation](#relationships-и-reconciliation)); mappers Integration Events Kitchen Order, Restaurant и Menu с доставкой в Kafka через Debezium (см. [Публикация](#публикация-outbox-и-debezium)); consumer `OrderPlaced` с Inbox — `cmd/restaurants-consumer` (см. [Потребление](#потребление-inbox-и-restaurants-consumer)). Через transport в Outbox пишут `CancelRestaurantOrder`, команды кухни, Open/Close Restaurant и команды меню. `GetRestaurant`, `GetMenu`, `BatchGetRestaurants`, `BatchGetMenus`, `ListRestaurants`, `ReceiveOrderRequest`, `CancelRestaurantOrder`, команды кухни (`AcceptRestaurantOrder`, `RejectRestaurantOrder`, `StartPreparation`, `MarkRestaurantOrderAssembled`, `MarkRestaurantOrderReady`, `ReportPreparationDelay`, `ReportPreparationFailure`, change [`add-kitchen-command-rpcs`](../../openspec/changes/archive/2026-10-25-add-kitchen-command-rpcs/)), `RegisterRestaurant`, `AssignStaff`, `RevokeStaff`, `OpenRestaurant`, `CloseRestaurant` и команды меню (`CreateMenu`, `AddMenuItem`, `UpdateMenuItem`, `SetMenuItemAvailability`, change [`add-restaurant-menu-command-rpcs`](../../openspec/changes/archive/2026-10-25-add-restaurant-menu-command-rpcs/)) и queries `ListIncomingOrders`, `GetKitchenQueue` (change [`close-order-lifecycle-in-kind`](../../openspec/changes/archive/2026-10-25-close-order-lifecycle-in-kind/)) подключены к `cmd/restaurants` через Connect/gRPC (командные RPC с `ServiceTokenSubjectResolver`; без конфигурации identity процесс не стартует), к transport пока не подключены Update Restaurant, Get Restaurant Order, List Active Preparations и List Ready Orders.
 - **Не реализованы:** Start / Complete Preparation Item (item-level model не входит в MVP) и Reject After Acceptance (не разрешён до продуктового решения); courier projection в List Ready Orders; BDD `.feature`.
 
 ## Запуск
 
 Требуется Node.js 22.6 или новее с поддержкой запуска TypeScript через type stripping.
 
-Нужны MongoDB replica set, SpiceDB и Valkey. Локальный single-node replica set и Valkey:
+Нужны MongoDB replica set, SpiceDB и Valkey. Несекретная конфигурация — файлы
+`config.example.yaml` (`restaurants`) и `config.consumer.example.yaml` (`restaurants-consumer`):
+`npm start` и `npm run consumer` задают `CONFIG_FILE` и `POD_NAME`. Секреты (`MONGODB__URI`,
+`VALKEY__URL`, `SPICEDB__PRESHARED_KEY`) — только env или `.env` (`cp .env.example .env`).
+Локальный single-node replica set и Valkey:
 
 ```bash
 docker run -d --name restaurants-mongo -p 27017:27017 mongo:8 --replSet rs0
 docker exec restaurants-mongo mongosh --quiet --eval 'rs.initiate()'
-export MONGODB__URI='mongodb://localhost:27017/?replicaSet=rs0&directConnection=true'
 docker run -d --name restaurants-valkey -p 6379:6379 valkey/valkey:9.1
-export VALKEY__URL='redis://localhost:6379'
+cp .env.example .env
 npm start  # мигрирует базу при старте
-# Wait Time Statistics и обновление кеша каталога (отдельный процесс, нужен Kafka):
-KAFKA__BROKERS=localhost:9092 SCHEMA_REGISTRY__URL=http://127.0.0.1:8081 npm run consumer
+# Wait Time Statistics и обновление кеша каталога (отдельный процесс, нужны Kafka и
+# Schema Registry из config.consumer.example.yaml):
+npm run consumer
 ```
 
 ## Проверка
@@ -547,17 +553,28 @@ npm run format
 ```bash
 docker build --target runtime -t nomnom/restaurants:local boundaries/restaurants
 docker run --rm -p 8082:8082 -p 9082:9082 \
-  -e SERVER__PORT=8082 \
+  -v "$PWD/boundaries/restaurants/config.example.yaml:/etc/nomnom/config.yaml:ro" \
+  -e CONFIG_FILE=/etc/nomnom/config.yaml -e POD_NAME=restaurants-local \
+  -e MONGODB__URI -e VALKEY__URL -e SPICEDB__PRESHARED_KEY \
   nomnom/restaurants:local
 ```
 
-Контейнер запускается пользователем `node`; `tini` пересылает сигналы приложению, а
-конфигурация передаётся переменными окружения. `pkg/lifecycle` реализует
+Контейнер запускается пользователем `node`; `tini` пересылает сигналы приложению.
+Несекретная конфигурация — версионированный файл `CONFIG_FILE` ([ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md)):
+`apiVersion: config.nomnom.dev/v1alpha1`, `kind: Restaurants`, `metadata.name` — роль процесса
+(`restaurants`, `restaurants-consumer`; `restaurants-admin` сверяет только `apiVersion` и `kind`) и
+`spec` с ключами в camelCase бывших env (`MONGODB__MAX_POOL_SIZE` → `spec.mongodb.maxPoolSize`).
+Нет файла, чужие `apiVersion`, `kind` или роль, неизвестный ключ на любом уровне (ошибка
+называет путь, например `spec.shutdown.drainTimout`) и невалидное значение останавливают процесс
+до открытия портов. Каждый процесс проверяет весь `spec` своего kind, но требует только свои
+секции. Env `SECTION__KEY` несекретных настроек не читается; секреты — только env
+`MONGODB__URI`, `VALKEY__URL`, `SPICEDB__PRESHARED_KEY`, полей для них в `spec` нет. Загрузчик —
+`pkg/config/file.ts` (`yaml` и `z.strictObject` на каждом уровне). `pkg/lifecycle` реализует
 [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live` и
-`/health/ready` на техническом порту `MANAGEMENT__PORT` (по умолчанию `9082`), а по
-`SIGTERM`/`SIGINT` — not ready, `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`), остановку
-приёма запросов и drain в пределах `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`).
-Файл `.env` предназначен для локальной разработки и в образ не копируется. Основной процесс
+`/health/ready` на техническом порту `spec.management.port` (по умолчанию `9082`), а по
+`SIGTERM`/`SIGINT` — not ready, `spec.shutdown.readinessDelay` (по умолчанию `5s`), остановку
+приёма запросов и drain в пределах `spec.shutdown.drainTimeout` (по умолчанию `20s`).
+Файл `.env` (только секреты) предназначен для локальной разработки и в образ не копируется. Основной процесс
 требует MongoDB и SpiceDB, `restaurants-consumer` — MongoDB и Kafka. Outbox локально
 никто не публикует: Debezium работает только в kind (ADR 37).
 

@@ -7,7 +7,7 @@
 
 Control plane не в горячем пути: ни gateway, ни ячейки к нему не обращаются. При старте, при изменении
 `Cell` и `Market` и при изменении своих ресурсов на gateway контроллер server-side apply применяет в
-неймспейс публичного gateway (`ROUTES__NAMESPACE`) полный набор ресурсов из реестра
+неймспейс публичного gateway (`spec.routes.namespace`) полный набор ресурсов из реестра
 ([publish routes](slices/topology/applications/publishroutes/README.md)):
 
 - `HTTPRoute market-<market_id>` — `/m/<market_id>` в Service Router Cell, префикс снимается,
@@ -79,9 +79,30 @@ Market с такой ошибкой не публикуется и не меша
 
 ## Конфигурация
 
-Обязательны `ROUTES__NAMESPACE`, `ROUTES__GATEWAY`, `ROUTES__LISTENER` (неймспейс маршрутов, Gateway и listener
-публичного API; [config.example.yaml](config.example.yaml)): пустой параметр — процесс не стартует. Kubernetes API — только
-in-cluster config ServiceAccount: вне кластера процесс не стартует (`make run` — только с поднятым в кластере API).
+Несекретная конфигурация — только файл по пути из env `CONFIG_FILE` (ADR 17,
+[config.example.yaml](config.example.yaml)): `apiVersion: config.nomnom.dev/v1alpha1`, `kind: ControlPlane`,
+`metadata.name: controlplane`, `spec`. Переменные `SECTION__KEY`, `OTEL_*` и `LOG__LEVEL` процесс не читает; секретов
+у него нет. Процесс не стартует, если `CONFIG_FILE` не задан или файла нет, `apiVersion`, `kind` или `metadata.name`
+чужие, в файле есть неизвестный ключ (ошибка называет путь, например `spec.shutdown.drainTimout`) или не задан env
+`POD_NAME` (`service.instance.id`).
+
+| Ключ `spec` | По умолчанию |
+| --- | --- |
+| `management.port` | `9086` |
+| `shutdown.readinessDelay`, `shutdown.drainTimeout` | `5s`, `20s` |
+| `routes.namespace`, `routes.gateway`, `routes.listener` — неймспейс маршрутов, Gateway и listener публичного API | нет, обязательны |
+| `telemetry.endpoint` — URL OTLP коллектора | нет; обязателен при включённом `tracing` или `metrics` |
+| `telemetry.protocol` — `grpc` или `http/protobuf` | `grpc` |
+| `telemetry.serviceName` | `controlplane` |
+| `telemetry.resourceAttributes` — без `service.name` и `service.instance.id` | пусто |
+| `tracing.enabled`, `metrics.enabled` | `false` |
+| `metrics.exportInterval` | `60s` |
+| `logging.level` — `debug`, `info`, `warn`, `error` | `info` |
+
+Длительности — строки Go-формата (`500ms`, `5s`, `2m`). Экспорт spans и метрик включают только флаги `tracing.enabled` и
+`metrics.enabled`: endpoint без них ничего не экспортирует. Kubernetes API — только in-cluster config ServiceAccount:
+вне кластера процесс не стартует (`make run` задаёт `CONFIG_FILE=config.example.yaml` и `POD_NAME`, но работает только
+с поднятым в кластере API).
 
 ## Команды
 

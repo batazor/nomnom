@@ -33,6 +33,7 @@ from pkg.config import (
     ManagementSettings,
     Settings,
     ShutdownSettings,
+    TelemetrySettings,
     database,
 )
 from pkg.lifecycle import Lifecycle, LifecycleConfig
@@ -73,12 +74,14 @@ def sections(settings: Settings) -> dict[str, Any]:
     }
 
 
-def telemetry_providers(flush_timeout: timedelta) -> Iterator[telemetry.Telemetry]:
+def telemetry_providers(
+    settings: TelemetrySettings, flush_timeout: timedelta
+) -> Iterator[telemetry.Telemetry]:
     """Global tracer and meter providers; flushed within ``flush_timeout`` on shutdown.
 
-    The default ``service.name`` is ``payments``; ``OTEL_SERVICE_NAME`` overrides it.
+    The default ``service.name`` is ``payments``; ``spec.telemetry.serviceName`` overrides it.
     """
-    owner = telemetry.setup("payments")
+    owner = telemetry.setup(settings)
     try:
         yield owner
     finally:

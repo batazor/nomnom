@@ -87,7 +87,7 @@
 ### Requirement: Телеметрия из файла конфигурации
 **ID:** FR-765
 
-Процесс SHALL настраивать OpenTelemetry из `spec.telemetry` (`endpoint`, `protocol`, `serviceName`, `resourceAttributes`), `spec.tracing`, `spec.metrics`, а уровень логов — из `spec.logging.level`. Процесс MUST NOT читать `OTEL_*` и `LOG__LEVEL`.
+Процесс SHALL настраивать OpenTelemetry из `spec.telemetry` (`endpoint`, `protocol`, `serviceName`, `resourceAttributes`), `spec.tracing`, `spec.metrics`, а уровень логов — из `spec.logging.level`. Endpoint, протокол, `service.name`, resource attributes, включение экспорта, интервал метрик и уровень логов MUST NOT браться из `OTEL_*` и `LOG__LEVEL`.
 
 #### Scenario: Env OpenTelemetry не действует
 **ID:** AC-1079
@@ -99,7 +99,7 @@
 ### Requirement: Включение экспорта телеметрии
 **ID:** FR-767
 
-`telemetry.protocol` SHALL быть `grpc` или `http/protobuf`, по умолчанию `grpc`. Экспорт spans SHALL включаться только `tracing.enabled: true`, экспорт метрик — только `metrics.enabled: true`; оба флага по умолчанию `false`. Если включён хотя бы один из них, `telemetry.endpoint` MUST быть задан.
+`telemetry.protocol` SHALL быть `grpc` или `http/protobuf`, по умолчанию `grpc`. Экспорт spans SHALL включаться только `tracing.enabled: true`, экспорт метрик — только `metrics.enabled: true`; оба флага по умолчанию `false`. Если включён хотя бы один из них, `telemetry.endpoint` MUST быть задан. Интервал экспорта метрик `metrics.exportInterval` SHALL быть больше нуля, по умолчанию `60s`.
 
 #### Scenario: Экспорт включён без endpoint
 **ID:** AC-1077

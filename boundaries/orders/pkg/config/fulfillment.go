@@ -2,66 +2,44 @@ package config
 
 import (
 	"fmt"
-	"strings"
 	"time"
-
-	"github.com/spf13/viper"
-)
-
-const (
-	configKeyFulfillment = "fulfillment"
-	envPrefixFulfillment = "FULFILLMENT__"
 )
 
 // FulfillmentConfig holds the Policy of the Order Fulfillment Workflow. The
 // defaults equal the DefaultPolicy of the fulfillment Temporal adapter and are
 // placeholders, not product decisions.
 type FulfillmentConfig struct {
-	AcceptanceTimeout       time.Duration `mapstructure:"acceptance_timeout"`
-	PreparationTimeout      time.Duration `mapstructure:"preparation_timeout"`
-	MaxPreparationExtension time.Duration `mapstructure:"max_preparation_extension"`
-	PickupTimeout           time.Duration `mapstructure:"pickup_timeout"`
-	DeliveryTimeout         time.Duration `mapstructure:"delivery_timeout"`
-	PublishStage            bool          `mapstructure:"publish_stage"`
+	AcceptanceTimeout       time.Duration `yaml:"acceptanceTimeout"`
+	PreparationTimeout      time.Duration `yaml:"preparationTimeout"`
+	MaxPreparationExtension time.Duration `yaml:"maxPreparationExtension"`
+	PickupTimeout           time.Duration `yaml:"pickupTimeout"`
+	DeliveryTimeout         time.Duration `yaml:"deliveryTimeout"`
+	PublishStage            bool          `yaml:"publishStage"`
 }
 
-var fulfillmentDefaults = map[string]any{
-	"acceptance_timeout":        10 * time.Minute,
-	"preparation_timeout":       90 * time.Minute,
-	"max_preparation_extension": 60 * time.Minute,
-	"pickup_timeout":            60 * time.Minute,
-	"delivery_timeout":          120 * time.Minute,
-	"publish_stage":             true,
-}
-
-// EnvFulfillment returns the environment variable of a fulfillment key, for
-// example FULFILLMENT__ACCEPTANCE_TIMEOUT.
-func EnvFulfillment(key string) string { return envPrefixFulfillment + strings.ToUpper(key) }
-
-func configureFulfillment(loader *viper.Viper) error {
-	for key, value := range fulfillmentDefaults {
-		path := configKeyFulfillment + "." + key
-		loader.SetDefault(path, value)
-		if err := loader.BindEnv(path, EnvFulfillment(key)); err != nil {
-			return fmt.Errorf("bind %s: %w", EnvFulfillment(key), err)
-		}
-	}
-	return nil
+// DefaultFulfillment — значения spec.fulfillment по умолчанию.
+var DefaultFulfillment = FulfillmentConfig{
+	AcceptanceTimeout:       10 * time.Minute,
+	PreparationTimeout:      90 * time.Minute,
+	MaxPreparationExtension: 60 * time.Minute,
+	PickupTimeout:           60 * time.Minute,
+	DeliveryTimeout:         120 * time.Minute,
+	PublishStage:            true,
 }
 
 func (cfg FulfillmentConfig) Validate() error {
 	for name, value := range map[string]time.Duration{
-		"acceptance_timeout":  cfg.AcceptanceTimeout,
-		"preparation_timeout": cfg.PreparationTimeout,
-		"pickup_timeout":      cfg.PickupTimeout,
-		"delivery_timeout":    cfg.DeliveryTimeout,
+		"acceptanceTimeout":  cfg.AcceptanceTimeout,
+		"preparationTimeout": cfg.PreparationTimeout,
+		"pickupTimeout":      cfg.PickupTimeout,
+		"deliveryTimeout":    cfg.DeliveryTimeout,
 	} {
 		if value <= 0 {
-			return fmt.Errorf("fulfillment %s must be positive, got %s", name, value)
+			return fmt.Errorf("spec.fulfillment.%s must be positive, got %s", name, value)
 		}
 	}
 	if cfg.MaxPreparationExtension < 0 {
-		return fmt.Errorf("fulfillment max_preparation_extension must not be negative, got %s", cfg.MaxPreparationExtension)
+		return fmt.Errorf("spec.fulfillment.maxPreparationExtension must not be negative, got %s", cfg.MaxPreparationExtension)
 	}
 	return nil
 }

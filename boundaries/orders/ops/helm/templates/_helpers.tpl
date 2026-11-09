@@ -49,110 +49,166 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end }}
 
 {{/*
+Секунды длительности в формате Go (500ms, 5s, 2m, 1h30m) из config.spec. Другая запись — ошибка.
+Usage: {{ include "orders.durationSeconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" $value) }}
+*/}}
+{{- define "orders.durationSeconds" -}}
+{{- $value := toString .value -}}
+{{- if not (regexMatch "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$" $value) -}}
+{{- fail (printf "%s must be a Go duration such as 5s or 2m, got %q" .key $value) -}}
+{{- end -}}
+{{- $units := dict "ns" 0.000000001 "us" 0.000001 "µs" 0.000001 "ms" 0.001 "s" 1.0 "m" 60.0 "h" 3600.0 -}}
+{{- $seconds := 0.0 -}}
+{{- range regexFindAll "[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h)" $value -1 -}}
+{{- $number := regexFind "^[0-9]+(\\.[0-9]+)?" . -}}
+{{- $seconds = addf $seconds (mulf (float64 $number) (get $units (trimPrefix $number .))) -}}
+{{- end -}}
+{{- $seconds -}}
+{{- end -}}
+
+{{/*
 Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay
-и drain timeout с запасом, иначе kubelet отправит SIGKILL посреди drain.
+и drain timeout config.spec.shutdown с запасом, иначе kubelet отправит SIGKILL посреди drain.
+Технический порт отличается от бизнес-порта.
 */}}
 {{- define "orders.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds -}}
-{{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- $spec := .Values.config.spec -}}
+{{- $shutdown := required "config.spec.shutdown is required" $spec.shutdown -}}
+{{- $readiness := include "orders.durationSeconds" (dict "key" "config.spec.shutdown.readinessDelay" "value" (required "config.spec.shutdown.readinessDelay is required" $shutdown.readinessDelay)) | float64 -}}
+{{- $drain := include "orders.durationSeconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" (required "config.spec.shutdown.drainTimeout is required" $shutdown.drainTimeout)) | float64 -}}
+{{- $budget := addf $readiness $drain -}}
+{{- if le (float64 .Values.terminationGracePeriodSeconds) $budget -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than config.spec.shutdown.readinessDelay + drainTimeout (%vs)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
-{{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- if le $drain 0.0 -}}
+{{- fail "config.spec.shutdown.drainTimeout must be positive" -}}
 {{- end -}}
-{{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
-{{- fail "management.port must differ from service.targetPort" -}}
+{{- if and .Values.service.enabled (eq (int (include "orders.managementPort" .)) (int (include "orders.serverPort" .))) -}}
+{{- fail "config.spec.management.port must differ from config.spec.server.port" -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-PostgreSQL env (ADR 8): DSN из внешнего Secret и лимиты пула процесса. Без dsnSecret.name
-переменные не задаются, и процесс orders не стартует (POSTGRES__DSN обязателен).
-За пулером в session mode каждое соединение пула держит server-соединение, поэтому
-maxConns задаётся values каждой роли. Миграции процесс применяет сам при старте
-2 соединениями вне maxConns: advisory lock процесса и миграция с lock_timeout.
-Usage: {{ include "orders.postgresEnv" (dict "context" $) }}
+Порты процесса из config.spec: бизнес-порт контейнера и технический порт metrics.
 */}}
-{{- define "orders.postgresEnv" -}}
-{{- with .context.Values.postgres }}
-{{- if .dsnSecret.name }}
+{{- define "orders.serverPort" -}}
+{{- required "config.spec.server.port is required for a release with service.enabled" (dig "server" "port" nil .Values.config.spec) | int -}}
+{{- end -}}
+
+{{- define "orders.managementPort" -}}
+{{- required "config.spec.management.port is required" (dig "management" "port" nil .Values.config.spec) | int -}}
+{{- end -}}
+
+{{/*
+Пул PostgreSQL роли (ADR 8): за пулером в session mode каждое соединение пула держит
+server-соединение, поэтому config.spec.postgres.maxConns задаётся values каждой роли.
+*/}}
+{{- define "orders.validatePostgres" -}}
+{{- with .Values.config.spec.postgres }}
+{{- if hasKey . "maxConns" }}
 {{- if lt (int .maxConns) 1 -}}
-{{- fail (printf "postgres.maxConns must be positive, got %v" .maxConns) -}}
+{{- fail (printf "config.spec.postgres.maxConns must be positive, got %v" .maxConns) -}}
 {{- end -}}
-{{- if or (lt (int .minConns) 0) (gt (int .minConns) 1) -}}
-{{- fail (printf "postgres.minConns must be 0 or 1, got %v" .minConns) -}}
+{{- if and (hasKey . "minConns") (gt (int .minConns) (int .maxConns)) -}}
+{{- fail "config.spec.postgres.minConns must not exceed config.spec.postgres.maxConns" -}}
 {{- end -}}
-{{- if gt (int .minConns) (int .maxConns) -}}
-{{- fail "postgres.minConns must not exceed postgres.maxConns" -}}
 {{- end }}
+{{- if and (hasKey . "minConns") (or (lt (int .minConns) 0) (gt (int .minConns) 1)) -}}
+{{- fail (printf "config.spec.postgres.minConns must be 0 or 1, got %v" .minConns) -}}
+{{- end -}}
+{{- end }}
+{{- end -}}
+
+{{/*
+Секреты процесса (FR-764): только env из внешних Secret, в файле конфигурации их нет. DSN
+PostgreSQL (POSTGRES__DSN) обязателен всем процессам; preshared key SpiceDB
+(SPICEDB__PRESHARED_KEY) — когда задан config.spec.spicedb.endpoint.
+*/}}
+{{- define "orders.secretEnv" -}}
+{{- with .Values.postgres.dsnSecret }}
+{{- if .name }}
 - name: POSTGRES__DSN
   valueFrom:
     secretKeyRef:
-      name: {{ .dsnSecret.name }}
-      key: {{ .dsnSecret.key }}
-- name: POSTGRES__MAX_CONNS
-  value: {{ .maxConns | quote }}
-- name: POSTGRES__MIN_CONNS
-  value: {{ .minConns | quote }}
-- name: POSTGRES__MAX_CONN_LIFETIME
-  value: {{ .maxConnLifetime | quote }}
-- name: POSTGRES__MAX_CONN_LIFETIME_JITTER
-  value: {{ .maxConnLifetimeJitter | quote }}
-- name: POSTGRES__MAX_CONN_IDLE_TIME
-  value: {{ .maxConnIdleTime | quote }}
-- name: POSTGRES__CONNECT_TIMEOUT
-  value: {{ .connectTimeout | quote }}
-- name: POSTGRES__HEALTH_CHECK_PERIOD
-  value: {{ .healthCheckPeriod | quote }}
+      name: {{ .name }}
+      key: {{ .key }}
+{{- end }}
+{{- end }}
+{{- if dig "spicedb" "endpoint" "" .Values.config.spec }}
+{{- with .Values.spicedb.presharedKeySecret }}
+- name: SPICEDB__PRESHARED_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ required "spicedb.presharedKeySecret.name is required when config.spec.spicedb.endpoint is set" .name }}
+      key: {{ .key }}
 {{- end }}
 {{- end }}
 {{- end }}
 
 {{/*
-OpenTelemetry (ADR 9, docs/observability.md): одинаковая идентификация traces, metrics и
-JSON-логов процесса. service.name — telemetry.serviceName роли, service.instance.id — имя pod (downward API),
-service.version — неизменяемый image.tag. Остальные атрибуты окружения задаются
-telemetry.resourceAttributes: явная env имеет приоритет над envFrom, поэтому
-OTEL_RESOURCE_ATTRIBUTES и OTEL_SERVICE_NAME в env были бы перекрыты. OTLP endpoint и
-уровень логов — необязательные telemetry.otlpEndpoint и telemetry.logLevel; пустые не
-задаются, и их можно передать через env/envFrom окружения.
-Usage: {{ include "orders.otelEnv" (dict "context" $ "serviceName" "") }}
+Пути, которые chart монтирует в pod; файл конфигурации получает их в spec.identity.
 */}}
-{{- define "orders.otelEnv" -}}
-{{- $values := .context.Values -}}
-{{- $serviceName := .serviceName | default $values.telemetry.serviceName | required "telemetry.serviceName is required" -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" (default "latest" $values.image.tag)) -}}
-{{- range $key, $value := $values.telemetry.resourceAttributes }}
-{{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
-{{- end }}
-- name: POD_NAME
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.name
-- name: OTEL_SERVICE_NAME
-  value: {{ $serviceName | quote }}
-- name: OTEL_RESOURCE_ATTRIBUTES
-  value: {{ join "," $attrs | quote }}
-{{- with $values.telemetry.otlpEndpoint }}
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ . | quote }}
-{{- end }}
-{{- with $values.telemetry.logLevel }}
-- name: LOG__LEVEL
-  value: {{ . | quote }}
-{{- end }}
-{{- end }}
+{{- define "orders.identityJwksFile" -}}/etc/nomnom/identity/jwks.json{{- end -}}
+{{- define "orders.identityUserJwksFile" -}}/etc/nomnom/user-identity/jwks.json{{- end -}}
+{{- define "orders.identityTokenDir" -}}/var/run/secrets/nomnom/identity{{- end -}}
+
+{{/*
+Файл конфигурации процесса (FR-762): apiVersion config.nomnom.dev/v1alpha1, kind Orders,
+metadata.name — роль, spec — config.spec как есть плюс ключи, которыми владеет chart: пути
+смонтированных JWKS и tokens в spec.identity и service.version (image.tag) в
+spec.telemetry.resourceAttributes. Такой ключ в values — ошибка.
+*/}}
+{{- define "orders.configFile" -}}
+{{- $spec := deepCopy .Values.config.spec -}}
+{{- $identity := dig "identity" (dict) $spec -}}
+{{- range $key := list "jwksFile" "userJwksFile" "tokenDir" -}}
+{{- if hasKey $identity $key -}}
+{{- fail (printf "config.spec.identity.%s is set by the chart from the mounted volumes; remove it from values" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.identity.jwksConfigMap -}}
+{{- $_ := set $identity "jwksFile" (include "orders.identityJwksFile" .) -}}
+{{- $_ := set $identity "userJwksFile" (include "orders.identityUserJwksFile" .) -}}
+{{- end -}}
+{{- if .Values.identity.tokenAudiences -}}
+{{- $_ := set $identity "tokenDir" (include "orders.identityTokenDir" .) -}}
+{{- end -}}
+{{- if $identity -}}
+{{- $_ := set $spec "identity" $identity -}}
+{{- end -}}
+{{- $attributes := dig "telemetry" "resourceAttributes" (dict) $spec -}}
+{{- if hasKey $attributes "service.version" -}}
+{{- fail "config.spec.telemetry.resourceAttributes.service.version is set by the chart from image.tag; remove it from values" -}}
+{{- end -}}
+{{- with .Values.image.tag -}}
+{{- $_ := set $attributes "service.version" (toString .) -}}
+{{- $telemetry := dig "telemetry" (dict) $spec -}}
+{{- $_ := set $telemetry "resourceAttributes" $attributes -}}
+{{- $_ := set $spec "telemetry" $telemetry -}}
+{{- end -}}
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Orders
+metadata:
+  name: {{ required "role is required: orders, orders-worker or orders-consumer" .Values.role }}
+spec:
+  {{- toYaml $spec | nindent 2 }}
+{{- end -}}
 
 {{/*
 Identity: процесс с gRPC API (service.enabled) проверяет service token (ADR 27) и user assertion BFF
-(ADR 32), поэтому JWKS, issuer, audience, allowlist, JWKS BFF, issuer BFF и делегаты обязательны —
+(ADR 32), поэтому JWKS кластера и BFF, issuer, audience, allowlist, issuer BFF и делегаты обязательны —
 иначе процесс не стартует.
 */}}
 {{- define "orders.validateIdentity" -}}
 {{- if .Values.service.enabled -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
+{{- range $key := list "jwksConfigMap" "userJwksConfigMap" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- range $key := list "issuer" "audience" "serviceAccounts" "userIssuer" "userDelegates" -}}
+{{- if not (dig "identity" $key "" $.Values.config.spec) -}}
+{{- fail (printf "config.spec.identity.%s is required" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

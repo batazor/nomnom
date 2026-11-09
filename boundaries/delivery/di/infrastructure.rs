@@ -569,7 +569,7 @@ impl CourierSettings for LocalCourierSettings {
 #[derive(Component)]
 #[shaku(interface = DeliverySettings)]
 pub struct LocalDeliverySettings {
-    /// `DELIVERY_ESTIMATE__*` of the process (FR-691).
+    /// `spec.deliveryEstimate` of the process (FR-691).
     estimate: DeliveryEstimatePolicy,
 }
 

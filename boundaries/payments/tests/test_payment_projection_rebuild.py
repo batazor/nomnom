@@ -12,7 +12,7 @@ from unittest import mock
 
 import psycopg
 import pytest
-from payment_fakes import NOW, ORCHESTRATOR, REQUESTER, PaymentsTestKit
+from payment_fakes import NOW, ORCHESTRATOR, REQUESTER, PaymentsTestKit, write_config
 
 from entrypoints.payments_admin import main as admin
 from infrastructure.repository import Database
@@ -271,13 +271,15 @@ class ProjectionRebuilderTest(unittest.TestCase):
     def run_admin(self, *args: str) -> tuple[int, dict[str, Any]]:
         stdout = io.StringIO()
         env = {
+            "CONFIG_FILE": write_config(self, {"eventStore": {"snapshotEvery": SNAPSHOT_EVERY}}),
+            "POD_NAME": "payments-test",
             "DATABASE__URI": self.uri,
-            "EVENT_STORE__SNAPSHOT_EVERY": str(SNAPSHOT_EVERY),
             "EVENT_STORE__SUBJECT_KEKS": '{"1": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}',
             "EVENT_STORE__SUBJECT_REF_KEY": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
         }
         with (
             mock.patch.dict(os.environ, env, clear=True),
+            mock.patch.object(admin.telemetry, "configure_logging"),
             mock.patch.object(admin.telemetry, "configure_process_logging"),
             redirect_stdout(stdout),
         ):
@@ -304,6 +306,7 @@ class ProjectionRebuilderTest(unittest.TestCase):
     def test_admin_requires_its_configuration(self) -> None:
         with (
             mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(admin.telemetry, "configure_logging"),
             mock.patch.object(admin.telemetry, "configure_process_logging"),
             self.assertLogs(admin.logger, "ERROR"),
         ):

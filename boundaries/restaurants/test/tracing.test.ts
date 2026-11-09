@@ -1,18 +1,24 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
+import { ROOT_CONTEXT } from "@opentelemetry/api";
 
 import { RestaurantsService } from "../infrastructure/grpc/gen/nomnom/restaurants/v1/service_pb.js";
 import { createGrpcServer } from "../infrastructure/grpc/server.ts";
 import { createRestaurantsService } from "../infrastructure/grpc/service.ts";
 import { GrpcWorker } from "../infrastructure/grpc/worker.ts";
+import { loadTelemetryConfig, specSchema } from "../pkg/config/config.ts";
 import type { Outbox } from "../pkg/outbox/outbox.ts";
+import { startTelemetry } from "../pkg/telemetry/telemetry.ts";
 import { currentTraceMetadata } from "../pkg/telemetry/trace-context.ts";
 import {
   installPropagation,
-  tracesEndpointConfigured,
+  SpanKind,
+  withSpan,
 } from "../pkg/telemetry/tracing.ts";
 import {
   createInfrastructure,
@@ -105,22 +111,86 @@ const startServer = async () => {
   return { client, restaurantId, metadata, stop };
 };
 
-test("traces are exported only with an OTLP endpoint", () => {
-  assert.equal(tracesEndpointConfigured({}), false);
-  assert.equal(
-    tracesEndpointConfigured({ OTEL_EXPORTER_OTLP_ENDPOINT: " " }),
-    false,
+test("AC-1080 an endpoint without the flags exports neither spans nor metrics", async () => {
+  const telemetry = startTelemetry(
+    loadTelemetryConfig(
+      specSchema.parse({ telemetry: { endpoint: "http://127.0.0.1:1" } }),
+      { POD_NAME: "restaurants-abc" },
+      "restaurants",
+    ),
   );
-  assert.equal(
-    tracesEndpointConfigured({
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://alloy:4317",
-    }),
-    true,
+  try {
+    assert.equal(telemetry.tracing, false);
+    assert.equal(telemetry.enabled, false);
+  } finally {
+    await telemetry.shutdown(1000);
+  }
+});
+
+test("AC-1079 spans and metrics go to telemetry.endpoint with the file's service.name, not to OTEL_*", async () => {
+  // OTLP/HTTP collector of the file; OTEL_* point to a closed port.
+  const received: { path: string; body: Buffer }[] = [];
+  const collector = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      received.push({ path: request.url ?? "", body: Buffer.concat(chunks) });
+      response.writeHead(200, { "content-type": "application/x-protobuf" });
+      response.end();
+    });
+  });
+  await new Promise<void>((resolve) =>
+    collector.listen(0, "127.0.0.1", resolve),
   );
-  assert.equal(
-    tracesEndpointConfigured({ OTEL_EXPORTER_OTLP_ENDPOINT: "http://a:4317" }),
-    true,
+  const { port } = collector.address() as AddressInfo;
+  const otel = {
+    OTEL_SERVICE_NAME: "other-service",
+    OTEL_RESOURCE_ATTRIBUTES: "service.name=other-service",
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:1",
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://127.0.0.1:1/v1/traces",
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "http://127.0.0.1:1/v1/metrics",
+    OTEL_EXPORTER_OTLP_PROTOCOL: "grpc",
+  };
+  Object.assign(process.env, otel);
+  try {
+    const telemetry = startTelemetry(
+      loadTelemetryConfig(
+        specSchema.parse({
+          telemetry: {
+            endpoint: `http://127.0.0.1:${port}`,
+            protocol: "http/protobuf",
+            serviceName: "restaurants-from-file",
+          },
+          tracing: { enabled: true },
+          metrics: { enabled: true },
+        }),
+        { ...process.env, POD_NAME: "restaurants-abc" },
+        "restaurants",
+      ),
+    );
+    assert.equal(telemetry.tracing, true);
+    assert.equal(telemetry.enabled, true);
+    assert.equal(telemetry.resource["service.name"], "restaurants-from-file");
+    await withSpan(
+      "probe",
+      { parent: ROOT_CONTEXT, kind: SpanKind.INTERNAL },
+      async () => {},
+    );
+    // Shutdown flushes both providers to the collector.
+    await telemetry.shutdown(5000);
+  } finally {
+    for (const name of Object.keys(otel)) delete process.env[name];
+    await new Promise((resolve) => collector.close(resolve));
+  }
+  assert.deepEqual(
+    [...new Set(received.map((request) => request.path))].sort(),
+    ["/v1/metrics", "/v1/traces"],
   );
+  for (const { body } of received) {
+    assert.ok(body.includes("restaurants-from-file"));
+    assert.ok(body.includes("restaurants-abc"));
+    assert.equal(body.includes("other-service"), false);
+  }
 });
 
 test("without span export the caller's traceparent reaches the Outbox", async () => {

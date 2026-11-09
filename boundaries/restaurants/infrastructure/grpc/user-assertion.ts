@@ -14,7 +14,7 @@ export const USER_ASSERTION_HEADER = "x-nomnom-user-assertion";
 const USER_ASSERTION_MAX_LIFETIME_SECONDS = 60;
 
 export interface UserAssertionOptions {
-  /** Ожидаемый `iss` assertion, `IDENTITY__USER_ISSUER`. */
+  /** Ожидаемый `iss` assertion, `spec.identity.userIssuer`. */
   readonly issuer: string;
   /** JWKS BFF (EC P-256). */
   readonly jwks: JSONWebKeySet;

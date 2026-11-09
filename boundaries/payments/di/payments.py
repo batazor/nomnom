@@ -32,8 +32,8 @@ def create_grpc_worker(
 class PaymentsContainer(containers.DeclarativeContainer):
     """One instance per ``payments`` process; ``config`` holds ``pkg.config.Settings``.
 
-    Identity (``IDENTITY__*``: service tokens and BFF user assertions),
-    ``SPICEDB__ENDPOINT``, ``PROVIDER__KIND`` and ``PROVIDER__WEBHOOK_SECRET`` are
+    Identity (``spec.identity``: service tokens and BFF user assertions),
+    ``spec.spicedb.endpoint``, ``spec.provider.kind`` and ``PROVIDER__WEBHOOK_SECRET`` are
     required: a missing or invalid value stops the process before any port opens.
     """
 
@@ -41,7 +41,7 @@ class PaymentsContainer(containers.DeclarativeContainer):
     config = providers.Configuration(strict=True)
 
     telemetry = TelemetryResource(
-        telemetry_providers, config.shutdown.provided.telemetry_flush_timeout
+        telemetry_providers, config.telemetry, config.shutdown.provided.telemetry_flush_timeout
     )
     database = ProcessResource(migrated_database, config.database)
     spicedb = ProcessResource(spicedb_client, config.spicedb)

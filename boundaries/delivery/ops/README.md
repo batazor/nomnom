@@ -22,7 +22,7 @@ chart сейчас не используется. Решение зафикси�
 | `Deployment` | Контейнер приложения (миграции PostgreSQL применяет сам процесс при старте); все изменяемые параметры в `values.yaml`. |
 | `Service` (`ClusterIP`, порт `8083`) | Backend target для internal gateway и технических механизмов Kubernetes. |
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
-| `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
+| `ConfigMap` | Файл конфигурации процесса `config.yaml` из `config.spec` (ADR 17), монтируется в `/etc/nomnom/config.yaml`. |
 | `ConfigMap` + `Job` `<release>-cdc-connector` | Только при `cdc.enabled`: hook post-install/post-upgrade регистрирует коннектор Debezium Outbox в Kafka Connect. |
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
@@ -84,22 +84,55 @@ helm upgrade --install delivery ops/helm --set image.tag=local
 
 ## Конфигурация
 
-Приложение слушает порт `8083` (переменная `SERVER__PORT`); `service.targetPort` должен
-совпадать с портом процесса. Несекретная конфигурация передаётся через `env` и попадает в
-`ConfigMap`:
+Несекретная конфигурация процесса — файл `config.yaml` в `ConfigMap`
+([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): chart монтирует его в
+`/etc/nomnom/config.yaml` (`subPath`), задаёт env `CONFIG_FILE` с этим путём и `POD_NAME` через
+Downward API (`service.instance.id`). Аннотация pod `checksum/config` — sha256 файла: изменение
+конфигурации перезапускает pods. Переменные `SECTION__KEY`, `OTEL_*` и `LOG__LEVEL` chart не
+задаёт, процесс их не читает.
+
+Файл собирается так:
+
+- `apiVersion: config.nomnom.dev/v1alpha1` и `kind: Delivery` — константы chart;
+- `metadata.name` — обязательное значение `role` (`values.yaml` — `delivery`,
+  `values-worker.yaml` — `delivery-worker`); процесс сверяет его со своей ролью;
+- `spec` — блок values `config.spec` как есть (`toYaml`): ключи camelCase, длительности —
+  строки (`5s`, `2m`); неизвестный ключ завершает startup процесса;
+- chart дописывает только то, чем владеет: пути смонтированных JWKS в
+  `spec.identity.jwksFile` и `spec.identity.userJwksFile` (при `identity.jwksConfigMap`) и
+  `service.version` из `image.tag` в `spec.telemetry.resourceAttributes`. Такой ключ в values —
+  ошибка `helm template`.
 
 ```yaml
-env:
-  OTEL_SERVICE_NAME: delivery
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.observability.svc:4317
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=nomnom,deployment.environment.name=local
+role: delivery
+config:
+  spec:
+    temporal:
+      hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+      namespace: default
+    telemetry:
+      endpoint: http://alloy.observability.svc:4317
+      resourceAttributes:
+        deployment.environment.name: local
+    tracing:
+      enabled: true
+    metrics:
+      enabled: true
 ```
 
-Адрес Alloy и другие значения OpenTelemetry задаются окружением и не хардкодятся в chart;
-Alloy sidecar не добавляется — collector разворачивается отдельно.
+Приложение слушает порт `8083` (`config.spec.server.port`, по умолчанию `8083`);
+`service.targetPort` должен совпадать с ним — при заданном `config.spec.server.port` chart это
+проверяет. Адрес Alloy и другие значения OpenTelemetry задаются окружением и не хардкодятся в
+chart; Alloy sidecar не добавляется — collector разворачивается отдельно.
+
+`values-worker.yaml` убирает из `config.spec` секции API (`identity`, `spicedb`, `kafka`,
+`deliveryEstimate`), неполные в `values.yaml`: процесс проверяет весь `spec` kind `Delivery` и
+неполную секцию не принимает.
 
 Секреты (пароли, API tokens, credentials БД и Kafka, BSR tokens) не помещаются в
-`values.yaml` и `ConfigMap`. Они подключаются из внешних Kubernetes `Secret`:
+`values.yaml` и `ConfigMap`, полей для них в `spec` нет. Chart подключает `DATABASE__URI`,
+`VALKEY__URL` и `SPICEDB__PRESHARED_KEY` из Secret через `secretKeyRef`; остальные — из внешних
+Kubernetes `Secret`:
 
 ```yaml
 envFrom:
@@ -120,8 +153,9 @@ Secret-ресурсы chart не создаёт.
 
 Хранилище — PostgreSQL ([ADR 31](../../../docs/adr/0031-outbox-storage-polling-relay-and-clients.md),
 [ADR 0001 контекста](../docs/adr/0001-postgresql-хранилище-delivery.md)). Контейнер получает
-`DATABASE__URI` из Secret `database.uriSecret` (по умолчанию `delivery-postgres`, ключ `dsn`)
-и `DATABASE__MAX_CONNS` (`database.pool.maxConns`). Secret создаёт развёртывание: в kind —
+`DATABASE__URI` из Secret `database.uriSecret` (по умолчанию `delivery-postgres`, ключ `dsn`);
+лимиты пула — `config.spec.database` (`maxConns`, `minConns`, `maxLifetime`, `idleTimeout`,
+`acquireTimeout`). Secret создаёт развёртывание: в kind —
 chart `ops/kind/bootstrap` вместе с базой `delivery` общего сервера `postgres`. Без Secret процесс завершается
 ошибкой startup (`DATABASE__URI is required`). Значение — только PostgreSQL connection URI
 (`postgresql://` или `postgres://`); libpq key=value завершает startup.
@@ -160,40 +194,43 @@ helm template delivery boundaries/delivery/ops/helm \
 
 Проверку projected ServiceAccount token ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md))
 включает `identity.jwksConfigMap`: ConfigMap с ключом `jwks.json` (создаётся развёртыванием из
-`kubectl get --raw /openid/v1/jwks`) монтируется read-only в `/etc/nomnom/identity/jwks.json`, а
-контейнер получает `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` и
-`IDENTITY__SERVICE_ACCOUNTS`. Без `jwksConfigMap` переменные не задаются и приложение отклоняет все
-gRPC-вызовы `UNAUTHENTICATED`.
+`kubectl get --raw /openid/v1/jwks`) монтируется read-only в `/etc/nomnom/identity/jwks.json`, и
+chart пишет этот путь в `spec.identity.jwksFile`. Issuer, audience и allowlist — ключи
+`config.spec.identity.issuer`, `audience` (chart: `nomnom.delivery`) и `serviceAccounts`; для
+release с gRPC API (`service.enabled`) все обязательны, пустое значение — ошибка рендера chart.
 
 ```bash
 helm template delivery boundaries/delivery/ops/helm \
-  --set identity.issuer=https://kubernetes.default.svc.cluster.local \
-  --set identity.serviceAccounts=nomnom/orders-worker=orders-worker \
-  --set identity.jwksConfigMap=cluster-jwks
+  --set config.spec.identity.issuer=https://kubernetes.default.svc.cluster.local \
+  --set config.spec.identity.serviceAccounts=nomnom/orders-worker=orders-worker \
+  --set config.spec.identity.userIssuer=nomnom-bff \
+  --set config.spec.identity.userDelegates=bff \
+  --set identity.jwksConfigMap=cluster-jwks --set identity.userJwksConfigMap=bff-jwks \
+  --set config.spec.temporal.hostPort=temporal:7233 --set config.spec.temporal.namespace=default \
+  --set valkey.urlSecret.name=delivery-valkey
 ```
 
 JWKS читается при старте: после обновления ConfigMap нужен rollout restart.
 
 User assertions BFF ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md))
-обязательны вместе с service identity: `identity.userJwksConfigMap`, `identity.userIssuer` и
-`identity.userDelegates`, пустое значение — ошибка рендера chart. Ключ `jwks.json` (публичные
-ключи BFF, в kind — ConfigMap `bff-jwks`) монтируется read-only в
-`/etc/nomnom/user-identity/jwks.json`, а контейнер получает `IDENTITY__USER_ISSUER`,
-`IDENTITY__USER_JWKS_FILE` и `IDENTITY__USER_DELEGATES`.
+обязательны вместе с service identity: `identity.userJwksConfigMap`,
+`config.spec.identity.userIssuer` и `config.spec.identity.userDelegates`. Ключ `jwks.json`
+(публичные ключи BFF, в kind — ConfigMap `bff-jwks`) монтируется read-only в
+`/etc/nomnom/user-identity/jwks.json`, путь chart пишет в `spec.identity.userJwksFile`.
 
 ## SpiceDB
 
-Авторизацию в SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) включает
-`spicedb.endpoint`: контейнер получает `SPICEDB__ENDPOINT`, `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT`
-и `SPICEDB__PRESHARED_KEY` из Secret `spicedb.presharedKeySecret` (`secretKeyRef`, по умолчанию
-ключ `preshared-key`). Secret создаётся развёртыванием; без его имени при заданном endpoint chart
-не рендерится. Без endpoint переменные не задаются, и приложение не стартует:
-`SPICEDB__ENDPOINT` обязателен. `spicedb.insecure: true` (plaintext) — только для kind.
+Авторизацию в SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) задают
+`config.spec.spicedb.endpoint`, `insecure` (plaintext, только для kind) и `timeout` (по умолчанию
+`2s`). При заданном endpoint контейнер получает `SPICEDB__PRESHARED_KEY` из Secret
+`spicedb.presharedKeySecret` (`secretKeyRef`, по умолчанию ключ `preshared-key`); Secret создаётся
+развёртыванием, без его имени chart не рендерится. Процесс `delivery` без endpoint не стартует:
+`spec.spicedb.endpoint` обязателен.
 
 ```bash
 helm template delivery boundaries/delivery/ops/helm \
-  --set spicedb.endpoint=spicedb.nomnom-authz.svc:50051 \
-  --set spicedb.insecure=true \
+  --set config.spec.spicedb.endpoint=spicedb.nomnom-authz.svc:50051 \
+  --set config.spec.spicedb.insecure=true \
   --set spicedb.presharedKeySecret.name=spicedb-preshared-key
 ```
 
@@ -206,13 +243,13 @@ helm template delivery boundaries/delivery/ops/helm \
 
 ## Runtime contract
 
-Chart реализует [runtime contract](../../../docs/cloud-native-runtime.md) ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): контейнер объявляет технический порт `metrics` (`management.port`, по умолчанию `9083`), а probes обращаются к health endpoints на нём. Порт `metrics` не входит в `Service`: kubelet probes и Alloy scrape идут напрямую в pod, имя порта задано моделью NetworkPolicy [ADR 16](../../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md).
+Chart реализует [runtime contract](../../../docs/cloud-native-runtime.md) ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): контейнер объявляет технический порт `metrics` (`config.spec.management.port`, chart: `9083`), а probes обращаются к health endpoints на нём. Порт `metrics` не входит в `Service`: kubelet probes и Alloy scrape идут напрямую в pod, имя порта задано моделью NetworkPolicy [ADR 16](../../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md).
 
 | Параметр | По умолчанию | Назначение |
 | --- | --- | --- |
-| `management.port` | `9083` | Номер технического порта; передаётся приложению как `MANAGEMENT__PORT`. |
-| `shutdown.readinessDelaySeconds` | `5` | `SHUTDOWN__READINESS_DELAY`: сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
-| `shutdown.drainTimeoutSeconds` | `20` | `SHUTDOWN__DRAIN_TIMEOUT`: deadline на завершение начатых запросов. |
+| `config.spec.management.port` | `9083` | Номер технического порта процесса и контейнерного порта `metrics`; отличается от `service.targetPort`. |
+| `config.spec.shutdown.readinessDelay` | `5s` | Сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
+| `config.spec.shutdown.drainTimeout` | `20s` | Deadline на завершение начатых запросов; положительный. |
 | `terminationGracePeriodSeconds` | `30` | Должен быть больше суммы delay и drain; иначе `helm template` завершается ошибкой. |
 | `startupProbe` | `/health/startup`, каждые 2s, до 30 попыток | Пока не пройдена, liveness и readiness не проверяются. |
 | `livenessProbe` | `/health/live`, каждые 10s, 3 провала | Остаётся успешной во время shutdown. |

@@ -10,8 +10,9 @@ generate:
 proto-check:
 	$(MAKE) -C ../.. buf-check
 
+# Несекретная конфигурация — config.example.yaml, секреты — .env (по образцу .env.example).
 run:
-	$(UV) run python -m entrypoints.payments.main
+	CONFIG_FILE=config.example.yaml POD_NAME=payments-local $(UV) run --env-file .env python -m entrypoints.payments.main
 
 test:
 	$(UV) run pytest

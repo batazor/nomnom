@@ -258,7 +258,7 @@ pub struct OrderTracking {
     pub pickup: ::core::option::Option<GeoPoint>,
     #[prost(message, optional, tag="4")]
     pub dropoff: ::core::option::Option<GeoPoint>,
-    /// Stored courier position, up to TRACKING__PERSIST_INTERVAL old; unset
+    /// Stored courier position, up to spec.tracking.persistInterval old; unset
     /// while unknown.
     #[prost(message, optional, tag="5")]
     pub courier_position: ::core::option::Option<CourierLocation>,
@@ -347,11 +347,11 @@ pub struct EstimateDeliveryDurationRequest {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EstimateDeliveryDurationResponse {
     /// Create Delivery → Pickup: median courier lead of the Market, or
-    /// DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD until the sample is full.
+    /// spec.deliveryEstimate.baselineCourierLead until the sample is full.
     #[prost(message, optional, tag="1")]
     pub courier_lead: ::core::option::Option<::prost_types::Duration>,
     /// Pickup → handover: median transit of the Market, or
-    /// DELIVERY_ESTIMATE__BASELINE_TRANSIT until the sample is full.
+    /// spec.deliveryEstimate.baselineTransit until the sample is full.
     #[prost(message, optional, tag="2")]
     pub transit: ::core::option::Option<::prost_types::Duration>,
 }

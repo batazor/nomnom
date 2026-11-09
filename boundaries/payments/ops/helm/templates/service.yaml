@@ -21,7 +21,7 @@ spec:
       {{- end }}
     # Webhooks провайдера: публикуется только через public gateway (HTTPRoute).
     - name: webhooks
-      port: {{ .Values.providerWebhooks.port }}
+      port: {{ include "payments.port" (dict "context" $ "section" "provider" "key" "webhookPort") }}
       targetPort: webhooks
       protocol: TCP
   selector:

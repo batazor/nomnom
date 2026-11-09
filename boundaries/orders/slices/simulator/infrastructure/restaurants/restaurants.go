@@ -1,7 +1,7 @@
 // Package restaurants implements the catalog port of the customer Simulator on
 // the public reads ListRestaurants and GetMenu of restaurants, called through
 // the internal gateway like the Place Order catalog, for the Markets configured
-// in SIMULATOR__MARKET_IDS.
+// in spec.simulator.marketIds.
 package restaurants
 
 import (

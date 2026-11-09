@@ -3,29 +3,36 @@
 image:
   pullPolicy: Never
 
-env:
-  KAFKA__BROKERS: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
-  # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
-  SCHEMA_REGISTRY__URL: http://schema-registry.nomnom-infra.svc.cluster.local:8081
-  TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
-  TEMPORAL__NAMESPACE: default
-  # Config orders требует адрес gateway при fulfillment neighbours "grpc" (по умолчанию):
-  # без него consumer не стартует.
-  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-
 # ADR 8: Inbox, Order и Outbox consumer'а — в PostgreSQL orders (Secret создаёт
-# chart ops/kind/bootstrap). Миграции выполняет init container release orders и этого release.
+# chart ops/kind/bootstrap). Схему процесс создаёт сам при старте.
 postgres:
   dsnSecret:
     name: orders-postgres
 
-# ADR 18: Record Courier Assignment пишет order#courier/order#delivery в SpiceDB до
-# commit Inbox; без endpoint consumer не стартует. Secret создаёт chart ops/kind/bootstrap.
+# ADR 18: Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
-  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
-  insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
+
+config:
+  spec:
+    kafka:
+      brokers:
+        - kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
+    # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
+    schemaRegistry:
+      url: http://schema-registry.nomnom-infra.svc.cluster.local:8081
+    temporal:
+      hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+      namespace: default
+    # Адрес gateway обязателен всем процессам orders: без него consumer не стартует.
+    internalGateway:
+      address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+    # ADR 18: Record Courier Assignment пишет order#courier/order#delivery в SpiceDB до
+    # commit Inbox; без endpoint consumer не стартует.
+    spicedb:
+      endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+      insecure: true
 
 # Burstable без CPU limit: request — доля CPU под конкуренцией, limit троттлит и при
 # свободной ноде. Memory request — steady state в kind, limit — пик e2e (Chainsaw, 54 теста)

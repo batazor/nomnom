@@ -3,6 +3,10 @@
 # адреса внешних систем и kind-specific настройки задаются отдельными values-файлами
 # или флагами --set при установке.
 
+# Роль процесса release: metadata.name файла конфигурации, процесс сверяет её со своей.
+# values.yaml — restaurants, values-consumer.yaml — restaurants-consumer.
+role: restaurants
+
 replicaCount: 1
 
 image:
@@ -69,7 +73,7 @@ service:
   enabled: true
   type: ClusterIP
   # Порт Service и порт приложения. Приложение слушает 8082 по умолчанию
-  # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,
+  # (config.spec.server.port); targetPort должен совпадать с портом,
   # на котором фактически запускается процесс.
   port: 8082
   targetPort: 8082
@@ -83,23 +87,6 @@ service:
 resources:
   requests: {}
   limits: {}
-
-# Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT и OTEL_RESOURCE_ATTRIBUTES задаются
-# секцией telemetry, а не здесь. Пример:
-# env:
-#   KAFKA__BROKERS: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
-env:
-  # Окна доставки запланированных заказов (FR-694): обязательны для API restaurants, без default
-  # в коде — пустое или невалидное значение останавливает старт. Ширина MUST делить 30 минут;
-  # MIN_LEAD < MAX_HORIZON. MAX_HORIZON MUST быть меньше срока жизни Authorization hold у
-  # payment provider (7 дней у карточных provider'ов), иначе запланированный заказ потребует
-  # повторной Authorization.
-  SCHEDULED_SLOT__WIDTH: 15m
-  SCHEDULED_SLOT__MIN_LEAD: 45m
-  SCHEDULED_SLOT__MAX_HORIZON: 48h
-  SCHEDULED_SLOT__HOLD_TTL: 10m
-  SCHEDULED_SLOT__ALTERNATIVES: "3"
 
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
 # envFrom:
@@ -116,40 +103,9 @@ envFrom: []
 #         key: token
 extraEnv: []
 
-# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
-# Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется; номер передаётся
-# приложению через MANAGEMENT__PORT. Порт не входит в Service и не публикуется через gateway.
-management:
-  port: 9082
-
-# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY,
-# SHUTDOWN__DRAIN_TIMEOUT и SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT. readinessDelaySeconds должен
-# превышать время, за которое readinessProbe замечает not ready (periodSeconds ×
-# failureThreshold), плюс распространение EndpointSlice и конфигурации internal gateway.
-# telemetryFlushTimeoutSeconds — deadline финального экспорта traces и metrics после drain.
-shutdown:
-  readinessDelaySeconds: 5
-  drainTimeoutSeconds: 20
-  telemetryFlushTimeoutSeconds: 5
-
-# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds + telemetryFlushTimeoutSeconds
+# Должен быть больше config.spec.shutdown.readinessDelay + drainTimeout + telemetryFlushTimeout
 # с запасом на выход процесса; chart отказывается рендериться при нарушении.
 terminationGracePeriodSeconds: 35
-
-# OpenTelemetry (ADR 9, docs/observability.md). Chart задаёт OTEL_SERVICE_NAME,
-# OTEL_RESOURCE_ATTRIBUTES (service.instance.id — имя pod через downward API,
-# service.version — image.tag, плюс resourceAttributes) и, если endpoint задан,
-# OTEL_EXPORTER_OTLP_ENDPOINT. Явные переменные chart перекрывают одноимённые из env
-# (ConfigMap), поэтому OTEL_* через env не задаются.
-telemetry:
-  # service.name процесса: restaurants, restaurants-consumer.
-  serviceName: restaurants
-  # OTLP/gRPC endpoint Alloy для traces и metrics, например
-  # http://alloy.nomnom-observability.svc.cluster.local:4317. Пусто — экспорт выключен,
-  # W3C trace context всё равно передаётся; логи всегда идут JSON в stdout.
-  endpoint: ""
-  # Атрибуты окружения, например deployment.environment.name: local.
-  resourceAttributes: {}
 
 # Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
 # в Kubernetes как есть.
@@ -183,87 +139,48 @@ readinessProbe:
   failureThreshold: 1
 
 # Service identity по projected ServiceAccount token (ADR 27) и user assertions BFF (ADR 32).
-# Для release с gRPC API (service.enabled) все значения ниже обязательны; ключ jwks.json
-# jwksConfigMap монтируется read-only в /etc/nomnom/identity/jwks.json, ключ jwks.json
-# userJwksConfigMap — в /etc/nomnom/user-identity/jwks.json.
+# Для release с gRPC API (service.enabled) обязательны обе ConfigMap и config.spec.identity
+# (issuer, audience, serviceAccounts, userIssuer, userDelegates). Ключ jwks.json jwksConfigMap
+# монтируется read-only в /etc/nomnom/identity/jwks.json, ключ jwks.json userJwksConfigMap — в
+# /etc/nomnom/user-identity/jwks.json; эти пути chart сам пишет в config.spec.identity.jwksFile и
+# userJwksFile.
 identity:
-  # Issuer токенов кластера (/.well-known/openid-configuration), например
-  # https://kubernetes.default.svc.cluster.local.
-  issuer: ""
-  # Audience, которую вызывающие указывают в projected token для этого контекста.
-  audience: "nomnom.restaurants"
-  # Allowlist через запятую: namespace/serviceaccount=service-name,
-  # например nomnom/orders-worker=orders-worker.
-  serviceAccounts: ""
   # ConfigMap с ключом jwks.json — публичные ключи кластера (/openid/v1/jwks).
   jwksConfigMap: ""
   # ConfigMap с ключом jwks.json — публичные ключи BFF (EC P-256), в kind bff-jwks.
   userJwksConfigMap: ""
-  # Ожидаемый iss assertion, например nomnom-bff.
-  userIssuer: ""
-  # Services через запятую, которым разрешено передавать user subject, например bff.
-  userDelegates: ""
 
-# Authorization через SpiceDB (ADR 18), обязательна: при пустом endpoint переменные SPICEDB__*
-# не задаются и процесс restaurants падает на старте.
-# Если endpoint задан, preshared key берётся только из Secret presharedKeySecret.
+# Authorization через SpiceDB (ADR 18), обязательна процессу restaurants: endpoint и прочие
+# настройки — config.spec.spicedb. При заданном endpoint preshared key берётся только из Secret
+# presharedKeySecret (env SPICEDB__PRESHARED_KEY).
 spicedb:
-  # gRPC endpoint host:port, например spicedb.nomnom-authz.svc.cluster.local:50051.
-  endpoint: ""
-  # Plaintext gRPC без TLS — только kind и локальный запуск.
-  insecure: false
-  # Deadline одной проверки; ошибка или timeout — отказ UNAVAILABLE (fail closed).
-  timeout: "2s"
   presharedKeySecret:
-    # Существующий Secret с preshared key SpiceDB; обязателен при заданном endpoint.
+    # Существующий Secret с preshared key SpiceDB; обязателен при заданном config.spec.spicedb.endpoint.
     name: ""
     key: "preshared-key"
 
 # Хранилище MongoDB (ADR 8, локальный ADR 1): replica set обязателен — Unit of Work
-# использует multi-document транзакции. Пока uriSecret.name пуст, MONGODB__* не задаются
-# и процесс не стартует (MONGODB__URI обязателен). Connection string (с учётными данными)
-# берётся только из Secret.
+# использует multi-document транзакции. Connection string (с учётными данными) берётся только
+# из Secret (env MONGODB__URI); пока uriSecret.name пуст, процессы не стартуют. База, timeout и
+# пул — config.spec.mongodb.
 mongodb:
   uriSecret:
     # Существующий Secret с connection string, например
     # mongodb://restaurants:<password>@mongodb-restaurants.nomnom-data.svc.cluster.local:27017/restaurants?replicaSet=rs0&authSource=restaurants
     name: ""
     key: "uri"
-  database: "restaurants"
-  # Server selection timeout при старте и запросах (500ms, 5s, 1m).
-  timeout: "5s"
-  # Connection pool MongoClient процесса (MONGODB__*), лимиты — на пул одного сервера
-  # replica set (драйвер держит пул на каждый сервер). Значения вне диапазона
-  # останавливают render chart и старт процесса. Метрики пула — db.client.connection.*
-  # (docs/observability/metric-inventory.md#db).
-  pool:
-    # Соединений на сервер (1..100): API обслуживает конкурентные RPC, consumer — 5
-    # (values-consumer.yaml).
-    maxPoolSize: 20
-    # Прогретые соединения; 0 — пул растёт по требованию и не держит idle-соединения.
-    minPoolSize: 0
-    # Idle-соединение закрывается после этого срока (500ms, 5s, 5m).
-    maxIdleTime: "5m"
-    # Ожидание свободного соединения до ошибки checkout (timeout вместо зависания).
-    waitQueueTimeout: "5s"
-    # Одновременно устанавливаемые соединения: сглаживает шторм подключений после рестарта.
-    maxConnecting: 2
 
 # Кеш чтения каталога (ADR 43, локальный ADR 3): GetRestaurant, GetMenu и ListRestaurants в Valkey.
 # restaurants-consumer обновляет ключи по RestaurantOpened/Closed и MenuItemAvailabilityChanged
-# сразу после commit, остальное устаревает до TTL. Пока urlSecret.name пуст, VALKEY__* не
-# задаются и процессы не стартуют (VALKEY__URL обязателен). Недоступный Valkey процесс не
-# останавливает: чтения идут в MongoDB мимо кеша.
+# сразу после commit, остальное устаревает до TTL. URL берётся только из Secret (env VALKEY__URL);
+# пока urlSecret.name пуст, процессы не стартуют. Недоступный Valkey процесс не останавливает:
+# чтения идут в MongoDB мимо кеша. Deadline команды и TTL — config.spec.valkey и config.spec.cache.
 valkey:
   urlSecret:
     # Существующий Secret с URL ACL-пользователя restaurants (ключи restaurants:*), например
     # redis://restaurants:<password>@valkey-restaurants.nomnom-data.svc.cluster.local:6379
     name: ""
     key: "url"
-  # Deadline одной команды; истёк — чтение из MongoDB.
-  commandTimeout: "50ms"
-  # TTL записи: изменение без события (цена, название) видно не позже чем через это время.
-  ttl: "1m"
 
 # ADR 37: Outbox restaurants доставляет Debezium (Kafka Connect) из change streams MongoDB.
 # Включается в одном release контекста (API): chart создаёт ресурс KafkaConnector
@@ -315,6 +232,88 @@ cdc:
 
 volumes: []
 volumeMounts: []
+
+# Файл конфигурации процесса (ADR 17): chart рендерит его в ConfigMap (ключ config.yaml) с
+# apiVersion config.nomnom.dev/v1alpha1, kind Restaurants и metadata.name — role, монтирует в
+# /etc/nomnom/config.yaml и задаёт CONFIG_FILE. config.spec попадает в файл как есть: ключи —
+# camelCase бывших env (MONGODB__MAX_POOL_SIZE → mongodb.maxPoolSize), длительности — строки
+# (500ms, 5s, 1m). Неизвестный ключ останавливает процесс на старте; секретов в spec нет.
+# Chart сам пишет только spec.identity.jwksFile, spec.identity.userJwksFile и
+# spec.telemetry.resourceAttributes["service.version"] (image.tag).
+config:
+  spec:
+    # Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
+    # Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется; номер обязателен:
+    # chart объявляет по нему containerPort. Порт не входит в Service и не публикуется через gateway.
+    management:
+      port: 9082
+    # Бюджет graceful shutdown; обязателен в values — chart проверяет по нему
+    # terminationGracePeriodSeconds. readinessDelay должен превышать время, за которое
+    # readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
+    # EndpointSlice и конфигурации internal gateway. telemetryFlushTimeout — deadline финального
+    # экспорта traces и metrics после drain.
+    shutdown:
+      readinessDelay: 5s
+      drainTimeout: 20s
+      telemetryFlushTimeout: 5s
+    # OpenTelemetry (ADR 9, docs/observability.md). Экспорт включают только tracing.enabled и
+    # metrics.enabled; с любым из них обязателен telemetry.endpoint, например
+    # http://alloy.nomnom-observability.svc.cluster.local:4317 (protocol grpc) или :4318
+    # (http/protobuf). service.name — имя процесса или telemetry.serviceName, service.instance.id —
+    # имя pod (POD_NAME), service.version — image.tag; resourceAttributes задают атрибуты
+    # окружения, например deployment.environment.name. Логи всегда JSON в stdout.
+    tracing:
+      enabled: false
+    metrics:
+      enabled: false
+    logging:
+      level: info
+    identity:
+      # Audience, которую вызывающие указывают в projected token для этого контекста. Issuer
+      # кластера (/.well-known/openid-configuration), allowlist namespace/serviceaccount=service-name
+      # через запятую, issuer BFF и services-делегаты через запятую задаёт окружение.
+      audience: nomnom.restaurants
+    spicedb:
+      # gRPC endpoint host:port, например spicedb.nomnom-authz.svc.cluster.local:50051, задаёт окружение.
+      # Plaintext gRPC без TLS — только kind и локальный запуск.
+      insecure: false
+      # Deadline одной проверки; ошибка или timeout — отказ UNAVAILABLE (fail closed).
+      timeout: 2s
+    mongodb:
+      database: restaurants
+      # Server selection timeout при старте и запросах (500ms, 5s, 1m).
+      timeout: 5s
+      # Connection pool MongoClient процесса, лимиты — на пул одного сервера replica set (драйвер
+      # держит пул на каждый сервер). Значения вне диапазона останавливают render chart и старт
+      # процесса. Метрики пула — db.client.connection.* (docs/observability/metric-inventory.md#db).
+      # Соединений на сервер (1..100): API обслуживает конкурентные RPC, consumer — 5
+      # (values-consumer.yaml).
+      maxPoolSize: 20
+      # Прогретые соединения; 0 — пул растёт по требованию и не держит idle-соединения.
+      minPoolSize: 0
+      # Idle-соединение закрывается после этого срока (500ms, 5s, 5m).
+      maxIdleTime: 5m
+      # Ожидание свободного соединения до ошибки checkout (timeout вместо зависания).
+      waitQueueTimeout: 5s
+      # Одновременно устанавливаемые соединения: сглаживает шторм подключений после рестарта.
+      maxConnecting: 2
+    valkey:
+      # Deadline одной команды; истёк — чтение из MongoDB.
+      commandTimeout: 50ms
+    cache:
+      # TTL записи: изменение без события (цена, название) видно не позже чем через это время.
+      ttl: 1m
+    # Окна доставки запланированных заказов (FR-694): обязательны для API restaurants, без default
+    # в коде — пустое или невалидное значение останавливает старт. Ширина MUST делить 30 минут;
+    # minLead < maxHorizon. maxHorizon MUST быть меньше срока жизни Authorization hold у
+    # payment provider (7 дней у карточных provider'ов), иначе запланированный заказ потребует
+    # повторной Authorization.
+    scheduledSlot:
+      width: 15m
+      minLead: 45m
+      maxHorizon: 48h
+      holdTtl: 10m
+      alternatives: 3
 
 nodeSelector: {}
 tolerations: []

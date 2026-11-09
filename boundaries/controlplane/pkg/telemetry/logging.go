@@ -17,15 +17,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 )
 
 // Логи процесса (docs/observability.md#логи): одна JSON-запись на строку в
 // stdout. Поля timestamp (UTC), severity и message, resource-поля service.* и
 // deployment.environment.name из того же resource, что у traces и metrics,
 // trace_id/span_id — только внутри span. Значения проходят redaction до записи.
-
-// EnvLogLevel — минимальный уровень записей: debug, info (по умолчанию), warn, error.
-const EnvLogLevel = "LOG__LEVEL"
 
 // Ключи записи. Resource-поля — плоские ключи с точками, как их читает Alloy.
 const (
@@ -59,12 +58,13 @@ type LogResource struct {
 	InstanceID  string
 }
 
-// LogResourceFor читает тот же resource, что Start: serviceName по умолчанию,
-// OTEL_SERVICE_NAME и OTEL_RESOURCE_ATTRIBUTES его переопределяют.
-func LogResourceFor(ctx context.Context, serviceName string) (LogResource, error) {
-	res, err := newResource(ctx, serviceName)
+// LogResourceFor — идентификация записей из того же resource, что у traces и
+// metrics (Resource): telemetry.serviceName, telemetry.resourceAttributes и
+// service.instance.id из POD_NAME.
+func LogResourceFor(ctx context.Context, cfg config.TelemetryConfig) (LogResource, error) {
+	res, err := Resource(ctx, cfg)
 	if err != nil {
-		return LogResource{Namespace: ServiceNamespace, Name: serviceName, Version: buildVersion()}, err
+		return LogResource{}, err
 	}
 	lr := LogResource{}
 	for _, kv := range res.Attributes() {
@@ -82,6 +82,13 @@ func LogResourceFor(ctx context.Context, serviceName string) (LogResource, error
 		}
 	}
 	return lr, nil
+}
+
+// ProcessLogResource — идентификация записей до загрузки конфигурации: имя
+// процесса по умолчанию и revision сборки. Окружения и instance id ещё нет —
+// полей просто нет.
+func ProcessLogResource(serviceName string) LogResource {
+	return LogResource{Namespace: ServiceNamespace, Name: serviceName, Version: buildVersion()}
 }
 
 func (r LogResource) attrs() []slog.Attr {
@@ -112,37 +119,14 @@ func NewLogHandler(w io.Writer, resource LogResource, level slog.Leveler) slog.H
 
 // SetupLogging делает JSON logger процесса default logger'ом: через него идут
 // slog.*, log.Printf (slog.SetDefault перенаправляет пакет log) и gRPC
-// (grpclog).
-// Вызывается первым в main, до загрузки конфигурации.
-func SetupLogging(serviceName string) *slog.Logger {
-	resource, resErr := LogResourceFor(context.Background(), serviceName)
-	level, levelErr := ParseLogLevel(os.Getenv(EnvLogLevel))
+// (grpclog). main вызывает его дважды: первым, до загрузки конфигурации, с
+// ProcessLogResource и уровнем info — чтобы и ошибки загрузки шли по схеме
+// логов, — и после загрузки с resource и spec.logging.level из файла.
+func SetupLogging(resource LogResource, level slog.Level) *slog.Logger {
 	logger := slog.New(NewLogHandler(os.Stdout, resource, level))
 	slog.SetDefault(logger)
 	setGRPCLogger(logger)
-	if resErr != nil {
-		logger.Warn("telemetry resource is incomplete", LogErrorKey, resErr)
-	}
-	if levelErr != nil {
-		logger.Warn("log level is invalid, using info", LogErrorKey, levelErr)
-	}
 	return logger
-}
-
-// ParseLogLevel разбирает LOG__LEVEL; пустое значение — info.
-func ParseLogLevel(raw string) (slog.Level, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "info":
-		return slog.LevelInfo, nil
-	case "debug":
-		return slog.LevelDebug, nil
-	case "warn", "warning":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return slog.LevelInfo, fmt.Errorf("%s must be debug, info, warn or error, got %q", EnvLogLevel, raw)
-	}
 }
 
 // traceHandler добавляет trace_id и span_id активного span из context записи.
@@ -304,8 +288,8 @@ func ErrorType(err error) string {
 	}
 }
 
-// buildVersion — service.version по умолчанию: VCS revision сборки; env
-// (OTEL_RESOURCE_ATTRIBUTES service.version, его задаёт Helm) переопределяет.
+// buildVersion — service.version по умолчанию: VCS revision сборки;
+// telemetry.resourceAttributes (Helm задаёт service.version из image tag) переопределяет.
 func buildVersion() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {

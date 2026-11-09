@@ -63,7 +63,7 @@ func TestEnsureStageSearchAttributeFailsWhenMissing(t *testing.T) {
 
 	require.ErrorIs(t, err, temporal.ErrSearchAttributeMissing)
 	assert.Contains(t, err.Error(), stage)
-	assert.Contains(t, err.Error(), "TEMPORAL__REGISTER_SEARCH_ATTRIBUTES")
+	assert.Contains(t, err.Error(), "spec.temporal.registerSearchAttributes")
 }
 
 func TestEnsureStageSearchAttributeRejectsWrongType(t *testing.T) {

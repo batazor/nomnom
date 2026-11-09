@@ -541,7 +541,7 @@ export declare type ReserveScheduledSlotResponse = Message<"nomnom.restaurants.v
    */
   result: {
     /**
-     * Held until confirmed or expired (SCHEDULED_SLOT__HOLD_TTL).
+     * Held until confirmed or expired (spec.scheduledSlot.holdTtl).
      *
      * @generated from field: nomnom.restaurants.v1.DeliveryWindow reserved = 1;
      */
@@ -564,7 +564,7 @@ export declare const ReserveScheduledSlotResponseSchema: GenMessage<ReserveSched
 
 /**
  * The window is full; the nearest available windows, at most
- * SCHEDULED_SLOT__ALTERNATIVES.
+ * spec.scheduledSlot.alternatives.
  *
  * @generated from message nomnom.restaurants.v1.SlotUnavailable
  */

@@ -1,7 +1,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use super::*;
-use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
+use crate::pkg::config::SPICEDB_ENDPOINT_KEY;
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::slices::courier::domains::courier::CourierId;
 use crate::slices::delivery::domains::delivery::{DeliveryId, OrderId};
@@ -224,7 +224,7 @@ fn empty_endpoint_is_a_config_error() {
     let Err(error) = SpiceDbAuthorization::from_config(&SpiceDbConfig::default()) else {
         panic!("an empty endpoint must not build an authorization");
     };
-    assert!(error.to_string().contains(SPICEDB_ENDPOINT_ENV));
+    assert!(error.to_string().contains(SPICEDB_ENDPOINT_KEY));
 }
 
 mod metrics {

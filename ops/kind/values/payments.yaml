@@ -8,32 +8,42 @@ podLabels:
   # Pod предоставляет бизнес-API: ingress только от internal gateway (NetworkPolicy).
   nomnom.dev/business-api: "true"
 
-env:
-  # Единственный адрес для синхронных вызовов бизнес-API других приложений.
-  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  # Sandbox-провайдер в памяти процесса: реальные деньги в kind не двигаются.
-  PROVIDER__KIND: fake
-  # Тестовый секрет подписи webhooks kind; в других окружениях приходит из Secret.
-  PROVIDER__WEBHOOK_SECRET: kind-provider-webhook-secret
-  # Обычный заказ даёт 7-10 событий: значение 5 заставляет снапшоты реально работать.
-  EVENT_STORE__SNAPSHOT_EVERY: "5"
+# Файл конфигурации процесса (ADR 17); секреты — из Secret через env.
+config:
+  spec:
+    provider:
+      # Sandbox-провайдер в памяти процесса: реальные деньги в kind не двигаются.
+      kind: fake
+    eventStore:
+      # Обычный заказ даёт 7-10 событий: значение 5 заставляет снапшоты реально работать.
+      snapshotEvery: 5
+    # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера и allowlist
+    # вызывающих workloads. ADR 32: user assertions BFF; передавать user subject может только
+    # service bff.
+    identity:
+      issuer: https://kubernetes.default.svc.cluster.local
+      serviceAccounts: nomnom-orders/orders-worker=orders-worker
+      userIssuer: nomnom-bff
+      userDelegates: bff
+    # ADR 18: SpiceDB тестового окружения.
+    spicedb:
+      endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+      insecure: true
 
-# ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
-# публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
+# Тестовый секрет подписи webhooks kind; в других окружениях приходит из Secret.
+# values/payments-stripe.yaml заменяет список целиком.
+extraEnv:
+  - name: PROVIDER__WEBHOOK_SECRET
+    value: kind-provider-webhook-secret
+
+# JWKS кластера (ConfigMap cluster-jwks) и BFF (ConfigMap bff-jwks) публикует Job identity-jwks
+# chart ops/kind/bootstrap.
 identity:
-  issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  serviceAccounts: nomnom-orders/orders-worker=orders-worker
-  # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
-  # передавать user subject может только service bff.
   userJwksConfigMap: bff-jwks
-  userIssuer: nomnom-bff
-  userDelegates: bff
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
+# ADR 18: Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
-  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
-  insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
 

@@ -10,14 +10,15 @@ POSTGRES_DEV_DSN ?= postgres://orders:orders@localhost:$(POSTGRES_PORT)/orders?s
 
 check: proto-check test lint format-check
 
-# План и отмена запланированного заказа обязательны для каждого процесса (config.example.yaml).
-SCHEDULED_ENV = CANCELLATION__SCHEDULED_CUTOFF=60m SCHEDULED_ORDER__PREPARATION_BUFFER=5m SCHEDULED_ORDER__REPLAN_LEAD=30m
+# Локальный API: несекретная конфигурация — файл CONFIG_FILE (config.example.yaml: SpiceDB из
+# `make spicedb-dev` в корне, ADR 18), секреты и имя pod — env. PostgreSQL — `make postgres-dev`.
+CONFIG_FILE ?= config.example.yaml
+POD_NAME ?= orders-local
+SPICEDB_DEV_PRESHARED_KEY ?= devkey
 
-# API требует SpiceDB (ADR 18): по умолчанию — локальный из `make spicedb-dev` в корне.
 run:
-	SPICEDB__ENDPOINT=$${SPICEDB__ENDPOINT:-localhost:50051} SPICEDB__PRESHARED_KEY=$${SPICEDB__PRESHARED_KEY:-devkey} \
-		SPICEDB__INSECURE=$${SPICEDB__INSECURE:-true} POSTGRES__DSN=$${POSTGRES__DSN:-$(POSTGRES_DEV_DSN)} \
-		$(SCHEDULED_ENV) $(GO) run ./cmd/orders
+	CONFIG_FILE=$(CONFIG_FILE) POD_NAME=$(POD_NAME) SPICEDB__PRESHARED_KEY=$(SPICEDB_DEV_PRESHARED_KEY) \
+		POSTGRES__DSN=$(POSTGRES_DEV_DSN) $(GO) run ./cmd/orders
 
 postgres-dev:
 	$(DOCKER) run -d --rm --name $(POSTGRES_CONTAINER) -p $(POSTGRES_PORT):5432 \

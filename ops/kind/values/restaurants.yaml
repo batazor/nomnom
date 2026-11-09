@@ -8,44 +8,14 @@ podLabels:
   # Pod предоставляет бизнес-API: ingress только от internal gateway (NetworkPolicy).
   nomnom.dev/business-api: "true"
 
-env:
-  # Единственный адрес для синхронных вызовов бизнес-API других приложений.
-  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  # Demo Simulator кухни (FR-606): обязательны, без default в коде.
-  SIMULATOR__INTERVAL: 5s
-  SIMULATOR__MIN_DELAY: 30s
-  SIMULATOR__MAX_DELAY: 2m
-  # Демо идёт в темпе Simulator (минуты, не десятки минут): базовое время ожидания, пока
-  # выборка Wait Time Statistics не набрана (FR-645). Совпадает с restaurants-consumer.
-  KITCHEN__PREPARATION_TIME: 1m
-  # Wait Time Statistics (FR-645, FR-657): оценка в каталоге и expected_ready_at; те же значения у consumer.
-  WAIT_TIME__SAMPLE_SIZE: "50"
-  WAIT_TIME__RECENT_WINDOW: 30m
-  WAIT_TIME__ELEVATED_FACTOR: "1.5"
-  WAIT_TIME__NORMAL_FACTOR: "1.2"
-  # Kitchen Queue (FR-241): обычный заказ после стольких базовых времён ожидания идёт с премиум-заказами.
-  KITCHEN_QUEUE__AGING_FACTOR: "2"
-
-# ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
-# публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
+# ADR 27 и ADR 32: ConfigMap JWKS кластера (cluster-jwks) и BFF (bff-jwks) публикует Job
+# identity-jwks chart ops/kind/bootstrap; chart монтирует их и пишет пути в config.spec.identity.
 identity:
-  issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  # orders — API orders (каталог Place Order: GetRestaurant, GetMenu). e2e-driver — fixture
-  # e2e пути заказа (e2e/chart/templates/e2e-driver.yaml): играет оператора, владельца и кухню,
-  # клиентов которых ещё нет; demo-seed — Job демо-данных (chart ops/kind/demo). Только в kind: chart-default его не содержит (AC-741).
-  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-orders/orders=orders,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver,nomnom-bff/demo-seed=demo-seed
-  # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
-  # передавать user subject могут service bff и, только в kind, e2e-driver и demo-seed — их assertion
-  # тест и Job подписывают тем же kind-ключом BFF.
   userJwksConfigMap: bff-jwks
-  userIssuer: nomnom-bff
-  userDelegates: bff,e2e-driver,demo-seed
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
+# ADR 18: Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
-  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
-  insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
 
@@ -53,11 +23,6 @@ spicedb:
 mongodb:
   uriSecret:
     name: restaurants-mongodb
-  # Новый pod первые секунды живёт с identity init Cilium, пока label'ы не дошли до агента,
-  # а ingress MongoDB ещё не знает его настоящую identity: SYN отбрасываются. 5s server
-  # selection не переживали этого при выкатке (restart consumer, 2026-10-27); 20s — с запасом
-  # в бюджете startupProbe (60s).
-  timeout: 20s
 
 # ADR 37: Outbox доставляет Debezium в Kafka Connect nomnom-infra. URI replica set Connect читает
 # из Secret cdc-credentials (ключ restaurants-uri) через DirectoryConfigProvider.
@@ -84,3 +49,47 @@ resources:
     memory: 96Mi
   limits:
     memory: 512Mi
+
+# Файл конфигурации процесса restaurants (ADR 17) поверх config.spec chart.
+config:
+  spec:
+    # Проверка projected ServiceAccount tokens (ADR 27) и user assertions BFF (ADR 32).
+    identity:
+      issuer: https://kubernetes.default.svc.cluster.local
+      # orders — API orders (каталог Place Order: GetRestaurant, GetMenu). e2e-driver — fixture
+      # e2e пути заказа (e2e/chart/templates/e2e-driver.yaml): играет оператора, владельца и кухню,
+      # клиентов которых ещё нет; demo-seed — Job демо-данных (chart ops/kind/demo). Только в kind:
+      # chart-default его не содержит (AC-741).
+      serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-orders/orders=orders,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver,nomnom-bff/demo-seed=demo-seed
+      # Передавать user subject могут service bff и, только в kind, e2e-driver и demo-seed — их
+      # assertion тест и Job подписывают тем же kind-ключом BFF.
+      userIssuer: nomnom-bff
+      userDelegates: bff,e2e-driver,demo-seed
+    # ADR 18: SpiceDB тестового окружения.
+    spicedb:
+      endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+      insecure: true
+    mongodb:
+      # Новый pod первые секунды живёт с identity init Cilium, пока label'ы не дошли до агента,
+      # а ingress MongoDB ещё не знает его настоящую identity: SYN отбрасываются. 5s server
+      # selection не переживали этого при выкатке (restart consumer, 2026-10-27); 20s — с запасом
+      # в бюджете startupProbe (60s).
+      timeout: 20s
+    # Demo Simulator кухни (FR-606): обязателен, без default в коде.
+    simulator:
+      interval: 5s
+      minDelay: 30s
+      maxDelay: 2m
+    # Демо идёт в темпе Simulator (минуты, не десятки минут): базовое время ожидания, пока
+    # выборка Wait Time Statistics не набрана (FR-645). Совпадает с restaurants-consumer.
+    kitchen:
+      preparationTime: 1m
+    # Wait Time Statistics (FR-645, FR-657): оценка в каталоге и expected_ready_at; те же значения у consumer.
+    waitTime:
+      sampleSize: 50
+      recentWindow: 30m
+      elevatedFactor: 1.5
+      normalFactor: 1.2
+    # Kitchen Queue (FR-241): обычный заказ после стольких базовых времён ожидания идёт с премиум-заказами.
+    kitchenQueue:
+      agingFactor: 2

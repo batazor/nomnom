@@ -1,9 +1,25 @@
+//! Конфигурация процессов `delivery`, `delivery-worker` и команды
+//! `delivery-admin` (ADR 17): версионированный YAML-файл `CONFIG_FILE` вида
+//! ресурса Kubernetes (`apiVersion: config.nomnom.dev/v1alpha1`,
+//! `kind: Delivery`, `metadata.name` — роль процесса, `spec`) и секреты из
+//! env под их именами (`DATABASE__URI`, `VALKEY__URL`,
+//! `SPICEDB__PRESHARED_KEY`). Переменные `SECTION__KEY` несекретных настроек
+//! не читаются: у настройки один источник.
+//!
+//! Ключи `spec` — camelCase имён прежних переменных
+//! (`TEMPORAL__HOST_PORT` → `spec.temporal.hostPort`), длительности — строки
+//! (`500ms`, `5s`, `2m`). Неизвестный ключ на любом уровне — ошибка с путём
+//! ключа; полей для секретов в `spec` нет, поэтому секрет в файле — тоже
+//! неизвестный ключ. Процесс проверяет весь `spec` kind `Delivery`, но
+//! требует только свои секции: секции другой роли допустимы.
+
 pub mod database;
 mod estimate;
 mod infrastructure;
 mod kafka;
 mod load;
 mod simulator;
+mod telemetry;
 mod temporal;
 mod tracking;
 
@@ -13,139 +29,95 @@ use config::ConfigError;
 use serde::Deserialize;
 
 pub use estimate::{
-    DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
-    DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig,
+    DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_KEY, DELIVERY_ESTIMATE_BASELINE_TRANSIT_KEY,
+    DELIVERY_ESTIMATE_SAMPLE_SIZE_KEY, DeliveryEstimateConfig,
 };
 pub use infrastructure::{ReconcilerConfig, SpiceDbConfig};
 pub use kafka::{
-    InitialOffset, KAFKA_BROKERS_ENV, KAFKA_CONSUMER_GROUP_ENV, KAFKA_INITIAL_OFFSET_ENV,
-    KafkaConfig, SCHEMA_REGISTRY_URL_ENV,
-};
-#[cfg(test)]
-use load::{
-    configure_delivery_estimate, configure_identity, configure_kafka, configure_reconciler,
-    configure_settings, configure_simulator, configure_spicedb, configure_temporal,
-    configure_tracking, load_from, load_kafka_from, load_worker_from,
+    InitialOffset, KAFKA_BROKERS_KEY, KAFKA_CONSUMER_GROUP_KEY, KafkaConfig,
+    SCHEMA_REGISTRY_URL_KEY,
 };
 pub use load::{load, load_kafka, load_worker};
+#[cfg(test)]
+use load::{load_from, load_kafka_from, load_worker_from};
 pub use simulator::{
-    SIMULATOR_INTERVAL_ENV, SIMULATOR_MAX_DELAY_ENV, SIMULATOR_MIN_DELAY_ENV,
-    SIMULATOR_TRACK_INTERVAL_ENV, SimulatorConfig,
+    SIMULATOR_INTERVAL_KEY, SIMULATOR_MAX_DELAY_KEY, SIMULATOR_MIN_DELAY_KEY,
+    SIMULATOR_TRACK_INTERVAL_KEY, SimulatorConfig,
+};
+pub use telemetry::{
+    DEFAULT_METRICS_EXPORT_INTERVAL, LogLevel, OtlpProtocol, POD_NAME_ENV, TelemetryConfig,
 };
 pub use temporal::{
-    TEMPORAL_CONNECT_TIMEOUT_ENV, TEMPORAL_HOST_PORT_ENV, TEMPORAL_NAMESPACE_ENV, TemporalConfig,
+    TEMPORAL_CONNECT_TIMEOUT_KEY, TEMPORAL_HOST_PORT_KEY, TEMPORAL_NAMESPACE_KEY, TemporalConfig,
 };
-pub use tracking::{
-    TRACKING_BLOCK_METERS_ENV, TRACKING_CITY_BLOCKS_ENV, TRACKING_CITY_ORIGIN_LATITUDE_ENV,
-    TRACKING_CITY_ORIGIN_LONGITUDE_ENV, TRACKING_PERSIST_INTERVAL_ENV, TrackingConfig,
-    VALKEY_URL_ENV, ValkeyConfig,
-};
+pub use tracking::{TRACKING_PERSIST_INTERVAL_KEY, TrackingConfig, VALKEY_URL_ENV, ValkeyConfig};
 
-const CONFIG_KEY_PORT: &str = "server.port";
+/// Переменная окружения с путём к файлу конфигурации.
+pub const CONFIG_FILE_ENV: &str = "CONFIG_FILE";
+/// Версия формата файла, которую знает процесс.
+pub const API_VERSION: &str = "config.nomnom.dev/v1alpha1";
+/// Kind файла: все роли сервиса делят его.
+pub const KIND: &str = "Delivery";
+/// Роль процесса gRPC API (`metadata.name`) и его `service.name` по умолчанию.
+pub const SERVER_ROLE: &str = "delivery";
+/// Роль Temporal worker (`metadata.name`) и его `service.name` по умолчанию.
+pub const WORKER_ROLE: &str = "delivery-worker";
+
 pub const DEFAULT_PORT: u16 = 8083;
-pub const PORT_ENV: &str = "SERVER__PORT";
-
-const CONFIG_KEY_MANAGEMENT_PORT: &str = "management.port";
 pub const DEFAULT_MANAGEMENT_PORT: u16 = 9083;
-pub const MANAGEMENT_PORT_ENV: &str = "MANAGEMENT__PORT";
+pub const DEFAULT_DRAIN_TIMEOUT: Duration = Duration::from_secs(20);
+pub const DEFAULT_READINESS_DELAY: Duration = Duration::from_secs(5);
 
-const CONFIG_KEY_DRAIN_TIMEOUT: &str = "shutdown.drain_timeout";
-pub const DEFAULT_DRAIN_TIMEOUT: &str = "20s";
-pub const DRAIN_TIMEOUT_ENV: &str = "SHUTDOWN__DRAIN_TIMEOUT";
+/// Ключи service identity (ADR 27) и user assertions BFF (ADR 32).
+pub const IDENTITY_KEY: &str = "spec.identity";
 
-const CONFIG_KEY_READINESS_DELAY: &str = "shutdown.readiness_delay";
-pub const DEFAULT_READINESS_DELAY: &str = "5s";
-pub const READINESS_DELAY_ENV: &str = "SHUTDOWN__READINESS_DELAY";
-
-/// Service identity (ADR 27) и user assertions BFF (ADR 32): ключ
-/// конфигурации и переменная окружения.
-const IDENTITY_SETTINGS: [(&str, &str); 7] = [
-    ("identity.issuer", ISSUER_ENV),
-    ("identity.audience", AUDIENCE_ENV),
-    ("identity.jwks_file", JWKS_FILE_ENV),
-    ("identity.service_accounts", SERVICE_ACCOUNTS_ENV),
-    ("identity.user_issuer", USER_ISSUER_ENV),
-    ("identity.user_jwks_file", USER_JWKS_FILE_ENV),
-    ("identity.user_delegates", USER_DELEGATES_ENV),
-];
-pub const ISSUER_ENV: &str = "IDENTITY__ISSUER";
-pub const AUDIENCE_ENV: &str = "IDENTITY__AUDIENCE";
-pub const JWKS_FILE_ENV: &str = "IDENTITY__JWKS_FILE";
-pub const SERVICE_ACCOUNTS_ENV: &str = "IDENTITY__SERVICE_ACCOUNTS";
-pub const USER_ISSUER_ENV: &str = "IDENTITY__USER_ISSUER";
-pub const USER_JWKS_FILE_ENV: &str = "IDENTITY__USER_JWKS_FILE";
-pub const USER_DELEGATES_ENV: &str = "IDENTITY__USER_DELEGATES";
-
-/// SpiceDB (ADR 18): ключ конфигурации, переменная окружения и значение по умолчанию.
-const SPICEDB_SETTINGS: [(&str, &str, &str); 4] = [
-    ("spicedb.endpoint", SPICEDB_ENDPOINT_ENV, ""),
-    ("spicedb.preshared_key", SPICEDB_PRESHARED_KEY_ENV, ""),
-    ("spicedb.insecure", SPICEDB_INSECURE_ENV, "false"),
-    (
-        "spicedb.timeout",
-        SPICEDB_TIMEOUT_ENV,
-        DEFAULT_SPICEDB_TIMEOUT,
-    ),
-];
-pub const SPICEDB_ENDPOINT_ENV: &str = "SPICEDB__ENDPOINT";
+/// SpiceDB (ADR 18): endpoint в файле, preshared key — секрет из env.
+pub const SPICEDB_ENDPOINT_KEY: &str = "spec.spicedb.endpoint";
 pub const SPICEDB_PRESHARED_KEY_ENV: &str = "SPICEDB__PRESHARED_KEY";
-pub const SPICEDB_INSECURE_ENV: &str = "SPICEDB__INSECURE";
-pub const SPICEDB_TIMEOUT_ENV: &str = "SPICEDB__TIMEOUT";
-pub const DEFAULT_SPICEDB_TIMEOUT: &str = "2s";
+pub const DEFAULT_SPICEDB_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Reconciliation of relationships (FR-445): ключ, переменная, значение по умолчанию.
-const RECONCILER_SETTINGS: [(&str, &str, &str); 3] = [
-    ("reconciler.interval", RECONCILER_INTERVAL_ENV, "5m"),
-    ("reconciler.grace", RECONCILER_GRACE_ENV, "10m"),
-    ("reconciler.page_size", RECONCILER_PAGE_SIZE_ENV, "500"),
-];
-pub const RECONCILER_INTERVAL_ENV: &str = "RECONCILER__INTERVAL";
-pub const RECONCILER_GRACE_ENV: &str = "RECONCILER__GRACE";
-pub const RECONCILER_PAGE_SIZE_ENV: &str = "RECONCILER__PAGE_SIZE";
+/// Reconciliation of relationships (FR-445): значения по умолчанию.
+pub const DEFAULT_RECONCILER_INTERVAL: Duration = Duration::from_secs(5 * 60);
+pub const DEFAULT_RECONCILER_GRACE: Duration = Duration::from_secs(10 * 60);
+pub const DEFAULT_RECONCILER_PAGE_SIZE: u32 = 500;
 /// Максимум `ReadRelationships` limit SpiceDB по умолчанию.
 pub const MAX_RECONCILER_PAGE_SIZE: u32 = 1000;
 
-/// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): ключ, переменная, значение по умолчанию.
-const DATABASE_SETTINGS: [(&str, &str, &str); 6] = [
-    ("database.uri", DATABASE_URI_ENV, ""),
-    (
-        "database.max_conns",
-        DATABASE_MAX_CONNS_ENV,
-        DEFAULT_DATABASE_MAX_CONNS,
-    ),
-    ("database.min_conns", DATABASE_MIN_CONNS_ENV, "0"),
-    ("database.max_lifetime", DATABASE_MAX_LIFETIME_ENV, "30m"),
-    ("database.idle_timeout", DATABASE_IDLE_TIMEOUT_ENV, "5m"),
-    (
-        "database.acquire_timeout",
-        DATABASE_ACQUIRE_TIMEOUT_ENV,
-        "5s",
-    ),
-];
+/// PostgreSQL (ADR 8, ADR 31, ADR 0001 контекста): URI — секрет из env,
+/// лимиты пула — `spec.database`.
 pub const DATABASE_URI_ENV: &str = "DATABASE__URI";
-pub const DATABASE_MAX_CONNS_ENV: &str = "DATABASE__MAX_CONNS";
-pub const DATABASE_MIN_CONNS_ENV: &str = "DATABASE__MIN_CONNS";
-pub const DATABASE_MAX_LIFETIME_ENV: &str = "DATABASE__MAX_LIFETIME";
-pub const DATABASE_IDLE_TIMEOUT_ENV: &str = "DATABASE__IDLE_TIMEOUT";
-pub const DATABASE_ACQUIRE_TIMEOUT_ENV: &str = "DATABASE__ACQUIRE_TIMEOUT";
-pub const DEFAULT_DATABASE_MAX_CONNS: &str = "10";
+pub const DEFAULT_DATABASE_MAX_CONNS: u32 = 10;
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase", default)]
 pub struct ServerConfig {
     pub port: u16,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self { port: DEFAULT_PORT }
+    }
 }
 
 /// Технический порт (Kubernetes-имя `metrics`): health и metrics отделены
 /// от бизнес-порта.
 #[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase", default)]
 pub struct ManagementConfig {
     pub port: u16,
 }
 
+impl Default for ManagementConfig {
+    fn default() -> Self {
+        Self {
+            port: DEFAULT_MANAGEMENT_PORT,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase", default)]
 pub struct ShutdownConfig {
     /// Ожидание распространения not ready до остановки приёма работы.
     /// Нулевое значение допустимо для процессов без входящего трафика.
@@ -156,11 +128,21 @@ pub struct ShutdownConfig {
     pub drain_timeout: Duration,
 }
 
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            readiness_delay: DEFAULT_READINESS_DELAY,
+            drain_timeout: DEFAULT_DRAIN_TIMEOUT,
+        }
+    }
+}
+
 /// Проверка projected ServiceAccount token (ADR 27) и user assertions BFF
-/// (ADR 32). Все поля обязательны для процесса с gRPC API: пустое значение —
-/// ошибка startup.
+/// (ADR 32), секция `spec.identity`. Все поля обязательны для процесса с
+/// gRPC API: отсутствие ключа — ошибка загрузки, пустое значение — ошибка
+/// startup.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct IdentityConfig {
     /// Ожидаемый `iss` token (issuer кластера).
     pub issuer: String,
@@ -178,8 +160,8 @@ pub struct IdentityConfig {
     pub user_delegates: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+/// Конфигурация процесса `delivery`.
+#[derive(Debug, PartialEq)]
 pub struct AppConfig {
     pub server: ServerConfig,
     pub management: ManagementConfig,
@@ -194,24 +176,26 @@ pub struct AppConfig {
     pub valkey: ValkeyConfig,
     pub kafka: KafkaConfig,
     pub delivery_estimate: DeliveryEstimateConfig,
+    pub telemetry: TelemetryConfig,
 }
 
 /// Конфигурация `delivery-worker` (FR-708): технический порт, остановка,
-/// PostgreSQL и Temporal. gRPC API, SpiceDB, Valkey и Kafka процессу не нужны.
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+/// PostgreSQL, Temporal и телеметрия. gRPC API, SpiceDB, Valkey и Kafka
+/// процессу не нужны.
+#[derive(Debug, PartialEq)]
 pub struct WorkerConfig {
     pub management: ManagementConfig,
     pub shutdown: ShutdownConfig,
     pub database: database::Config,
     pub temporal: TemporalConfig,
+    pub telemetry: TelemetryConfig,
 }
 
 impl ShutdownConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         if self.drain_timeout.is_zero() {
             return Err(ConfigError::Message(
-                "shutdown drain timeout must be positive".to_owned(),
+                "spec.shutdown.drainTimeout must be positive".to_owned(),
             ));
         }
         Ok(())
@@ -222,7 +206,7 @@ impl ManagementConfig {
     fn validate_port(&self) -> Result<(), ConfigError> {
         if self.port == 0 {
             return Err(ConfigError::Message(
-                "management port must be between 1 and 65535".to_owned(),
+                "spec.management.port must be between 1 and 65535".to_owned(),
             ));
         }
         Ok(())
@@ -232,7 +216,7 @@ impl ManagementConfig {
         self.validate_port()?;
         if self.port == server.port {
             return Err(ConfigError::Message(format!(
-                "management port must differ from server port {}",
+                "spec.management.port must differ from spec.server.port {}",
                 server.port
             )));
         }
@@ -244,7 +228,7 @@ impl ServerConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         if self.port == 0 {
             return Err(ConfigError::Message(
-                "server port must be between 1 and 65535".to_owned(),
+                "spec.server.port must be between 1 and 65535".to_owned(),
             ));
         }
         Ok(())

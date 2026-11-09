@@ -1,36 +1,36 @@
 # Kafka consumer orders (ADR 28): отдельный release того же chart.
 #   helm upgrade --install orders-consumer ops/helm -f ops/helm/values-consumer.yaml
-# Brokers (KAFKA__BROKERS), Schema Registry (SCHEMA_REGISTRY__URL, FR-715), адрес и namespace
-# Temporal (TEMPORAL__HOST_PORT, TEMPORAL__NAMESPACE) задаются values окружения через env; SpiceDB (spicedb.*) обязателен: consumer синхронизирует
+# Brokers (config.spec.kafka.brokers), Schema Registry (config.spec.schemaRegistry.url, FR-715),
+# адрес и namespace Temporal (config.spec.temporal) задаются values окружения; SpiceDB
+# (config.spec.spicedb.endpoint, spicedb.presharedKeySecret) обязателен: consumer синхронизирует
 # связи order по RelationshipsChanged (ADR 18).
 component: consumer
 
-telemetry:
-  serviceName: orders-consumer
+role: orders-consumer
 
 command:
   - /orders-consumer
-
-# service.name процесса (telemetry.serviceName) совпадает с Kafka ClientID (квоты и
-# диагностика брокера).
-# Группа orders читает стримы с начала: события по существующим Order должны быть отражены,
-# повтор истории идемпотентен через Inbox (ADR 28).
-env:
-  KAFKA__CLIENT_ID: orders-consumer
-  KAFKA__CONSUMER_GROUP: orders
-  KAFKA__INITIAL_OFFSET: oldest
 
 # Consumer не обслуживает бизнес-API: без Service и бизнес-порта, только metrics и probes.
 service:
   enabled: false
 
-# Router.Close ждёт начатые сообщения не дольше drainTimeout; offsets подтверждаются только
-# для сообщений, обработанных до commit, остальные доставляются повторно.
-shutdown:
-  readinessDelaySeconds: 2
-  drainTimeoutSeconds: 20
-
-# Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Watermill handlers: транзакция Inbox + агрегат на сообщение.
-postgres:
-  maxConns: 5
-  minConns: 1
+config:
+  spec:
+    # Kafka ClientID совпадает с service.name процесса (квоты и диагностика брокера).
+    # Группа orders читает стримы с начала: события по существующим Order должны быть отражены,
+    # повтор истории идемпотентен через Inbox (ADR 28).
+    kafka:
+      clientId: orders-consumer
+      consumerGroup: orders
+      initialOffset: oldest
+    # Router.Close ждёт начатые сообщения не дольше drainTimeout; offsets подтверждаются только
+    # для сообщений, обработанных до commit, остальные доставляются повторно.
+    shutdown:
+      readinessDelay: 2s
+      drainTimeout: 20s
+    # Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Watermill handlers: транзакция Inbox +
+    # агрегат на сообщение.
+    postgres:
+      maxConns: 5
+      minConns: 1

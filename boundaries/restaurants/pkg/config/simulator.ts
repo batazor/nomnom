@@ -1,13 +1,20 @@
-import {
-  SIMULATOR_INTERVAL_ENV,
-  SIMULATOR_MAX_DELAY_ENV,
-  SIMULATOR_MIN_DELAY_ENV,
-} from "./env.ts";
-import { durationSchema } from "./schemas.ts";
+import { z } from "zod";
+
+import type { Spec } from "./file.ts";
+import { durationSchema, positiveDurationSchema } from "./schemas.ts";
+
+/** `spec.simulator`: обязательна процессу restaurants, без defaults. */
+export const simulatorSectionSchema = z
+  .strictObject({
+    interval: positiveDurationSchema.optional(),
+    minDelay: durationSchema.optional(),
+    maxDelay: durationSchema.optional(),
+  })
+  .prefault({});
 
 /**
  * Demo Simulator of the kitchen (FR-605, FR-606). Every value is required:
- * an empty or invalid value, or `MIN_DELAY > MAX_DELAY`, stops the startup.
+ * a missing or invalid value, or `minDelay > maxDelay`, stops the startup.
  */
 export interface SimulatorConfig {
   /** Delay between the end of one simulator pass and the start of the next. */
@@ -18,26 +25,21 @@ export interface SimulatorConfig {
 }
 
 export function loadSimulatorConfig(
-  environment: Record<string, string | undefined>,
+  spec: Pick<Spec, "simulator">,
 ): SimulatorConfig {
-  const duration = (name: string): number => {
-    const value = environment[name]?.trim() ?? "";
-    if (value === "") throw new Error(`${name} is required`);
-    const parsed = durationSchema.safeParse(value);
-    if (!parsed.success) {
-      throw new Error(`${name}: ${parsed.error.issues[0]?.message}`);
+  const required = (name: keyof Spec["simulator"]): number => {
+    const value = spec.simulator[name];
+    if (value === undefined) {
+      throw new Error(`spec.simulator.${name} is required`);
     }
-    return parsed.data;
+    return value;
   };
-  const intervalMs = duration(SIMULATOR_INTERVAL_ENV);
-  if (intervalMs <= 0) {
-    throw new Error(`${SIMULATOR_INTERVAL_ENV} must be positive`);
-  }
-  const minDelayMs = duration(SIMULATOR_MIN_DELAY_ENV);
-  const maxDelayMs = duration(SIMULATOR_MAX_DELAY_ENV);
+  const intervalMs = required("interval");
+  const minDelayMs = required("minDelay");
+  const maxDelayMs = required("maxDelay");
   if (minDelayMs > maxDelayMs) {
     throw new Error(
-      `${SIMULATOR_MIN_DELAY_ENV} must not be longer than ${SIMULATOR_MAX_DELAY_ENV}`,
+      "spec.simulator.minDelay must not be longer than spec.simulator.maxDelay",
     );
   }
   return Object.freeze({ intervalMs, minDelayMs, maxDelayMs });

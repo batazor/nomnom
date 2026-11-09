@@ -1,8 +1,8 @@
 {{- /*
-ConfigMap только для несекретной конфигурации. Секреты подключаются внешними
-Kubernetes Secret через envFrom или extraEnv[].valueFrom и этим chart не создаются.
+Файл конфигурации процесса (CONFIG_FILE): только несекретные настройки. Секреты подключаются
+внешними Kubernetes Secret через env (orders.secretEnv), envFrom или extraEnv[].valueFrom и этим
+chart не создаются.
 */ -}}
-{{- if .Values.env -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,7 +10,5 @@ metadata:
   labels:
     {{- include "orders.labels" (dict "customLabels" (dict) "context" $) | nindent 4 }}
 data:
-  {{- range $key, $value := .Values.env }}
-  {{ $key }}: {{ $value | toString | quote }}
-  {{- end }}
-{{- end }}
+  config.yaml: |
+    {{- include "orders.configFile" . | nindent 4 }}

@@ -1,15 +1,15 @@
 // OpenTelemetry bootstrap of a restaurants process (ADR 9,
-// docs/observability.md, docs/cloud-native-runtime.md#observability-lifecycle).
-// Metrics and traces share one resource (pkg/telemetry/resource.ts). OTLP
-// metrics are exported only when OTEL_EXPORTER_OTLP_ENDPOINT or
-// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT is set; without it the global no-op
-// MeterProvider stays in place and instruments cost nothing. The pipeline adds
-// Node.js runtime metrics (v8js.*, nodejs.eventloop.*) and process.cpu.time /
-// process.memory.usage. Tracing (pkg/telemetry/tracing.ts) always propagates
-// W3C Trace Context and exports spans only with a traces endpoint. Shutdown
-// performs the final export of both providers within the flush timeout.
+// docs/observability.md, docs/cloud-native-runtime.md#observability-lifecycle),
+// configured only by TelemetryConfig from the configuration file: OTEL_* is
+// not read. Metrics and traces share one resource (pkg/telemetry/resource.ts).
+// OTLP metrics are exported only with `spec.metrics.enabled`; without it the
+// global no-op MeterProvider stays in place and instruments cost nothing. The
+// pipeline adds Node.js runtime metrics (v8js.*, nodejs.eventloop.*) and
+// process.cpu.time / process.memory.usage. Tracing (pkg/telemetry/tracing.ts)
+// always propagates W3C Trace Context and exports spans only with
+// `spec.tracing.enabled`. Shutdown performs the final export of both providers
+// within the flush timeout.
 import { metrics } from "@opentelemetry/api";
-import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-grpc";
 import { RuntimeNodeInstrumentation } from "@opentelemetry/instrumentation-runtime-node";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
@@ -19,28 +19,19 @@ import {
 } from "@opentelemetry/sdk-metrics";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace";
 
+import type { TelemetryConfig } from "../config/telemetry.ts";
+import { OTLP_EXPORT_TIMEOUT_MS, otlpMetricExporter } from "./otlp.ts";
 import { registerProcessMetrics } from "./process-metrics.ts";
-import {
-  type Environment,
-  type ResourceAttributes,
-  telemetryResource,
-} from "./resource.ts";
+import { type ResourceAttributes, telemetryResource } from "./resource.ts";
 import { startTracing } from "./tracing.ts";
 
-export const OTLP_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT";
-const OTLP_METRICS_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
-
-/** Interval of the periodic OTLP metrics export. */
-const METRICS_EXPORT_INTERVAL_MS = 15_000;
-/** Deadline of one metrics export; below the interval. */
-const METRICS_EXPORT_TIMEOUT_MS = 10_000;
 /**
  * Sampling interval of the event loop delay histogram (runtime-node, its
  * default): a gauge is reported only after five samples per export.
  */
 const RUNTIME_MONITORING_PRECISION_MS = 10;
 
-/** Default of `shutdown.telemetry_flush_timeout`. */
+/** Default of `spec.shutdown.telemetryFlushTimeout`. */
 export const DEFAULT_TELEMETRY_FLUSH_TIMEOUT_MS = 5000;
 
 export type Telemetry = Readonly<{
@@ -64,35 +55,27 @@ export type TelemetryOptions = Readonly<{
   spanProcessors?: SpanProcessor[];
 }>;
 
-export const metricsEndpointConfigured = (environment: Environment): boolean =>
-  (environment[OTLP_ENDPOINT_ENV]?.trim() ?? "") !== "" ||
-  (environment[OTLP_METRICS_ENDPOINT_ENV]?.trim() ?? "") !== "";
-
 export function startTelemetry(
-  serviceName: string,
-  environment: Environment = process.env,
+  config: TelemetryConfig,
   options: TelemetryOptions = {},
 ): Telemetry {
-  const resource = telemetryResource(serviceName, environment);
-  const tracing = startTracing(
-    serviceName,
-    environment,
-    options.spanProcessors === undefined
-      ? {}
-      : { spanProcessors: options.spanProcessors },
-  );
+  const resource = telemetryResource(config);
+  const tracing = startTracing(config.traces, resource, options.spanProcessors);
   const readers =
     options.metricReaders ??
-    (metricsEndpointConfigured(environment)
-      ? // The exporter reads endpoint, headers and protocol options from OTEL_*.
-        [
+    (config.metrics === undefined
+      ? []
+      : [
           new PeriodicExportingMetricReader({
-            exporter: new OTLPMetricExporter(),
-            exportIntervalMillis: METRICS_EXPORT_INTERVAL_MS,
-            exportTimeoutMillis: METRICS_EXPORT_TIMEOUT_MS,
+            exporter: otlpMetricExporter(config.metrics),
+            exportIntervalMillis: config.metrics.exportIntervalMs,
+            // The reader requires the export deadline within the interval.
+            exportTimeoutMillis: Math.min(
+              OTLP_EXPORT_TIMEOUT_MS,
+              config.metrics.exportIntervalMs,
+            ),
           }),
-        ]
-      : []);
+        ]);
   if (readers.length === 0) {
     return {
       enabled: false,

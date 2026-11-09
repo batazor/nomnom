@@ -1,63 +1,418 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  CONFIG_API_VERSION,
+  CONFIG_KIND,
   database,
   loadConfig,
+  loadIdentityConfig,
   loadKafkaConfig,
   loadScheduledSlotConfig,
   loadSchemaRegistryConfig,
+  loadSimulatorConfig,
+  loadSpiceDbConfig,
+  loadTelemetryConfig,
+  loadValkeyConfig,
+  parseConfigDocument,
+  readConfigFile,
+  specSchema,
 } from "../pkg/config/config.ts";
 
-test("SERVER__PORT takes precedence over PORT", () => {
-  const config = loadConfig({
-    SERVER__PORT: "9002",
-    PORT: "9001",
-  });
+/** Configuration file of `name` with `spec`, as a YAML document. */
+const configYaml = (name: string, spec: string) =>
+  `apiVersion: ${CONFIG_API_VERSION}
+kind: ${CONFIG_KIND}
+metadata:
+  name: ${name}
+spec:
+${spec}`;
 
-  assert.equal(config.server.port, 9002);
+const configFile = async (content: string) => {
+  const directory = await mkdtemp(join(tmpdir(), "restaurants-config-"));
+  const path = join(directory, "config.yaml");
+  await writeFile(path, content);
+  return path;
+};
+
+test("AC-1067 a process accepts the file of its own role", async () => {
+  const spec = readConfigFile(
+    {
+      CONFIG_FILE: await configFile(
+        configYaml(
+          "restaurants",
+          `  shutdown:
+    drainTimeout: 20s
+  telemetry:
+    endpoint: http://alloy:4317
+  tracing:
+    enabled: true
+`,
+        ),
+      ),
+    },
+    "restaurants",
+  );
+  assert.equal(spec.shutdown.drainTimeout, 20_000);
+  assert.equal(spec.tracing.enabled, true);
+  assert.equal(
+    parseConfigDocument(
+      {
+        apiVersion: CONFIG_API_VERSION,
+        kind: CONFIG_KIND,
+        metadata: { name: "restaurants-consumer" },
+        spec: {},
+      },
+      "restaurants-consumer",
+    ).shutdown.drainTimeout,
+    20_000,
+  );
 });
 
-test("rejects an invalid port", () => {
-  assert.throws(() => loadConfig({ PORT: "not-a-port" }));
-  assert.throws(() => loadConfig({ PORT: "70000" }));
+test("the example files are valid configurations of their roles", () => {
+  const example = (name: string) =>
+    fileURLToPath(new URL(`../${name}`, import.meta.url));
+  const secrets = {
+    MONGODB__URI: "mongodb://m",
+    VALKEY__URL: "redis://v",
+    SPICEDB__PRESHARED_KEY: "devkey",
+    POD_NAME: "local",
+  };
+  const api = readConfigFile(
+    { ...secrets, CONFIG_FILE: example("config.example.yaml") },
+    "restaurants",
+  );
+  loadConfig(api);
+  loadTelemetryConfig(api, secrets, "restaurants");
+  loadSimulatorConfig(api);
+  loadScheduledSlotConfig(api);
+  loadIdentityConfig(api);
+  loadSpiceDbConfig(api, secrets);
+  loadValkeyConfig(api, secrets);
+  database.load(api, secrets, "api");
+  const consumer = readConfigFile(
+    { ...secrets, CONFIG_FILE: example("config.consumer.example.yaml") },
+    "restaurants-consumer",
+  );
+  loadConfig(consumer);
+  loadTelemetryConfig(consumer, secrets, "restaurants-consumer");
+  loadKafkaConfig(consumer);
+  loadSchemaRegistryConfig(consumer);
+  loadValkeyConfig(consumer, secrets);
+  assert.equal(
+    database.load(consumer, secrets, "consumer").pool.maxPoolSize,
+    5,
+  );
+  // restaurants-admin runs next to the consumer with its file.
+  readConfigFile(
+    { CONFIG_FILE: example("config.consumer.example.yaml") },
+    "restaurants-admin",
+  );
 });
 
-test("reads shutdown budget from the environment", () => {
-  const config = loadConfig({
-    SHUTDOWN__READINESS_DELAY: "0s",
-    SHUTDOWN__DRAIN_TIMEOUT: "1500ms",
-    SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT: "2s",
-  });
+test("AC-1068 another apiVersion or kind stops startup and names the expected ones", () => {
+  for (const header of [
+    { apiVersion: "config.nomnom.dev/v1beta1", kind: CONFIG_KIND },
+    { apiVersion: CONFIG_API_VERSION, kind: "Delivery" },
+    { kind: CONFIG_KIND },
+  ]) {
+    assert.throws(
+      () =>
+        parseConfigDocument(
+          { ...header, metadata: { name: "restaurants" }, spec: {} },
+          "restaurants",
+        ),
+      /expected apiVersion config\.nomnom\.dev\/v1alpha1 and kind Restaurants/,
+      JSON.stringify(header),
+    );
+  }
+  assert.throws(
+    () => parseConfigDocument("restaurants", "restaurants"),
+    /expected apiVersion/,
+  );
+});
 
+test("AC-1069 the file of another role stops startup", () => {
+  assert.throws(
+    () =>
+      parseConfigDocument(
+        {
+          apiVersion: CONFIG_API_VERSION,
+          kind: CONFIG_KIND,
+          metadata: { name: "restaurants" },
+          spec: {},
+        },
+        "restaurants-consumer",
+      ),
+    /metadata\.name: expected the role restaurants-consumer, got "restaurants"/,
+  );
+});
+
+test("AC-1070 restaurants-admin accepts the file of the pod's role", () => {
+  for (const name of ["restaurants-consumer", "restaurants"]) {
+    const spec = parseConfigDocument(
+      {
+        apiVersion: CONFIG_API_VERSION,
+        kind: CONFIG_KIND,
+        metadata: { name },
+        spec: { kafka: { brokers: "kafka:9092" } },
+      },
+      "restaurants-admin",
+    );
+    assert.deepEqual(loadKafkaConfig(spec).brokers, ["kafka:9092"]);
+  }
+  // The admin still checks apiVersion and kind.
+  assert.throws(
+    () =>
+      parseConfigDocument(
+        {
+          apiVersion: CONFIG_API_VERSION,
+          kind: "Orders",
+          metadata: { name: "restaurants-consumer" },
+          spec: {},
+        },
+        "restaurants-admin",
+      ),
+    /expected apiVersion/,
+  );
+});
+
+test("AC-1071 a missing CONFIG_FILE or file stops startup", async () => {
+  for (const environment of [{}, { CONFIG_FILE: " " }]) {
+    assert.throws(
+      () => readConfigFile(environment, "restaurants"),
+      /CONFIG_FILE is required/,
+    );
+  }
+  const directory = await mkdtemp(join(tmpdir(), "restaurants-config-"));
+  assert.throws(
+    () =>
+      readConfigFile(
+        { CONFIG_FILE: join(directory, "missing.yaml") },
+        "restaurants",
+      ),
+    /missing\.yaml: cannot read the file/,
+  );
+  for (const content of ["", "spec: [", "---\na: 1\n---\nb: 2\n"]) {
+    const path = await configFile(content);
+    assert.throws(
+      () => readConfigFile({ CONFIG_FILE: path }, "restaurants"),
+      /invalid YAML|expected apiVersion/,
+      JSON.stringify(content),
+    );
+  }
+});
+
+test("AC-1072 an unknown key stops startup with its path", async () => {
+  const path = await configFile(
+    configYaml(
+      "restaurants",
+      `  shutdown:
+    drainTimout: 20s
+  mongodb:
+    pool:
+      maxPoolSize: 5
+`,
+    ),
+  );
+  assert.throws(
+    () => readConfigFile({ CONFIG_FILE: path }, "restaurants"),
+    (error: Error) =>
+      error.message.includes("spec.shutdown.drainTimout: unknown field") &&
+      error.message.includes("spec.mongodb.pool: unknown field") &&
+      error.message.startsWith(path),
+  );
+});
+
+test("AC-1073 an unknown top-level or metadata key stops startup", () => {
+  const document = {
+    apiVersion: CONFIG_API_VERSION,
+    kind: CONFIG_KIND,
+    metadata: { name: "restaurants" },
+    spec: {},
+  };
+  assert.throws(
+    () =>
+      parseConfigDocument({ ...document, status: {} }, "restaurants-consumer"),
+    (error: Error) => error.message === "status: unknown field",
+  );
+  assert.throws(
+    () =>
+      parseConfigDocument(
+        { ...document, metadata: { name: "restaurants", labels: {} } },
+        "restaurants",
+      ),
+    /metadata\.labels: unknown field/,
+  );
+  assert.throws(
+    () => parseConfigDocument({ ...document, spec: undefined }, "restaurants"),
+    (error: Error) => error.message.startsWith("spec: "),
+  );
+});
+
+test("sections of the other role of the kind are accepted", () => {
+  const spec = parseConfigDocument(
+    {
+      apiVersion: CONFIG_API_VERSION,
+      kind: CONFIG_KIND,
+      metadata: { name: "restaurants-consumer" },
+      spec: {
+        simulator: { interval: "5s", minDelay: "30s", maxDelay: "2m" },
+        identity: { audience: "nomnom.restaurants" },
+        kafka: { brokers: "kafka:9092", consumerGroup: "restaurants" },
+      },
+    },
+    "restaurants-consumer",
+  );
+  assert.equal(spec.simulator.interval, 5000);
+});
+
+test("AC-1074 env of a non-secret setting has no effect", async () => {
+  const path = await configFile(
+    configYaml(
+      "restaurants",
+      `  shutdown:
+    drainTimeout: 20s
+`,
+    ),
+  );
+  const spec = readConfigFile(
+    {
+      CONFIG_FILE: path,
+      SHUTDOWN__DRAIN_TIMEOUT: "0ms",
+      SERVER__PORT: "9999",
+      PORT: "9998",
+      MONGODB__DATABASE: "other",
+      CACHE__TTL: "1h",
+    },
+    "restaurants",
+  );
+  const config = loadConfig(spec);
+  assert.equal(config.shutdown.drainTimeoutMs, 20_000);
+  assert.equal(config.server.port, 8082);
+  const mongodb = database.load(
+    spec,
+    { MONGODB__URI: "mongodb://m", MONGODB__DATABASE: "other" },
+    "api",
+  );
+  assert.equal(mongodb.database, "restaurants");
+  assert.equal(
+    loadValkeyConfig(spec, { VALKEY__URL: "redis://v", CACHE__TTL: "1h" })
+      .ttlMs,
+    60_000,
+  );
+});
+
+test("AC-1075 a secret in the file is an unknown key", () => {
+  for (const [section, key] of [
+    ["mongodb", "uri"],
+    ["valkey", "url"],
+    ["spicedb", "presharedKey"],
+  ] as const) {
+    assert.throws(
+      () =>
+        parseConfigDocument(
+          {
+            apiVersion: CONFIG_API_VERSION,
+            kind: CONFIG_KIND,
+            metadata: { name: "restaurants" },
+            spec: { [section]: { [key]: "secret" } },
+          },
+          "restaurants",
+        ),
+      new RegExp(`spec\\.${section}\\.${key}: unknown field`),
+    );
+  }
+});
+
+test("AC-1076 an empty required secret stops startup", () => {
+  const spec = specSchema.parse({ spicedb: { endpoint: "spicedb:50051" } });
+  for (const uri of [undefined, "", "  "]) {
+    assert.throws(
+      () => database.load(spec, { MONGODB__URI: uri }, "api"),
+      /MONGODB__URI is required/,
+    );
+  }
+  assert.throws(
+    () => loadValkeyConfig(spec, { VALKEY__URL: "" }),
+    /VALKEY__URL is required/,
+  );
+});
+
+test("an invalid value in the file stops startup with its path", () => {
+  for (const [spec, message] of [
+    [{ shutdown: { drainTimeout: "0ms" } }, /spec\.shutdown\.drainTimeout: /],
+    [{ shutdown: { readinessDelay: "5" } }, /expected a duration/],
+    [{ server: { port: "8082" } }, /spec\.server\.port: /],
+    [{ server: { port: 70000 } }, /spec\.server\.port: /],
+    [{ tracing: { enabled: "true" } }, /spec\.tracing\.enabled: /],
+  ] as const) {
+    assert.throws(
+      () =>
+        parseConfigDocument(
+          {
+            apiVersion: CONFIG_API_VERSION,
+            kind: CONFIG_KIND,
+            metadata: { name: "restaurants" },
+            spec,
+          },
+          "restaurants",
+        ),
+      message,
+      JSON.stringify(spec),
+    );
+  }
+});
+
+test("the process tunables default to the explicit defaults", () => {
+  const config = loadConfig(specSchema.parse({}));
+  assert.deepEqual(config.server, { port: 8082 });
+  assert.deepEqual(config.management, { port: 9082 });
+  assert.deepEqual(config.shutdown, {
+    readinessDelayMs: 5000,
+    drainTimeoutMs: 20_000,
+    telemetryFlushTimeoutMs: 5000,
+  });
+});
+
+test("reads the shutdown budget from the file", () => {
+  const config = loadConfig(
+    specSchema.parse({
+      shutdown: {
+        readinessDelay: "0s",
+        drainTimeout: "1500ms",
+        telemetryFlushTimeout: "2s",
+      },
+    }),
+  );
   assert.deepEqual(config.shutdown, {
     readinessDelayMs: 0,
     drainTimeoutMs: 1500,
     telemetryFlushTimeoutMs: 2000,
   });
-});
-
-test("rejects an invalid shutdown budget", () => {
-  assert.throws(() => loadConfig({ SHUTDOWN__DRAIN_TIMEOUT: "0s" }));
-  assert.throws(() => loadConfig({ SHUTDOWN__READINESS_DELAY: "5" }));
-  assert.throws(() => loadConfig({ SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT: "0s" }));
+  assert.throws(() =>
+    specSchema.parse({ shutdown: { telemetryFlushTimeout: "0s" } }),
+  );
 });
 
 test("rejects a management port equal to the server port", () => {
-  assert.throws(() => loadConfig({ MANAGEMENT__PORT: "8082" }));
-});
-
-test("MongoDB is required: an empty MONGODB__URI stops startup", () => {
-  assert.throws(() => database.load({}), /MONGODB__URI is required/);
   assert.throws(
-    () => database.load({ MONGODB__URI: "  " }),
-    /MONGODB__URI is required/,
+    () => loadConfig(specSchema.parse({ management: { port: 8082 } })),
+    /spec\.management\.port must differ/,
   );
 });
 
 test("MongoDB config defaults the database and timeout", () => {
   assert.deepEqual(
-    database.load({ MONGODB__URI: "mongodb://mongo:27017/?replicaSet=rs0" }),
+    database.load(
+      specSchema.parse({}),
+      { MONGODB__URI: "mongodb://mongo:27017/?replicaSet=rs0" },
+      "api",
+    ),
     {
       uri: "mongodb://mongo:27017/?replicaSet=rs0",
       database: "restaurants",
@@ -74,24 +429,33 @@ test("MongoDB config defaults the database and timeout", () => {
 });
 
 test("MongoDB pool defaults depend on the process", () => {
-  const environment = { MONGODB__URI: "mongodb://m" };
-  const maxPoolSize = (process?: "api" | "consumer") => {
-    const { pool } = database.load(environment, process);
+  const spec = specSchema.parse({});
+  const maxPoolSize = (process: "api" | "consumer") => {
+    const { pool } = database.load(
+      spec,
+      { MONGODB__URI: "mongodb://m" },
+      process,
+    );
     return [pool.maxPoolSize, pool.maxConnecting];
   };
-  assert.deepEqual(maxPoolSize(), [20, 2]);
+  assert.deepEqual(maxPoolSize("api"), [20, 2]);
   assert.deepEqual(maxPoolSize("consumer"), [5, 2]);
 });
 
-test("MongoDB pool reads MONGODB__* overrides", () => {
-  const mongodb = database.load({
-    MONGODB__URI: "mongodb://m",
-    MONGODB__MAX_POOL_SIZE: "8",
-    MONGODB__MIN_POOL_SIZE: "1",
-    MONGODB__MAX_IDLE_TIME: "1m",
-    MONGODB__WAIT_QUEUE_TIMEOUT: "750ms",
-    MONGODB__MAX_CONNECTING: "4",
-  });
+test("MongoDB pool reads spec.mongodb", () => {
+  const mongodb = database.load(
+    specSchema.parse({
+      mongodb: {
+        maxPoolSize: 8,
+        minPoolSize: 1,
+        maxIdleTime: "1m",
+        waitQueueTimeout: "750ms",
+        maxConnecting: 4,
+      },
+    }),
+    { MONGODB__URI: "mongodb://m" },
+    "api",
+  );
   assert.deepEqual(mongodb.pool, {
     maxPoolSize: 8,
     minPoolSize: 1,
@@ -100,91 +464,115 @@ test("MongoDB pool reads MONGODB__* overrides", () => {
     maxConnecting: 4,
   });
   // The default maxConnecting never exceeds a one-connection pool.
-  const single = database.load({
-    MONGODB__URI: "mongodb://m",
-    MONGODB__MAX_POOL_SIZE: "1",
-  });
+  const single = database.load(
+    specSchema.parse({ mongodb: { maxPoolSize: 1 } }),
+    { MONGODB__URI: "mongodb://m" },
+    "api",
+  );
   assert.equal(single.pool.maxConnecting, 1);
 });
 
 test("MongoDB pool rejects values out of range at startup", () => {
-  const invalid: Record<string, string>[] = [
-    { MONGODB__MAX_POOL_SIZE: "0" },
-    { MONGODB__MAX_POOL_SIZE: "101" },
-    { MONGODB__MAX_POOL_SIZE: "2.5" },
-    { MONGODB__MAX_POOL_SIZE: "many" },
-    { MONGODB__MIN_POOL_SIZE: "-1" },
-    { MONGODB__MAX_POOL_SIZE: "5", MONGODB__MIN_POOL_SIZE: "6" },
-    { MONGODB__MAX_IDLE_TIME: "0s" },
-    { MONGODB__MAX_IDLE_TIME: "300000" },
-    { MONGODB__WAIT_QUEUE_TIMEOUT: "0ms" },
-    { MONGODB__MAX_CONNECTING: "0" },
-    { MONGODB__MAX_POOL_SIZE: "3", MONGODB__MAX_CONNECTING: "4" },
+  const invalid: Record<string, unknown>[] = [
+    { maxPoolSize: 0 },
+    { maxPoolSize: 101 },
+    { maxPoolSize: 2.5 },
+    { maxPoolSize: "many" },
+    { minPoolSize: -1 },
+    { maxPoolSize: 5, minPoolSize: 6 },
+    { maxIdleTime: "0s" },
+    { maxIdleTime: 300000 },
+    { waitQueueTimeout: "0ms" },
+    { maxConnecting: 0 },
+    { maxPoolSize: 3, maxConnecting: 4 },
+    { timeout: "0s" },
+    { database: "a/b" },
   ];
-  for (const overrides of invalid) {
+  for (const mongodb of invalid) {
     assert.throws(
-      () => database.load({ MONGODB__URI: "mongodb://m", ...overrides }),
-      /MONGODB__/,
-      JSON.stringify(overrides),
+      () =>
+        database.load(
+          specSchema.parse({ mongodb }),
+          { MONGODB__URI: "mongodb://m" },
+          "api",
+        ),
+      JSON.stringify(mongodb),
     );
   }
-});
-
-test("MongoDB config rejects malformed values", () => {
-  assert.throws(() => database.load({ MONGODB__URI: "http://mongo" }));
-  assert.throws(() =>
-    database.load({ MONGODB__URI: "mongodb://m", MONGODB__DATABASE: "a/b" }),
+  assert.throws(
+    () =>
+      database.load(
+        specSchema.parse({ mongodb: { maxPoolSize: 5, minPoolSize: 6 } }),
+        { MONGODB__URI: "mongodb://m" },
+        "api",
+      ),
+    /spec\.mongodb\.minPoolSize/,
   );
   assert.throws(() =>
-    database.load({ MONGODB__URI: "mongodb://m", MONGODB__TIMEOUT: "0s" }),
+    database.load(specSchema.parse({}), { MONGODB__URI: "http://m" }, "api"),
   );
 });
 
 test("durations accept hours and days", () => {
   assert.equal(
-    loadConfig({ RECONCILER__INTERVAL: "36h" }).reconciler.intervalMs,
+    loadConfig(specSchema.parse({ reconciler: { interval: "36h" } })).reconciler
+      .intervalMs,
     36 * 3_600_000,
   );
   assert.equal(
-    loadConfig({ RECONCILER__GRACE: "1d" }).reconciler.graceMs,
+    loadConfig(specSchema.parse({ reconciler: { grace: "1d" } })).reconciler
+      .graceMs,
     86_400_000,
   );
-  assert.throws(() => loadConfig({ RECONCILER__GRACE: "7w" }));
+  assert.throws(() => specSchema.parse({ reconciler: { grace: "7w" } }));
 });
 
-test("Kafka is required: an empty KAFKA__BROKERS stops startup", () => {
-  assert.throws(() => loadKafkaConfig({}), /KAFKA__BROKERS is required/);
+test("Kafka is required: a missing spec.kafka.brokers stops startup", () => {
+  for (const kafka of [{}, { brokers: " " }]) {
+    assert.throws(
+      () => loadKafkaConfig(specSchema.parse({ kafka })),
+      /spec\.kafka\.brokers is required/,
+    );
+  }
 });
 
 test("Kafka config parses brokers and rejects malformed ones", () => {
   assert.deepEqual(
-    loadKafkaConfig({ KAFKA__BROKERS: " kafka-0:9092, kafka-1:9092 " }),
+    loadKafkaConfig(
+      specSchema.parse({ kafka: { brokers: " kafka-0:9092, kafka-1:9092 " } }),
+    ),
     {
       brokers: ["kafka-0:9092", "kafka-1:9092"],
       clientId: "restaurants-consumer",
     },
   );
-  assert.throws(() => loadKafkaConfig({ KAFKA__BROKERS: "kafka-0" }));
-  assert.throws(() => loadKafkaConfig({ KAFKA__BROKERS: "a:1,,b:2" }));
+  for (const brokers of ["kafka-0", "a:1,,b:2"]) {
+    assert.throws(
+      () => loadKafkaConfig(specSchema.parse({ kafka: { brokers } })),
+      /spec\.kafka\.brokers: malformed broker/,
+    );
+  }
 });
 
 test("FR-719: the consumer requires an http(s) Schema Registry url", () => {
   assert.throws(
-    () => loadSchemaRegistryConfig({}),
-    /SCHEMA_REGISTRY__URL is required/,
+    () => loadSchemaRegistryConfig(specSchema.parse({})),
+    /spec\.schemaRegistry\.url is required/,
   );
   assert.throws(() =>
-    loadSchemaRegistryConfig({ SCHEMA_REGISTRY__URL: "kafka:8081" }),
+    loadSchemaRegistryConfig(
+      specSchema.parse({ schemaRegistry: { url: "kafka:8081" } }),
+    ),
   );
-  const config = loadSchemaRegistryConfig({
-    SCHEMA_REGISTRY__URL: "http://kafka:8081",
-  });
+  const config = loadSchemaRegistryConfig(
+    specSchema.parse({ schemaRegistry: { url: "http://kafka:8081" } }),
+  );
   assert.equal(config.url.href, "http://kafka:8081/");
   assert.equal(config.timeoutMs, 5_000);
 });
 
 test("the consumer reads its group from the oldest offset with bounded retries by default", () => {
-  assert.deepEqual(loadConfig({}).consumer, {
+  assert.deepEqual(loadConfig(specSchema.parse({})).consumer, {
     groupId: "restaurants",
     fromBeginning: true,
     maxRetries: 5,
@@ -192,13 +580,16 @@ test("the consumer reads its group from the oldest offset with bounded retries b
     retryMaxIntervalMs: 5000,
   });
   assert.deepEqual(
-    loadConfig({
-      KAFKA__CONSUMER_GROUP: "restaurants-test",
-      KAFKA__INITIAL_OFFSET: "newest",
-      CONSUMER__MAX_RETRIES: "0",
-      CONSUMER__RETRY_INITIAL_INTERVAL: "1s",
-      CONSUMER__RETRY_MAX_INTERVAL: "1m",
-    }).consumer,
+    loadConfig(
+      specSchema.parse({
+        kafka: { consumerGroup: "restaurants-test", initialOffset: "newest" },
+        consumer: {
+          maxRetries: 0,
+          retryInitialInterval: "1s",
+          retryMaxInterval: "1m",
+        },
+      }),
+    ).consumer,
     {
       groupId: "restaurants-test",
       fromBeginning: false,
@@ -210,19 +601,24 @@ test("the consumer reads its group from the oldest offset with bounded retries b
 });
 
 test("the consumer config rejects malformed values", () => {
-  assert.throws(() => loadConfig({ KAFKA__CONSUMER_GROUP: "bad group" }));
-  assert.throws(() => loadConfig({ KAFKA__INITIAL_OFFSET: "latest" }));
-  assert.throws(() => loadConfig({ CONSUMER__MAX_RETRIES: "-1" }));
   assert.throws(() =>
-    loadConfig({
-      CONSUMER__RETRY_INITIAL_INTERVAL: "10s",
-      CONSUMER__RETRY_MAX_INTERVAL: "1s",
-    }),
+    specSchema.parse({ kafka: { consumerGroup: "bad group" } }),
+  );
+  assert.throws(() => specSchema.parse({ kafka: { initialOffset: "latest" } }));
+  assert.throws(() => specSchema.parse({ consumer: { maxRetries: -1 } }));
+  assert.throws(
+    () =>
+      loadConfig(
+        specSchema.parse({
+          consumer: { retryInitialInterval: "10s", retryMaxInterval: "1s" },
+        }),
+      ),
+    /spec\.consumer\.retryMaxInterval/,
   );
 });
 
 test("kitchen tunables default to the MVP decisions", () => {
-  assert.deepEqual(loadConfig({}).kitchen, {
+  assert.deepEqual(loadConfig(specSchema.parse({})).kitchen, {
     preparationTimeMs: 20 * 60_000,
     repeatPolicy: "succeed-without-event",
     cancellationDuringPreparation: "reject",
@@ -230,14 +626,18 @@ test("kitchen tunables default to the MVP decisions", () => {
   });
 });
 
-test("kitchen tunables are read from the environment", () => {
+test("kitchen tunables are read from the file", () => {
   assert.deepEqual(
-    loadConfig({
-      KITCHEN__PREPARATION_TIME: "45m",
-      KITCHEN__REPEAT_POLICY: "reject",
-      KITCHEN__CANCELLATION_DURING_PREPARATION: "allow",
-      KITCHEN_QUEUE__AGING_FACTOR: "3.5",
-    }).kitchen,
+    loadConfig(
+      specSchema.parse({
+        kitchen: {
+          preparationTime: "45m",
+          repeatPolicy: "reject",
+          cancellationDuringPreparation: "allow",
+        },
+        kitchenQueue: { agingFactor: 3.5 },
+      }),
+    ).kitchen,
     {
       preparationTimeMs: 45 * 60_000,
       repeatPolicy: "reject",
@@ -248,76 +648,94 @@ test("kitchen tunables are read from the environment", () => {
 });
 
 test("kitchen tunables reject malformed values", () => {
-  assert.throws(() => loadConfig({ KITCHEN__PREPARATION_TIME: "0m" }));
-  assert.throws(() => loadConfig({ KITCHEN__PREPARATION_TIME: "20" }));
+  const issue = (spec: Record<string, unknown>) =>
+    parseConfigDocument(
+      {
+        apiVersion: CONFIG_API_VERSION,
+        kind: CONFIG_KIND,
+        metadata: { name: "restaurants" },
+        spec,
+      },
+      "restaurants",
+    );
+  assert.throws(() => issue({ kitchen: { preparationTime: "0m" } }));
+  assert.throws(() => issue({ kitchen: { preparationTime: "20" } }));
   assert.throws(
-    () => loadConfig({ KITCHEN__REPEAT_POLICY: "ignore" }),
-    /KITCHEN__REPEAT_POLICY/,
+    () => issue({ kitchen: { repeatPolicy: "ignore" } }),
+    /spec\.kitchen\.repeatPolicy: expected succeed-without-event or reject/,
   );
   assert.throws(
-    () => loadConfig({ KITCHEN__CANCELLATION_DURING_PREPARATION: "maybe" }),
-    /KITCHEN__CANCELLATION_DURING_PREPARATION/,
+    () => issue({ kitchen: { cancellationDuringPreparation: "maybe" } }),
+    /spec\.kitchen\.cancellationDuringPreparation: expected allow or reject/,
   );
-  for (const factor of ["0", "-1", "soon"]) {
+  for (const agingFactor of [0, -1, "soon"]) {
     assert.throws(
-      () => loadConfig({ KITCHEN_QUEUE__AGING_FACTOR: factor }),
-      /KITCHEN_QUEUE__AGING_FACTOR/,
+      () => issue({ kitchenQueue: { agingFactor } }),
+      /spec\.kitchenQueue\.agingFactor/,
     );
   }
 });
 
 test("FR-657 reads the wait time parameters and rejects inverted thresholds", () => {
-  assert.deepEqual(loadConfig({}).waitTime, {
+  assert.deepEqual(loadConfig(specSchema.parse({})).waitTime, {
     sampleSize: 50,
     recentWindowMs: 30 * 60_000,
     elevatedFactor: 1.5,
     normalFactor: 1.2,
   });
   assert.equal(
-    loadConfig({ WAIT_TIME__RECENT_WINDOW: "1h" }).waitTime.recentWindowMs,
+    loadConfig(specSchema.parse({ waitTime: { recentWindow: "1h" } })).waitTime
+      .recentWindowMs,
     3_600_000,
   );
-  assert.throws(() =>
-    loadConfig({
-      WAIT_TIME__ELEVATED_FACTOR: "1.2",
-      WAIT_TIME__NORMAL_FACTOR: "1.2",
-    }),
+  assert.throws(
+    () =>
+      loadConfig(
+        specSchema.parse({
+          waitTime: { elevatedFactor: 1.2, normalFactor: 1.2 },
+        }),
+      ),
+    /spec\.waitTime\.normalFactor must be less/,
   );
-  assert.throws(() => loadConfig({ WAIT_TIME__SAMPLE_SIZE: "0" }));
-  assert.throws(() => loadConfig({ WAIT_TIME__ELEVATED_FACTOR: "fast" }));
+  assert.throws(() => specSchema.parse({ waitTime: { sampleSize: 0 } }));
+  assert.throws(() =>
+    specSchema.parse({ waitTime: { elevatedFactor: "fast" } }),
+  );
 });
 
-/** SCHEDULED_SLOT__* of .env.example. */
-const scheduledSlotEnvironment = {
-  SCHEDULED_SLOT__WIDTH: "15m",
-  SCHEDULED_SLOT__MIN_LEAD: "45m",
-  SCHEDULED_SLOT__MAX_HORIZON: "48h",
-  SCHEDULED_SLOT__HOLD_TTL: "10m",
-  SCHEDULED_SLOT__ALTERNATIVES: "3",
+/** spec.scheduledSlot of config.example.yaml. */
+const scheduledSlot = {
+  width: "15m",
+  minLead: "45m",
+  maxHorizon: "48h",
+  holdTtl: "10m",
+  alternatives: 3,
 };
 
-test("FR-694 reads the Delivery Window grid from SCHEDULED_SLOT__*", () => {
-  assert.deepEqual(loadScheduledSlotConfig(scheduledSlotEnvironment), {
-    widthMs: 15 * 60_000,
-    minLeadMs: 45 * 60_000,
-    maxHorizonMs: 48 * 3_600_000,
-    holdTtlMs: 10 * 60_000,
-    alternatives: 3,
-  });
+test("FR-694 reads the Delivery Window grid from spec.scheduledSlot", () => {
+  assert.deepEqual(
+    loadScheduledSlotConfig(specSchema.parse({ scheduledSlot })),
+    {
+      widthMs: 15 * 60_000,
+      minLeadMs: 45 * 60_000,
+      maxHorizonMs: 48 * 3_600_000,
+      holdTtlMs: 10 * 60_000,
+      alternatives: 3,
+    },
+  );
 });
 
-test("FR-694 every SCHEDULED_SLOT__ value is required", () => {
-  for (const name of Object.keys(scheduledSlotEnvironment)) {
-    for (const value of [undefined, "", " "]) {
-      assert.throws(
-        () =>
-          loadScheduledSlotConfig({
-            ...scheduledSlotEnvironment,
-            [name]: value,
+test("FR-694 every spec.scheduledSlot value is required", () => {
+  for (const name of Object.keys(scheduledSlot)) {
+    assert.throws(
+      () =>
+        loadScheduledSlotConfig(
+          specSchema.parse({
+            scheduledSlot: { ...scheduledSlot, [name]: undefined },
           }),
-        new RegExp(`${name} is required`),
-      );
-    }
+        ),
+      new RegExp(`spec\\.scheduledSlot\\.${name} is required`),
+    );
   }
 });
 
@@ -325,19 +743,17 @@ test("AC-937 a width that does not divide 30 minutes stops startup", () => {
   for (const width of ["20m", "7m", "45m", "1h"]) {
     assert.throws(
       () =>
-        loadScheduledSlotConfig({
-          ...scheduledSlotEnvironment,
-          SCHEDULED_SLOT__WIDTH: width,
-        }),
-      /SCHEDULED_SLOT__WIDTH must divide 30 minutes/,
+        loadScheduledSlotConfig(
+          specSchema.parse({ scheduledSlot: { ...scheduledSlot, width } }),
+        ),
+      /spec\.scheduledSlot\.width must divide 30 minutes/,
     );
   }
   for (const width of ["5m", "10m", "15m", "30m"]) {
     assert.equal(
-      loadScheduledSlotConfig({
-        ...scheduledSlotEnvironment,
-        SCHEDULED_SLOT__WIDTH: width,
-      }).widthMs % 60_000,
+      loadScheduledSlotConfig(
+        specSchema.parse({ scheduledSlot: { ...scheduledSlot, width } }),
+      ).widthMs % 60_000,
       0,
     );
   }
@@ -345,22 +761,176 @@ test("AC-937 a width that does not divide 30 minutes stops startup", () => {
 
 test("FR-694 malformed Delivery Window values stop startup", () => {
   for (const [name, value, message] of [
-    ["SCHEDULED_SLOT__MIN_LEAD", "48h", /MIN_LEAD must be shorter/],
-    ["SCHEDULED_SLOT__MIN_LEAD", "49h", /MIN_LEAD must be shorter/],
-    ["SCHEDULED_SLOT__HOLD_TTL", "0m", /must be positive/],
-    ["SCHEDULED_SLOT__WIDTH", "15", /expected a duration/],
-    ["SCHEDULED_SLOT__ALTERNATIVES", "-1", /SCHEDULED_SLOT__ALTERNATIVES/],
-    ["SCHEDULED_SLOT__ALTERNATIVES", "two", /SCHEDULED_SLOT__ALTERNATIVES/],
-    ["SCHEDULED_SLOT__ALTERNATIVES", "1.5", /SCHEDULED_SLOT__ALTERNATIVES/],
+    ["minLead", "48h", /minLead must be shorter/],
+    ["minLead", "49h", /minLead must be shorter/],
+    ["holdTtl", "0m", /must be positive/],
+    ["width", "15", /expected a duration/],
+    ["alternatives", -1, /expected zero or more/],
+    ["alternatives", "two", /expected a number/],
+    ["alternatives", 1.5, /expected an integer/],
   ] as const) {
     assert.throws(
       () =>
-        loadScheduledSlotConfig({
-          ...scheduledSlotEnvironment,
-          [name]: value,
-        }),
+        loadScheduledSlotConfig(
+          specSchema.parse({
+            scheduledSlot: { ...scheduledSlot, [name]: value },
+          }),
+        ),
       message,
       `${name}=${value}`,
     );
   }
+});
+
+test("telemetry defaults: no export, grpc, process name and info logs", () => {
+  assert.deepEqual(
+    loadTelemetryConfig(
+      specSchema.parse({}),
+      { POD_NAME: "restaurants-abc" },
+      "restaurants",
+    ),
+    {
+      serviceName: "restaurants",
+      instanceId: "restaurants-abc",
+      resourceAttributes: {},
+      traces: undefined,
+      metrics: undefined,
+      logLevel: "INFO",
+    },
+  );
+  assert.deepEqual(
+    loadTelemetryConfig(
+      specSchema.parse({
+        telemetry: {
+          endpoint: "http://alloy:4318",
+          protocol: "http/protobuf",
+          serviceName: "restaurants-blue",
+          resourceAttributes: { "deployment.environment.name": "kind" },
+        },
+        tracing: { enabled: true },
+        metrics: { enabled: true },
+        logging: { level: "debug" },
+      }),
+      { POD_NAME: "restaurants-abc" },
+      "restaurants",
+    ),
+    {
+      serviceName: "restaurants-blue",
+      instanceId: "restaurants-abc",
+      resourceAttributes: { "deployment.environment.name": "kind" },
+      traces: { endpoint: "http://alloy:4318", protocol: "http/protobuf" },
+      metrics: {
+        endpoint: "http://alloy:4318",
+        protocol: "http/protobuf",
+        exportIntervalMs: 60_000,
+      },
+      logLevel: "DEBUG",
+    },
+  );
+});
+
+test("AC-1077 export enabled without an endpoint stops startup", () => {
+  for (const spec of [
+    { tracing: { enabled: true } },
+    { metrics: { enabled: true } },
+    { tracing: { enabled: true }, telemetry: { endpoint: "" } },
+  ]) {
+    assert.throws(
+      () =>
+        loadTelemetryConfig(
+          specSchema.parse(spec),
+          { POD_NAME: "restaurants-abc" },
+          "restaurants",
+        ),
+      /spec\.telemetry\.endpoint is required/,
+      JSON.stringify(spec),
+    );
+  }
+  assert.throws(
+    () =>
+      loadTelemetryConfig(
+        specSchema.parse({
+          telemetry: { endpoint: "alloy:4317" },
+          tracing: { enabled: true },
+        }),
+        { POD_NAME: "restaurants-abc" },
+        "restaurants",
+      ),
+    /must be an http\(s\) url/,
+  );
+});
+
+test("AC-1078 an unknown OTLP protocol stops startup and lists both", () => {
+  assert.throws(
+    () =>
+      parseConfigDocument(
+        {
+          apiVersion: CONFIG_API_VERSION,
+          kind: CONFIG_KIND,
+          metadata: { name: "restaurants" },
+          spec: { telemetry: { protocol: "http/json" } },
+        },
+        "restaurants",
+      ),
+    /spec\.telemetry\.protocol: expected grpc or http\/protobuf/,
+  );
+});
+
+test("AC-1080 an endpoint without the flags exports nothing", () => {
+  const config = loadTelemetryConfig(
+    specSchema.parse({ telemetry: { endpoint: "http://alloy:4317" } }),
+    { POD_NAME: "restaurants-abc" },
+    "restaurants",
+  );
+  assert.equal(config.traces, undefined);
+  assert.equal(config.metrics, undefined);
+});
+
+test("AC-1081 resource attributes must not override the process identity", () => {
+  for (const key of ["service.name", "service.instance.id"]) {
+    assert.throws(
+      () =>
+        parseConfigDocument(
+          {
+            apiVersion: CONFIG_API_VERSION,
+            kind: CONFIG_KIND,
+            metadata: { name: "restaurants" },
+            spec: { telemetry: { resourceAttributes: { [key]: "other" } } },
+          },
+          "restaurants",
+        ),
+      new RegExp(
+        `spec\\.telemetry\\.resourceAttributes\\.${key.replaceAll(".", "\\.")}: must not be set`,
+      ),
+    );
+  }
+});
+
+test("AC-1082 a missing POD_NAME stops startup", () => {
+  for (const environment of [{}, { POD_NAME: "" }]) {
+    assert.throws(
+      () =>
+        loadTelemetryConfig(specSchema.parse({}), environment, "restaurants"),
+      /POD_NAME is required/,
+    );
+  }
+});
+
+test("FR-765 OTEL_* and LOG__LEVEL do not configure telemetry", () => {
+  const config = loadTelemetryConfig(
+    specSchema.parse({ logging: { level: "warn" } }),
+    {
+      POD_NAME: "restaurants-abc",
+      OTEL_SERVICE_NAME: "other",
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://other:4317",
+      OTEL_RESOURCE_ATTRIBUTES: "service.version=9.9.9",
+      LOG__LEVEL: "debug",
+    },
+    "restaurants",
+  );
+  assert.equal(config.serviceName, "restaurants");
+  assert.equal(config.traces, undefined);
+  assert.equal(config.metrics, undefined);
+  assert.deepEqual(config.resourceAttributes, {});
+  assert.equal(config.logLevel, "WARN");
 });

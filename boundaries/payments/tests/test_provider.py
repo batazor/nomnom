@@ -1,12 +1,10 @@
 import json
-import os
 import unittest
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
-from pydantic import ValidationError
+from payment_fakes import REQUIRED_SPEC
 
-from pkg.config import ProviderSettings, load_settings
+from pkg.config import ConfigError, ProviderSettings, parse_spec
 from slices.payment.applications.ports import (
     ProviderOperationRequest,
     ProviderOperationStatus,
@@ -64,29 +62,13 @@ class FakeProviderTest(unittest.TestCase):
         )
 
     def test_create_provider_by_kind(self) -> None:
-        with patch.dict(os.environ, {"PROVIDER__KIND": "fake"}, clear=True):
-            self.assertIsInstance(create_provider(ProviderSettings()), FakePaymentProvider)
-        with (
-            patch.dict(os.environ, {}, clear=True),
-            self.assertRaises(ProviderConfigurationError),
-        ):
+        self.assertIsInstance(create_provider(ProviderSettings(kind="fake")), FakePaymentProvider)
+        with self.assertRaises(ProviderConfigurationError):
             create_provider(ProviderSettings())
 
     def test_rejects_unknown_kind(self) -> None:
-        with (
-            patch.dict(
-                os.environ,
-                {
-                    "PROVIDER__KIND": "unknown",
-                    "EVENT_STORE__SNAPSHOT_EVERY": "5",
-                    "EVENT_STORE__SUBJECT_KEKS": '{"1": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}',
-                    "EVENT_STORE__SUBJECT_REF_KEY": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
-                },
-                clear=True,
-            ),
-            self.assertRaises(ValidationError),
-        ):
-            load_settings()
+        with self.assertRaisesRegex(ConfigError, "spec.provider.kind"):
+            parse_spec({**REQUIRED_SPEC, "provider": {"kind": "unknown"}})
 
 
 class WebhookTest(unittest.TestCase):

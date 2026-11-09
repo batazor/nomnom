@@ -85,7 +85,7 @@ type Workflow interface {
 }
 
 // NewCatalog — catalog snapshot Place Order: GetRestaurant и GetMenu restaurants
-// через internal gateway (lazy connection, projected token из IDENTITY__TOKEN_DIR).
+// через internal gateway (lazy connection, projected token из spec.identity.tokenDir).
 func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityConfig, limits config.CatalogConfig) (place.Catalog, func(), error) {
 	minimum, err := decimal.NewFromString(limits.MinimumTotal)
 	if err != nil {
@@ -105,8 +105,8 @@ func NewCatalog(gateway config.InternalGatewayConfig, identity config.IdentityCo
 
 // NewSlotReservations — резервация окна запланированного заказа Place Order:
 // ReserveScheduledSlot restaurants через internal gateway от service identity
-// orders (projected token nomnom.restaurants из IDENTITY__TOKEN_DIR); deadline —
-// CATALOG__TIMEOUT, как у чтений каталога до транзакции.
+// orders (projected token nomnom.restaurants из spec.identity.tokenDir); deadline —
+// spec.catalog.timeout, как у чтений каталога до транзакции.
 func NewSlotReservations(gateway config.InternalGatewayConfig, identity config.IdentityConfig, catalog config.CatalogConfig) (place.SlotReservations, func(), error) {
 	conn, err := gatewayclient.Dial(gateway.Address, identity.TokenDir)
 	if err != nil {
@@ -123,7 +123,7 @@ func NewClock() Clock { return system.Clock{} }
 // without it. Checks of an Order read at least as fresh as its stored revision.
 func NewAuthorizer(cfg config.SpiceDBConfig, revisions spicedb.RevisionReader) (Authorizer, func(), error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
-		return nil, nil, fmt.Errorf("%s is required: orders checks permissions in SpiceDB", config.EnvSpiceDBEndpoint)
+		return nil, nil, fmt.Errorf("%s is required: orders checks permissions in SpiceDB", config.KeySpiceDBEndpoint)
 	}
 	client, err := spicedb.Dial(cfg)
 	if err != nil {
@@ -137,11 +137,11 @@ func NewAuthorizer(cfg config.SpiceDBConfig, revisions spicedb.RevisionReader) (
 // order#delivery к состоянию Order по RelationshipsChanged (ADR 18).
 type RelationshipSync = syncrelationships.Relationships
 
-// NewRelationshipSync подключает consumer к SpiceDB: без SPICEDB__ENDPOINT
+// NewRelationshipSync подключает consumer к SpiceDB: без spec.spicedb.endpoint
 // процесс не стартует.
 func NewRelationshipSync(cfg config.SpiceDBConfig) (RelationshipSync, func(), error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
-		return nil, nil, fmt.Errorf("%s is required: orders-consumer syncs order relationships to SpiceDB", config.EnvSpiceDBEndpoint)
+		return nil, nil, fmt.Errorf("%s is required: orders-consumer syncs order relationships to SpiceDB", config.KeySpiceDBEndpoint)
 	}
 	client, err := spicedb.Dial(cfg)
 	if err != nil {

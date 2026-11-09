@@ -15,9 +15,11 @@
 //!   `error.message`.
 //!
 //! Redaction is the caller's duty: tokens, credentials, payloads, bind
-//! parameters and Kafka message contents are never passed as fields. Library
-//! targets log at `WARN` and above only (`sqlx` at `ERROR`: its slow-query
-//! warnings carry statement text).
+//! parameters and Kafka message contents are never passed as fields. Process
+//! code logs at `spec.logging.level` (`info` by default); library targets log
+//! at `WARN` and above only, or at that level if it is stricter (`sqlx` at
+//! `ERROR`: its slow-query warnings carry statement text). `LOG__LEVEL` and
+//! `RUST_LOG` are not read.
 
 use std::fmt::{self, Write as _};
 use std::io::Write as _;
@@ -29,9 +31,11 @@ use opentelemetry_sdk::Resource;
 use serde_json::{Map, Value};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
-use tracing_subscriber::Layer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
-use tracing_subscriber::layer::{Context as LayerContext, SubscriberExt as _};
+use tracing_subscriber::layer::{Context as LayerContext, Layered, SubscriberExt as _};
+use tracing_subscriber::{Layer, Registry, reload};
+
+use crate::pkg::config::{LogLevel, TelemetryConfig};
 
 /// Resource attributes copied into every record.
 const RESOURCE_FIELDS: [&str; 5] = [
@@ -133,29 +137,69 @@ impl<S: Subscriber> Layer<S> for JsonLayer {
     }
 }
 
-/// Process code at `INFO`, libraries at `WARN`, `sqlx` at `ERROR`.
+/// Process code at `level`, libraries at `WARN` (or `level`, if stricter),
+/// `sqlx` at `ERROR`.
 #[must_use]
-pub fn filter() -> Targets {
+pub fn filter(level: LogLevel) -> Targets {
+    let own = match level {
+        LogLevel::Debug => LevelFilter::DEBUG,
+        LogLevel::Info => LevelFilter::INFO,
+        LogLevel::Warn => LevelFilter::WARN,
+        LogLevel::Error => LevelFilter::ERROR,
+    };
     Targets::new()
-        .with_default(LevelFilter::WARN)
-        .with_target(env!("CARGO_CRATE_NAME"), LevelFilter::INFO)
+        .with_default(own.min(LevelFilter::WARN))
+        .with_target(env!("CARGO_CRATE_NAME"), own)
         .with_target("sqlx", LevelFilter::ERROR)
 }
 
-/// Installs the JSON stdout logger as the global `tracing` subscriber. Called
-/// first in `main`, before configuration is loaded, so startup errors share
-/// the format. A second call keeps the first subscriber.
-pub fn init_logs(default_service_name: &str) {
-    let resource = super::resource(default_service_name);
-    let subscriber =
-        tracing_subscriber::registry().with(JsonLayer::stdout(&resource).with_filter(filter()));
+type FilterLayer = reload::Layer<Targets, Registry>;
+
+/// The installed logger: its level and resource are set from the
+/// configuration once it is loaded.
+pub struct Logs {
+    filter: reload::Handle<Targets, Registry>,
+    layer: reload::Handle<JsonLayer, Layered<FilterLayer, Registry>>,
+}
+
+impl Logs {
+    /// Applies `spec.logging.level` and the process resource.
+    pub fn configure(&self, config: &TelemetryConfig) -> Result<(), String> {
+        self.filter
+            .reload(filter(config.log_level))
+            .map_err(|error| format!("set log level: {error}"))?;
+        self.layer
+            .reload(JsonLayer::stdout(&super::resource(config)))
+            .map_err(|error| format!("set log resource: {error}"))
+    }
+}
+
+/// Installs the JSON stdout logger as the global `tracing` subscriber at the
+/// default level `INFO`. Called first in `main`, before configuration is
+/// loaded, so startup errors share the format; [`Logs::configure`] then
+/// applies the configuration. A second call keeps the first subscriber.
+pub fn init_logs(default_service_name: &str) -> Logs {
+    let (filter, filter_handle) = reload::Layer::new(filter(LogLevel::default()));
+    let (layer, layer_handle) = reload::Layer::new(JsonLayer::stdout(&super::startup_resource(
+        default_service_name,
+    )));
+    let subscriber = tracing_subscriber::registry().with(filter).with(layer);
     let _ = tracing::subscriber::set_global_default(subscriber);
+    Logs {
+        filter: filter_handle,
+        layer: layer_handle,
+    }
 }
 
 /// Records logged by `work` on the current thread, rendered with `resource`
 /// and a fixed clock (2026-10-25T12:34:56.789Z) — for tests of the log
 /// format, including integration tests.
 pub fn capture_json(resource: &Resource, work: impl FnOnce()) -> Vec<Value> {
+    capture_json_at(resource, LogLevel::default(), work)
+}
+
+/// [`capture_json`] at `level`.
+pub fn capture_json_at(resource: &Resource, level: LogLevel, work: impl FnOnce()) -> Vec<Value> {
     let lines = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
     let sink = Arc::clone(&lines);
     let layer = JsonLayer::new(
@@ -167,7 +211,7 @@ pub fn capture_json(resource: &Resource, work: impl FnOnce()) -> Vec<Value> {
         }),
         Arc::new(|| UNIX_EPOCH + std::time::Duration::from_millis(1_792_931_696_789)),
     );
-    let subscriber = tracing_subscriber::registry().with(layer.with_filter(filter()));
+    let subscriber = tracing_subscriber::registry().with(layer.with_filter(filter(level)));
     tracing::subscriber::with_default(subscriber, work);
     let lines = lines.lock().map(|lines| lines.clone()).unwrap_or_default();
     lines

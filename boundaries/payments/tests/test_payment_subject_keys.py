@@ -10,7 +10,7 @@ from typing import Any, LiteralString, override
 from unittest import mock
 
 import pytest
-from payment_fakes import NOW, SUBJECT_KEK, SUBJECT_REF_KEY, PaymentsTestKit
+from payment_fakes import NOW, SUBJECT_KEK, SUBJECT_REF_KEY, PaymentsTestKit, write_config
 
 from entrypoints.payments_admin import main as admin
 from infrastructure.repository import Database
@@ -246,13 +246,15 @@ class SubjectKeysTest(unittest.TestCase):
     def run_admin(self, *args: str) -> tuple[int, dict[str, Any]]:
         stdout = io.StringIO()
         env = {
+            "CONFIG_FILE": write_config(self, {"eventStore": {"snapshotEvery": 5}}),
+            "POD_NAME": "payments-test",
             "DATABASE__URI": self.uri,
-            "EVENT_STORE__SNAPSHOT_EVERY": "5",
             "EVENT_STORE__SUBJECT_KEKS": json.dumps({"1": SUBJECT_KEK}),
             "EVENT_STORE__SUBJECT_REF_KEY": SUBJECT_REF_KEY,
         }
         with (
             mock.patch.dict(os.environ, env, clear=True),
+            mock.patch.object(admin.telemetry, "configure_logging"),
             mock.patch.object(admin.telemetry, "configure_process_logging"),
             redirect_stdout(stdout),
         ):

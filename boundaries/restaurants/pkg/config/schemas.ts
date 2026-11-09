@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const portSchema = z.coerce.number().int().min(1).max(65535);
+export const portSchema = z.number().int().min(1).max(65535);
 
 const DURATION_UNITS_MS = {
   ms: 1,
@@ -24,6 +24,14 @@ export const durationSchema = z
     );
   });
 
-export const booleanSchema = z
-  .enum(["true", "false"], { error: "expected true or false" })
-  .transform((value) => value === "true");
+/** Длительность больше нуля. */
+export const positiveDurationSchema = durationSchema.refine(
+  (value) => value > 0,
+  "must be positive",
+);
+
+/**
+ * Строка без пробелов по краям; пустая строка равна отсутствующему ключу, и
+ * обязательную настройку проверяет загрузчик процесса.
+ */
+export const optionalStringSchema = z.string().trim().optional();

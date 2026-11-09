@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Subject } from "../pkg/authz/subject.ts";
-import { loadSimulatorConfig } from "../pkg/config/config.ts";
+import { loadSimulatorConfig, specSchema } from "../pkg/config/config.ts";
 import { PermissionDeniedError as RestaurantOrderPermissionDeniedError } from "../slices/restaurantorder/applications/failure/failure.ts";
 import { PermissionDeniedError } from "../slices/simulator/applications/failure/failure.ts";
 import { GetSimulatorHandler } from "../slices/simulator/applications/get/get.ts";
@@ -25,46 +25,49 @@ import { FixedClock, owner, startOfDay } from "./support/restaurants.ts";
 
 const operator: Subject = { type: "user", id: "operator" };
 
-const validEnvironment = {
-  SIMULATOR__INTERVAL: "5s",
-  SIMULATOR__MIN_DELAY: "30s",
-  SIMULATOR__MAX_DELAY: "2m",
-};
+/** spec.simulator of config.example.yaml. */
+const simulator = { interval: "5s", minDelay: "30s", maxDelay: "2m" };
 
 test("FR-606 reads the required Simulator settings", () => {
-  assert.deepEqual(loadSimulatorConfig(validEnvironment), {
+  assert.deepEqual(loadSimulatorConfig(specSchema.parse({ simulator })), {
     intervalMs: 5_000,
     minDelayMs: 30_000,
     maxDelayMs: 120_000,
   });
 });
 
-test("AC-765 MIN_DELAY longer than MAX_DELAY stops startup", () => {
+test("AC-765 minDelay longer than maxDelay stops startup", () => {
   assert.throws(
     () =>
-      loadSimulatorConfig({
-        ...validEnvironment,
-        SIMULATOR__MIN_DELAY: "3m",
-        SIMULATOR__MAX_DELAY: "1m",
-      }),
-    /SIMULATOR__MIN_DELAY must not be longer than SIMULATOR__MAX_DELAY/,
+      loadSimulatorConfig(
+        specSchema.parse({
+          simulator: { ...simulator, minDelay: "3m", maxDelay: "1m" },
+        }),
+      ),
+    /spec\.simulator\.minDelay must not be longer than spec\.simulator\.maxDelay/,
   );
 });
 
-test("FR-606 an empty or invalid Simulator setting stops startup", () => {
-  for (const name of Object.keys(validEnvironment)) {
-    for (const value of [undefined, "", "  ", "5", "soon"]) {
+test("FR-606 a missing or invalid Simulator setting stops startup", () => {
+  for (const name of Object.keys(simulator)) {
+    assert.throws(
+      () =>
+        loadSimulatorConfig(
+          specSchema.parse({ simulator: { ...simulator, [name]: undefined } }),
+        ),
+      new RegExp(`spec\\.simulator\\.${name} is required`),
+      name,
+    );
+    for (const value of ["", "5", "soon", 5]) {
       assert.throws(
-        () => loadSimulatorConfig({ ...validEnvironment, [name]: value }),
-        new RegExp(name),
+        () => specSchema.parse({ simulator: { ...simulator, [name]: value } }),
         `${name}=${value}`,
       );
     }
   }
   assert.throws(
-    () =>
-      loadSimulatorConfig({ ...validEnvironment, SIMULATOR__INTERVAL: "0s" }),
-    /SIMULATOR__INTERVAL must be positive/,
+    () => specSchema.parse({ simulator: { ...simulator, interval: "0s" } }),
+    /must be positive/,
   );
 });
 

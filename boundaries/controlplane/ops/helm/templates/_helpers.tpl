@@ -49,61 +49,78 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end }}
 
 {{/*
+Секунды длительности Go-формата (500ms, 5s, 1m30s) — для проверок chart; процесс разбирает
+значение сам.
+Usage: {{ include "controlplane.durationSeconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" .) | float64 }}
+*/}}
+{{- define "controlplane.durationSeconds" -}}
+{{- $value := toString .value -}}
+{{- if not (regexMatch "^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$" $value) -}}
+{{- fail (printf "%s must be a Go duration such as 500ms, 5s or 2m, got %q" .key $value) -}}
+{{- end -}}
+{{- $scale := dict "ns" 0.000000001 "us" 0.000001 "µs" 0.000001 "ms" 0.001 "s" 1.0 "m" 60.0 "h" 3600.0 -}}
+{{- $seconds := 0.0 -}}
+{{- range $part := regexFindAll "[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h)" $value -1 -}}
+{{- $number := regexFind "^[0-9]+(\\.[0-9]+)?" $part -}}
+{{- $seconds = addf $seconds (mulf (float64 $number) (get $scale (trimPrefix $number $part))) -}}
+{{- end -}}
+{{- $seconds -}}
+{{- end -}}
+
+{{/*
 Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay
-и drain timeout с запасом, иначе kubelet отправит SIGKILL посреди drain.
+и drain timeout из config.spec.shutdown с запасом, иначе kubelet отправит SIGKILL посреди drain.
 */}}
 {{- define "controlplane.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds -}}
-{{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- $shutdown := .Values.config.spec.shutdown | required "config.spec.shutdown is required: the chart checks the shutdown budget" -}}
+{{- $readinessDelay := include "controlplane.durationSeconds" (dict "key" "config.spec.shutdown.readinessDelay" "value" ($shutdown.readinessDelay | required "config.spec.shutdown.readinessDelay is required")) | float64 -}}
+{{- $drainTimeout := include "controlplane.durationSeconds" (dict "key" "config.spec.shutdown.drainTimeout" "value" ($shutdown.drainTimeout | required "config.spec.shutdown.drainTimeout is required")) | float64 -}}
+{{- $budget := addf $readinessDelay $drainTimeout -}}
+{{- if le (float64 .Values.terminationGracePeriodSeconds) $budget -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than config.spec.shutdown.readinessDelay + drainTimeout (%vs)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
-{{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- if le $drainTimeout 0.0 -}}
+{{- fail "config.spec.shutdown.drainTimeout must be positive" -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-OpenTelemetry (ADR 9, docs/observability.md): одинаковая идентификация traces, metrics и
-JSON-логов процесса. service.name — telemetry.serviceName роли, service.instance.id — имя pod (downward API),
-service.version — неизменяемый image.tag. Остальные атрибуты окружения задаются
-telemetry.resourceAttributes: явная env имеет приоритет над envFrom, поэтому
-OTEL_RESOURCE_ATTRIBUTES и OTEL_SERVICE_NAME в env были бы перекрыты. OTLP endpoint и
-уровень логов — необязательные telemetry.otlpEndpoint и telemetry.logLevel; пустые не
-задаются, и их можно передать через env/envFrom окружения.
-Usage: {{ include "controlplane.otelEnv" (dict "context" $ "serviceName" "") }}
+Технический порт процесса — config.spec.management.port: тот же, что слушает процесс.
 */}}
-{{- define "controlplane.otelEnv" -}}
-{{- $values := .context.Values -}}
-{{- $serviceName := $values.telemetry.serviceName | required "telemetry.serviceName is required" -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" ($values.image.tag | required "image.tag is required")) -}}
-{{- range $key, $value := $values.telemetry.resourceAttributes }}
-{{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
-{{- end }}
-- name: POD_NAME
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.name
-- name: OTEL_SERVICE_NAME
-  value: {{ $serviceName | quote }}
-- name: OTEL_RESOURCE_ATTRIBUTES
-  value: {{ join "," $attrs | quote }}
-{{- with $values.telemetry.otlpEndpoint }}
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ . | quote }}
-{{- end }}
-{{- with $values.telemetry.logLevel }}
-- name: LOG__LEVEL
-  value: {{ . | quote }}
-{{- end }}
-{{- end }}
+{{- define "controlplane.managementPort" -}}
+{{- .Values.config.spec.management.port | required "config.spec.management.port is required" -}}
+{{- end -}}
 
 {{/*
 Маршруты публичного gateway (ADR 41): без них control plane не опубликует маршруты объявленных Market.
 */}}
 {{- define "controlplane.validateRoutes" -}}
 {{- range $key := list "namespace" "gateway" "listener" -}}
-{{- if not (get $.Values.routes $key) -}}
-{{- fail (printf "routes.%s is required" $key) -}}
+{{- if not (get $.Values.config.spec.routes $key) -}}
+{{- fail (printf "config.spec.routes.%s is required" $key) -}}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Файл конфигурации процесса (ADR 17, ADR 9): apiVersion, kind и metadata.name — роль из
+обязательного role, spec — config.spec как есть. Chart дописывает только то, чем владеет:
+service.version из неизменяемого image.tag в spec.telemetry.resourceAttributes. Если этот ключ
+задан в values, рендер падает: у значения один источник. service.instance.id процесс берёт из
+POD_NAME (downward API), service.name — из spec.telemetry.serviceName.
+*/}}
+{{- define "controlplane.configFile" -}}
+{{- $values := .Values.config.spec -}}
+{{- if hasKey (dig "telemetry" "resourceAttributes" (dict) $values) "service.version" -}}
+{{- fail "config.spec.telemetry.resourceAttributes.service.version is set by the chart from image.tag: remove it from values" -}}
+{{- end -}}
+{{- $owned := dict "telemetry" (dict "resourceAttributes" (dict "service.version" (.Values.image.tag | required "image.tag is required: service.version of telemetry" | toString))) -}}
+{{- $spec := mustMergeOverwrite (deepCopy $values) $owned -}}
+{{- $document := dict
+  "apiVersion" "config.nomnom.dev/v1alpha1"
+  "kind" "ControlPlane"
+  "metadata" (dict "name" (.Values.role | required "role is required: metadata.name of the process configuration file"))
+  "spec" $spec
+-}}
+{{- toYaml $document -}}
 {{- end -}}

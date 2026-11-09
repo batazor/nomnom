@@ -69,14 +69,14 @@ class ProviderConfigurationError(RuntimeError):
 
 
 def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient]:
-    """The authzed client of the process; ``SPICEDB__ENDPOINT`` is required.
+    """The authzed client of the process; ``spec.spicedb.endpoint`` is required.
 
     Channels connect lazily on the first check. The authzed client keeps no handle on
     its channel, so there is nothing to release before the process exits.
     """
     if not settings.enabled:
         raise SpiceDBConfigurationError(
-            "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
+            "spec.spicedb.endpoint is required: payments checks permissions in SpiceDB"
         )
     yield create_spicedb_client(settings)
 
@@ -84,10 +84,10 @@ def spicedb_client(settings: SpiceDBSettings) -> Iterator[PermissionsClient]:
 def create_permission_checker(
     settings: SpiceDBSettings, client: PermissionsClient | None = None
 ) -> PaymentPermissionChecker:
-    """Authorization port with nomnom.authz.* per check; ``SPICEDB__ENDPOINT`` is required."""
+    """Authorization port with nomnom.authz.* per check; ``spec.spicedb.endpoint`` is required."""
     if not settings.enabled:
         raise SpiceDBConfigurationError(
-            "SPICEDB__ENDPOINT is required: payments checks permissions in SpiceDB"
+            "spec.spicedb.endpoint is required: payments checks permissions in SpiceDB"
         )
     return SpiceDBPermissionChecker(
         client if client is not None else create_spicedb_client(settings),
@@ -103,16 +103,16 @@ def create_provider(settings: ProviderSettings) -> PaymentProviderGateway:
         return StripePaymentProvider(
             create_stripe_client(settings.stripe_api_key, settings.stripe_timeout.total_seconds())
         )
-    raise ProviderConfigurationError(f"unsupported PROVIDER__KIND {settings.kind!r}")
+    raise ProviderConfigurationError(f"unsupported spec.provider.kind {settings.kind!r}")
 
 
 def webhook_format_of(settings: ProviderSettings) -> WebhookFormat:
-    """Wire format of the webhooks of ``PROVIDER__KIND``."""
+    """Wire format of the webhooks of ``spec.provider.kind``."""
     if settings.kind == "fake":
         return SANDBOX_WEBHOOK_FORMAT
     if settings.kind == "stripe":
         return STRIPE_WEBHOOK_FORMAT
-    raise ProviderConfigurationError(f"unsupported PROVIDER__KIND {settings.kind!r}")
+    raise ProviderConfigurationError(f"unsupported spec.provider.kind {settings.kind!r}")
 
 
 def instrument[In, Out](

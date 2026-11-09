@@ -1,32 +1,17 @@
 package config
 
-import (
-	"fmt"
+import "fmt"
 
-	"github.com/spf13/viper"
-)
-
-const (
-	configKeyPort = "server.port"
-	DefaultPort   = 8081
-	EnvPort       = "SERVER__PORT"
-)
+// DefaultPort — бизнес-порт (spec.server.port).
+const DefaultPort = 8081
 
 type ServerConfig struct {
-	Port int `mapstructure:"port"`
-}
-
-func configureServer(loader *viper.Viper) error {
-	loader.SetDefault(configKeyPort, DefaultPort)
-	if err := loader.BindEnv(configKeyPort, EnvPort, "PORT"); err != nil {
-		return fmt.Errorf("bind %s: %w", EnvPort, err)
-	}
-	return nil
+	Port int `yaml:"port"`
 }
 
 func (cfg ServerConfig) Validate() error {
 	if cfg.Port < 1 || cfg.Port > 65535 {
-		return fmt.Errorf("server port must be between 1 and 65535, got %d", cfg.Port)
+		return fmt.Errorf("spec.server.port must be between 1 and 65535, got %d", cfg.Port)
 	}
 	return nil
 }

@@ -67,7 +67,7 @@ pub static MIGRATION_SETS: [MigrationSet; 4] = [
     ),
 ];
 
-/// Pool size of the startup migration, whatever `DATABASE__MAX_CONNS` says.
+/// Pool size of the startup migration, whatever `spec.database.maxConns` says.
 pub const MIGRATE_MAX_CONNS: u32 = 1;
 
 /// Arbitrary constant shared by every delivery migrator.

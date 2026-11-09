@@ -17,8 +17,9 @@ import (
 )
 
 func main() {
-	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов.
-	telemetry.SetupLogging(di.AppServiceName)
+	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов;
+	// уровень и resource из файла конфигурации run применяет после загрузки.
+	telemetry.SetupLogging(telemetry.ProcessLogResource(di.AppServiceName), slog.LevelInfo)
 	if err := run(); err != nil {
 		slog.Error("controlplane stopped", telemetry.LogErrorKey, err)
 		os.Exit(1)
@@ -26,10 +27,15 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	cfg, err := config.Load(di.AppRole, di.AppServiceName)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	resource, err := telemetry.LogResourceFor(context.Background(), cfg.Telemetry)
+	if err != nil {
+		return err
+	}
+	telemetry.SetupLogging(resource, cfg.Logging.SlogLevel())
 
 	app, err := di.InitializeApp(cfg)
 	if err != nil {

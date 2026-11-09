@@ -20,10 +20,13 @@ Service предназначен для internal gateway и технически
   kubectl --namespace {{ .Release.Namespace }} port-forward \
     svc/{{ include "common.names.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
 
-Health contract на техническом порту metrics ({{ .Values.management.port }}):
+Роль процесса: {{ .Values.role }}; файл конфигурации — ConfigMap {{ include "common.names.fullname" . }},
+ключ config.yaml, в контейнере /etc/nomnom/config.yaml.
+
+Health contract на техническом порту metrics ({{ include "restaurants.managementPort" . }}):
   kubectl --namespace {{ .Release.Namespace }} port-forward \
-    deploy/{{ include "common.names.fullname" . }} {{ .Values.management.port }}:metrics
-  curl -i localhost:{{ .Values.management.port }}/health/ready
+    deploy/{{ include "common.names.fullname" . }} {{ include "restaurants.managementPort" . }}:metrics
+  curl -i localhost:{{ include "restaurants.managementPort" . }}/health/ready
 {{- if not (and .Values.startupProbe.enabled .Values.livenessProbe.enabled .Values.readinessProbe.enabled) }}
 
 ВНИМАНИЕ: часть probes отключена в values; runtime contract требует startup, liveness и readiness.

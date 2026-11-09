@@ -8,43 +8,11 @@ podLabels:
   # Pod предоставляет бизнес-API: ingress только от internal gateway (NetworkPolicy).
   nomnom.dev/business-api: "true"
 
-env:
-  # Единственный адрес для синхронных вызовов бизнес-API других приложений.
-  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  # Демо Simulator курьеров (FR-606, FR-667): опрос, границы задержки действия и интервал
-  # позиций движущихся курьеров.
-  SIMULATOR__INTERVAL: 5s
-  SIMULATOR__MIN_DELAY: 30s
-  SIMULATOR__MAX_DELAY: 2m
-  SIMULATOR__TRACK_INTERVAL: 1s
-  # Live tracking (FR-658): Virtual City 12 × 12 кварталов по 150 м накрывает позиции курьеров
-  # демо-данных (ops/kind/demo/files/seed.json) и стартовую точку курьеров BFF.
-  TRACKING__CITY_ORIGIN_LATITUDE: "52.515"
-  TRACKING__CITY_ORIGIN_LONGITUDE: "13.385"
-  TRACKING__CITY_BLOCKS: "12"
-  TRACKING__BLOCK_METERS: "150"
-  TRACKING__PERSIST_INTERVAL: 15s
-  # Kafka consumer собственных фактов Delivery для Delivery Duration Statistics (FR-676);
-  # группа и начальный offset заданы в chart (values.yaml).
-  KAFKA__BROKERS: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
-  # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
-  SCHEMA_REGISTRY__URL: http://schema-registry.nomnom-infra.svc.cluster.local:8081
-
-# ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
-# публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
+# ADR 27: JWKS кластера (ConfigMap cluster-jwks публикует Job identity-jwks chart
+# ops/kind/bootstrap); ADR 32: JWKS BFF (ConfigMap bff-jwks, тот же chart).
 identity:
-  issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  # bff — courier-экран (RPC курьера от имени пользователя). e2e-driver — fixture e2e пути
-  # заказа (e2e/chart/templates/e2e-driver.yaml): играет оператора и курьера; demo-seed — Job демо-данных (chart ops/kind/demo). Только в kind:
-  # chart-default его не содержит (AC-741).
-  serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver,nomnom-bff/demo-seed=demo-seed
-  # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
-  # передавать user subject могут service bff и, только в kind, e2e-driver и demo-seed — их assertion
-  # тест и Job подписывают тем же kind-ключом BFF.
   userJwksConfigMap: bff-jwks
-  userIssuer: nomnom-bff
-  userDelegates: bff,e2e-driver,demo-seed
 
 # FR-661: Valkey потока позиций; Secret delivery-valkey (URL ACL-пользователя delivery) создаёт
 # chart ops/kind/bootstrap.
@@ -52,18 +20,55 @@ valkey:
   urlSecret:
     name: delivery-valkey
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
+# ADR 18: Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
-  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
-  insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
 
-# FR-707: Create Delivery и ответы курьеров запускают и будят Assignment Workflow в Temporal
-# dev server (manifests/messaging/infrastructure.yaml); исполняет его release delivery-worker.
-temporal:
-  hostPort: temporal.nomnom-infra.svc.cluster.local:7233
-  namespace: default
+config:
+  spec:
+    # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера и allowlist вызывающих
+    # workloads. bff — courier-экран (RPC курьера от имени пользователя). e2e-driver — fixture e2e
+    # пути заказа (e2e/chart/templates/e2e-driver.yaml): играет оператора и курьера; demo-seed —
+    # Job демо-данных (chart ops/kind/demo). Только в kind: chart-default его не содержит (AC-741).
+    # ADR 32: user assertions BFF; передавать user subject могут service bff и, только в kind,
+    # e2e-driver и demo-seed — их assertion тест и Job подписывают тем же kind-ключом BFF.
+    identity:
+      issuer: https://kubernetes.default.svc.cluster.local
+      serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-bff/bff=bff,nomnom-bff/e2e-driver=e2e-driver,nomnom-bff/demo-seed=demo-seed
+      userIssuer: nomnom-bff
+      userDelegates: bff,e2e-driver,demo-seed
+    # ADR 18: SpiceDB тестового окружения.
+    spicedb:
+      endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+      insecure: true
+    # FR-707: Create Delivery и ответы курьеров запускают и будят Assignment Workflow в Temporal
+    # dev server (manifests/messaging/infrastructure.yaml); исполняет его release delivery-worker.
+    temporal:
+      hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+      namespace: default
+    # Демо Simulator курьеров (FR-606, FR-667): опрос, границы задержки действия и интервал
+    # позиций движущихся курьеров.
+    simulator:
+      interval: 5s
+      minDelay: 30s
+      maxDelay: 2m
+      trackInterval: 1s
+    # Live tracking (FR-658): Virtual City 12 × 12 кварталов по 150 м накрывает позиции курьеров
+    # демо-данных (ops/kind/demo/files/seed.json) и стартовую точку курьеров BFF.
+    tracking:
+      cityOriginLatitude: 52.515
+      cityOriginLongitude: 13.385
+      cityBlocks: 12
+      blockMeters: 150
+      persistInterval: 15s
+    # Kafka consumer собственных фактов Delivery для Delivery Duration Statistics (FR-676);
+    # группа и начальный offset заданы в chart (values.yaml).
+    kafka:
+      brokers: kafka-kafka-bootstrap.nomnom-infra.svc.cluster.local:9092
+    # Schema Registry: consumer сверяет subject схемы записи с event_type (FR-715).
+    schemaRegistry:
+      url: http://schema-registry.nomnom-infra.svc.cluster.local:8081
 
 # ADR 37: Outbox публикует коннектор Debezium delivery-outbox в Kafka Connect nomnom-infra;
 # пароль Connect читает из Secret cdc-credentials (ключ delivery-password).

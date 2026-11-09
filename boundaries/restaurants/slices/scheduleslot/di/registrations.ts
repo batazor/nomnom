@@ -1,6 +1,6 @@
 // Awilix registrations of the `scheduleslot` slice (ADR 5): the MongoDB
 // repository of Schedule Slots, the Delivery Window grid from
-// SCHEDULED_SLOT__* and the handlers exposed through transport.
+// spec.scheduledSlot and the handlers exposed through transport.
 import { type AwilixContainer, asFunction } from "awilix";
 import type { Db } from "mongodb";
 import type { Registrations } from "../../../di/container.ts";

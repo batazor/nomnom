@@ -4,10 +4,12 @@
 image:
   pullPolicy: Never
 
-# Temporal dev server (manifests/messaging/infrastructure.yaml), тот же, что у release delivery.
-temporal:
-  hostPort: temporal.nomnom-infra.svc.cluster.local:7233
-  namespace: default
+config:
+  spec:
+    # Temporal dev server (manifests/messaging/infrastructure.yaml), тот же, что у release delivery.
+    temporal:
+      hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+      namespace: default
 
 # Burstable без CPU limit, как release delivery; профиль worker ещё не измерен, limit — тот же.
 resources:

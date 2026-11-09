@@ -38,7 +38,7 @@ type ServiceTokenSubjectResolver struct {
 func NewSubjectResolver(cfg config.IdentityConfig) (SubjectResolver, error) {
 	if !cfg.Verifying() {
 		return nil, fmt.Errorf("%s, %s and %s are required",
-			config.EnvIdentityIssuer, config.EnvIdentityAudience, config.EnvIdentityJWKSFile)
+			config.KeyIdentityIssuer, config.KeyIdentityAudience, config.KeyIdentityJWKSFile)
 	}
 	service, err := newServiceTokenVerifier(cfg)
 	if err != nil {

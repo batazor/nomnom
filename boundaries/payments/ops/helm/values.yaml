@@ -33,6 +33,88 @@ global: {}
 # Label app.kubernetes.io/component.
 component: api
 
+# Роль процесса — metadata.name файла конфигурации (ADR 17); процесс сверяет её со своей.
+# Обязательна. У chart payments одна роль.
+role: payments
+
+# Файл конфигурации процесса (ADR 17, docs/cloud-native-runtime.md): config.spec попадает в
+# ConfigMap ключом config.yaml как есть вместе с apiVersion config.nomnom.dev/v1alpha1,
+# kind Payments и metadata.name из role. Файл монтируется в /etc/nomnom/config.yaml (env
+# CONFIG_FILE); при его изменении pod перезапускается (аннотация checksum/config). Ключи —
+# camelCase, неизвестный ключ процесс отвергает при старте; пример со всеми ключами —
+# config.example.yaml приложения. Chart дописывает только то, чем владеет:
+# spec.identity.jwksFile и spec.identity.userJwksFile (пути смонтированных JWKS) и
+# spec.telemetry.resourceAttributes["service.version"] (image.tag). Задать их в values —
+# ошибка helm template. Секретов в spec нет: они приходят из Secret через env.
+config:
+  spec:
+    # Бизнес-порт gRPC; он же containerPort с именем service.portName.
+    server:
+      port: 8084
+    # Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
+    # Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется. Порт не входит в
+    # Service и не публикуется через gateway.
+    management:
+      port: 9084
+    # Бюджет graceful shutdown, <int>(ms|s|m). readinessDelay должен превышать время, за
+    # которое readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс
+    # распространение EndpointSlice и конфигурации internal gateway.
+    shutdown:
+      readinessDelay: 5s
+      drainTimeout: 20s
+      telemetryFlushTimeout: 5s
+    # Service identity по projected ServiceAccount token (ADR 27) и user assertions BFF
+    # (ADR 32). Все значения обязательны (иначе helm template завершается ошибкой); пути JWKS
+    # дописывает chart (см. identity ниже).
+    identity:
+      # Issuer токенов кластера (/.well-known/openid-configuration).
+      issuer: ""
+      # Audience этого контекста: token другого контекста отклоняется.
+      audience: "nomnom.payments"
+      # Allowlist через запятую: namespace/serviceaccount=service-name,
+      # например nomnom/orders-worker=orders-worker.
+      serviceAccounts: ""
+      # Ожидаемый iss user assertion, например nomnom-bff.
+      userIssuer: ""
+      # Services, которым разрешено передавать user, через запятую, например bff.
+      userDelegates: ""
+    # Authorization через SpiceDB (ADR 18): endpoint обязателен, preshared key — из Secret
+    # spicedb.presharedKeySecret (env SPICEDB__PRESHARED_KEY).
+    spicedb:
+      # gRPC endpoint host:port, например spicedb.nomnom-authz.svc.cluster.local:50051.
+      endpoint: ""
+      # Plaintext gRPC без TLS — только для kind и локальных окружений.
+      insecure: false
+      # Deadline одного CheckPermission в формате <int>(ms|s|m); при превышении use case
+      # отклоняется UNAVAILABLE (fail closed).
+      timeout: "2s"
+    # Платёжный провайдер. kind (fake или stripe) задаёт окружение; webhookPort — HTTP-приём
+    # webhooks провайдера (POST /webhooks/provider), порт входит в Service, снаружи доступен
+    # только путь /webhooks/provider через public gateway (в kind —
+    # ops/kind/manifests/gateway/public-gateway.yaml). Секрет подписи webhooks — env
+    # PROVIDER__WEBHOOK_SECRET из Secret (extraEnv или envFrom).
+    provider:
+      webhookPort: 8085
+    # Пул процесса (ADR 8, локальный ADR 1). За пулером PostgreSQL в session mode каждое
+    # соединение держит server-соединение: replicas × maxConns должна помещаться в pool_size
+    # пулера (README, «Пулер PostgreSQL»). maxConns — по конкурентности процесса: API с
+    # webhooks 10.
+    database:
+      maxConns: 10
+      # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
+      minConns: 1
+      # psycopg_pool сам закрывает соединение на 0-5% раньше lifetime (jitter).
+      maxConnLifetime: "30m"
+      maxConnIdleTime: "5m"
+      # connect_timeout libpq (целые секунды) и ожидание свободного соединения пула.
+      connectTimeout: "5s"
+      acquireTimeout: "5s"
+    # eventStore.snapshotEvery обязателен и задаётся окружением (локальный ADR 2).
+    # ADR 9: telemetry.endpoint, protocol, serviceName, resourceAttributes, tracing.enabled,
+    # metrics.enabled, metrics.exportInterval, logging.level — общий формат всех chart.
+    telemetry:
+      resourceAttributes: {}
+
 serviceAccount:
   create: true
   # Имя ServiceAccount. Пустое значение — <fullname>.
@@ -63,13 +145,9 @@ securityContext:
 
 service:
   type: ClusterIP
-  # Порт Service и порт приложения. Приложение слушает 8084 по умолчанию
-  # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,
-  # на котором фактически запускается процесс.
+  # Порт Service; targetPort — именованный порт контейнера (config.spec.server.port).
   port: 8084
-  targetPort: 8084
-  # Имя порта. Сейчас приложение отвечает по HTTP; при переходе на gRPC
-  # Бизнес-порт обслуживает nomnom.payments.v1 по gRPC/HTTP2.
+  # Имя бизнес-порта: он обслуживает nomnom.payments.v1 по gRPC/HTTP2.
   portName: grpc
   appProtocol: kubernetes.io/h2c
   annotations: {}
@@ -79,30 +157,7 @@ resources:
   requests: {}
   limits: {}
 
-# Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# OTEL_RESOURCE_ATTRIBUTES здесь не задаётся: chart задаёт её явно (telemetry ниже), а явная
-# env перекрывает envFrom. Пример:
-# env:
-#   PROVIDER__KIND: fake
-env: {}
-
-# ADR 9, docs/observability.md: OpenTelemetry процесса. service.namespace=nomnom задаёт код,
-# service.name по умолчанию — имя процесса (payments).
-# Chart всегда передаёт OTEL_RESOURCE_ATTRIBUTES: service.instance.id — имя pod (downward
-# API), service.version — image.tag (или "unknown"), плюс resourceAttributes, например
-# deployment.environment.name.
-telemetry:
-  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
-  # http://alloy.nomnom-observability.svc.cluster.local:4317. Пусто — chart переменную не
-  # задаёт (её можно передать через env); без endpoint traces и metrics не экспортируются,
-  # JSON-логи в stdout пишутся всегда.
-  endpoint: ""
-  # OTEL_SERVICE_NAME; пусто — имя процесса из кода.
-  serviceName: ""
-  # Дополнительные resource attributes: ключ → значение.
-  resourceAttributes: {}
-  #   deployment.environment.name: local
-
+# Секреты окружения из внешних Secret; несекретные настройки — только config.spec.
 # Дополнительные источники переменных окружения, в том числе внешние Secret:
 # envFrom:
 #   - secretRef:
@@ -118,29 +173,8 @@ envFrom: []
 #         key: password
 extraEnv: []
 
-# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
-# Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется; номер передаётся
-# приложению через MANAGEMENT__PORT. Порт не входит в Service и не публикуется через gateway.
-management:
-  port: 9084
-
-# HTTP-приём webhooks платёжного провайдера (POST /webhooks/provider), передаётся через
-# PROVIDER__WEBHOOK_PORT. Порт входит в Service; снаружи доступен только путь
-# /webhooks/provider через public gateway (в kind — ops/kind/manifests/gateway/public-gateway.yaml).
-providerWebhooks:
-  port: 8085
-
-# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY,
-# SHUTDOWN__DRAIN_TIMEOUT и SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
-# readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
-# EndpointSlice и конфигурации internal gateway.
-shutdown:
-  readinessDelaySeconds: 5
-  drainTimeoutSeconds: 20
-  telemetryFlushTimeoutSeconds: 5
-
-# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds + telemetryFlushTimeoutSeconds с запасом на выход процесса;
-# chart отказывается рендериться при нарушении.
+# Должен быть больше config.spec.shutdown.readinessDelay + drainTimeout + telemetryFlushTimeout
+# с запасом на выход процесса; chart отказывается рендериться при нарушении.
 terminationGracePeriodSeconds: 35
 
 # Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
@@ -174,44 +208,20 @@ readinessProbe:
   timeoutSeconds: 1
   failureThreshold: 1
 
-# Service identity по projected ServiceAccount token (ADR 27) и user assertions BFF (ADR 32).
-# Все значения обязательны (иначе helm template завершается ошибкой): ConfigMap jwksConfigMap
-# (публичные ключи кластера, /openid/v1/jwks) монтируется read-only в
-# /etc/nomnom/identity/jwks.json, userJwksConfigMap (публичные ES256 ключи BFF) — в
-# /etc/nomnom/user-identity/jwks.json; значения передаются приложению как IDENTITY__ISSUER,
-# IDENTITY__AUDIENCE, IDENTITY__JWKS_FILE, IDENTITY__SERVICE_ACCOUNTS, IDENTITY__USER_ISSUER,
-# IDENTITY__USER_JWKS_FILE и IDENTITY__USER_DELEGATES.
+# JWKS для проверки service identity (ADR 27) и user assertions BFF (ADR 32). Оба значения
+# обязательны (иначе helm template завершается ошибкой). ConfigMap jwksConfigMap (публичные
+# ключи кластера, /openid/v1/jwks) монтируется read-only в /etc/nomnom/identity/jwks.json,
+# userJwksConfigMap (публичные ES256 ключи BFF) — в /etc/nomnom/user-identity/jwks.json; эти
+# пути chart пишет в config.spec.identity.jwksFile и userJwksFile.
 identity:
-  # Issuer токенов кластера (/.well-known/openid-configuration). Обязателен.
-  issuer: ""
-  # Audience этого контекста: token другого контекста отклоняется.
-  audience: "nomnom.payments"
-  # Allowlist через запятую: namespace/serviceaccount=service-name,
-  # например nomnom/orders-worker=orders-worker. Обязателен.
-  serviceAccounts: ""
-  # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart. Обязателен.
+  # Имя ConfigMap с ключом jwks.json; создаётся развёртыванием, не этим chart.
   jwksConfigMap: ""
-  # Ожидаемый iss user assertion, например nomnom-bff. Обязателен.
-  userIssuer: ""
-  # Services, которым разрешено передавать user, через запятую, например bff. Обязателен.
-  userDelegates: ""
   # Имя ConfigMap с ключом jwks.json (JWKS BFF); создаётся развёртыванием, не этим chart.
-  # Обязателен.
   userJwksConfigMap: ""
 
-# Authorization через SpiceDB (ADR 18). Проверка включается, только когда задан endpoint:
-# контейнер получает SPICEDB__ENDPOINT, SPICEDB__INSECURE, SPICEDB__TIMEOUT и
-# SPICEDB__PRESHARED_KEY из Secret (secretKeyRef). Без endpoint все permissions запрещены.
+# Secret с preshared key SpiceDB (env SPICEDB__PRESHARED_KEY) создаётся развёртыванием, не этим
+# chart; ключ в values не хранится. name обязателен.
 spicedb:
-  # gRPC endpoint host:port, например spicedb.nomnom-authz.svc.cluster.local:50051.
-  endpoint: ""
-  # Plaintext gRPC без TLS — только для kind и локальных окружений.
-  insecure: false
-  # Deadline одного CheckPermission в формате <int>(ms|s|m); при превышении use case
-  # отклоняется UNAVAILABLE (fail closed).
-  timeout: "2s"
-  # Secret с preshared key создаётся развёртыванием, не этим chart; ключ в values не хранится.
-  # name обязателен вместе с endpoint.
   presharedKeySecret:
     name: ""
     key: "preshared-key"
@@ -226,24 +236,12 @@ eventStore:
 
 # PostgreSQL (ADR 8, локальный ADR 1). Connection URI (postgresql://…) берётся из внешнего Secret
 # (env DATABASE__URI) и не хранится в values; без uriSecret.name переменная не задаётся и процесс
-# не стартует.
+# не стартует. Пул процесса — config.spec.database.
 database:
   # Secret создаётся развёртыванием, не этим chart.
   uriSecret:
     name: ""
     key: "dsn"
-  # Пул процесса (DATABASE__*). За пулером PostgreSQL в session mode каждое соединение
-  # держит server-соединение: replicas × maxConns должна помещаться в pool_size пулера
-  # (README, «Пулер PostgreSQL»). maxConns — по конкурентности процесса: API с webhooks 10.
-  maxConns: 10
-  # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
-  minConns: 1
-  # psycopg_pool сам закрывает соединение на 0-5% раньше lifetime (jitter).
-  maxConnLifetime: "30m"
-  maxConnIdleTime: "5m"
-  # connect_timeout libpq (целые секунды) и ожидание свободного соединения пула.
-  connectTimeout: "5s"
-  acquireTimeout: "5s"
 
 # ADR 37: Outbox payments доставляет Debezium (Kafka Connect) из WAL. Release контекста
 # создаёт ресурс KafkaConnector cdc.connector.name в KafkaConnect cdc.connect.

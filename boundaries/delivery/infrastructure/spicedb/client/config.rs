@@ -21,9 +21,9 @@ impl std::error::Error for SpiceDbConfigError {}
 impl SpiceDbConfigError {
     /// Пустой endpoint: процесс, проверяющий права, не стартует без SpiceDB.
     #[must_use]
-    pub fn missing_endpoint(env: &str) -> Self {
+    pub fn missing_endpoint(key: &str) -> Self {
         config_error(format!(
-            "{env} is required: delivery checks permissions in SpiceDB"
+            "{key} is required: delivery checks permissions in SpiceDB"
         ))
     }
 }

@@ -2,8 +2,8 @@
 // contract as orders (pkg/telemetry/telemetry.go): W3C Trace Context is always
 // propagated, so an incoming `traceparent` reaches the Outbox metadata even
 // without export; Baggage passes only by allowlist. Spans are exported over
-// OTLP/gRPC through a bounded BatchSpanProcessor only when
-// OTEL_EXPORTER_OTLP_TRACES_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT is set.
+// OTLP (`spec.telemetry.protocol`) through a bounded BatchSpanProcessor only
+// with `spec.tracing.enabled`; OTEL_* is not read.
 import {
   type Attributes,
   type BaggageEntry,
@@ -26,19 +26,19 @@ import {
   W3CBaggagePropagator,
   W3CTraceContextPropagator,
 } from "@opentelemetry/core";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
+  AlwaysOnSampler,
   BatchSpanProcessor,
+  ParentBasedSampler,
   type SpanProcessor,
   TracerProvider,
 } from "@opentelemetry/sdk-trace";
 
+import type { OtlpExport } from "../config/telemetry.ts";
 import { errorType } from "./logger.ts";
-import { type Environment, telemetryResource } from "./resource.ts";
-
-export const OTLP_TRACES_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT";
-const OTLP_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT";
+import { otlpSpanExporter } from "./otlp.ts";
+import type { ResourceAttributes } from "./resource.ts";
 
 /** Tracer name of the spans this boundary starts itself. */
 export const TRACER_NAME = "nomnom.restaurants";
@@ -130,35 +130,35 @@ export function installPropagation(): void {
   );
 }
 
-export const tracesEndpointConfigured = (environment: Environment): boolean =>
-  (environment[OTLP_TRACES_ENDPOINT_ENV]?.trim() ?? "") !== "" ||
-  (environment[OTLP_ENDPOINT_ENV]?.trim() ?? "") !== "";
-
+/**
+ * Installs propagation and, with `traces` (spec.tracing.enabled), exports
+ * spans of `resource`. `spanProcessors` replace the OTLP exporter (tests).
+ */
 export function startTracing(
-  serviceName: string,
-  environment: Environment = process.env,
-  options: { spanProcessors?: SpanProcessor[] } = {},
+  traces: OtlpExport | undefined,
+  resource: ResourceAttributes,
+  spanProcessors?: SpanProcessor[],
 ): Tracing {
   installPropagation();
-  const spanProcessors =
-    options.spanProcessors ??
-    (tracesEndpointConfigured(environment)
-      ? // The exporter reads endpoint, headers and protocol options from OTEL_*.
-        [
+  const processors =
+    spanProcessors ??
+    (traces === undefined
+      ? []
+      : [
           new BatchSpanProcessor({
-            exporter: new OTLPTraceExporter(),
+            exporter: otlpSpanExporter(traces),
             ...SPAN_EXPORT_LIMITS,
           }),
-        ]
-      : []);
-  if (spanProcessors.length === 0) {
+        ]);
+  if (processors.length === 0) {
     return { enabled: false, shutdown: async () => {} };
   }
   const provider = new TracerProvider({
-    resource: resourceFromAttributes(
-      telemetryResource(serviceName, environment),
-    ),
-    spanProcessors,
+    resource: resourceFromAttributes(resource),
+    // The SDK default, set explicitly: every span of a sampled parent and
+    // every root span is recorded.
+    sampler: new ParentBasedSampler({ root: new AlwaysOnSampler() }),
+    spanProcessors: processors,
   });
   trace.setGlobalTracerProvider(provider);
   return {

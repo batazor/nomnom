@@ -24,7 +24,7 @@ service DeliveryService {
   rpc CreateDelivery(CreateDeliveryRequest) returns (CreateDeliveryResponse);
   rpc CancelDelivery(CancelDeliveryRequest) returns (CancelDeliveryResponse);
   // Delivery Duration Estimate of a Market for planning scheduled orders
-  // (FR-691): the medians of the latest DELIVERY_ESTIMATE__SAMPLE_SIZE
+  // (FR-691): the medians of the latest spec.deliveryEstimate.sampleSize
   // durations of the Market, each the configured baseline until its sample
   // is full. Requires platform#coordinate_delivery, like the commands above;
   // market_id empty or not a slug is INVALID_ARGUMENT.
@@ -92,7 +92,7 @@ message OrderTracking {
   VirtualCity city = 2;
   GeoPoint pickup = 3;
   GeoPoint dropoff = 4;
-  // Stored courier position, up to TRACKING__PERSIST_INTERVAL old; unset
+  // Stored courier position, up to spec.tracking.persistInterval old; unset
   // while unknown.
   CourierLocation courier_position = 5;
 }
@@ -162,10 +162,10 @@ message EstimateDeliveryDurationRequest {
 
 message EstimateDeliveryDurationResponse {
   // Create Delivery → Pickup: median courier lead of the Market, or
-  // DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD until the sample is full.
+  // spec.deliveryEstimate.baselineCourierLead until the sample is full.
   google.protobuf.Duration courier_lead = 1;
   // Pickup → handover: median transit of the Market, or
-  // DELIVERY_ESTIMATE__BASELINE_TRANSIT until the sample is full.
+  // spec.deliveryEstimate.baselineTransit until the sample is full.
   google.protobuf.Duration transit = 2;
 }
 

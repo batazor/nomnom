@@ -1,6 +1,7 @@
 // Command restaurants-admin — operator actions of restaurants, run once in the
 // restaurants-consumer pod (kubectl exec), which already has the Kafka
-// configuration:
+// configuration in its CONFIG_FILE (only apiVersion and kind are checked, not
+// the role):
 //
 //   restaurants-admin dlq list --stream <topic>
 //   restaurants-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
@@ -22,8 +23,14 @@ import {
   loadConsumerConfig,
   loadKafkaConfig,
   loadLocalEnv,
+  loadTelemetryConfig,
+  readConfigFile,
 } from "../../pkg/config/config.ts";
-import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
+import {
+  createLogger,
+  logStartupFailure,
+  logUncaughtErrors,
+} from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 import { RESTAURANT_ORDER_EVENTS_TOPIC } from "../../slices/restaurantorder/infrastructure/integration/restaurant-order-events.ts";
 
@@ -37,10 +44,31 @@ const USAGE = `usage:
   restaurants-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
   restaurants-admin dlq discard --stream <topic> --partition <p> --through <offset> --reason <text>`;
 
+const writeStderr = (line: string) => process.stderr.write(`${line}\n`);
+
 loadLocalEnv();
+const loaded = logStartupFailure(
+  SERVICE_NAME,
+  () => {
+    const spec = readConfigFile(process.env, SERVICE_NAME);
+    return {
+      // spec.kafka.brokers is required: restaurants-admin reads the DLQ from Kafka.
+      kafka: loadKafkaConfig(spec),
+      consumer: loadConsumerConfig(spec),
+      telemetry: loadTelemetryConfig(spec, process.env, SERVICE_NAME),
+    };
+  },
+  writeStderr,
+);
+// The resource of the pod with its own service.name: the file's
+// telemetry.serviceName belongs to the process of the pod.
 const logger = createLogger({
-  resource: telemetryResource(SERVICE_NAME),
-  write: (line) => process.stderr.write(`${line}\n`),
+  resource: telemetryResource({
+    ...loaded.telemetry,
+    serviceName: SERVICE_NAME,
+  }),
+  level: loaded.telemetry.logLevel,
+  write: writeStderr,
 });
 logUncaughtErrors(logger);
 
@@ -84,9 +112,8 @@ async function deadLetters(
   }
   const bound = throughFlag(values.partition, values.through);
 
-  // KAFKA__BROKERS is required: restaurants-admin reads the DLQ from Kafka.
-  const kafkaConfig = loadKafkaConfig(process.env);
-  const { groupId } = loadConsumerConfig(process.env);
+  const kafkaConfig = loaded.kafka;
+  const { groupId } = loaded.consumer;
   const log = logger.child({
     operation: "dlq",
     stream,

@@ -76,7 +76,7 @@ pub struct Handler<'a> {
     pub publisher: &'a dyn CourierPositionPublisher,
     pub wake: &'a dyn CandidateWake,
     pub clock: &'a dyn Clock,
-    /// `TRACKING__PERSIST_INTERVAL` in seconds.
+    /// `spec.tracking.persistInterval` in seconds.
     pub persist_interval_seconds: i64,
 }
 
@@ -134,7 +134,7 @@ mod tests {
         Courier, CourierName, CourierStatus, LocationError,
     };
 
-    /// `TRACKING__PERSIST_INTERVAL` of the tests.
+    /// `spec.tracking.persistInterval` of the tests.
     const PERSIST_INTERVAL: i64 = 15;
 
     fn subject() -> Subject {

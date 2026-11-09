@@ -24,7 +24,7 @@ type userAssertionVerifier struct {
 func newUserAssertionVerifier(cfg config.IdentityConfig) (*userAssertionVerifier, error) {
 	if !cfg.UserVerifying() {
 		return nil, fmt.Errorf("%s, %s and %s are required",
-			config.EnvIdentityUserIssuer, config.EnvIdentityUserJWKSFile, config.EnvIdentityUserDelegates)
+			config.KeyIdentityUserIssuer, config.KeyIdentityUserJWKSFile, config.KeyIdentityUserDelegates)
 	}
 	keys, err := LoadUserJWKS(cfg.UserJWKSFile)
 	if err != nil {

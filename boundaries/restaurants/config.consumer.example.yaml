@@ -1,0 +1,59 @@
+# Файл конфигурации процесса restaurants-consumer для локального запуска (npm run consumer
+# задаёт CONFIG_FILE=config.consumer.example.yaml и POD_NAME). Формат и секреты — как у
+# config.example.yaml; restaurants-admin, запущенный рядом, читает этот же файл и сверяет
+# только apiVersion и kind.
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Restaurants
+metadata:
+  name: restaurants-consumer
+spec:
+  management:
+    port: 9083
+  shutdown:
+    readinessDelay: 2s
+    drainTimeout: 20s
+    telemetryFlushTimeout: 5s
+  telemetry:
+    protocol: grpc
+    resourceAttributes:
+      deployment.environment.name: local
+  tracing:
+    enabled: false
+  metrics:
+    enabled: false
+  logging:
+    level: info
+  # MongoDB replica set (ADR 8): Inbox и Restaurant Orders; connection string — env MONGODB__URI.
+  mongodb:
+    database: restaurants
+    timeout: 5s
+    maxPoolSize: 5
+  # Valkey (ADR 43): URL — env VALKEY__URL.
+  valkey:
+    commandTimeout: 50ms
+  cache:
+    ttl: 1m
+    refreshGroup: restaurants-cache
+  # Kafka (ADR 28): брокеры обязательны; группа restaurants читает стрим с начала.
+  kafka:
+    brokers: localhost:9092
+    clientId: restaurants-consumer
+    consumerGroup: restaurants
+    initialOffset: oldest
+  # Schema Registry записей стримов (FR-715): обязателен.
+  schemaRegistry:
+    url: http://127.0.0.1:8081
+    timeout: 5s
+  # Повторы transient-ошибок в процессе до повторной доставки Kafka.
+  consumer:
+    maxRetries: 5
+    retryInitialInterval: 100ms
+    retryMaxInterval: 5s
+  # Wait Time Statistics (FR-645, FR-657): те же значения, что у restaurants.
+  kitchen:
+    preparationTime: 20m
+  waitTime:
+    sampleSize: 50
+    recentWindow: 30m
+    elevatedFactor: 1.5
+    normalFactor: 1.2

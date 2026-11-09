@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import stripe
 from pydantic import ValidationError
 
-from pkg.config import ProviderSettings
+from pkg.config import ProviderSettings, ProviderSpec
 from slices.payment.applications.ports import (
     ProviderOperationRequest,
     ProviderOperationStatus,
@@ -160,36 +160,25 @@ class StripeSettingsTest(unittest.TestCase):
         for key in ("", "sk_live_x", "rk_test_x"):
             with (
                 self.subTest(key=key),
-                patch.dict(
-                    os.environ,
-                    {"PROVIDER__KIND": "stripe", "PROVIDER__STRIPE_API_KEY": key},
-                    clear=True,
+                patch.dict(os.environ, {"PROVIDER__STRIPE_API_KEY": key}, clear=True),
+                self.assertRaisesRegex(
+                    ValidationError, "PROVIDER__STRIPE_API_KEY must be a test key"
                 ),
-                self.assertRaises(ValidationError),
             ):
-                ProviderSettings()
+                ProviderSettings.from_spec(ProviderSpec(kind="stripe"))
 
     def test_key_does_not_reach_repr(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"PROVIDER__KIND": "stripe", "PROVIDER__STRIPE_API_KEY": "sk_test_hidden"},
-            clear=True,
-        ):
-            settings = ProviderSettings()
+        with patch.dict(os.environ, {"PROVIDER__STRIPE_API_KEY": "sk_test_hidden"}, clear=True):
+            settings = ProviderSettings.from_spec(ProviderSpec(kind="stripe"))
+        self.assertEqual(settings.stripe_api_key, "sk_test_hidden")
         self.assertNotIn("sk_test_hidden", repr(settings))
         self.assertEqual(settings.stripe_timeout, timedelta(seconds=10))
 
     def test_kind_selects_provider_and_webhook_format(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"PROVIDER__KIND": "stripe", "PROVIDER__STRIPE_API_KEY": "sk_test_x"},
-            clear=True,
-        ):
-            settings = ProviderSettings()
+        settings = ProviderSettings(kind="stripe", stripe_api_key="sk_test_x")
         self.assertIsInstance(create_provider(settings), StripePaymentProvider)
         self.assertIs(webhook_format_of(settings), STRIPE_WEBHOOK_FORMAT)
-        with patch.dict(os.environ, {"PROVIDER__KIND": "fake"}, clear=True):
-            self.assertIs(webhook_format_of(ProviderSettings()), SANDBOX_WEBHOOK_FORMAT)
+        self.assertIs(webhook_format_of(ProviderSettings(kind="fake")), SANDBOX_WEBHOOK_FORMAT)
 
 
 class StripeEventTest(unittest.TestCase):

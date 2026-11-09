@@ -1,0 +1,137 @@
+# Конфигурация процесса delivery для локального запуска (make run): CONFIG_FILE указывает на
+# этот файл, POD_NAME задаёт service.instance.id. Формат — версионированный ресурс
+# (ADR 17): apiVersion и kind проверяются, metadata.name — роль процесса (delivery или
+# delivery-worker), неизвестный ключ на любом уровне завершает startup с путём ключа.
+# Секреты в файле не задаются, полей для них нет: DATABASE__URI, VALKEY__URL и
+# SPICEDB__PRESHARED_KEY — только из env.
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Delivery
+metadata:
+  name: delivery
+spec:
+  server:
+    # Бизнес-порт gRPC; по умолчанию 8083.
+    port: 8083
+
+  management:
+    # Технический порт с /health/startup, /health/live и /health/ready; по умолчанию 9083.
+    port: 9083
+
+  shutdown:
+    # Ожидание распространения not ready до остановки приёма работы.
+    readinessDelay: 5s
+    drainTimeout: 20s
+
+  identity:
+    # Service identity (ADR 27) и user assertions BFF (ADR 32): обязательны процессу с gRPC
+    # API, пустое значение или нечитаемый JWKS завершают startup.
+    issuer: https://kubernetes.default.svc.cluster.local
+    audience: nomnom.delivery
+    jwksFile: /etc/nomnom/identity/jwks.json
+    # Allowlist "namespace/serviceaccount=service-name" через запятую.
+    serviceAccounts: nomnom-orders/orders-worker=orders-worker,nomnom-bff/bff=bff
+    userIssuer: nomnom-bff
+    userJwksFile: /etc/nomnom/user-identity/jwks.json
+    # Services через запятую, которым разрешено передавать user subject.
+    userDelegates: bff
+
+  spicedb:
+    # Авторизация в SpiceDB (ADR 18), endpoint обязателен; preshared key — только
+    # SPICEDB__PRESHARED_KEY из Secret.
+    endpoint: localhost:50051
+    # true — plaintext без TLS, только для kind и локального запуска.
+    insecure: true
+    # Deadline одного CheckPermission; ошибка или timeout — отказ (fail closed).
+    timeout: 2s
+
+  reconciler:
+    # Фоновая сверка relationships courier#self и delivery#courier с business state
+    # процесса (FR-445). Первый проход — через 10s после старта.
+    interval: 5m
+    # Orphan/stale связь удаляется, только если она была orphan на двух проходах с
+    # интервалом не меньше grace.
+    grace: 10m
+    # Размер страницы ReadRelationships (1..1000).
+    pageSize: 500
+
+  temporal:
+    # Temporal Assignment Workflow (FR-704…FR-708): процесс delivery запускает и будит workflow,
+    # delivery-worker его исполняет; оба читают эту секцию. Обязательно, значений по умолчанию
+    # нет: пустые hostPort или namespace, нулевой connectTimeout и недоступный Temporal
+    # завершают startup.
+    hostPort: localhost:7233
+    namespace: default
+    connectTimeout: 10s
+
+  database:
+    # PostgreSQL delivery (ADR 8, ADR 31, ADR 0001 контекста): connection URI — только
+    # DATABASE__URI из env (postgresql://user:password@host:5432/db или postgres://).
+    # Лимиты пула процесса.
+    maxConns: 10
+    minConns: 0
+    maxLifetime: 30m
+    idleTimeout: 5m
+    acquireTimeout: 5s
+
+  simulator:
+    # Демо Simulator курьеров (FR-604..FR-606, FR-667): пока его включает оператор
+    # (SetSimulatorEnabled), pending offers, назначенные и забранные доставки получают действие
+    # курьера через случайную задержку [minDelay, maxDelay]. Обязательно, значений по
+    # умолчанию нет; minDelay > maxDelay и trackInterval > interval завершают startup.
+    interval: 5s
+    minDelay: 30s
+    maxDelay: 2m
+    trackInterval: 1s
+
+  tracking:
+    # Live tracking (FR-658, FR-661): Virtual City — сетка cityBlocks × cityBlocks кварталов
+    # со стороной blockMeters от юго-западного угла. Обязательно, значений по умолчанию нет.
+    # Valkey потока позиций — только VALKEY__URL из env.
+    cityOriginLatitude: 52.515
+    cityOriginLongitude: 13.385
+    cityBlocks: 12
+    blockMeters: 150.0
+    # Позиция курьера пишется в PostgreSQL не чаще этого интервала; поток получает каждую.
+    persistInterval: 15s
+
+  kafka:
+    # Kafka consumer процесса (ADR 4, ADR 11): группа читает собственный стрим
+    # delivery.v1.delivery-events и ведёт Delivery Duration Statistics (FR-676). Обязательно,
+    # значений по умолчанию нет.
+    brokers: localhost:9092
+    consumerGroup: delivery
+    # С какого конца читает группа без committed offset: oldest или newest.
+    initialOffset: oldest
+
+  schemaRegistry:
+    # Schema Registry (FR-715): subject схемы записи сверяется с event_type. Обязателен, http(s).
+    url: http://127.0.0.1:8081
+
+  deliveryEstimate:
+    # Delivery Duration Estimate (FR-691): медианы последних sampleSize длительностей Market;
+    # пока выборка не набрана — базовые значения. Обязательно, значений по умолчанию нет.
+    sampleSize: 50
+    baselineCourierLead: 15m
+    baselineTransit: 20m
+
+  telemetry:
+    # OpenTelemetry (ADR 9). endpoint обязателен, если включён tracing или metrics;
+    # protocol — grpc (по умолчанию) или http/protobuf. service.name по умолчанию — роль
+    # процесса; resourceAttributes не могут задавать service.name и service.instance.id.
+    endpoint: http://localhost:4317
+    protocol: grpc
+    resourceAttributes:
+      deployment.environment.name: local
+
+  tracing:
+    # Экспорт spans; по умолчанию false.
+    enabled: false
+
+  metrics:
+    # Экспорт metrics; по умолчанию false. Интервал по умолчанию 60s.
+    enabled: false
+    exportInterval: 60s
+
+  logging:
+    # debug, info (по умолчанию), warn или error.
+    level: info

@@ -8,44 +8,18 @@ podLabels:
   # Pod предоставляет бизнес-API: ingress только от internal gateway (NetworkPolicy).
   nomnom.dev/business-api: "true"
 
-env:
-  # Единственный адрес для синхронных вызовов бизнес-API других приложений.
-  INTERNAL_GATEWAY_ADDR: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
-  # Place Order и Request Order Cancellation обращаются к fulfillment workflow; client
-  # lazy, поэтому старт API от Temporal не зависит.
-  TEMPORAL__HOST_PORT: temporal.nomnom-infra.svc.cluster.local:7233
-  TEMPORAL__NAMESPACE: default
-  # Demo customer Simulator (FR-605): покупатель — демо-пользователь demo@nomnom.test
-  # (sub Dex, ops/kind/bootstrap/values.yaml); включается переключателем «Эмулятор».
-  SIMULATOR__INTERVAL: 5s
-  SIMULATOR__MIN_DELAY: 30s
-  SIMULATOR__MAX_DELAY: 2m
-  SIMULATOR__CUSTOMER_ID: ChFub21ub20tZGVtby1vd25lchIFbG9jYWw
-  # ADR 41: Market демо-покупателя — berlin из ops/kind/demo/files/seed.json.
-  SIMULATOR__MARKET_IDS: berlin
-
 # ADR 27: проверка projected ServiceAccount tokens по JWKS кластера (ConfigMap cluster-jwks
-# публикует Job identity-jwks chart ops/kind/bootstrap) и allowlist вызывающих workloads.
+# публикует Job identity-jwks chart ops/kind/bootstrap). ADR 32: user assertions BFF (ConfigMap
+# bff-jwks публикует тот же Job). Каталог Place Order читает GetRestaurant и GetMenu restaurants
+# через gateway с projected token audience nomnom.restaurants (spec.identity.tokenDir).
 identity:
-  issuer: https://kubernetes.default.svc.cluster.local
   jwksConfigMap: cluster-jwks
-  # grpc-caller — фикстура проверок (e2e/chart/templates/probes.yaml): допущенный
-  # workload, но не делегат; с ним проверяется отказ assertion от чужого workload.
-  serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/grpc-caller=grpc-caller
-  # Каталог Place Order читает GetRestaurant и GetMenu restaurants через gateway с
-  # projected token audience nomnom.restaurants (IDENTITY__TOKEN_DIR).
+  userJwksConfigMap: bff-jwks
   tokenAudiences:
     - nomnom.restaurants
-  # ADR 32: user assertions BFF (ConfigMap bff-jwks публикует Job identity-jwks chart ops/kind/bootstrap);
-  # передавать user subject может только service bff.
-  userJwksConfigMap: bff-jwks
-  userIssuer: nomnom-bff
-  userDelegates: bff
 
-# ADR 18: SpiceDB тестового окружения; Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
+# ADR 18: Secret spicedb-preshared-key создаёт chart ops/kind/bootstrap.
 spicedb:
-  endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
-  insecure: true
   presharedKeySecret:
     name: spicedb-preshared-key
 
@@ -53,6 +27,38 @@ spicedb:
 postgres:
   dsnSecret:
     name: orders-postgres
+
+config:
+  spec:
+    # Единственный адрес для синхронных вызовов бизнес-API других приложений.
+    internalGateway:
+      address: internal-gateway.envoy-gateway-system.svc.cluster.local:8080
+    # Place Order и Request Order Cancellation обращаются к fulfillment workflow; client
+    # lazy, поэтому старт API от Temporal не зависит.
+    temporal:
+      hostPort: temporal.nomnom-infra.svc.cluster.local:7233
+      namespace: default
+    # Demo customer Simulator (FR-605): покупатель — демо-пользователь demo@nomnom.test
+    # (sub Dex, ops/kind/bootstrap/values.yaml); включается переключателем «Эмулятор».
+    simulator:
+      interval: 5s
+      minDelay: 30s
+      maxDelay: 2m
+      customerId: ChFub21ub20tZGVtby1vd25lchIFbG9jYWw
+      # ADR 41: Market демо-покупателя — berlin из ops/kind/demo/files/seed.json.
+      marketIds: berlin
+    identity:
+      issuer: https://kubernetes.default.svc.cluster.local
+      # grpc-caller — фикстура проверок (e2e/chart/templates/probes.yaml): допущенный
+      # workload, но не делегат; с ним проверяется отказ assertion от чужого workload.
+      serviceAccounts: nomnom-bff/bff=bff,nomnom-bff/grpc-caller=grpc-caller
+      userIssuer: nomnom-bff
+      # Передавать user subject может только service bff.
+      userDelegates: bff
+    # ADR 18: SpiceDB тестового окружения.
+    spicedb:
+      endpoint: spicedb.nomnom-authz.svc.cluster.local:50051
+      insecure: true
 
 # Burstable без CPU limit: request — доля CPU под конкуренцией, limit троттлит и при
 # свободной ноде. Memory request — steady state в kind, limit — пик e2e (Chainsaw, 54 теста)

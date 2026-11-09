@@ -58,22 +58,54 @@ resources:
   requests: {}
   limits: {}
 
-# Несекретная конфигурация: ConfigMap, подключаемый через envFrom.
-env: {}
+# Роль процесса: metadata.name файла конфигурации. Обязательна.
+role: controlplane
+
+# Файл конфигурации процесса (apiVersion config.nomnom.dev/v1alpha1, kind ControlPlane): chart
+# рендерит его в ConfigMap с ключом config.yaml, монтирует в /etc/nomnom/config.yaml и задаёт
+# CONFIG_FILE. config.spec попадает в файл как есть: ключи camelCase, длительности — строки Go
+# (500ms, 5s, 2m); неизвестный ключ — процесс не стартует. Env SECTION__KEY, OTEL_* и LOG__LEVEL
+# процесс не читает. Chart сам дописывает только telemetry.resourceAttributes["service.version"]
+# из image.tag: задать его в values — ошибка helm template.
+config:
+  spec:
+    # Технический порт runtime contract (docs/cloud-native-runtime.md): /health/*. Имя metrics
+    # задано моделью NetworkPolicy (ADR 16).
+    management:
+      port: 9086
+    # Бюджет graceful shutdown; chart сверяет его с terminationGracePeriodSeconds.
+    shutdown:
+      readinessDelay: 5s
+      drainTimeout: 20s
+    # Маршруты публичного gateway (ADR 41): неймспейс HTTPRoute, Gateway и listener клиентского
+    # трафика. Все поля обязательны. Chart выдаёт ServiceAccount Role в этом неймспейсе:
+    # server-side apply и watch HTTPRoute, HTTPRouteFilter и ConfigMap, удаление HTTPRoute.
+    routes:
+      namespace: ""
+      gateway: ""
+      listener: ""
+    # ADR 9: OpenTelemetry. Значения процесса по умолчанию: экспорт выключен (tracing.enabled и
+    # metrics.enabled — false), protocol grpc, serviceName controlplane, metrics.exportInterval 60s,
+    # logging.level info. telemetry.endpoint (URL OTLP коллектора) обязателен при включённом
+    # экспорте. service.instance.id — имя pod (POD_NAME); его и service.name resourceAttributes не задают.
+    # telemetry:
+    #   endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317
+    #   protocol: grpc
+    #   resourceAttributes:
+    #     deployment.environment.name: kind
+    # tracing:
+    #   enabled: true
+    # metrics:
+    #   enabled: true
+    #   exportInterval: 60s
+    # logging:
+    #   level: info
+
+# Секреты окружения (Kubernetes Secret); несекретная конфигурация — только config.spec.
 envFrom: []
 extraEnv: []
 
-# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/*. Имя metrics
-# задано моделью NetworkPolicy (ADR 16).
-management:
-  port: 9086
-
-# Бюджет graceful shutdown (SHUTDOWN__READINESS_DELAY, SHUTDOWN__DRAIN_TIMEOUT).
-shutdown:
-  readinessDelaySeconds: 5
-  drainTimeoutSeconds: 20
-
-# Больше readinessDelaySeconds + drainTimeoutSeconds; chart проверяет.
+# Больше config.spec.shutdown.readinessDelay + drainTimeout; chart проверяет.
 terminationGracePeriodSeconds: 30
 
 startupProbe:
@@ -109,20 +141,3 @@ volumeMounts: []
 nodeSelector: {}
 tolerations: []
 affinity: {}
-
-# Маршруты публичного gateway (ADR 41): неймспейс HTTPRoute, Gateway и listener клиентского
-# трафика. Все поля обязательны. Chart выдаёт ServiceAccount Role в этом неймспейсе: server-side
-# apply и watch HTTPRoute, HTTPRouteFilter и ConfigMap, удаление HTTPRoute.
-routes:
-  namespace: ""
-  gateway: ""
-  listener: ""
-
-# ADR 9: OTel resource attributes процесса.
-telemetry:
-  serviceName: controlplane
-  resourceAttributes: {}
-  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT); пусто — задаётся env окружения.
-  otlpEndpoint: ""
-  # LOG__LEVEL: debug | info | warn | error; пусто — info.
-  logLevel: ""

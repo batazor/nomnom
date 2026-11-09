@@ -49,156 +49,139 @@ Kubernetes использует tag "latest"; NOTES.txt предупреждае
 {{- end }}
 
 {{/*
+Длительность в формате приложения (500ms, 5s, 1m, 2h, 7d) в миллисекундах.
+Usage: {{ include "restaurants.durationMs" (dict "key" "config.spec.shutdown.drainTimeout" "value" $value) }}
+*/}}
+{{- define "restaurants.durationMs" -}}
+{{- $value := toString .value -}}
+{{- if not (regexMatch "^[0-9]+(ms|s|m|h|d)$" $value) -}}
+{{- fail (printf "%s must be a duration like 500ms, 5s or 1m, got %q" .key $value) -}}
+{{- end -}}
+{{- $unit := regexReplaceAll "^[0-9]+" $value "" -}}
+{{- mul (regexFind "^[0-9]+" $value | int64) (get (dict "ms" 1 "s" 1000 "m" 60000 "h" 3600000 "d" 86400000) $unit) -}}
+{{- end -}}
+
+{{/*
+Технический порт процесса: config.spec.management.port; chart объявляет по нему containerPort
+metrics, поэтому значение обязательно в values.
+*/}}
+{{- define "restaurants.managementPort" -}}
+{{- required "config.spec.management.port is required: the chart declares the metrics port" (dig "management" "port" nil .Values.config.spec) -}}
+{{- end -}}
+
+{{/*
 Бюджет shutdown runtime contract: terminationGracePeriodSeconds покрывает readiness delay,
-drain timeout и flush telemetry с запасом, иначе kubelet отправит SIGKILL посреди drain.
+drain timeout и flush telemetry из config.spec.shutdown с запасом, иначе kubelet отправит
+SIGKILL посреди drain. Длительности обязательны в values: chart проверяет по ним бюджет.
 */}}
 {{- define "restaurants.validateShutdownBudget" -}}
-{{- $budget := add .Values.shutdown.readinessDelaySeconds .Values.shutdown.drainTimeoutSeconds .Values.shutdown.telemetryFlushTimeoutSeconds -}}
-{{- if le (int .Values.terminationGracePeriodSeconds) (int $budget) -}}
-{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than shutdown.readinessDelaySeconds + shutdown.drainTimeoutSeconds + shutdown.telemetryFlushTimeoutSeconds (%v)" .Values.terminationGracePeriodSeconds $budget) -}}
+{{- $budget := 0 -}}
+{{- $durations := dict -}}
+{{- range $key := list "readinessDelay" "drainTimeout" "telemetryFlushTimeout" -}}
+{{- $name := printf "config.spec.shutdown.%s" $key -}}
+{{- $value := required (printf "%s is required: the chart checks the shutdown budget" $name) (dig "shutdown" $key nil $.Values.config.spec) -}}
+{{- $ms := include "restaurants.durationMs" (dict "key" $name "value" $value) | int64 -}}
+{{- $_ := set $durations $key $ms -}}
+{{- $budget = add $budget $ms -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.drainTimeoutSeconds) 0 -}}
-{{- fail "shutdown.drainTimeoutSeconds must be positive" -}}
+{{- if le (mul (int64 .Values.terminationGracePeriodSeconds) 1000) (int64 $budget) -}}
+{{- fail (printf "terminationGracePeriodSeconds (%v) must be greater than config.spec.shutdown.readinessDelay + drainTimeout + telemetryFlushTimeout (%vms)" .Values.terminationGracePeriodSeconds $budget) -}}
 {{- end -}}
-{{- if le (int .Values.shutdown.telemetryFlushTimeoutSeconds) 0 -}}
-{{- fail "shutdown.telemetryFlushTimeoutSeconds must be positive" -}}
+{{- if le (int64 $durations.drainTimeout) 0 -}}
+{{- fail "config.spec.shutdown.drainTimeout must be positive" -}}
 {{- end -}}
-{{- if eq (int .Values.management.port) (int .Values.service.targetPort) -}}
-{{- fail "management.port must differ from service.targetPort" -}}
+{{- if le (int64 $durations.telemetryFlushTimeout) 0 -}}
+{{- fail "config.spec.shutdown.telemetryFlushTimeout must be positive" -}}
+{{- end -}}
+{{- if eq (int (include "restaurants.managementPort" .)) (int .Values.service.targetPort) -}}
+{{- fail "config.spec.management.port must differ from service.targetPort" -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
 Service identity (ADR 27) и user assertions BFF (ADR 32): процесс с gRPC API (service.enabled)
-проверяет token и assertion, поэтому JWKS, issuer, audience и allowlist кластера, а также JWKS BFF,
-issuer BFF и делегаты обязательны — иначе процесс не стартует.
+проверяет token и assertion, поэтому ConfigMap JWKS кластера и BFF, а также issuer, audience,
+allowlist, issuer BFF и делегаты в config.spec.identity обязательны — иначе процесс не стартует.
 */}}
 {{- define "restaurants.validateIdentity" -}}
 {{- if .Values.service.enabled -}}
-{{- range $key := list "jwksConfigMap" "issuer" "audience" "serviceAccounts" "userJwksConfigMap" "userIssuer" "userDelegates" -}}
+{{- range $key := list "jwksConfigMap" "userJwksConfigMap" -}}
 {{- if not (get $.Values.identity $key) -}}
 {{- fail (printf "identity.%s is required" $key) -}}
 {{- end -}}
 {{- end -}}
+{{- range $key := list "issuer" "audience" "serviceAccounts" "userIssuer" "userDelegates" -}}
+{{- if not (dig "identity" $key "" $.Values.config.spec) -}}
+{{- fail (printf "config.spec.identity.%s is required" $key) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-SpiceDB (ADR 18): с endpoint приложению нужен preshared key из Secret, иначе оно
-не стартует; timeout в формате приложения (500ms, 2s, 1m).
+SpiceDB (ADR 18): с config.spec.spicedb.endpoint приложению нужен preshared key из Secret,
+иначе оно не стартует; timeout в формате приложения (500ms, 2s, 1m).
 */}}
 {{- define "restaurants.validateSpiceDb" -}}
-{{- with .Values.spicedb -}}
-{{- if .endpoint -}}
-{{- if not (and .presharedKeySecret.name .presharedKeySecret.key) -}}
-{{- fail "spicedb.presharedKeySecret.name and spicedb.presharedKeySecret.key are required when spicedb.endpoint is set" -}}
+{{- if dig "spicedb" "endpoint" "" .Values.config.spec -}}
+{{- if not (and .Values.spicedb.presharedKeySecret.name .Values.spicedb.presharedKeySecret.key) -}}
+{{- fail "spicedb.presharedKeySecret.name and spicedb.presharedKeySecret.key are required when config.spec.spicedb.endpoint is set" -}}
 {{- end -}}
-{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
-{{- fail (printf "spicedb.timeout must be a positive duration like 500ms, 2s or 1m, got %q" (toString .timeout)) -}}
-{{- end -}}
-{{- end -}}
+{{- with dig "spicedb" "timeout" nil .Values.config.spec -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .)) -}}
+{{- fail (printf "config.spec.spicedb.timeout must be a positive duration like 500ms, 2s or 1m, got %q" (toString .)) -}}
 {{- end -}}
 {{- end -}}
-
-{{/*
-MongoDB (ADR 8): переменные подключения из Secret и лимиты connection pool процесса.
-Без uriSecret.name ничего не задаётся, и процессы restaurants и restaurants-consumer не
-стартуют (MONGODB__URI обязателен).
-Usage: {{ include "restaurants.mongodbEnv" (dict "context" $ "pool" .Values.mongodb.pool) }}
-*/}}
-{{- define "restaurants.mongodbEnv" -}}
-{{- $pool := .pool -}}
-{{- with .context.Values.mongodb }}
-{{- if .uriSecret.name }}
-- name: MONGODB__URI
-  valueFrom:
-    secretKeyRef:
-      name: {{ .uriSecret.name | quote }}
-      key: {{ .uriSecret.key | quote }}
-- name: MONGODB__DATABASE
-  value: {{ .database | quote }}
-- name: MONGODB__TIMEOUT
-  value: {{ .timeout | quote }}
-- name: MONGODB__MAX_POOL_SIZE
-  value: {{ $pool.maxPoolSize | quote }}
-- name: MONGODB__MIN_POOL_SIZE
-  value: {{ $pool.minPoolSize | quote }}
-- name: MONGODB__MAX_IDLE_TIME
-  value: {{ $pool.maxIdleTime | quote }}
-- name: MONGODB__WAIT_QUEUE_TIMEOUT
-  value: {{ $pool.waitQueueTimeout | quote }}
-- name: MONGODB__MAX_CONNECTING
-  value: {{ $pool.maxConnecting | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/*
-Valkey (ADR 43, локальный ADR 3): кеш чтения каталога. Без urlSecret.name ничего не задаётся,
-и процессы restaurants и restaurants-consumer не стартуют (VALKEY__URL обязателен).
-*/}}
-{{- define "restaurants.valkeyEnv" -}}
-{{- with .Values.valkey }}
-{{- if .urlSecret.name }}
-- name: VALKEY__URL
-  valueFrom:
-    secretKeyRef:
-      name: {{ .urlSecret.name | quote }}
-      key: {{ .urlSecret.key | quote }}
-- name: VALKEY__COMMAND_TIMEOUT
-  value: {{ .commandTimeout | quote }}
-- name: CACHE__TTL
-  value: {{ .ttl | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
+{{- end -}}
+{{- end -}}
 
 {{/*
 Valkey: ключ Secret и длительности в формате приложения (pkg/config/cache.ts).
 */}}
 {{- define "restaurants.validateValkey" -}}
-{{- with .Values.valkey -}}
-{{- if .urlSecret.name -}}
-{{- if not .urlSecret.key -}}
+{{- if .Values.valkey.urlSecret.name -}}
+{{- if not .Values.valkey.urlSecret.key -}}
 {{- fail "valkey.urlSecret.key is required when valkey.urlSecret.name is set" -}}
 {{- end -}}
-{{- range $name, $value := dict "commandTimeout" .commandTimeout "ttl" .ttl -}}
-{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m|h)$" (toString $value)) -}}
-{{- fail (printf "valkey.%s must be a positive duration like 50ms, 5s or 5m, got %q" $name (toString $value)) -}}
 {{- end -}}
-{{- end -}}
+{{- range $name, $value := dict "valkey.commandTimeout" (dig "valkey" "commandTimeout" nil .Values.config.spec) "cache.ttl" (dig "cache" "ttl" nil .Values.config.spec) -}}
+{{- if and $value (not (regexMatch "^[1-9][0-9]*(ms|s|m|h)$" (toString $value))) -}}
+{{- fail (printf "config.spec.%s must be a positive duration like 50ms, 5s or 5m, got %q" $name (toString $value)) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-MongoDB: имя базы, timeout и лимиты пула в формате приложения (pkg/config/database.ts).
+MongoDB: ключ Secret, имя базы, timeout и лимиты пула в формате приложения
+(pkg/config/database.ts); проверяются заданные в config.spec.mongodb значения, остальные
+берёт default процесса.
 */}}
 {{- define "restaurants.validateMongoDb" -}}
-{{- with .Values.mongodb -}}
-{{- if .uriSecret.name -}}
-{{- if not .uriSecret.key -}}
+{{- if and .Values.mongodb.uriSecret.name (not .Values.mongodb.uriSecret.key) -}}
 {{- fail "mongodb.uriSecret.key is required when mongodb.uriSecret.name is set" -}}
 {{- end -}}
-{{- if not (regexMatch "^[A-Za-z0-9_-]{1,63}$" (toString .database)) -}}
-{{- fail (printf "mongodb.database must match ^[A-Za-z0-9_-]{1,63}$, got %q" (toString .database)) -}}
+{{- $mongodb := dig "mongodb" dict .Values.config.spec -}}
+{{- if hasKey $mongodb "database" -}}
+{{- if not (regexMatch "^[A-Za-z0-9_-]{1,63}$" (toString $mongodb.database)) -}}
+{{- fail (printf "config.spec.mongodb.database must match ^[A-Za-z0-9_-]{1,63}$, got %q" (toString $mongodb.database)) -}}
 {{- end -}}
-{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString .timeout)) -}}
-{{- fail (printf "mongodb.timeout must be a positive duration like 500ms, 5s or 1m, got %q" (toString .timeout)) -}}
 {{- end -}}
-{{- $max := int .pool.maxPoolSize -}}
-{{- if not (and (regexMatch "^[0-9]+$" (toString .pool.maxPoolSize)) (ge (int .pool.maxPoolSize) 1) (le (int .pool.maxPoolSize) 100)) -}}
-{{- fail (printf "mongodb.pool.maxPoolSize must be an integer between 1 and 100, got %q" (toString .pool.maxPoolSize)) -}}
+{{- range $name := list "timeout" "maxIdleTime" "waitQueueTimeout" -}}
+{{- if hasKey $mongodb $name -}}
+{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString (get $mongodb $name))) -}}
+{{- fail (printf "config.spec.mongodb.%s must be a positive duration like 500ms, 5s or 5m, got %q" $name (toString (get $mongodb $name))) -}}
 {{- end -}}
-{{- if not (and (regexMatch "^[0-9]+$" (toString .pool.minPoolSize)) (le (int .pool.minPoolSize) $max)) -}}
-{{- fail (printf "mongodb.pool.minPoolSize must be an integer between 0 and pool.maxPoolSize (%d), got %q" $max (toString .pool.minPoolSize)) -}}
 {{- end -}}
-{{- if not (and (regexMatch "^[0-9]+$" (toString .pool.maxConnecting)) (ge (int .pool.maxConnecting) 1) (le (int .pool.maxConnecting) $max)) -}}
-{{- fail (printf "mongodb.pool.maxConnecting must be an integer between 1 and pool.maxPoolSize (%d), got %q" $max (toString .pool.maxConnecting)) -}}
 {{- end -}}
-{{- range $name, $value := dict "maxIdleTime" .pool.maxIdleTime "waitQueueTimeout" .pool.waitQueueTimeout -}}
-{{- if not (regexMatch "^[1-9][0-9]*(ms|s|m)$" (toString $value)) -}}
-{{- fail (printf "mongodb.pool.%s must be a positive duration like 500ms, 5s or 5m, got %q" $name (toString $value)) -}}
+{{- if hasKey $mongodb "maxPoolSize" -}}
+{{- if not (and (regexMatch "^[0-9]+$" (toString $mongodb.maxPoolSize)) (ge (int $mongodb.maxPoolSize) 1) (le (int $mongodb.maxPoolSize) 100)) -}}
+{{- fail (printf "config.spec.mongodb.maxPoolSize must be an integer between 1 and 100, got %q" (toString $mongodb.maxPoolSize)) -}}
+{{- end -}}
+{{- range $name, $min := dict "minPoolSize" 0 "maxConnecting" 1 -}}
+{{- if hasKey $mongodb $name -}}
+{{- $value := get $mongodb $name -}}
+{{- if not (and (regexMatch "^[0-9]+$" (toString $value)) (ge (int $value) $min) (le (int $value) (int $mongodb.maxPoolSize))) -}}
+{{- fail (printf "config.spec.mongodb.%s must be an integer between %d and maxPoolSize (%d), got %q" $name $min (int $mongodb.maxPoolSize) (toString $value)) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -206,48 +189,70 @@ MongoDB: имя базы, timeout и лимиты пула в формате п�
 {{- end -}}
 
 {{/*
-OpenTelemetry resource (ADR 9), как orders.otelEnv: service.instance.id — имя pod
-(downward API), service.version — неизменяемый image.tag (или digest), остальное —
-telemetry.resourceAttributes. Явная env имеет приоритет над envFrom, поэтому
-OTEL_RESOURCE_ATTRIBUTES из env (ConfigMap) была бы перекрыта.
-*/}}
-{{- define "restaurants.otelResourceEnv" -}}
-{{- $version := required "image.tag or image.digest is required" (.Values.image.tag | default .Values.image.digest) -}}
-{{- $attrs := list "service.instance.id=$(POD_NAME)" (printf "service.version=%s" $version) -}}
-{{- range $key, $value := .Values.telemetry.resourceAttributes }}
-{{- $attrs = append $attrs (printf "%s=%s" $key (toString $value)) -}}
-{{- end }}
-- name: POD_NAME
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.name
-- name: OTEL_RESOURCE_ATTRIBUTES
-  value: {{ join "," $attrs | quote }}
-{{- end }}
-
-{{/*
-OTEL_* процесса: service.name, resource и OTLP endpoint (traces и metrics), если задан.
-*/}}
-{{- define "restaurants.otelEnv" -}}
-- name: OTEL_SERVICE_NAME
-  value: {{ .Values.telemetry.serviceName | quote }}
-{{- with .Values.telemetry.endpoint }}
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ . | quote }}
-{{- end }}
-{{ include "restaurants.otelResourceEnv" . }}
-{{- end }}
-
-{{/*
-telemetry: service.name обязателен; service.instance.id и service.version chart задаёт сам.
+telemetry: service.name и service.instance.id задаёт процесс (имя процесса или
+config.spec.telemetry.serviceName и POD_NAME), service.namespace — всегда nomnom,
+service.version — chart из image.tag; в resourceAttributes values их не задают.
 */}}
 {{- define "restaurants.validateTelemetry" -}}
-{{- if not .Values.telemetry.serviceName -}}
-{{- fail "telemetry.serviceName is required" -}}
-{{- end -}}
+{{- $attributes := dig "telemetry" "resourceAttributes" dict .Values.config.spec -}}
 {{- range $key := list "service.instance.id" "service.version" "service.name" "service.namespace" -}}
-{{- if hasKey $.Values.telemetry.resourceAttributes $key -}}
-{{- fail (printf "telemetry.resourceAttributes must not set %s: the chart and the application set it" $key) -}}
+{{- if hasKey $attributes $key -}}
+{{- fail (printf "config.spec.telemetry.resourceAttributes must not set %s: the chart and the application set it" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Файл конфигурации процесса (ADR 17): apiVersion, kind Restaurants, metadata.name — роль
+release (обязательное значение role) и spec — config.spec из values как есть. Chart дописывает
+только поля, которыми владеет: пути смонтированных JWKS в spec.identity и service.version
+(image.tag или digest) в spec.telemetry.resourceAttributes; такой ключ в values — ошибка.
+*/}}
+{{- define "restaurants.configFile" -}}
+{{- $spec := deepCopy (required "config.spec is required" .Values.config.spec) -}}
+{{- range $key := list "jwksFile" "userJwksFile" -}}
+{{- if hasKey (dig "identity" dict $spec) $key -}}
+{{- fail (printf "config.spec.identity.%s must not be set: the chart sets it from identity.jwksConfigMap and identity.userJwksConfigMap" $key) -}}
+{{- end -}}
+{{- end -}}
+{{- $version := required "image.tag or image.digest is required" (.Values.image.tag | default .Values.image.digest) -}}
+{{- $owned := dict "telemetry" (dict "resourceAttributes" (dict "service.version" (toString $version))) -}}
+{{- if .Values.identity.jwksConfigMap -}}
+{{- $_ := set $owned "identity" (dict "jwksFile" "/etc/nomnom/identity/jwks.json" "userJwksFile" "/etc/nomnom/user-identity/jwks.json") -}}
+{{- end -}}
+{{- $metadata := dict "name" (required "role is required: metadata.name of the configuration file" .Values.role) -}}
+{{- toYaml (dict "apiVersion" "config.nomnom.dev/v1alpha1" "kind" "Restaurants" "metadata" $metadata "spec" (merge $spec $owned)) -}}
+{{- end -}}
+
+{{/*
+Секреты процесса из Kubernetes Secret под их env-именами; в файле конфигурации полей для них
+нет. Без ссылки на Secret переменная не задаётся, и процесс, которому секрет обязателен,
+не стартует.
+*/}}
+{{- define "restaurants.secretEnv" -}}
+{{- if dig "spicedb" "endpoint" "" .Values.config.spec }}
+- name: SPICEDB__PRESHARED_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.spicedb.presharedKeySecret.name | quote }}
+      key: {{ .Values.spicedb.presharedKeySecret.key | quote }}
+{{- end }}
+{{- with .Values.mongodb.uriSecret }}
+{{- if .name }}
+- name: MONGODB__URI
+  valueFrom:
+    secretKeyRef:
+      name: {{ .name | quote }}
+      key: {{ .key | quote }}
+{{- end }}
+{{- end }}
+{{- with .Values.valkey.urlSecret }}
+{{- if .name }}
+- name: VALKEY__URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .name | quote }}
+      key: {{ .key | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

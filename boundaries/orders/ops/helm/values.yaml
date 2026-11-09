@@ -35,6 +35,11 @@ global: {}
 # component: worker, command ["/orders-worker"], без Service и бизнес-порта.
 component: api
 
+# Роль процесса: metadata.name файла конфигурации (orders, orders-worker, orders-consumer).
+# Процесс сверяет его со своей ролью и не стартует с файлом чужой роли. values-<role>.yaml
+# переопределяют.
+role: orders
+
 # Переопределение entrypoint образа; пустой список — ENTRYPOINT образа (/orders).
 command: []
 
@@ -70,11 +75,8 @@ service:
   # false — без Service и бизнес-порта контейнера (Temporal worker).
   enabled: true
   type: ClusterIP
-  # Порт Service и порт приложения. Приложение слушает 8081 по умолчанию
-  # (переменная SERVER__PORT или PORT); targetPort должен совпадать с портом,
-  # на котором фактически запускается процесс.
+  # Порт Service. Порт контейнера — config.spec.server.port, на нём слушает процесс.
   port: 8081
-  targetPort: 8081
   # Бизнес-порт обслуживает nomnom.orders.v1 по gRPC/HTTP2.
   portName: grpc
   appProtocol: kubernetes.io/h2c
@@ -89,24 +91,8 @@ resources:
   requests: {}
   limits: {}
 
-# Несекретная конфигурация. Попадает в ConfigMap и подключается через envFrom.
-# OpenTelemetry — секция telemetry ниже, не env. CANCELLATION__WINDOW без значения —
-# placeholder 5m.
-# Release API (cmd/orders) требует SIMULATOR__INTERVAL, SIMULATOR__MIN_DELAY,
-# SIMULATOR__MAX_DELAY, SIMULATOR__CUSTOMER_ID и SIMULATOR__MARKET_IDS (FR-606, ADR 41):
-# без них pod не стартует.
-# Запланированные заказы (add-scheduled-orders): значения обязательны для всех процессов
-# (API, worker, consumer читают одну конфигурацию), пустое или неположительное — pod не
-# стартует. Releases worker и consumer наследуют их из этого файла.
-env:
-  # Окно отмены запланированного заказа закрывается в window_start − cutoff (FR-462).
-  CANCELLATION__SCHEDULED_CUTOFF: 60m
-  # start_at = planned_ready_at − baseline preparation − buffer (FR-677).
-  SCHEDULED_ORDER__PREPARATION_BUFFER: 5m
-  # Контрольная точка пересчёта плана за replan_lead до start_at (FR-679).
-  SCHEDULED_ORDER__REPLAN_LEAD: 30m
-
-# Дополнительные источники переменных окружения, в том числе внешние Secret:
+# Дополнительные источники переменных окружения — только секреты окружения; несекретная
+# конфигурация задаётся config.spec:
 # envFrom:
 #   - secretRef:
 #       name: orders-secrets
@@ -121,22 +107,8 @@ envFrom: []
 #         key: password
 extraEnv: []
 
-# Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics.
-# Имя порта metrics задано моделью NetworkPolicy (ADR 16) и не меняется; номер передаётся
-# приложению через MANAGEMENT__PORT. Порт не входит в Service и не публикуется через gateway.
-management:
-  port: 9081
-
-# Бюджет graceful shutdown, передаётся приложению через SHUTDOWN__READINESS_DELAY и
-# SHUTDOWN__DRAIN_TIMEOUT. readinessDelaySeconds должен превышать время, за которое
-# readinessProbe замечает not ready (periodSeconds × failureThreshold), плюс распространение
-# EndpointSlice и конфигурации internal gateway.
-shutdown:
-  readinessDelaySeconds: 5
-  drainTimeoutSeconds: 20
-
-# Должен быть больше readinessDelaySeconds + drainTimeoutSeconds с запасом на выход процесса;
-# chart отказывается рендериться при нарушении.
+# Должен быть больше config.spec.shutdown.readinessDelay + drainTimeout с запасом на выход
+# процесса; chart отказывается рендериться при нарушении.
 terminationGracePeriodSeconds: 30
 
 # Probes используют health contract на техническом порту. Поля, кроме enabled, передаются
@@ -177,55 +149,32 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Service identity (ADR 27). jwksConfigMap, issuer и serviceAccounts обязательны для
-# release с gRPC API (service.enabled). Окружение задаёт issuer кластера, ConfigMap с JWKS кластера
-# (ключ jwks.json) и allowlist "namespace/serviceaccount=service-name,…".
+# Service identity (ADR 27) и user assertions BFF (ADR 32): здесь только то, что монтирует chart.
+# Для release с gRPC API (service.enabled) обязательны jwksConfigMap (JWKS кластера, ключ jwks.json),
+# userJwksConfigMap (JWKS BFF, ключ jwks.json) и config.spec.identity issuer, audience,
+# serviceAccounts, userIssuer, userDelegates. Пути файлов (config.spec.identity.jwksFile,
+# userJwksFile, tokenDir) chart дописывает сам.
 identity:
-  issuer: ""
-  audience: nomnom.orders
-  serviceAccounts: ""
   jwksConfigMap: ""
+  userJwksConfigMap: ""
   # Audiences целевых контекстов, для которых Pod получает projected token
   # (/var/run/secrets/nomnom/identity/<audience>); нужно только worker'у.
   tokenAudiences: []
   tokenExpirationSeconds: 3600
-  # User assertions BFF (ADR 32): ConfigMap с JWKS BFF (ключ jwks.json), ожидаемый iss и
-  # services-делегаты через запятую. Обязательны вместе с jwksConfigMap, issuer и serviceAccounts
-  # для release с gRPC API (service.enabled).
-  userJwksConfigMap: ""
-  userIssuer: ""
-  userDelegates: ""
 
-# SpiceDB (ADR 18). endpoint обязателен: без SPICEDB__ENDPOINT процесс не стартует.
-# Preshared key берётся из внешнего Secret и не хранится в values.
+# SpiceDB (ADR 18). Endpoint — config.spec.spicedb.endpoint; preshared key (SPICEDB__PRESHARED_KEY)
+# берётся из внешнего Secret и не хранится в values.
 spicedb:
-  endpoint: ""
-  insecure: false
-  timeout: 2s
   presharedKeySecret:
     name: ""
     key: preshared-key
 
-# PostgreSQL (ADR 8). DSN берётся из внешнего Secret; без него процесс не стартует.
-# Миграции встроены в образ: каждый процесс при старте применяет недостающие под advisory
-# lock до запуска остального (пул из 1 соединения, вне maxConns).
+# PostgreSQL (ADR 8). DSN (POSTGRES__DSN) берётся из внешнего Secret; без него процесс не стартует.
+# Пул — config.spec.postgres.
 postgres:
   dsnSecret:
     name: ""
     key: dsn
-  # Пул процесса (POSTGRES__*). За пулером PostgreSQL в session mode каждое соединение
-  # держит server-соединение: Σ(replicas × maxConns) всех ролей должна помещаться в
-  # pool_size пулера (README, «Пулер PostgreSQL»). maxConns — по конкурентности роли:
-  # API 10, worker и consumer 5 (values-<role>.yaml).
-  maxConns: 10
-  # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
-  minConns: 1
-  # Lifetime с jitter: реплики не переоткрывают соединения одновременно.
-  maxConnLifetime: 30m
-  maxConnLifetimeJitter: 5m
-  maxConnIdleTime: 5m
-  connectTimeout: 5s
-  healthCheckPeriod: 1m
 
 # ADR 37: Outbox orders доставляет Debezium (Kafka Connect) из WAL. Включается в одном release
 # контекста (API): ресурс KafkaConnector
@@ -283,17 +232,66 @@ cdc:
       transforms.outbox.route.topic.replacement: ${routedByValue}
       transforms.outbox.table.fields.additional.placement: event_id:header:_watermill_message_uuid,event_id:header:event_id,event_type:header:event_type,occurred_at:header:occurred_at,aggregate_type:header:aggregate_type,aggregate_id:header:aggregate_id,aggregate_version:header:aggregate_version,traceparent:header:traceparent
 
-# ADR 9: OTel resource attributes процесса. service.instance.id (имя pod) и service.version
-# (image.tag) chart задаёт сам; здесь — атрибуты окружения, например
-# deployment.environment.name. Не задавать OTEL_RESOURCE_ATTRIBUTES через env: явная
-# переменная chart её перекроет.
-telemetry:
-  # service.name роли: orders, orders-worker, orders-consumer (values-<role>.yaml).
-  # Совпадает с default процесса.
-  serviceName: orders
-  resourceAttributes: {}
-  # OTLP gRPC endpoint Alloy (OTEL_EXPORTER_OTLP_ENDPOINT), например
-  # http://alloy.observability.svc:4317. Пусто — задаётся env окружения или не экспортируется.
-  otlpEndpoint: ""
-  # LOG__LEVEL: debug | info | warn | error; пусто — info.
-  logLevel: ""
+# Файл конфигурации процесса (CONFIG_FILE, /etc/nomnom/config.yaml): chart рендерит его в ConfigMap
+# с apiVersion config.nomnom.dev/v1alpha1, kind Orders, metadata.name: role и spec — этим блоком как
+# есть. Ключи — camelCase, длительности — строки Go (5s, 2m); неизвестный ключ — ошибка старта
+# процесса. Секретов здесь нет: postgres.dsn или spicedb.presharedKey в spec — неизвестный ключ.
+# Chart сам дописывает только identity.jwksFile, identity.userJwksFile, identity.tokenDir (пути
+# смонтированных JWKS и tokens) и telemetry.resourceAttributes["service.version"] (image.tag); эти
+# ключи в values — ошибка helm template. Секции других ролей допустимы.
+config:
+  spec:
+    # Бизнес-порт gRPC: порт контейнера (имя service.portName) и Service targetPort.
+    server:
+      port: 8081
+    # Технический порт runtime contract (docs/cloud-native-runtime.md): /health/* и metrics. Имя
+    # порта metrics задано моделью NetworkPolicy (ADR 16); порт не входит в Service.
+    management:
+      port: 9081
+    # Бюджет graceful shutdown. readinessDelay должен превышать время, за которое readinessProbe
+    # замечает not ready (periodSeconds × failureThreshold), плюс распространение EndpointSlice и
+    # конфигурации internal gateway.
+    shutdown:
+      readinessDelay: 5s
+      drainTimeout: 20s
+    # Запланированные заказы (add-scheduled-orders): значения обязательны для всех процессов,
+    # пустое или неположительное — pod не стартует. Releases worker и consumer наследуют их.
+    cancellation:
+      # Окно отмены запланированного заказа закрывается в window_start − cutoff (FR-462).
+      scheduledCutoff: 60m
+    scheduledOrder:
+      # start_at = planned_ready_at − baseline preparation − buffer (FR-677).
+      preparationBuffer: 5m
+      # Контрольная точка пересчёта плана за replanLead до start_at (FR-679).
+      replanLead: 30m
+    identity:
+      audience: nomnom.orders
+    # Пул процесса. За пулером PostgreSQL в session mode каждое соединение держит
+    # server-соединение: Σ(replicas × maxConns) всех ролей должна помещаться в pool_size пулера
+    # (README, «Пулер PostgreSQL»). maxConns — по конкурентности роли: API 10, worker и consumer 5
+    # (values-<role>.yaml). Миграции при старте — 2 соединения вне maxConns.
+    postgres:
+      maxConns: 10
+      # 0 или 1: простаивающие соединения тоже держат server-соединения пулера.
+      minConns: 1
+      # Lifetime с jitter: реплики не переоткрывают соединения одновременно.
+      maxConnLifetime: 30m
+      maxConnLifetimeJitter: 5m
+      maxConnIdleTime: 5m
+      connectTimeout: 5s
+      healthCheckPeriod: 1m
+    # ADR 9: OpenTelemetry. service.name — имя роли по умолчанию (telemetry.serviceName
+    # переопределяет), service.instance.id — имя pod (POD_NAME). endpoint — OTLP коллектор
+    # (http://alloy.observability.svc:4317), protocol — grpc | http/protobuf. Экспорт включают
+    # только tracing.enabled и metrics.enabled; endpoint обязателен, если включён хотя бы один.
+    # resourceAttributes — атрибуты окружения, например deployment.environment.name.
+    telemetry:
+      protocol: grpc
+    tracing:
+      enabled: false
+    metrics:
+      enabled: false
+      exportInterval: 60s
+    # debug | info | warn | error.
+    logging:
+      level: info

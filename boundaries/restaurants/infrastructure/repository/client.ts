@@ -48,7 +48,7 @@ export const databasePoolName = (address: string, database: string) =>
 /**
  * Opens the client and pings the primary, so an unreachable or misconfigured
  * MongoDB stops startup instead of failing the first request. Pool limits come
- * from MONGODB__* (pkg/config); CMAP events feed the db.client.connection.*
+ * from spec.mongodb (pkg/config); CMAP events feed the db.client.connection.*
  * metrics, command monitoring events the client spans and
  * db.client.operation.duration (command-telemetry.ts).
  */
@@ -56,7 +56,9 @@ export async function connectDatabase(
   config: DatabaseConnectConfig,
   options: DatabaseConnectOptions = {},
 ): Promise<DatabaseConnection> {
-  const pool = config.pool ?? database.loadPool({}, "api");
+  const pool =
+    config.pool ??
+    database.loadPool(database.mongodbSectionSchema.parse({}), "api");
   const client = new MongoClient(config.uri, {
     appName: "restaurants",
     // Optional domain fields are omitted instead of being stored as null.

@@ -65,7 +65,7 @@ function problem(
   return { code, menuItemIds, alternativeWindows };
 }
 
-// Windows of scheduled orders: SCHEDULED_SLOT__WIDTH on a UTC grid, from the
+// Windows of scheduled orders: restaurants spec.scheduledSlot.width on a UTC grid, from the
 // minimum lead over the horizon, like restaurants lists them (FR-673).
 const slotWidthMs = 15 * 60_000;
 const slotLeadMs = 60 * 60_000;

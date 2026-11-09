@@ -12,6 +12,7 @@ import time
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager, redirect_stdout
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, override
@@ -25,7 +26,7 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
-from payment_fakes import PaymentsTestKit
+from payment_fakes import TELEMETRY, PaymentsTestKit
 from test_grpc_service import StaticSubjectResolver
 
 from infrastructure.grpc.service import (
@@ -79,10 +80,7 @@ class Signals:
 
     def __init__(self) -> None:
         self.spans = InMemorySpanExporter()
-        resource = telemetry.build_resource(
-            "payments",
-            {"OTEL_RESOURCE_ATTRIBUTES": "deployment.environment.name=test,service.version=1.2.3"},
-        )
+        resource = telemetry.build_resource(TELEMETRY)
         self.tracer_provider = telemetry.create_tracer_provider(
             resource, SimpleSpanProcessor(self.spans)
         )
@@ -441,15 +439,7 @@ class JsonLogTest(unittest.TestCase):
             root.setLevel(saved[1])
 
         self.addCleanup(restore)
-        telemetry.configure_process_logging(
-            "payments",
-            {
-                "OTEL_RESOURCE_ATTRIBUTES": (
-                    "deployment.environment.name=test,service.version=1.2.3,"
-                    "service.instance.id=payments-7d9f"
-                )
-            },
-        )
+        telemetry.configure_process_logging(TELEMETRY)
 
     def lines(self, emit: Any) -> list[dict[str, Any]]:
         out = io.StringIO()
@@ -545,7 +535,7 @@ class RuntimeAndResourceTest(unittest.TestCase):
         self.assertEqual(signals.tracer_provider.resource.attributes, resource)
 
     def test_service_name_override(self) -> None:
-        resource = telemetry.build_resource("payments", {"OTEL_SERVICE_NAME": "canary"})
+        resource = telemetry.build_resource(replace(TELEMETRY, service_name="canary"))
         self.assertEqual(resource.attributes["service.name"], "canary")
         self.assertEqual(resource.attributes["service.namespace"], "nomnom")
 
@@ -608,9 +598,9 @@ class WebhookSpanTest(unittest.TestCase):
 
 
 class SetupTest(unittest.TestCase):
-    def test_signal_endpoints_are_independent(self) -> None:
+    def test_metrics_are_exported_without_tracing(self) -> None:
         owner = telemetry.setup(
-            environ={"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:1"}
+            replace(TELEMETRY, endpoint="http://127.0.0.1:1", metrics_enabled=True)
         )
         try:
             self.assertTrue(owner.enabled)

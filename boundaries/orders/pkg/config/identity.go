@@ -3,28 +3,16 @@ package config
 import (
 	"fmt"
 	"strings"
-
-	"github.com/spf13/viper"
 )
 
 const (
-	configKeyIdentityIssuer          = "identity.issuer"
-	configKeyIdentityAudience        = "identity.audience"
-	configKeyIdentityJWKSFile        = "identity.jwks_file"
-	configKeyIdentityServiceAccounts = "identity.service_accounts"
-	configKeyIdentityTokenDir        = "identity.token_dir"
-	configKeyIdentityUserIssuer      = "identity.user_issuer"
-	configKeyIdentityUserJWKSFile    = "identity.user_jwks_file"
-	configKeyIdentityUserDelegates   = "identity.user_delegates"
-
-	EnvIdentityIssuer          = "IDENTITY__ISSUER"
-	EnvIdentityAudience        = "IDENTITY__AUDIENCE"
-	EnvIdentityJWKSFile        = "IDENTITY__JWKS_FILE"
-	EnvIdentityServiceAccounts = "IDENTITY__SERVICE_ACCOUNTS"
-	EnvIdentityTokenDir        = "IDENTITY__TOKEN_DIR"
-	EnvIdentityUserIssuer      = "IDENTITY__USER_ISSUER"
-	EnvIdentityUserJWKSFile    = "IDENTITY__USER_JWKS_FILE"
-	EnvIdentityUserDelegates   = "IDENTITY__USER_DELEGATES"
+	KeyIdentityIssuer          = "spec.identity.issuer"
+	KeyIdentityAudience        = "spec.identity.audience"
+	KeyIdentityJWKSFile        = "spec.identity.jwksFile"
+	KeyIdentityServiceAccounts = "spec.identity.serviceAccounts"
+	KeyIdentityUserIssuer      = "spec.identity.userIssuer"
+	KeyIdentityUserJWKSFile    = "spec.identity.userJwksFile"
+	KeyIdentityUserDelegates   = "spec.identity.userDelegates"
 
 	DefaultIdentityAudience = "nomnom.orders"
 )
@@ -33,45 +21,19 @@ const (
 // assertions signed by BFF (ADR 32), and locates the projected tokens this
 // process presents to other contexts.
 type IdentityConfig struct {
-	Issuer   string `mapstructure:"issuer"`
-	Audience string `mapstructure:"audience"`
-	JWKSFile string `mapstructure:"jwks_file"`
+	Issuer   string `yaml:"issuer"`
+	Audience string `yaml:"audience"`
+	JWKSFile string `yaml:"jwksFile"`
 	// ServiceAccounts is the allowlist "namespace/serviceaccount=service-name,…".
-	ServiceAccounts string `mapstructure:"service_accounts"`
+	ServiceAccounts string `yaml:"serviceAccounts"`
 	// TokenDir holds one projected token per target audience; empty sends no credentials.
-	TokenDir string `mapstructure:"token_dir"`
+	TokenDir string `yaml:"tokenDir"`
 	// UserIssuer is the expected iss of user assertions.
-	UserIssuer string `mapstructure:"user_issuer"`
+	UserIssuer string `yaml:"userIssuer"`
 	// UserJWKSFile holds the BFF assertion keys (EC P-256).
-	UserJWKSFile string `mapstructure:"user_jwks_file"`
+	UserJWKSFile string `yaml:"userJwksFile"`
 	// UserDelegates lists services allowed to pass a user assertion: "bff,…".
-	UserDelegates string `mapstructure:"user_delegates"`
-}
-
-func configureIdentity(loader *viper.Viper) error {
-	loader.SetDefault(configKeyIdentityIssuer, "")
-	loader.SetDefault(configKeyIdentityAudience, DefaultIdentityAudience)
-	loader.SetDefault(configKeyIdentityJWKSFile, "")
-	loader.SetDefault(configKeyIdentityServiceAccounts, "")
-	loader.SetDefault(configKeyIdentityTokenDir, "")
-	loader.SetDefault(configKeyIdentityUserIssuer, "")
-	loader.SetDefault(configKeyIdentityUserJWKSFile, "")
-	loader.SetDefault(configKeyIdentityUserDelegates, "")
-	for key, env := range map[string]string{
-		configKeyIdentityIssuer:          EnvIdentityIssuer,
-		configKeyIdentityAudience:        EnvIdentityAudience,
-		configKeyIdentityJWKSFile:        EnvIdentityJWKSFile,
-		configKeyIdentityServiceAccounts: EnvIdentityServiceAccounts,
-		configKeyIdentityTokenDir:        EnvIdentityTokenDir,
-		configKeyIdentityUserIssuer:      EnvIdentityUserIssuer,
-		configKeyIdentityUserJWKSFile:    EnvIdentityUserJWKSFile,
-		configKeyIdentityUserDelegates:   EnvIdentityUserDelegates,
-	} {
-		if err := loader.BindEnv(key, env); err != nil {
-			return fmt.Errorf("bind %s: %w", env, err)
-		}
-	}
-	return nil
+	UserDelegates string `yaml:"userDelegates"`
 }
 
 // Verifying reports whether the inbound token settings are complete.
@@ -120,7 +82,7 @@ func (cfg IdentityConfig) Validate() error {
 		return err
 	}
 	if strings.TrimSpace(cfg.Issuer) != "" && len(accounts) == 0 {
-		return fmt.Errorf("%s must not be empty when %s is set", EnvIdentityServiceAccounts, EnvIdentityIssuer)
+		return fmt.Errorf("%s must not be empty when %s is set", KeyIdentityServiceAccounts, KeyIdentityIssuer)
 	}
 	return nil
 }

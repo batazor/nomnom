@@ -35,9 +35,9 @@ use crate::infrastructure::spicedb::{
 };
 use crate::infrastructure::temporal::TemporalAssignment;
 use crate::pkg::config::{
-    AppConfig, DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV, DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
-    DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV, DeliveryEstimateConfig, KafkaConfig, SimulatorConfig,
-    SpiceDbConfig, TemporalConfig, TrackingConfig, ValkeyConfig, database,
+    AppConfig, DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_KEY, DELIVERY_ESTIMATE_BASELINE_TRANSIT_KEY,
+    DELIVERY_ESTIMATE_SAMPLE_SIZE_KEY, DeliveryEstimateConfig, KafkaConfig, SERVER_ROLE,
+    SimulatorConfig, SpiceDbConfig, TemporalConfig, TrackingConfig, ValkeyConfig, database,
 };
 use crate::pkg::telemetry::{self, Telemetry};
 use crate::slices::courier::domains::courier::CourierRepository;
@@ -62,8 +62,9 @@ use super::{
     SystemRandomness, UseCaseCourierActions,
 };
 
-/// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
-pub const SERVICE_NAME: &str = "delivery";
+/// `service.name` процесса по умолчанию (`spec.telemetry.serviceName`
+/// переопределяет) — его роль.
+pub const SERVICE_NAME: &str = SERVER_ROLE;
 
 /// Первый проход reconciliation вскоре после старта.
 const FIRST_RECONCILIATION: Duration = Duration::from_secs(10);
@@ -145,12 +146,12 @@ pub fn estimate_policy(config: &DeliveryEstimateConfig) -> Result<DeliveryEstima
     )
     .map_err(|error| {
         let name = match error {
-            InvalidEstimatePolicy::SampleSize => DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV,
+            InvalidEstimatePolicy::SampleSize => DELIVERY_ESTIMATE_SAMPLE_SIZE_KEY,
             InvalidEstimatePolicy::Baseline(DurationKind::CourierLead) => {
-                DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV
+                DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_KEY
             }
             InvalidEstimatePolicy::Baseline(DurationKind::Transit) => {
-                DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV
+                DELIVERY_ESTIMATE_BASELINE_TRANSIT_KEY
             }
         };
         format!("{name}: {error}")
@@ -158,7 +159,7 @@ pub fn estimate_policy(config: &DeliveryEstimateConfig) -> Result<DeliveryEstima
 }
 
 /// Consumer собственных фактов Delivery (`delivery.v1.delivery-events`) для
-/// Delivery Duration Statistics в группе `KAFKA__CONSUMER_GROUP`.
+/// Delivery Duration Statistics в группе `spec.kafka.consumerGroup`.
 pub fn duration_statistics_consumer(config: &KafkaConfig) -> Result<EventConsumer, String> {
     EventConsumer::subscribe(config, OUTBOX_TOPIC, CONSUMER)
 }
@@ -450,7 +451,7 @@ pub fn compose(config: &AppConfig) -> Result<ServerModule, Box<dyn Error>> {
     // Tracer и instruments (клиент SpiceDB, пул PostgreSQL, use cases)
     // берутся у глобальных providers при создании, поэтому pipeline
     // запускается первым.
-    let telemetry = telemetry::start(SERVICE_NAME)?;
+    let telemetry = telemetry::start(&config.telemetry)?;
     // Невалидный JWKS или allowlist service identity прерывает startup.
     let subjects = subject_resolver(&config.identity)?;
     // SpiceDB обязателен: проверки прав, запись relationships и reconciliation.
@@ -516,7 +517,7 @@ mod tests {
     use crate::infrastructure::memory::{RecordingAssignment, RecordingRelationships};
     use crate::infrastructure::repository::test_support::TestStore;
     use crate::pkg::authz::Subject;
-    use crate::pkg::config::SPICEDB_ENDPOINT_ENV;
+    use crate::pkg::config::SPICEDB_ENDPOINT_KEY;
     use crate::slices::courier::applications::{register, set_availability, update_location};
     use crate::slices::delivery::applications::{
         assignment::advance, assignment::create, assignment::find_courier,
@@ -693,8 +694,8 @@ mod tests {
         assert_eq!(offer.courier_id().as_str(), "courier-1");
     }
 
-    /// FR-691: a zero `DELIVERY_ESTIMATE__*` stops the process before ports
-    /// open; the error names the variable.
+    /// FR-691: a zero `spec.deliveryEstimate.*` stops the process before
+    /// ports open; the error names the key.
     #[test]
     fn zero_delivery_estimate_fails_startup() {
         let minutes = |value: u64| Duration::from_secs(value * 60);
@@ -706,15 +707,15 @@ mod tests {
         assert!(estimate_policy(&config(50, minutes(15), minutes(20))).is_ok());
         for (name, config) in [
             (
-                DELIVERY_ESTIMATE_SAMPLE_SIZE_ENV,
+                DELIVERY_ESTIMATE_SAMPLE_SIZE_KEY,
                 config(0, minutes(15), minutes(20)),
             ),
             (
-                DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_ENV,
+                DELIVERY_ESTIMATE_BASELINE_COURIER_LEAD_KEY,
                 config(50, Duration::ZERO, minutes(20)),
             ),
             (
-                DELIVERY_ESTIMATE_BASELINE_TRANSIT_ENV,
+                DELIVERY_ESTIMATE_BASELINE_TRANSIT_KEY,
                 config(50, minutes(15), Duration::ZERO),
             ),
         ] {
@@ -730,6 +731,6 @@ mod tests {
         let Err(error) = spicedb(&SpiceDbConfig::default()) else {
             panic!("an empty endpoint must fail startup");
         };
-        assert!(error.to_string().contains(SPICEDB_ENDPOINT_ENV));
+        assert!(error.to_string().contains(SPICEDB_ENDPOINT_KEY));
     }
 }

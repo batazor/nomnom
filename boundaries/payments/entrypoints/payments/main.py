@@ -9,9 +9,7 @@ import sys
 from di.payments import PaymentsContainer
 from di.resources import ProcessResource, TelemetryResource, sections
 from pkg import telemetry
-from pkg.config import load_settings
-
-SERVICE_NAME = "payments"
+from pkg.config import PAYMENTS_ROLE, load_settings
 
 logger = logging.getLogger("entrypoints.payments")
 
@@ -24,8 +22,10 @@ def run() -> None:
     telemetry is initialized first and shut down last.
     """
     # Невалидная конфигурация завершает процесс до открытия портов.
+    settings = load_settings()
+    telemetry.configure_process_logging(settings.telemetry)
     container = PaymentsContainer()
-    container.config.from_dict(sections(load_settings()))
+    container.config.from_dict(sections(settings))
     # Telemetry инициализируется первой и сбрасывается последней (runtime contract, шаг 8).
     container.init_resources(TelemetryResource)
     try:
@@ -44,9 +44,12 @@ def main() -> int:
     """Console entrypoint; any failure is logged as JSON and turns into exit code 1.
 
     Logging is configured first: every record, startup errors included, is one JSON
-    line on stdout (docs/observability.md#логи).
+    line on stdout (docs/observability.md#логи). Until the configuration file is loaded the
+    records carry only the process name; then ``spec.logging.level`` and the resource apply.
     """
-    telemetry.configure_process_logging(SERVICE_NAME)
+    telemetry.configure_logging(
+        {"service.namespace": telemetry.SERVICE_NAMESPACE, "service.name": PAYMENTS_ROLE}
+    )
     try:
         run()
     except Exception as error:

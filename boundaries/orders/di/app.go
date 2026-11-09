@@ -22,9 +22,6 @@ import (
 	simulatordi "nomnom/orders/slices/simulator/di"
 )
 
-// AppServiceName — service.name API по умолчанию; OTEL_SERVICE_NAME переопределяет.
-const AppServiceName = "orders"
-
 // App — lifecycle.Worker бизнес-порта, владелец SimulatorRunner и ProjectionCatchUp.
 type App struct {
 	server     *grpc.Server
@@ -33,17 +30,21 @@ type App struct {
 	catchUp    *ProjectionCatchUp
 	addr       string
 	listener   net.Listener
-	newMetrics func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
+	telemetry  config.ObservabilityConfig
+	newMetrics func(ctx context.Context, cfg config.ObservabilityConfig) (*telemetry.Metrics, error)
 	metrics    *telemetry.Metrics
 }
 
-func NewApp(cfg config.ServerConfig, server *grpc.Server, order *orderdi.Module, simulator *SimulatorRunner, catchUp *ProjectionCatchUp) *App {
-	return &App{server: server, order: order, simulator: simulator, catchUp: catchUp, addr: fmt.Sprintf(":%d", cfg.Port), newMetrics: telemetry.Start}
+func NewApp(cfg config.ServerConfig, observability config.ObservabilityConfig, server *grpc.Server, order *orderdi.Module, simulator *SimulatorRunner, catchUp *ProjectionCatchUp) *App {
+	return &App{
+		server: server, order: order, simulator: simulator, catchUp: catchUp, addr: fmt.Sprintf(":%d", cfg.Port),
+		telemetry: observability, newMetrics: telemetry.Start,
+	}
 }
 
 // Start поднимает metrics pipeline и открывает бизнес-порт; после него процесс может стать ready.
 func (a *App) Start(ctx context.Context) error {
-	metrics, err := a.newMetrics(ctx, AppServiceName)
+	metrics, err := a.newMetrics(ctx, a.telemetry)
 	if err != nil {
 		return fmt.Errorf("start telemetry: %w", err)
 	}

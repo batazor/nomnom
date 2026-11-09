@@ -2,12 +2,11 @@
 #   helm upgrade --install orders-worker ops/helm -f ops/helm/values-worker.yaml
 # Worker разворачивается WorkerDeployment Temporal Worker Controller (ADR 5 контекста): контроллер
 # создаёт Deployment на каждый Build ID и задаёт TEMPORAL_DEPLOYMENT_NAME и TEMPORAL_WORKER_BUILD_ID.
-# Адрес и namespace Temporal (temporal.hostPort, temporal.namespace) задаются values окружения.
+# Адрес и namespace Temporal (config.spec.temporal.hostPort, namespace) задаются values окружения:
+# из них же chart строит Connection и WorkerDeployment.
 component: worker
 
-temporal:
-  hostPort: ""
-  namespace: ""
+role: orders-worker
 
 workerDeployment:
   # Новые заказы сразу идут на новую версию; начатые (Pinned) доживают на своей.
@@ -17,9 +16,6 @@ workerDeployment:
   sunset:
     scaledownDelay: 1h
     deleteDelay: 24h
-
-telemetry:
-  serviceName: orders-worker
 
 command:
   - /orders-worker
@@ -33,7 +29,10 @@ identity:
     - nomnom.restaurants
     - nomnom.delivery
 
-# Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Temporal activities обращаются к store по одной на задачу; лишние ждут в пуле.
-postgres:
-  maxConns: 5
-  minConns: 1
+config:
+  spec:
+    # Пул PostgreSQL роли (README, «Пулер PostgreSQL»): Temporal activities обращаются к store по
+    # одной на задачу; лишние ждут в пуле.
+    postgres:
+      maxConns: 5
+      minConns: 1

@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/batazor/nomnom/boundaries/controlplane/pkg/config"
 	"github.com/batazor/nomnom/boundaries/controlplane/pkg/telemetry"
 )
 
@@ -147,31 +148,32 @@ func TestLogRedaction(t *testing.T) {
 	assert.Equal(t, "o-1", r["order_id"], "allowed lookup identifiers stay")
 }
 
-// Resource fields follow OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES, as for traces and metrics.
-func TestLogResourceFollowsOTelEnv(t *testing.T) {
-	t.Setenv("OTEL_SERVICE_NAME", "controlplane-consumer")
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=local,service.version=abc123,service.instance.id=pod-1")
-	resource, err := telemetry.LogResourceFor(context.Background(), "controlplane")
+// Resource fields come from the configuration file, as for traces and metrics; OTEL_* is not read.
+func TestLogResourceFollowsTheConfig(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "other")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=other,service.version=other,service.instance.id=other")
+	resource, err := telemetry.LogResourceFor(context.Background(), config.TelemetryConfig{
+		ServiceName:        "controlplane-blue",
+		ResourceAttributes: map[string]string{"deployment.environment.name": "local", "service.version": "abc123"},
+		InstanceID:         "pod-1",
+	})
 	require.NoError(t, err)
 	assert.Equal(t, telemetry.LogResource{
-		Namespace: "nomnom", Name: "controlplane-consumer", Version: "abc123", Environment: "local", InstanceID: "pod-1",
+		Namespace: "nomnom", Name: "controlplane-blue", Version: "abc123", Environment: "local", InstanceID: "pod-1",
 	}, resource)
 
-	t.Setenv("OTEL_SERVICE_NAME", "")
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
-	resource, err = telemetry.LogResourceFor(context.Background(), "controlplane-reconciler")
+	resource, err = telemetry.LogResourceFor(context.Background(), config.TelemetryConfig{ServiceName: "controlplane", InstanceID: "pod-1"})
 	require.NoError(t, err)
-	assert.Equal(t, "controlplane-reconciler", resource.Name)
+	assert.Equal(t, "controlplane", resource.Name)
 	assert.NotEmpty(t, resource.Version, "build version by default")
 	assert.Empty(t, resource.Environment, "unknown environment is absent, not faked")
 }
 
-func TestParseLogLevel(t *testing.T) {
-	for raw, want := range map[string]slog.Level{"": slog.LevelInfo, "debug": slog.LevelDebug, "WARN": slog.LevelWarn, "error": slog.LevelError} {
-		got, err := telemetry.ParseLogLevel(raw)
-		require.NoError(t, err)
-		assert.Equal(t, want, got, raw)
-	}
-	_, err := telemetry.ParseLogLevel("verbose")
-	assert.Error(t, err)
+// Before the configuration is loaded, records carry the default process name and the build version.
+func TestProcessLogResource(t *testing.T) {
+	resource := telemetry.ProcessLogResource("controlplane")
+	assert.Equal(t, "nomnom", resource.Namespace)
+	assert.Equal(t, "controlplane", resource.Name)
+	assert.NotEmpty(t, resource.Version)
+	assert.Empty(t, resource.InstanceID)
 }

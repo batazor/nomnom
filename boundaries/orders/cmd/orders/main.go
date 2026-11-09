@@ -17,8 +17,9 @@ import (
 )
 
 func main() {
-	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов.
-	telemetry.SetupLogging(di.AppServiceName)
+	// JSON logger процесса — до конфигурации, чтобы и ошибки загрузки шли по схеме логов;
+	// после загрузки его заменяет logger из spec.telemetry и spec.logging.
+	telemetry.SetupStartupLogging(config.RoleAPI)
 	if err := run(); err != nil {
 		slog.Error("orders stopped", telemetry.LogErrorKey, err)
 		os.Exit(1)
@@ -26,9 +27,12 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	cfg, err := config.Load(config.RoleAPI)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+	if _, err := telemetry.SetupLogging(context.Background(), cfg.Observability); err != nil {
+		return fmt.Errorf("setup logging: %w", err)
 	}
 
 	app, cleanup, err := di.InitializeApp(cfg)

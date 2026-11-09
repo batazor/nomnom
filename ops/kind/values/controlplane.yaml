@@ -4,12 +4,14 @@ image:
   # Образ загружен через kind load; Never гарантирует запуск именно собранной версии.
   pullPolicy: Never
 
-# ADR 41: маршруты Market и список Market — listener api Gateway public
-# (manifests/gateway/public-gateway.yaml).
-routes:
-  namespace: nomnom-gateway
-  gateway: public
-  listener: api
+config:
+  spec:
+    # ADR 41: маршруты Market и список Market — listener api Gateway public
+    # (manifests/gateway/public-gateway.yaml).
+    routes:
+      namespace: nomnom-gateway
+      gateway: public
+      listener: api
 
 # Burstable без CPU limit; профиль ещё не измерен.
 resources:

@@ -7,11 +7,15 @@ thin wrappers over the real adapters inject faults (failing Outbox write, stale 
 
 import os
 import pickle
+import tempfile
+import unittest
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, TypeVar, override
 from unittest.mock import patch
 
+import yaml
 from dependency_injector import providers
 
 from di.payments import PaymentsContainer
@@ -24,7 +28,7 @@ from infrastructure.repository import (
     create_database,
 )
 from pkg.authz import AuthorizationUnavailableError, Subject, SubjectKind
-from pkg.config import database, load_settings
+from pkg.config import API_VERSION, KIND, TelemetrySettings, database, parse_spec, settings
 from pkg.outbox import AggregateRef
 from slices.payment.applications.operation_flow import (
     PaymentOperationExecutor,
@@ -84,14 +88,29 @@ NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 MARKET = MarketId("berlin")
 # Снапшот почти на каждый commit: все сценарии use cases проходят и через него.
 SNAPSHOT_EVERY = 2
-# EVENT_STORE__SNAPSHOT_EVERY обязателен: без него load_settings падает.
 SUBJECT_KEK = "test-subject-kek-with-at-least-32-characters"
 SUBJECT_REF_KEY = "test-subject-ref-key-with-at-least-32-characters"
-REQUIRED_EVENT_STORE_ENV = {
-    "EVENT_STORE__SNAPSHOT_EVERY": "5",
+# Секреты и имя pod, без которых процесс payments не стартует.
+REQUIRED_SECRETS = {
+    "DATABASE__URI": "postgresql://payments@127.0.0.1:1/x",
     "EVENT_STORE__SUBJECT_KEKS": '{"1": "' + SUBJECT_KEK + '"}',
     "EVENT_STORE__SUBJECT_REF_KEY": SUBJECT_REF_KEY,
+    "POD_NAME": "payments-test",
 }
+# Телеметрия процесса без экспорта: тесты подставляют свои флаги через dataclasses.replace.
+TELEMETRY = TelemetrySettings(
+    endpoint="",
+    protocol="grpc",
+    service_name="payments",
+    instance_id="payments-7d9f",
+    resource_attributes={"deployment.environment.name": "test", "service.version": "1.2.3"},
+    tracing_enabled=False,
+    metrics_enabled=False,
+    metrics_export_interval=timedelta(seconds=60),
+    log_level="info",
+)
+# spec.eventStore.snapshotEvery обязателен: без него файл конфигурации не принимается.
+REQUIRED_SPEC: dict[str, Any] = {"eventStore": {"snapshotEvery": 5}}
 # Only facts with a contract reach the Outbox of the real mapper.
 _UNPUBLISHED = (PaymentCreated, PaymentOperationRequested, PaymentOperationSucceeded)
 
@@ -399,27 +418,39 @@ class PaymentsTestKit:
 
 def unreachable_database() -> Database:
     """Pool that never connects: for composition tests that stop before storage."""
-    return create_database(database.Config(DATABASE__URI=UNREACHABLE_DATABASE_URI))
+    return create_database(database.Config(uri=UNREACHABLE_DATABASE_URI))
 
 
 UNREACHABLE_DATABASE_URI = "postgresql://payments@127.0.0.1:1/x"
 
 
-def payments_container(environment: Mapping[str, str] | None = None) -> PaymentsContainer:
-    """``PaymentsContainer`` over settings from ``environment``.
+def write_config(test: unittest.TestCase, spec: Mapping[str, Any], name: str = "payments") -> str:
+    """Path of a configuration file ``kind: Payments`` with ``spec``, removed after ``test``."""
+    directory = tempfile.TemporaryDirectory()
+    test.addCleanup(directory.cleanup)
+    path = Path(directory.name) / "config.yaml"
+    document = {
+        "apiVersion": API_VERSION,
+        "kind": KIND,
+        "metadata": {"name": name},
+        "spec": dict(spec),
+    }
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    return str(path)
+
+
+def payments_container(
+    spec: Mapping[str, Any] | None = None, secrets: Mapping[str, str] | None = None
+) -> PaymentsContainer:
+    """``PaymentsContainer`` over ``spec`` of the configuration file and ``secrets`` of env.
 
     The database is an unreachable pool (closed by ``close_container``) and both workers
     listen on ephemeral loopback ports.
     """
-    env = {
-        "DATABASE__URI": UNREACHABLE_DATABASE_URI,
-        **REQUIRED_EVENT_STORE_ENV,
-        **(environment or {}),
-    }
-    with patch.dict(os.environ, env, clear=True):
-        settings = load_settings()
+    with patch.dict(os.environ, {**REQUIRED_SECRETS, **(secrets or {})}, clear=True):
+        process = settings(parse_spec({**REQUIRED_SPEC, **(spec or {})}))
     container = PaymentsContainer()
-    container.config.from_dict(sections(settings))
+    container.config.from_dict(sections(process))
     container.database.override(providers.Object(unreachable_database()))
     container.grpc_address.override(providers.Object(("127.0.0.1", 0)))
     container.webhook_address.override(providers.Object(("127.0.0.1", 0)))

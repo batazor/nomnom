@@ -9,6 +9,7 @@ ops/
     Chart.yaml
     values.yaml
     values-worker.yaml   # release Temporal worker
+    values-consumer.yaml # release Kafka consumer
     templates/
 ```
 
@@ -23,7 +24,7 @@ chart сейчас не используется. Решение зафикси�
 | `Deployment` | Один контейнер с образом приложения; все изменяемые параметры в `values.yaml`. |
 | `Service` (`ClusterIP`, порт `8081`) | Backend target для internal gateway и технических механизмов Kubernetes. |
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
-| `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
+| `ConfigMap` | Файл конфигурации процесса `config.yaml` из `config.spec` (монтируется в `/etc/nomnom/config.yaml`). |
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
@@ -62,12 +63,12 @@ helm uninstall orders
 
 ## PostgreSQL и Outbox
 
-DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`); без него
+DSN передаётся из внешнего Secret: `postgres.dsnSecret.name`/`key` (env `POSTGRES__DSN`, в файле конфигурации его нет); без него
 процесс не стартует. Миграции встроены в образ наборами слайсов (id `orders` и `simulator`, у каждого своя
 таблица версий `schema_migrations_<id>`; id — часть контракта схемы, от имён кода не зависит): каждый процесс при старте применяет
-недостающие всех наборов (golang-migrate под одним advisory lock, ожидание блокировок DDL ограничено `lock_timeout` 5 с, незавершённая миграция повторяется) и только потом запускает остальное. Пул процесса задают `postgres.maxConns`,
+недостающие всех наборов (golang-migrate под одним advisory lock, ожидание блокировок DDL ограничено `lock_timeout` 5 с, незавершённая миграция повторяется) и только потом запускает остальное. Пул процесса задают `config.spec.postgres.maxConns`,
 `minConns`, `maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`,
-`healthCheckPeriod` (env `POSTGRES__*`); values каждой роли задают свой `maxConns` (API 10,
+`healthCheckPeriod`; values каждой роли задают свой `maxConns` (API 10,
 worker и consumer 5), миграции при старте — 2 отдельных соединения (advisory lock и сама миграция). Пулер перед
 базой — только session mode, Σ(replicas × maxConns) ≤ `pool_size`
 ([README](../README.md#пулер-postgresql)).
@@ -94,19 +95,19 @@ Workflow — `PINNED`, начатые заказы доживают на сво�
 
 | Параметр | По умолчанию | Назначение |
 | --- | --- | --- |
-| `temporal.hostPort` | пусто, обязателен | Адрес Temporal Server: `Connection` и `TEMPORAL__HOST_PORT` worker'а |
-| `temporal.namespace` | пусто, обязателен | Temporal namespace: `WorkerDeployment` и `TEMPORAL__NAMESPACE` worker'а |
+| `config.spec.temporal.hostPort` | пусто, обязателен | Адрес Temporal Server: `Connection` и файл конфигурации worker'а |
+| `config.spec.temporal.namespace` | пусто, обязателен | Temporal namespace: `WorkerDeployment` и файл конфигурации worker'а |
 | `workerDeployment.rollout` | `strategy: AllAtOnce` | Как новые workflow переходят на новую версию |
 | `workerDeployment.sunset` | `scaledownDelay: 1h`, `deleteDelay: 24h` | Когда Drained версия масштабируется в 0 и удаляется |
 
 ```bash
 helm template orders-worker ops/helm -f ops/helm/values-worker.yaml \
-  --set temporal.hostPort=temporal:7233 --set temporal.namespace=default
+  --set config.spec.temporal.hostPort=temporal:7233 --set config.spec.temporal.namespace=default
 ```
 
 ```bash
 helm upgrade --install orders-worker ops/helm -f ops/helm/values-worker.yaml \
-  --set temporal.hostPort=temporal:7233 --set temporal.namespace=default
+  --set config.spec.temporal.hostPort=temporal:7233 --set config.spec.temporal.namespace=default
 ```
 
 ## Образ
@@ -134,35 +135,71 @@ helm upgrade --install orders ops/helm --set image.tag=local
 
 ## Конфигурация
 
-Приложение слушает порт `8081` (переменная `SERVER__PORT`); `service.targetPort` должен
-совпадать с портом процесса. Несекретная конфигурация передаётся через `env` и попадает в
-`ConfigMap`:
+Несекретная конфигурация процесса — версионированный файл, который chart рендерит в `ConfigMap`
+(ключ `config.yaml`), монтирует в `/etc/nomnom/config.yaml` и передаёт процессу через `CONFIG_FILE`.
+Аннотация pod `checksum/config` перезапускает pod при изменении файла: процесс читает его только
+при старте.
 
 ```yaml
-env:
-  CANCELLATION__WINDOW: 5m
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Orders            # константа chart
+metadata:
+  name: orders          # values role: orders, orders-worker, orders-consumer
+spec: {}                # values config.spec как есть + ключи, которыми владеет chart
 ```
 
-OpenTelemetry задаётся секцией `telemetry` (не через `env`: явные переменные chart
-перекрывают `envFrom`). Chart сам выставляет `OTEL_SERVICE_NAME` (`telemetry.serviceName`
-роли: `orders`, `orders-worker`, `orders-consumer`) и `OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя
-pod, `service.version` — image tag, плюс `telemetry.resourceAttributes`) во всех releases:
+`role` обязателен: `values.yaml` задаёт `orders`, `values-worker.yaml` и `values-consumer.yaml` —
+свои роли; процесс не стартует с файлом чужой роли. `config.spec` попадает в файл через `toYaml`:
+ключи — camelCase (`scheduledOrder.replanLead`), длительности — строки Go (`5s`), неизвестный ключ —
+ошибка старта процесса. Ключи и значения по умолчанию — [README приложения](../README.md#запуск) и
+[`config.example.yaml`](../config.example.yaml). `values-<role>.yaml` переопределяют секции своей роли,
+секции других ролей процесс принимает.
+
+Chart сам дописывает только то, чем владеет; такой ключ в values — ошибка `helm template`:
+
+| Ключ `spec` | Значение |
+| --- | --- |
+| `identity.jwksFile`, `identity.userJwksFile` | Пути JWKS из `identity.jwksConfigMap` и `identity.userJwksConfigMap` |
+| `identity.tokenDir` | Каталог projected tokens `identity.tokenAudiences` |
+| `telemetry.resourceAttributes["service.version"]` | `image.tag`, если задан |
+
+Chart читает из `config.spec` порты (`server.port` — порт контейнера `grpc`, `management.port` —
+порт `metrics`) и бюджет shutdown; `service.port` — только порт `Service`.
+
+OpenTelemetry — `config.spec.telemetry`, `tracing`, `metrics` и `logging`, одинаковые во всех chart:
+`service.name` — роль процесса, `service.instance.id` — имя pod (env `POD_NAME` из Downward API).
+`OTEL_*` и `LOG__LEVEL` chart не задаёт, процесс их не читает. Экспорт включается только флагами:
 
 ```yaml
-telemetry:
-  otlpEndpoint: http://alloy.observability.svc:4317   # OTEL_EXPORTER_OTLP_ENDPOINT
-  logLevel: info                                       # LOG__LEVEL
-  resourceAttributes:
-    deployment.environment.name: local
+config:
+  spec:
+    telemetry:
+      endpoint: http://alloy.observability.svc:4317
+      protocol: grpc                    # или http/protobuf
+      resourceAttributes:
+        deployment.environment.name: local
+    tracing:
+      enabled: true
+    metrics:
+      enabled: true
+      exportInterval: 60s
+    logging:
+      level: info
 ```
 
-Адрес Alloy и окружение задаются values окружения и не хардкодятся в chart;
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` и другие переменные SDK можно передать через `env`.
-Alloy sidecar не добавляется — collector разворачивается отдельно. Процессы пишут JSON-логи
-в stdout (README приложения, «Observability»).
+Адрес Alloy и окружение задаются values окружения и не хардкодятся в chart. Alloy sidecar не
+добавляется — collector разворачивается отдельно. Процессы пишут JSON-логи в stdout (README
+приложения, «Observability»).
+
+На уровне chart остаются только ссылки на Secret (`postgres.dsnSecret`, `spicedb.presharedKeySecret`),
+имена ConfigMap JWKS (`identity.jwksConfigMap`, `identity.userJwksConfigMap`), `identity.tokenAudiences`
+и прочие параметры развёртывания. Для release с gRPC API (`service.enabled`) обязательны оба ConfigMap
+JWKS и `config.spec.identity` `issuer`, `audience`, `serviceAccounts`, `userIssuer`, `userDelegates`.
 
 Секреты (пароли, API tokens, credentials БД и Kafka, BSR tokens) не помещаются в
-`values.yaml` и `ConfigMap`. Они подключаются из внешних Kubernetes `Secret`:
+`values.yaml` и `ConfigMap` — в `spec` для них нет полей. Процесс читает их из env под своими именами
+(`POSTGRES__DSN`, `SPICEDB__PRESHARED_KEY`); chart задаёт их из `postgres.dsnSecret` и
+`spicedb.presharedKeySecret`, остальные секреты окружения подключаются из внешних Kubernetes `Secret`:
 
 ```yaml
 envFrom:
@@ -188,13 +225,13 @@ Secret-ресурсы chart не создаёт.
 
 ## Runtime contract
 
-Chart реализует [runtime contract](../../../docs/cloud-native-runtime.md) ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): контейнер объявляет технический порт `metrics` (`management.port`, по умолчанию `9081`), а probes обращаются к health endpoints на нём. Порт `metrics` не входит в `Service`: kubelet probes и Alloy scrape идут напрямую в pod, имя порта задано моделью NetworkPolicy [ADR 16](../../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md).
+Chart реализует [runtime contract](../../../docs/cloud-native-runtime.md) ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): контейнер объявляет технический порт `metrics` (`config.spec.management.port`, по умолчанию `9081`), а probes обращаются к health endpoints на нём. Порт `metrics` не входит в `Service`: kubelet probes и Alloy scrape идут напрямую в pod, имя порта задано моделью NetworkPolicy [ADR 16](../../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md).
 
 | Параметр | По умолчанию | Назначение |
 | --- | --- | --- |
-| `management.port` | `9081` | Номер технического порта; передаётся приложению как `MANAGEMENT__PORT`. |
-| `shutdown.readinessDelaySeconds` | `5` | `SHUTDOWN__READINESS_DELAY`: сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
-| `shutdown.drainTimeoutSeconds` | `20` | `SHUTDOWN__DRAIN_TIMEOUT`: deadline на завершение начатых запросов. |
+| `config.spec.management.port` | `9081` | Номер технического порта: порт контейнера `metrics` и файл конфигурации. |
+| `config.spec.shutdown.readinessDelay` | `5s` | Сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
+| `config.spec.shutdown.drainTimeout` | `20s` | Deadline на завершение начатых запросов. |
 | `terminationGracePeriodSeconds` | `30` | Должен быть больше суммы delay и drain; иначе `helm template` завершается ошибкой. |
 | `startupProbe` | `/health/startup`, каждые 2s, до 30 попыток | Пока не пройдена, liveness и readiness не проверяются. |
 | `livenessProbe` | `/health/live`, каждые 10s, 3 провала | Остаётся успешной во время shutdown. |

@@ -250,7 +250,7 @@ func TestSubjectResolverRequiresUserSettings(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewSubjectResolver(cfg)
-			require.ErrorContains(t, err, config.EnvIdentityUserIssuer+", "+config.EnvIdentityUserJWKSFile+" and "+config.EnvIdentityUserDelegates+" are required")
+			require.ErrorContains(t, err, config.KeyIdentityUserIssuer+", "+config.KeyIdentityUserJWKSFile+" and "+config.KeyIdentityUserDelegates+" are required")
 		})
 	}
 }

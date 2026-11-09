@@ -1,7 +1,8 @@
 """payments-admin: derived data of the Payment streams, forgetting users, operation history.
 
-Runs with the environment of the ``payments`` process; it applies no migrations and opens
-no ports (``boundaries/payments/ops/README.md``)::
+Runs in the pod of a payments process with its configuration file (``CONFIG_FILE``, only
+``apiVersion`` and ``kind`` are checked) and secrets; it applies no migrations and opens no
+ports (``boundaries/payments/ops/README.md``)::
 
     python -m entrypoints.payments_admin.main projections check
     python -m entrypoints.payments_admin.main projections rebuild [--snapshots]
@@ -22,7 +23,7 @@ from typing import Any
 
 from infrastructure.repository import create_database
 from pkg import telemetry
-from pkg.config import EventStoreSettings, database
+from pkg.config import ADMIN_PROCESS_NAME, AdminSettings, load_admin_settings
 from slices.payment.domains.payment import OperationRequester, PaymentId, SealedSubject
 from slices.payment.infrastructure.repository import (
     DatabasePaymentAuditReader,
@@ -30,14 +31,12 @@ from slices.payment.infrastructure.repository import (
     ProjectionRebuilder,
 )
 
-SERVICE_NAME = "payments-admin"
-
 logger = logging.getLogger("entrypoints.payments_admin")
 
 
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     """Parse the command line; an unknown command exits with code 2."""
-    parser = argparse.ArgumentParser(prog=SERVICE_NAME)
+    parser = argparse.ArgumentParser(prog=ADMIN_PROCESS_NAME)
     groups = parser.add_subparsers(dest="group", required=True)
     projections = groups.add_parser("projections").add_subparsers(dest="command", required=True)
     projections.add_parser("check", help="compare derived data with the streams")
@@ -55,16 +54,16 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(args: argparse.Namespace, settings: AdminSettings) -> int:
     """Run the command on its own pool; returns the exit code."""
-    db = create_database(database.Config())
-    settings = EventStoreSettings()
+    db = create_database(settings.database)
+    event_store = settings.event_store
     try:
         db.check()
-        keys = DatabaseSubjectKeys(db, settings.subject_keks, settings.subject_ref_key)
+        keys = DatabaseSubjectKeys(db, event_store.subject_keks, event_store.subject_ref_key)
         match args.group:
             case "projections":
-                return _projections(args, ProjectionRebuilder(db, settings.snapshot_every))
+                return _projections(args, ProjectionRebuilder(db, event_store.snapshot_every))
             case "subjects":
                 return _subjects(args, keys)
             case "payments":
@@ -140,9 +139,13 @@ def _print(value: dict[str, Any]) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Console entrypoint; any failure is logged as JSON and turns into exit code 1."""
     args = parse_args(argv)
-    telemetry.configure_process_logging(SERVICE_NAME)
+    telemetry.configure_logging(
+        {"service.namespace": telemetry.SERVICE_NAMESPACE, "service.name": ADMIN_PROCESS_NAME}
+    )
     try:
-        return run(args)
+        settings = load_admin_settings()
+        telemetry.configure_process_logging(settings.telemetry)
+        return run(args, settings)
     except Exception as error:
         logger.exception("payments-admin: %s", error)
         return 1

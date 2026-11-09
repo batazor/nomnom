@@ -18,15 +18,12 @@ spec:
       {{- include "common.labels.matchLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- if or .Values.env .Values.podAnnotations }}
       annotations:
-        {{- if .Values.env }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- end }}
+        # Изменение файла конфигурации перезапускает pod: процесс читает файл только на старте.
+        checksum/config: {{ include "controlplane.configFile" . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
         {{- end }}
-      {{- end }}
       labels:
         {{- include "controlplane.labels" (dict "customLabels" .Values.podLabels "context" $) | nindent 8 }}
     spec:
@@ -53,34 +50,21 @@ spec:
           {{- end }}
           ports:
             - name: metrics
-              containerPort: {{ .Values.management.port }}
+              containerPort: {{ include "controlplane.managementPort" . }}
               protocol: TCP
-          {{- if or .Values.env .Values.envFrom }}
+          {{- with .Values.envFrom }}
           envFrom:
-            {{- if .Values.env }}
-            - configMapRef:
-                name: {{ include "common.names.fullname" . }}
-            {{- end }}
-            {{- with .Values.envFrom }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
-            {{- end }}
           {{- end }}
           env:
-            - name: MANAGEMENT__PORT
-              value: {{ .Values.management.port | quote }}
-            - name: SHUTDOWN__READINESS_DELAY
-              value: {{ printf "%ds" (int .Values.shutdown.readinessDelaySeconds) | quote }}
-            - name: SHUTDOWN__DRAIN_TIMEOUT
-              value: {{ printf "%ds" (int .Values.shutdown.drainTimeoutSeconds) | quote }}
-            {{- with .Values.routes }}
-            - name: ROUTES__NAMESPACE
-              value: {{ .namespace | quote }}
-            - name: ROUTES__GATEWAY
-              value: {{ .gateway | quote }}
-            - name: ROUTES__LISTENER
-              value: {{ .listener | quote }}
-            {{- end }}
-            {{- include "controlplane.otelEnv" (dict "context" .) | nindent 12 }}
+            # Несекретная конфигурация — только файл; env SECTION__KEY и OTEL_* процесс не читает.
+            - name: CONFIG_FILE
+              value: /etc/nomnom/config.yaml
+            # service.instance.id telemetry.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             {{- with .Values.extraEnv }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
             {{- end }}
@@ -96,14 +80,23 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
           volumeMounts:
+            - name: config
+              mountPath: /etc/nomnom
+              readOnly: true
+            {{- with .Values.volumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
+            {{- end }}
       volumes:
+        - name: config
+          configMap:
+            name: {{ include "common.names.fullname" . }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+        {{- with .Values.volumes }}
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 8 }}

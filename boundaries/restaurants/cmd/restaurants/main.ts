@@ -15,42 +15,71 @@ import {
   loadScheduledSlotConfig,
   loadSimulatorConfig,
   loadSpiceDbConfig,
+  loadTelemetryConfig,
   loadValkeyConfig,
+  readConfigFile,
 } from "../../pkg/config/config.ts";
 import { Lifecycle } from "../../pkg/lifecycle/lifecycle.ts";
-import { createLogger, logUncaughtErrors } from "../../pkg/telemetry/logger.ts";
+import {
+  createLogger,
+  logStartupFailure,
+  logUncaughtErrors,
+} from "../../pkg/telemetry/logger.ts";
 import { telemetryResource } from "../../pkg/telemetry/resource.ts";
 import { startTelemetry } from "../../pkg/telemetry/telemetry.ts";
 
 const SERVICE_NAME = "restaurants";
 
+// Secrets of a local run from .env; everything else comes from CONFIG_FILE.
 loadLocalEnv();
-// JSON logs to stdout with the telemetry resource; a startup failure is one
-// ERROR record.
-const logger = createLogger({ resource: telemetryResource(SERVICE_NAME) });
+// The configuration file (ADR 17) is read before anything else: a missing
+// file, another role, an unknown key or an invalid value is one ERROR record
+// and exit 1 before a port is opened.
+const loaded = logStartupFailure(SERVICE_NAME, () => {
+  const spec = readConfigFile(process.env, SERVICE_NAME);
+  return {
+    config: loadConfig(spec),
+    telemetry: loadTelemetryConfig(spec, process.env, SERVICE_NAME),
+    // Demo Simulator (FR-606): required in this process; a missing or
+    // invalid value or minDelay > maxDelay stops startup.
+    simulator: loadSimulatorConfig(spec),
+    // Delivery Windows of scheduled orders (FR-694): required; a missing or
+    // invalid value, a width not dividing 30 minutes or minLead >= maxHorizon
+    // stops startup.
+    scheduledSlot: loadScheduledSlotConfig(spec),
+    // Required infrastructure: a missing or invalid value stops startup.
+    // MongoDB (ADR 8, local ADR 1): the process migrates its collections,
+    // validators and indexes itself before serving (local ADR 2).
+    mongodb: databaseConfig.load(spec, process.env, "api"),
+    // SpiceDB (ADR 18): errors and timeouts fail closed as UNAVAILABLE.
+    spicedb: loadSpiceDbConfig(spec, process.env),
+    // Valkey (ADR 43, local ADR 3) caches Get Restaurant and Get Menu; an
+    // unreachable Valkey only makes reads bypass the cache.
+    valkeyConfig: loadValkeyConfig(spec, process.env),
+    // Projected ServiceAccount tokens (ADR 27) and BFF user assertions (ADR 32).
+    identity: loadIdentityConfig(spec),
+  };
+});
+const {
+  config,
+  simulator,
+  scheduledSlot,
+  mongodb,
+  spicedb,
+  valkeyConfig,
+  identity,
+} = loaded;
+// JSON logs to stdout with the telemetry resource and spec.logging.level; an
+// uncaught error is one ERROR record.
+const logger = createLogger({
+  resource: telemetryResource(loaded.telemetry),
+  level: loaded.telemetry.logLevel,
+});
 logUncaughtErrors(logger);
-const config = loadConfig();
-// Demo Simulator (FR-606): required in this process; an empty or invalid
-// value or MIN_DELAY > MAX_DELAY stops startup.
-const simulator = loadSimulatorConfig(process.env);
-// Delivery Windows of scheduled orders (FR-694): required; an empty or
-// invalid value, a width not dividing 30 minutes or MIN_LEAD >= MAX_HORIZON
-// stops startup.
-const scheduledSlot = loadScheduledSlotConfig(process.env);
-// Required infrastructure: an empty or invalid value stops startup.
-// MongoDB (ADR 8, local ADR 1): the process migrates its collections,
-// validators and indexes itself before serving (local ADR 2).
-const mongodb = databaseConfig.load(process.env, "api");
-// SpiceDB (ADR 18): errors and timeouts fail closed as UNAVAILABLE.
-const spicedb = loadSpiceDbConfig(process.env);
-// Valkey (ADR 43, local ADR 3) caches Get Restaurant and Get Menu; an
-// unreachable Valkey only makes reads bypass the cache.
-const valkeyConfig = loadValkeyConfig(process.env);
-// Projected ServiceAccount tokens (ADR 27) and BFF user assertions (ADR 32).
-const identity = loadIdentityConfig(process.env);
 // Telemetry starts before the application (docs/cloud-native-runtime.md):
-// OTLP metrics and traces are exported only with OTEL_EXPORTER_OTLP_*.
-const telemetry = startTelemetry(SERVICE_NAME);
+// OTLP metrics and traces are exported only with spec.metrics.enabled and
+// spec.tracing.enabled.
+const telemetry = startTelemetry(loaded.telemetry);
 // Projected ServiceAccount token verification (ADR 27) and BFF user
 // assertions (ADR 32). Missing issuer, audience or JWKS, an invalid JWKS or
 // allowlist stops startup.

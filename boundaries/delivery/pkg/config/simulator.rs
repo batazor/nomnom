@@ -1,28 +1,21 @@
-//! Демо Simulator курьеров (FR-606, FR-667): интервал опроса, границы
-//! случайной задержки действия и интервал движения курьеров. Значений по
-//! умолчанию нет: пустое или невалидное значение, `MIN_DELAY > MAX_DELAY` и
-//! `TRACK_INTERVAL > INTERVAL` завершают startup.
+//! Демо Simulator курьеров (FR-606, FR-667), секция `spec.simulator`:
+//! интервал опроса, границы случайной задержки действия и интервал движения
+//! курьеров. Значений по умолчанию нет: отсутствующее или невалидное
+//! значение, `minDelay > maxDelay` и `trackInterval > interval` завершают
+//! startup.
 
 use std::time::Duration;
 
 use config::ConfigError;
 use serde::Deserialize;
 
-pub const SIMULATOR_INTERVAL_ENV: &str = "SIMULATOR__INTERVAL";
-pub const SIMULATOR_MIN_DELAY_ENV: &str = "SIMULATOR__MIN_DELAY";
-pub const SIMULATOR_MAX_DELAY_ENV: &str = "SIMULATOR__MAX_DELAY";
-pub const SIMULATOR_TRACK_INTERVAL_ENV: &str = "SIMULATOR__TRACK_INTERVAL";
-
-/// Ключ конфигурации и переменная окружения; значения по умолчанию нет.
-pub(super) const SIMULATOR_SETTINGS: [(&str, &str); 4] = [
-    ("simulator.interval", SIMULATOR_INTERVAL_ENV),
-    ("simulator.min_delay", SIMULATOR_MIN_DELAY_ENV),
-    ("simulator.max_delay", SIMULATOR_MAX_DELAY_ENV),
-    ("simulator.track_interval", SIMULATOR_TRACK_INTERVAL_ENV),
-];
+pub const SIMULATOR_INTERVAL_KEY: &str = "spec.simulator.interval";
+pub const SIMULATOR_MIN_DELAY_KEY: &str = "spec.simulator.minDelay";
+pub const SIMULATOR_MAX_DELAY_KEY: &str = "spec.simulator.maxDelay";
+pub const SIMULATOR_TRACK_INTERVAL_KEY: &str = "spec.simulator.trackInterval";
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SimulatorConfig {
     /// Интервал между проходами Simulator.
     #[serde(with = "humantime_serde")]
@@ -41,10 +34,10 @@ pub struct SimulatorConfig {
 impl SimulatorConfig {
     pub(super) fn validate(&self) -> Result<(), ConfigError> {
         for (value, name) in [
-            (self.interval, SIMULATOR_INTERVAL_ENV),
-            (self.min_delay, SIMULATOR_MIN_DELAY_ENV),
-            (self.max_delay, SIMULATOR_MAX_DELAY_ENV),
-            (self.track_interval, SIMULATOR_TRACK_INTERVAL_ENV),
+            (self.interval, SIMULATOR_INTERVAL_KEY),
+            (self.min_delay, SIMULATOR_MIN_DELAY_KEY),
+            (self.max_delay, SIMULATOR_MAX_DELAY_KEY),
+            (self.track_interval, SIMULATOR_TRACK_INTERVAL_KEY),
         ] {
             if value.is_zero() {
                 return Err(ConfigError::Message(format!("{name} must be positive")));
@@ -52,12 +45,12 @@ impl SimulatorConfig {
         }
         if self.min_delay > self.max_delay {
             return Err(ConfigError::Message(format!(
-                "{SIMULATOR_MIN_DELAY_ENV} must not exceed {SIMULATOR_MAX_DELAY_ENV}"
+                "{SIMULATOR_MIN_DELAY_KEY} must not exceed {SIMULATOR_MAX_DELAY_KEY}"
             )));
         }
         if self.track_interval > self.interval {
             return Err(ConfigError::Message(format!(
-                "{SIMULATOR_TRACK_INTERVAL_ENV} must not exceed {SIMULATOR_INTERVAL_ENV}"
+                "{SIMULATOR_TRACK_INTERVAL_KEY} must not exceed {SIMULATOR_INTERVAL_KEY}"
             )));
         }
         Ok(())

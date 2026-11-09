@@ -13,8 +13,8 @@ var ErrInvalidSchedulePolicy = errors.New("schedule policy requires a positive p
 // ErrInvalidScheduleEstimates: an estimate is a non-negative duration.
 var ErrInvalidScheduleEstimates = errors.New("schedule estimates must not be negative")
 
-// SchedulePolicy holds SCHEDULED_ORDER__PREPARATION_BUFFER and
-// SCHEDULED_ORDER__REPLAN_LEAD.
+// SchedulePolicy holds spec.scheduledOrder.preparationBuffer and
+// spec.scheduledOrder.replanLead.
 type SchedulePolicy struct {
 	PreparationBuffer time.Duration
 	ReplanLead        time.Duration

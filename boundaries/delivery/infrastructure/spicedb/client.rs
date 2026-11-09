@@ -39,7 +39,7 @@ use super::v1::{
     CheckPermissionRequest, ReadRelationshipsRequest, WriteRelationshipsRequest,
     WriteRelationshipsResponse,
 };
-use crate::pkg::config::{SPICEDB_ENDPOINT_ENV, SpiceDbConfig};
+use crate::pkg::config::{SPICEDB_ENDPOINT_KEY, SpiceDbConfig};
 use crate::pkg::persistence::AuthorizationRevision;
 use crate::pkg::telemetry::rpc::{self, ClientCall, RpcMetrics};
 
@@ -218,7 +218,7 @@ impl SpiceDbClient {
         telemetry: ClientTelemetry,
     ) -> Result<Self, SpiceDbConfigError> {
         if !config.enabled() {
-            return Err(SpiceDbConfigError::missing_endpoint(SPICEDB_ENDPOINT_ENV));
+            return Err(SpiceDbConfigError::missing_endpoint(SPICEDB_ENDPOINT_KEY));
         }
         if config.preshared_key.is_empty() {
             return Err(config_error("preshared key is required"));
@@ -271,10 +271,10 @@ type Client = PermissionsServiceClient<
 fn server_target(uri: &tonic::codegen::http::Uri) -> Result<(String, u16), SpiceDbConfigError> {
     let host = uri
         .host()
-        .ok_or_else(|| config_error(format!("SPICEDB__ENDPOINT {uri} has no host")))?;
+        .ok_or_else(|| config_error(format!("spec.spicedb.endpoint {uri} has no host")))?;
     let port = uri
         .port_u16()
-        .ok_or_else(|| config_error(format!("SPICEDB__ENDPOINT {uri} has no port")))?;
+        .ok_or_else(|| config_error(format!("spec.spicedb.endpoint {uri} has no port")))?;
     Ok((host.to_owned(), port))
 }
 

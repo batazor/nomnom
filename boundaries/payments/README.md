@@ -86,21 +86,21 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 | metadata `authorization: Bearer <jwt>` (ровно одно значение) | нет metadata или другой scheme |
 | header `alg` ∈ {`RS256`, `ES256`}, `kid` есть в JWKS и совпадает по алгоритму | `none`, `HS*`, прочие алгоритмы, нет или неизвестный `kid` |
 | подпись ключом JWKS (PyJWT с явным списком алгоритмов) | неверная подпись |
-| `iss` == `IDENTITY__ISSUER` | иначе |
-| `aud` (строка или массив) содержит `IDENTITY__AUDIENCE` | token другого контекста (AC-460) |
+| `iss` == `identity.issuer` | иначе |
+| `aud` (строка или массив) содержит `identity.audience` | token другого контекста (AC-460) |
 | `exp` > now − 30 s, `nbf` ≤ now + 30 s | просрочен / ещё не действителен |
-| `sub` = `system:serviceaccount:<ns>:<sa>` есть в `IDENTITY__SERVICE_ACCOUNTS` | неизвестный ServiceAccount |
+| `sub` = `system:serviceaccount:<ns>:<sa>` есть в `identity.serviceAccounts` | неизвестный ServiceAccount |
 
 Результат — `Subject(service, <service-name>)` из allowlist; что разрешено этой identity, решает authorization в use case. Любой отказ — `UNAUTHENTICATED` с сообщением `invalid caller identity`; конкретная причина пишется в log (`WARNING`), сам token не логируется.
 
-| Переменная | По умолчанию | Назначение |
+| Ключ `spec` | По умолчанию | Назначение |
 | --- | --- | --- |
-| `IDENTITY__ISSUER` | пусто | Issuer токенов кластера (`/.well-known/openid-configuration`). |
-| `IDENTITY__AUDIENCE` | пусто | Audience контекста; в кластере `nomnom.payments`. |
-| `IDENTITY__JWKS_FILE` | пусто | Путь к JWKS кластера (`/openid/v1/jwks`); в Helm chart — `/etc/nomnom/identity/jwks.json`. |
-| `IDENTITY__SERVICE_ACCOUNTS` | пусто | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker`. |
+| `identity.issuer` | пусто | Issuer токенов кластера (`/.well-known/openid-configuration`). |
+| `identity.audience` | пусто | Audience контекста; в кластере `nomnom.payments`. |
+| `identity.jwksFile` | пусто | Путь к JWKS кластера (`/openid/v1/jwks`); в Helm chart — `/etc/nomnom/identity/jwks.json`. |
+| `identity.serviceAccounts` | пусто | Allowlist через запятую: `namespace/serviceaccount=service-name`, например `nomnom/orders-worker=orders-worker`. |
 
-`IDENTITY__ISSUER`, `IDENTITY__AUDIENCE` и `IDENTITY__JWKS_FILE` обязательны (AC-462). Ошибки startup (процесс завершается до открытия портов): пустые значения identity, нечитаемый или невалидный JWKS либо JWKS без ключей `RS256`/`ES256` с `kid`, пустой allowlist при заданном issuer, неверный формат или дубликаты allowlist. JWKS читается один раз при старте: после ротации signing key кластера нужен restart pod.
+`identity.issuer`, `identity.audience` и `identity.jwksFile` обязательны (AC-462). Ошибки startup (процесс завершается до открытия портов): пустые значения identity, нечитаемый или невалидный JWKS либо JWKS без ключей `RS256`/`ES256` с `kid`, пустой allowlist при заданном issuer, неверный формат или дубликаты allowlist. JWKS читается один раз при старте: после ротации signing key кластера нужен restart pod.
 
 Совместимость с реализациями других контекстов закреплена общими векторами `tests/identity/fixtures`: `tests/test_service_identity.py` принимает только `valid` и `valid_string_aud` (AC-461) и проверяет вызов по gRPC до handler (AC-459). Время проверки `exp`/`nbf` инжектируется (`clock`) для тестов допуска. Helm values `identity.*` описаны в [ops/README.md](ops/README.md#service-identity).
 
@@ -110,18 +110,18 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 
 1. service token, как выше; отказ — `UNAUTHENTICATED`, assertion не рассматривается;
 2. нет `x-nomnom-user-assertion` — `Subject(service, <service-name>)`, как раньше;
-3. assertion повторяется или пуст либо service не входит в `IDENTITY__USER_DELEGATES` — `UNAUTHENTICATED` (AC-526);
-4. `UserAssertionVerifier`: `alg` только `ES256`, `kid` есть в JWKS BFF (EC P-256), `iss` == `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp − iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст.
+3. assertion повторяется или пуст либо service не входит в `identity.userDelegates` — `UNAUTHENTICATED` (AC-526);
+4. `UserAssertionVerifier`: `alg` только `ES256`, `kid` есть в JWKS BFF (EC P-256), `iss` == `identity.userIssuer`, `aud` содержит `identity.audience`, `exp`/`nbf` с допуском 30 s, `iat` обязателен и `exp − iat ≤ 60 s`, `sub` непуст и без пробелов по краям, `jti` непуст.
 
 Результат — `Subject(user, <sub>)` с `delegate` = имя service BFF (для log и audit, в сравнении и authorization не участвует). Принятие (`INFO`) и отказ (`WARNING`) пишутся в log с `delegate` и `jti`; токены не логируются.
 
-| Переменная | По умолчанию | Назначение |
+| Ключ `spec` | По умолчанию | Назначение |
 | --- | --- | --- |
-| `IDENTITY__USER_ISSUER` | — (обязательна) | Ожидаемый `iss` assertion; в кластере `nomnom-bff`. |
-| `IDENTITY__USER_JWKS_FILE` | — (обязательна) | Путь к JWKS BFF; в Helm chart — `/etc/nomnom/user-identity/jwks.json`. |
-| `IDENTITY__USER_DELEGATES` | — (обязательна) | Имена services через запятую, которым разрешено передавать user; в кластере `bff`. |
+| `identity.userIssuer` | — (обязательна) | Ожидаемый `iss` assertion; в кластере `nomnom-bff`. |
+| `identity.userJwksFile` | — (обязательна) | Путь к JWKS BFF; в Helm chart — `/etc/nomnom/user-identity/jwks.json`. |
+| `identity.userDelegates` | — (обязательна) | Имена services через запятую, которым разрешено передавать user; в кластере `bff`. |
 
-Все три переменные обязательны, как и service identity: процесс не стартует, если любая из них пуста (ошибка называет пустые переменные). Ошибки startup также: нечитаемый JWKS BFF либо JWKS без ключей `ES256` P-256 с `kid`, неверный формат или дубликаты `IDENTITY__USER_DELEGATES`. Тесты — `tests/test_user_identity.py` на `user-vectors.json` с часами, зафиксированными на `now`.
+Все три ключа обязательны, как и service identity: процесс не стартует, если любой из них пуст (ошибка называет пустые ключи). Ошибки startup также: нечитаемый JWKS BFF либо JWKS без ключей `ES256` P-256 с `kid`, неверный формат или дубликаты `identity.userDelegates`. Тесты — `tests/test_user_identity.py` на `user-vectors.json` с часами, зафиксированными на `now`.
 
 ## Authorization
 
@@ -132,14 +132,14 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 | `create`, `authorize`, `capture`, `cancel_authorization`, `refund` | `platform:nomnom#manage_payments` |
 | `view`, `view_operations` | `platform:nomnom#view_payments` |
 
-Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional permission — отказ (`PermissionDeniedError` → `PERMISSION_DENIED`). Любая ошибка gRPC, неверный ключ, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationUnavailableError` → `UNAVAILABLE` (fail closed, AC-466); причина пишется в log (`WARNING`).
+Subject: `user` → `user:<id>`, `service` → `service:<id>`. Consistency `minimize_latency`. Разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION` и conditional permission — отказ (`PermissionDeniedError` → `PERMISSION_DENIED`). Любая ошибка gRPC, неверный ключ, недоступность или превышение `spicedb.timeout` — `AuthorizationUnavailableError` → `UNAVAILABLE` (fail closed, AC-466); причина пишется в log (`WARNING`).
 
-| Переменная | По умолчанию | Назначение |
+| Ключ `spec` или секрет env | По умолчанию | Назначение |
 | --- | --- | --- |
-| `SPICEDB__ENDPOINT` | пусто | gRPC endpoint `host:port`. Обязателен: пусто — ошибка startup. |
-| `SPICEDB__PRESHARED_KEY` | пусто | Bearer preshared key; обязателен при заданном endpoint (иначе ошибка startup). В Helm — из Secret. |
-| `SPICEDB__INSECURE` | `false` | Plaintext gRPC без TLS — только kind и локальный запуск. |
-| `SPICEDB__TIMEOUT` | `2s` | Deadline одного `CheckPermission`, `<int>(ms|s|m)`, `> 0`. |
+| `spicedb.endpoint` | пусто | gRPC endpoint `host:port`. Обязателен: пусто — ошибка startup. |
+| env `SPICEDB__PRESHARED_KEY` | пусто | Bearer preshared key; обязателен при заданном endpoint (иначе ошибка startup). Только env, в Helm — из Secret. |
+| `spicedb.insecure` | `false` | Plaintext gRPC без TLS — только kind и локальный запуск. |
+| `spicedb.timeout` | `2s` | Deadline одного `CheckPermission`, `<int>(ms|s|m)`, `> 0`. |
 
 Unit-тесты маппинга и fail-closed поведения с fake клиентом — `tests/test_spicedb_authorization.py`. Integration-тесты `tests/test_spicedb_integration.py` против SpiceDB `authzed/spicedb:v1.57.0` в testcontainers (memory datastore, `authorization/bootstrap.yaml` plaintext, ключ `devkey`) проверяют, что `service:orders-worker` имеет все payment permissions (AC-465), `service:bff` — ни одного, а недоступный endpoint даёт `AuthorizationUnavailableError`.
 
@@ -195,7 +195,7 @@ Helm values `spicedb.*` описаны в [ops/README.md](ops/README.md#authoriz
 
 - **Configuration.** `providers.Configuration(strict=True)` заполняется провалидированными pydantic settings через `di.resources.sections`: секции остаются типизированными объектами `pkg.config` (`config.identity`, `config.database`, …); секция `provider` хранится как `config.payment_provider`, потому что `Configuration.provider` — собственный атрибут провайдера.
 - **Ресурсы и порядок.** `TelemetryResource` и `ProcessResource` (`di/resources.py`) — подтипы `providers.Resource`. Entrypoint вызывает `init_resources(TelemetryResource)`, затем `init_resources(ProcessResource)`, а в `finally` — `shutdown_resources(ProcessResource)` и последним `shutdown_resources(TelemetryResource)`: telemetry сбрасывается последней (runtime contract, шаг 8). Ресурс базы сначала применяет миграции, затем открывает и проверяет pool — всё до открытия портов. Authzed client не хранит ссылку на канал, поэтому его release пуст.
-- **Use cases.** `PaymentsHandlers`, `PaymentOperationExecutor` и `ApplyProviderCallbackHandler` — `Singleton`/`Factory` провайдеры на процесс; зависимости передаются через конструкторы. Выбор реализаций — `create_subject_resolver` (identity), `create_permission_checker` (SpiceDB; ошибка старта без `SPICEDB__ENDPOINT`), `create_provider` (`PROVIDER__KIND`), `PaymentEventsMapper` — описан только в `PaymentsContainer`.
+- **Use cases.** `PaymentsHandlers`, `PaymentOperationExecutor` и `ApplyProviderCallbackHandler` — `Singleton`/`Factory` провайдеры на процесс; зависимости передаются через конструкторы. Выбор реализаций — `create_subject_resolver` (identity), `create_permission_checker` (SpiceDB; ошибка старта без `spicedb.endpoint`), `create_provider` (`provider.kind`), `PaymentEventsMapper` — описан только в `PaymentsContainer`.
 - **Границы.** `@inject` и wiring не используются; `slices/`, `pkg/` и `infrastructure/` не импортируют `di` и `dependency_injector`. Тесты собирают handlers напрямую с fakes (`tests/payment_fakes.py`) или через контейнер с `override()` (`tests/test_di_containers.py`: разрешение графа, подмена fakes, порядок ресурсов в entrypoints).
 
 Runtime — Python 3.14 (`python:3.14.9-slim-bookworm`): Dependency Injector 4.49.1 официально поддерживает его. Обоснование и fallback (composition roots вручную, как в `bb45bc6`) — в ADR 5.
@@ -228,9 +228,9 @@ Pipeline процесса — `pkg/telemetry` (контракт [docs/observabil
 
 | Сигнал | Что пишется | Где |
 | --- | --- | --- |
-| Resource | `service.namespace=nomnom`, `service.name` процесса (`payments`; `OTEL_SERVICE_NAME` переопределяет), `OTEL_RESOURCE_ATTRIBUTES` (`service.version`, `service.instance.id`, `deployment.environment.name`). Один resource для traces и metrics, те же поля в логах. | `pkg/telemetry/resource.py` |
+| Resource | `service.namespace=nomnom`, `service.name` процесса (`payments`; `telemetry.serviceName` переопределяет), `service.instance.id` из env `POD_NAME` (обязателен), `telemetry.resourceAttributes` (`service.version` из `image.tag` в Helm, `deployment.environment.name`; `service.name` и `service.instance.id` в них — ошибка startup). Один resource для traces и metrics, те же поля в логах. `OTEL_*` не читаются: SDK получает resource явно. | `pkg/telemetry/resource.py` |
 | Propagation | W3C `traceparent`/`tracestate`; baggage — только ключи `BAGGAGE_ALLOWLIST` (сейчас пусто). Некорректный `traceparent` отбрасывается, начинается новый trace. | `pkg/telemetry/propagation.py` |
-| Traces | `TracerProvider` + OTLP gRPC, `BatchSpanProcessor` (очередь 2048, batch 512, export timeout 3s) — только при `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Sampler `ParentBased(SkipOrphanClientSpans)`: client span без родителя (проверка пула) не пишется. | `pkg/telemetry/__init__.py` |
+| Traces | `TracerProvider` + OTLP `telemetry.protocol` (`grpc` или `http/protobuf`) на `telemetry.endpoint`, `BatchSpanProcessor` (очередь 2048, batch 512, export timeout 3s) — только при `tracing.enabled: true`. Sampler `ParentBased(SkipOrphanClientSpans)`: client span без родителя (проверка пула) не пишется. | `pkg/telemetry/__init__.py` |
 | gRPC | Server и client interceptors (`pkg/telemetry/rpc.py`): span `Service/Method`, `rpc.system.name`, `rpc.method`, `rpc.response.status_code` (имя кода); `rpc.server.call.duration` / `rpc.client.call.duration` (s). Client interceptor стоит на канале SpiceDB (`server.address`/`server.port`). `opentelemetry-instrumentation-grpc` не используется: у него нет RPC-метрик и старые attributes. | `infrastructure/grpc/worker.py`, `slices/payment/infrastructure/authorization/spicedb.py` |
 | PostgreSQL | Cursor пула (`cursor_factory`): client span `{db.operation.name} {db.collection.name}` на statement только внутри trace и `db.client.operation.duration` (s, buckets semconv) на каждый statement — `db.system.name=postgresql`, `db.operation.name`, `db.collection.name`, при ошибке `error.type` (SQLSTATE или класс) и в span `db.response.status_code`. Текст statement и bind parameters не пишутся. `opentelemetry-instrumentation-psycopg` не используется: метрики только при opt-in, без `db.collection.name`, старые attributes spans. | `infrastructure/repository/statements.py` |
 | Unit of Work | `nomnom.uow.transactions` и `nomnom.uow.duration` (s) на каждую попытку внешнего Unit of Work (`nomnom.outcome`: committed \| rolled_back \| commit_failed), `nomnom.uow.retries` (`nomnom.reason`: serialization \| deadlock \| write_conflict \| other); retry также — span event `nomnom.uow.retry` и WARN-лог. | `infrastructure/repository/transactions.py`, `infrastructure/repository/database.py` |
@@ -240,10 +240,10 @@ Pipeline процесса — `pkg/telemetry` (контракт [docs/observabil
 | Kafka | Outbox сохраняет `traceparent` контекста записи события (`''` без span); Debezium передаёт его в header `traceparent` без изменений, consumers продолжают trace записи. Span отправки payments не пишет и Kafka не потребляет. | `infrastructure/repository/outbox.py` |
 | Use cases | Декоратор `Handler` в DI: span `usecase <name>` и `nomnom.usecase.duration` (`nomnom.usecase.name`, `nomnom.usecase.kind`, `nomnom.outcome`, `error.type`); классификация ошибок — `slices/payment/infrastructure/observability/usecases.py`. | `pkg/telemetry/usecase.py`, `di/payments.py` |
 | Provider | `nomnom.payments.provider.request.duration` (`nomnom.payment.operation`: authorize \| capture \| refund \| cancel; `nomnom.outcome`: success \| declined \| error \| timeout) и client span `payments.provider <operation>`. | `slices/payment/infrastructure/observability/provider.py` |
-| Runtime | `process.cpu.time` (`cpu.mode`), `process.memory.usage`, `process.thread.count`, `cpython.gc.collections` (`cpython.gc.generation`) — только при `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Свои callbacks вместо `opentelemetry-instrumentation-system-metrics`: тот пишет устаревшие `type`/`generation`. | `pkg/telemetry/runtime.py` |
-| Logs | Одна JSON-строка на запись в stdout для всех loggers (gRPC, lifecycle, SDK): `timestamp` (UTC), `severity` (`DEBUG`/`INFO`/`WARN`/`ERROR`/`FATAL`), `message`, `service.*`, `deployment.environment.name`, `logger`, `trace_id`/`span_id` только внутри span, поля операции из allowlist `extra`, `exception` (`type`, `message`, `stacktrace`). Bearer/JWT, пароли в DSN, `password=`/`secret=`/`token=` и номера карт (Luhn) заменяются на `[REDACTED]`. | `pkg/telemetry/logs.py` |
+| Runtime | `process.cpu.time` (`cpu.mode`), `process.memory.usage`, `process.thread.count`, `cpython.gc.collections` (`cpython.gc.generation`) — только при `metrics.enabled: true`, экспорт каждые `metrics.exportInterval` (`60s`). Свои callbacks вместо `opentelemetry-instrumentation-system-metrics`: тот пишет устаревшие `type`/`generation`. | `pkg/telemetry/runtime.py` |
+| Logs | Одна JSON-строка на запись в stdout для всех loggers (gRPC, lifecycle, SDK): `timestamp` (UTC), `severity` (`DEBUG`/`INFO`/`WARN`/`ERROR`/`FATAL`), `message`, `service.*`, `deployment.environment.name`, `logger`, `trace_id`/`span_id` только внутри span, поля операции из allowlist `extra`, `exception` (`type`, `message`, `stacktrace`); минимальный уровень — `logging.level` (`debug`, `info`, `warn`, `error`, по умолчанию `info`). Bearer/JWT, пароли в DSN, `password=`/`secret=`/`token=` и номера карт (Luhn) заменяются на `[REDACTED]`. | `pkg/telemetry/logs.py` |
 
-Histograms в секундах получают явные границы `SECONDS_BUCKETS` (как `orders`). Сбой или недоступность collector не влияет на запросы: export асинхронный, очередь ограничена, export timeout 3s укладывается в `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`.
+Histograms в секундах получают явные границы `SECONDS_BUCKETS` (как `orders`). Сбой или недоступность collector не влияет на запросы: export асинхронный, очередь ограничена, export timeout 3s укладывается в `shutdown.telemetryFlushTimeout`.
 
 ## Статус реализации
 
@@ -260,10 +260,10 @@ Histograms в секундах получают явные границы `SECON
 Реализован runtime contract процесса по [Cloud Native Runtime](../../docs/cloud-native-runtime.md) и [ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md) в `pkg/lifecycle`:
 
 - `Lifecycle(LifecycleConfig(...)).run(worker)` — технический порт → `worker.start()` → `worker.run()` в собственном потоке → ready → `SIGTERM`/`SIGINT` → not ready → `shutdown.readiness_delay` → `worker.shutdown(deadline)` в пределах `shutdown.drain_timeout` → закрытие технического порта последним. Exit `0` при штатном shutdown, `1` при ошибке (невалидная конфигурация, ошибка start, неожиданная остановка worker, превышение drain timeout). Повторный сигнал во время shutdown завершает процесс сразу.
-- Технический порт `management.port` (`MANAGEMENT__PORT`, по умолчанию `9084`, отличается от бизнес-порта): `GET /health/startup`, `/health/live`, `/health/ready` с JSON `{"status":"ok"}` или `{"status":"unavailable","reason":"initializing|shutting_down"}`; liveness остаётся `200` во время shutdown, probes не логируются. Внешние зависимости в readiness не входят.
+- Технический порт `management.port` (по умолчанию `9084`, отличается от бизнес-порта): `GET /health/startup`, `/health/live`, `/health/ready` с JSON `{"status":"ok"}` или `{"status":"unavailable","reason":"initializing|shutting_down"}`; liveness остаётся `200` во время shutdown, probes не логируются. Внешние зависимости в readiness не входят.
 - `HttpWorker` — бизнес-порт на `http.server`: при shutdown прекращает приём, закрывает idle keep-alive соединения, дожидается начатых запросов до deadline и сообщает об ошибке, если они не завершились.
 
-Длительности задаются как `<int>(ms|s|m)`: `SHUTDOWN__READINESS_DELAY` (по умолчанию `5s`, `>= 0`), `SHUTDOWN__DRAIN_TIMEOUT` (по умолчанию `20s`, `> 0`) и `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT` (по умолчанию `5s`, `> 0`). Traces экспортируются через OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`, metrics — `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; после drain providers сбрасываются не дольше `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`.
+Длительности задаются как `<int>(ms|s|m)`: `shutdown.readinessDelay` (по умолчанию `5s`, `>= 0`), `shutdown.drainTimeout` (по умолчанию `20s`, `> 0`) и `shutdown.telemetryFlushTimeout` (по умолчанию `5s`, `> 0`). Traces экспортируются, только если `tracing.enabled: true`, metrics — `metrics.enabled: true`; при включённом экспорте `telemetry.endpoint` обязателен, endpoint без флагов ничего не экспортирует. После drain providers сбрасываются не дольше `shutdown.telemetryFlushTimeout`.
 
 Реализовано хранилище PostgreSQL в `infrastructure/repository` (psycopg 3, пул `psycopg_pool`):
 
@@ -272,12 +272,12 @@ Histograms в секундах получают явные границы `SECON
 - `DatabaseUnitOfWork` — одна локальная транзакция; repositories, Outbox и Inbox внутри `run` используют её соединение (context variable), вложенный `run` присоединяется. Вне Unit of Work каждый вызов берёт своё соединение из пула. Внешний `run` повторяет работу в новой транзакции при serialization failure (`40001`), deadlock (`40P01`), другом откате класса `40` и `ConcurrencyConflictError` ([ADR 20](../../docs/adr/0020-unit-of-work-for-local-transactions.md)): не больше `MAX_ATTEMPTS` (3) попыток, backoff 10 ms с удвоением, новая попытка не начинается позже 1 s от первой. Ошибка COMMIT не повторяется: результат неизвестен и разрешается идемпотентностью операции.
 - Outbox `payments_outbox` — контракт записи [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md): `event_id` (PK, UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`), `event_type` (полное имя Protobuf-сообщения), `aggregate_type`, `aggregate_id`, `aggregate_version`, `occurred_at`, `topic`, `payload` (Protobuf, `BYTEA`), `traceparent` (`NOT NULL DEFAULT ''`) и `created_at` для retention (индекс). Таблицу, индекс и publication создаёт миграция `infrastructure/repository/migrations/00001_outbox.sql`. Какие Domain Events публикуются, решает внедряемый `OutboxEventMapper` (`infrastructure/repository/outbox.py`); событие без контракта (mapper вернул `None`) в Outbox не пишется. `NoPublishedContracts` — mapper без опубликованных контрактов для тестовых сборок; контейнер `di/payments.py` передаёт `PaymentEventsMapper` — см. [Публикация Integration Events](#публикация-integration-events).
 - Поток `payment_events` (`slices/payment/infrastructure/repository/event_store.py`) неизменяем (`UPDATE` и `DELETE` отклоняет триггер); `PRIMARY KEY (payment_id, version)` обеспечивает optimistic concurrency: занятая версия даёт `ConcurrencyConflictError`, и Unit of Work повторяет работу на свежем состоянии. Payload — JSONB, формы и upcaster'ы — `event_codec.py` (`PaymentOperationRequested` версии 2 хранит `requested_by`); неизвестный тип или версия события — ошибка чтения.
-- Снапшоты `payment_snapshots` хранят последний снапшот `Payment` и пишутся в транзакции событий, когда commit проходит кратное обязательному `EVENT_STORE__SNAPSHOT_EVERY`. Это производные данные: снапшот другой версии схемы не используется, таблицу можно очистить. Метрика `nomnom_payments_event_store_replayed_events` показывает, сколько событий применяется при загрузке.
+- Снапшоты `payment_snapshots` хранят последний снапшот `Payment` и пишутся в транзакции событий, когда commit проходит кратное обязательному `eventStore.snapshotEvery`. Это производные данные: снапшот другой версии схемы не используется, таблицу можно очистить. Метрика `nomnom_payments_event_store_replayed_events` показывает, сколько событий применяется при загрузке.
 - Миграция на поток падает, если `payments` не пуста: перенос старых строк не предусмотрен.
 - Идентификатор пользователя в `requested_by` зашифрован ключом этого пользователя (`subject_keys`, обязательные `EVENT_STORE__SUBJECT_KEKS` и `EVENT_STORE__SUBJECT_REF_KEY`); `payments-admin subjects forget` делает его нечитаемым ([ops](ops/README.md#забвение-пользователя)).
 - Производные данные пересобираются из потоков операторской командой `payments-admin` ([ops](ops/README.md#пересборка-проекций)).
 - Нарушения уникальности отображаются в доменные ошибки: `payments_order_id_key` → `DuplicatePaymentError`, `payment_operations_idempotency_key_key` → `DuplicateIdempotencyKeyError`, частичный уникальный индекс `payment_operations_one_pending` (`WHERE state = 'pending'`) → `OperationAlreadyPendingError`. Insert выполняется в savepoint, поэтому обработанная ошибка не ломает транзакцию. `save` обновляет строку только при совпадении `version`, иначе `ConcurrencyConflictError`.
-- `DATABASE__URI` обязателен и принимается только как connection URI PostgreSQL (`postgresql://` или `postgres://`): пустое значение, форма libpq `key=value` или другая схема завершают процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). Лимиты пула — `DATABASE__MAX_CONNS` (`10`), `DATABASE__MIN_CONNS` (`0`, допустимо 0–1), `DATABASE__MAX_CONN_LIFETIME` (`30m`, psycopg_pool закрывает соединение на 0–5% раньше — jitter), `DATABASE__MAX_CONN_IDLE_TIME` (`5m`), `DATABASE__CONNECT_TIMEOUT` (`5s`, `connect_timeout` libpq в целых секундах), `DATABASE__ACQUIRE_TIMEOUT` (`5s`, ожидание соединения пула, затем `PoolTimeout`); недопустимое значение — ошибка startup. См. [Пулер PostgreSQL](#пулер-postgresql).
+- `DATABASE__URI` обязателен и принимается только как connection URI PostgreSQL (`postgresql://` или `postgres://`): пустое значение, форма libpq `key=value` или другая схема завершают процесс на старте; недоступная база — тоже (проверка соединения до открытия портов). Лимиты пула — `database.maxConns` (`10`), `database.minConns` (`0`, допустимо 0–1), `database.maxConnLifetime` (`30m`, psycopg_pool закрывает соединение на 0–5% раньше — jitter), `database.maxConnIdleTime` (`5m`), `database.connectTimeout` (`5s`, `connect_timeout` libpq в целых секундах), `database.acquireTimeout` (`5s`, ожидание соединения пула, затем `PoolTimeout`); недопустимое значение — ошибка startup. См. [Пулер PostgreSQL](#пулер-postgresql).
 - `PaymentRepository` содержит только `get`, поиск через проекции (`get_by_order`, `get_by_operation`, `get_by_idempotency_key`), `add` и `save`. Незавершённую операцию проверяет агрегат, история операций и статус оплаты — read-model порты `PaymentOperationHistory` и `PaymentStatusReader`; все реализованы в `slices/payment/infrastructure/repository/queries.py`. Queries читают свои представления прямо из таблиц и не восстанавливают агрегаты через репозитории ([CQRS](../../docs/cqrs.md#query-сторона)). Инвариант «не более одной pending-операции» проверяет агрегат, индекс проекции остаётся страховкой схемы.
 - Тесты (`make test`, pytest) используют только реальную инфраструктуру: `tests/conftest.py` поднимает через testcontainers по одному контейнеру на сессию — `postgres:18.6-alpine3.24` (с миграциями) и `authzed/spicedb:v1.57.0`; классы подключают их через `@pytest.mark.usefixtures("database" | "spicedb")`. Переменных окружения тесты не требуют и не пропускаются; данные изолируются `TRUNCATE` перед каждым тестом. In-memory адаптеров хранилища нет; `tests/payment_fakes.py` содержит только fakes провайдера, permissions, часов и идентификаторов. Нужен Docker.
 
@@ -294,11 +294,11 @@ Histograms в секундах получают явные границы `SECON
 
 При одной реплике это 10 server-соединений; соединение миграций закрывается до открытия пула. Debezium держит своё соединение репликации к базе (не через пулер). Пул экспортирует OTel semconv `db.client.connection.*` (`count` по `state`, `max`, `idle.min`, `pending_requests`, `timeouts`, `wait_time`, `use_time`; `db.client.connection.pool.name=payments`), инвентарь — [`docs/observability/metric-inventory.md`](../../docs/observability/metric-inventory.md#db).
 
-Не реализованы: боевой провайдер (есть `fake` и [Stripe test mode](#stripe-test-mode)), Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `SPICEDB__ENDPOINT`, `PROVIDER__KIND` (`fake` или `stripe`) и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
+Не реализованы: боевой провайдер (есть `fake` и [Stripe test mode](#stripe-test-mode)), Kafka consumers (Inbox для integration events) и остальные transport handlers. `GetPaymentStatus` и командные RPC работают через gRPC на бизнес-порту; контейнер `di/payments.py` требует identity, `spicedb.endpoint`, `provider.kind` (`fake` или `stripe`) и `PROVIDER__WEBHOOK_SECRET` (см. [Authorization](#authorization)). Момент Authorization/Capture определяет оркестратор `orders`; partial capture/refund и сроки `PaymentCapturable`/`PaymentRefundable` не поддерживаются до продуктового решения.
 
 ### Stripe test mode
 
-`PROVIDER__KIND=stripe` подключает настоящий API Stripe в тестовом режиме: пример реального провайдера без реальных денег. `fake` остаётся провайдером kind по умолчанию: `make kind-deploy` и e2e работают без ключа и обращений к Stripe. Адаптер — `slices/payment/infrastructure/provider/stripe_gateway.py`, разбор webhook — `stripe_webhook.py`.
+`provider.kind: stripe` подключает настоящий API Stripe в тестовом режиме: пример реального провайдера без реальных денег. `fake` остаётся провайдером kind по умолчанию: `make kind-deploy` и e2e работают без ключа и обращений к Stripe. Адаптер — `slices/payment/infrastructure/provider/stripe_gateway.py`, разбор webhook — `stripe_webhook.py`.
 
 | Операция | Вызов Stripe | Успех | Ссылка провайдера |
 | --- | --- | --- | --- |
@@ -315,11 +315,11 @@ Histograms в секундах получают явные границы `SECON
 
 Ограничения: `payment_intent.canceled` не отображается, отмена получает результат в ответе API. Действия из Stripe Dashboard и истечение авторизации через 7 дней до `Payment` не доходят, состояние разойдётся.
 
-| Переменная | Значение |
+| Ключ `spec` или секрет env | Значение |
 | --- | --- |
-| `PROVIDER__STRIPE_API_KEY` | Обязательна при `PROVIDER__KIND=stripe`, только `sk_test_...`, иначе ошибка startup. Только из Secret. |
-| `PROVIDER__STRIPE_TIMEOUT` | Deadline одного запроса, `<int>(ms\|s\|m)`, по умолчанию `10s`. |
-| `PROVIDER__WEBHOOK_SECRET` | `whsec_...` от `stripe listen` или endpoint в Dashboard. |
+| env `PROVIDER__STRIPE_API_KEY` | Обязательна при `provider.kind: stripe`, только `sk_test_...`, иначе ошибка startup. Только из Secret. |
+| `provider.stripeTimeout` | Deadline одного запроса, `<int>(ms\|s\|m)`, по умолчанию `10s`. |
+| env `PROVIDER__WEBHOOK_SECRET` | `whsec_...` от `stripe listen` или endpoint в Dashboard. |
 
 Запуск в kind: Stripe не достучится до кластера, webhooks доставляет Stripe CLI. Без `stripe login` CLI берёт ключ из `STRIPE_API_KEY`, он же печатает секрет подписи:
 
@@ -349,6 +349,30 @@ make kind-stripe-listen
 make run  # payments: gRPC + provider webhooks
 ```
 
+`make run` запускает процесс с файлом конфигурации `config.example.yaml` (`CONFIG_FILE`), `POD_NAME=payments-local` и секретами из `.env` (образец — `.env.example`).
+
+## Конфигурация
+
+Несекретная конфигурация процесса — только файл по пути из env `CONFIG_FILE` ([ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md)):
+
+```yaml
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Payments
+metadata:
+  name: payments
+spec:
+  shutdown:
+    drainTimeout: 20s
+  eventStore:
+    snapshotEvery: 5
+```
+
+- `apiVersion` и `kind` должны быть `config.nomnom.dev/v1alpha1` и `Payments`, `metadata.name` — роль процесса `payments`; иначе процесс завершается с кодом 1 до открытия портов. `payments_admin` запускается в pod процесса и сверяет только `apiVersion` и `kind`.
+- Ключи `spec` — camelCase. Неизвестный ключ на любом уровне, включая верхний, — ошибка startup с путём ключа: `spec.shutdown.drainTimout: unknown field`. Все ключи со значениями по умолчанию — [`config.example.yaml`](config.example.yaml); загрузчик — `pkg/config/file.py` (`yaml.safe_load` и pydantic-модели с `extra="forbid"`).
+- Переменные `SECTION__KEY` для несекретных настроек и `OTEL_*` не читаются. Секреты приходят только из env и полей в `spec` не имеют (`spec.database.uri` — неизвестный ключ): `DATABASE__URI`, `SPICEDB__PRESHARED_KEY`, `EVENT_STORE__SUBJECT_KEKS`, `EVENT_STORE__SUBJECT_REF_KEY`, `PROVIDER__WEBHOOK_SECRET`, `PROVIDER__STRIPE_API_KEY`. Пустой обязательный секрет — ошибка startup.
+- `service.instance.id` — env `POD_NAME`, обязателен.
+- Телеметрия — `telemetry` (`endpoint`, `protocol`: `grpc` или `http/protobuf`, `serviceName`, `resourceAttributes`), `tracing.enabled`, `metrics.enabled`, `metrics.exportInterval` и `logging.level` (см. [Observability](#observability)). Для `http/protobuf` `endpoint` — базовый URL коллектора, процесс добавляет `/v1/traces` и `/v1/metrics`.
+
 ## Проверка
 
 ```bash
@@ -371,14 +395,16 @@ make lint-fix
 ```bash
 docker build --target runtime -t nomnom/payments:local boundaries/payments
 docker run --rm -p 8084:8084 -p 9084:9084 \
-  -e SERVER__PORT=8084 \
-  -e MANAGEMENT__PORT=9084 \
+  -v "$PWD/boundaries/payments/config.example.yaml:/etc/nomnom/config.yaml:ro" \
+  -e CONFIG_FILE=/etc/nomnom/config.yaml \
+  -e POD_NAME=payments-local \
+  --env-file boundaries/payments/.env \
   nomnom/payments:local
 ```
 
 Контейнер запускается непривилегированным пользователем `app`; `tini` пересылает сигналы
-приложению. Конфигурация передаётся
-переменными окружения; `.env` в образ не копируется. Основной процесс требует `DATABASE__URI` и при старте сам применяет миграции.
+приложению. Конфигурация передаётся файлом `CONFIG_FILE`, секреты — переменными окружения;
+`.env` в образ не копируется. Основной процесс требует `DATABASE__URI` и при старте сам применяет миграции.
 
 ## Развёртывание
 

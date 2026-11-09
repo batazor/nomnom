@@ -70,8 +70,8 @@ func NewFulfillmentEstimates(gateway config.InternalGatewayConfig, identity conf
 
 // NewFulfillmentModule собирает handlers под декоратором телеметрии use cases.
 //
-// Plan Schedule takes SCHEDULED_ORDER__PREPARATION_BUFFER and
-// SCHEDULED_ORDER__REPLAN_LEAD, validated at startup.
+// Plan Schedule takes spec.scheduledOrder.preparationBuffer and
+// spec.scheduledOrder.replanLead, validated at startup.
 func NewFulfillmentModule(deps FulfillmentDependencies) *FulfillmentModule {
 	store, uc := deps.Store, deps.Telemetry
 	plan := planschedule.NewHandler(store, deps.Estimates.Preparation, deps.Estimates.DeliveryDuration, order.SchedulePolicy{

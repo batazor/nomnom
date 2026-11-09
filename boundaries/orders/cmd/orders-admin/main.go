@@ -1,5 +1,6 @@
 // Command orders-admin — операторские действия orders, запускается разово в pod
-// orders-consumer (kubectl exec), где уже есть конфигурация Kafka и PostgreSQL:
+// orders-consumer (kubectl exec) и читает его файл конфигурации (CONFIG_FILE,
+// сверяются только apiVersion и kind) и секреты из env pod:
 //
 //	orders-admin dlq list --stream <topic>
 //	orders-admin dlq redrive --stream <topic> [--partition <p> --through <offset>]
@@ -23,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,7 +53,7 @@ const usage = `usage:
   orders-admin authz resync`
 
 func main() {
-	telemetry.SetupLogging(serviceName)
+	telemetry.SetupStartupLogging(serviceName)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
@@ -64,34 +66,40 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) < 2 {
 		return errors.New(usage)
 	}
-	// Each command reads only the section it uses: the hook Job of the chart
-	// runs projections with the database configuration alone.
+	cfg, err := config.LoadAdmin(serviceName)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if _, err := telemetry.SetupLogging(ctx, cfg.Observability); err != nil {
+		return fmt.Errorf("setup logging: %w", err)
+	}
+	// Each command validates only the sections it uses: the file belongs to the
+	// role of the pod.
 	switch args[0] {
 	case "dlq":
-		cfg, err := config.LoadKafka()
-		if err != nil {
-			return fmt.Errorf("load kafka config: %w", err)
+		if err := cfg.Kafka.Validate(); err != nil {
+			return err
 		}
-		return deadLetters(ctx, cfg, args[1], args[2:], out)
+		return deadLetters(ctx, cfg.Kafka, args[1], args[2:], out)
 	case "projections":
-		cfg, err := config.LoadDatabase()
-		if err != nil {
-			return fmt.Errorf("load postgres config: %w", err)
+		if err := cfg.Database.Validate(); err != nil {
+			return err
 		}
-		return projections(ctx, cfg, args[1:])
+		return projections(ctx, cfg.Database, args[1:])
 	case "authz":
 		if args[1] != "resync" {
 			return fmt.Errorf("unknown authz action %q\n%s", args[1], usage)
 		}
-		db, err := config.LoadDatabase()
-		if err != nil {
-			return fmt.Errorf("load postgres config: %w", err)
+		if err := cfg.Database.Validate(); err != nil {
+			return err
 		}
-		spice, err := config.LoadSpiceDB()
-		if err != nil {
-			return fmt.Errorf("load spicedb config: %w", err)
+		if strings.TrimSpace(cfg.SpiceDB.Endpoint) == "" {
+			return fmt.Errorf("%s is required", config.KeySpiceDBEndpoint)
 		}
-		return resync(ctx, db, spice)
+		if err := cfg.SpiceDB.Validate(); err != nil {
+			return err
+		}
+		return resync(ctx, cfg.Database, cfg.SpiceDB)
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}

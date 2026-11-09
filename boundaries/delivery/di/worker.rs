@@ -28,7 +28,7 @@ use crate::infrastructure::repository::Store;
 use crate::infrastructure::temporal::{
     AssignmentActivities, AssignmentSteps, AssignmentWorkflow, Step, TASK_QUEUE, TemporalAssignment,
 };
-use crate::pkg::config::{TemporalConfig, WorkerConfig};
+use crate::pkg::config::{TemporalConfig, WORKER_ROLE, WorkerConfig};
 use crate::pkg::lifecycle::Worker;
 use crate::pkg::telemetry::usecase::UseCaseTelemetry;
 use crate::pkg::telemetry::{self, Telemetry};
@@ -43,8 +43,9 @@ use crate::slices::delivery::infrastructure::observed_use_cases::{
 
 use super::infrastructure::{LOCAL_ASSIGNMENT_POLICY, ObservedStore, SystemClock, observed_outbox};
 
-/// `service.name` процесса по умолчанию (`OTEL_SERVICE_NAME` переопределяет).
-pub const SERVICE_NAME: &str = "delivery-worker";
+/// `service.name` процесса по умолчанию (`spec.telemetry.serviceName`
+/// переопределяет) — его роль.
+pub const SERVICE_NAME: &str = WORKER_ROLE;
 
 /// Use cases шагов назначения над хранилищем процесса, каждый вызов — span
 /// и `nomnom.usecase.duration`, как у use cases процесса `delivery`.
@@ -146,7 +147,7 @@ impl WorkerProcess {
 /// недоступные PostgreSQL или Temporal прерывают startup до открытия портов.
 /// Вызывается внутри tokio runtime: OTLP exporter держит соединение на нём.
 pub fn compose(config: &WorkerConfig) -> Result<WorkerProcess, Box<dyn Error>> {
-    let telemetry = telemetry::start(SERVICE_NAME)?;
+    let telemetry = telemetry::start(&config.telemetry)?;
     let store = Arc::new(
         Store::connect(&config.database)?.with_outbox_mapper(Arc::new(DeliveryIntegrationEvents)),
     );

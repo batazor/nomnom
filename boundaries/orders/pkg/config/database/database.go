@@ -2,32 +2,16 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 const (
-	configKeyPostgresDSN                   = "postgres.dsn"
-	configKeyPostgresMaxConns              = "postgres.max_conns"
-	configKeyPostgresMinConns              = "postgres.min_conns"
-	configKeyPostgresMaxConnLifetime       = "postgres.max_conn_lifetime"
-	configKeyPostgresMaxConnLifetimeJitter = "postgres.max_conn_lifetime_jitter"
-	configKeyPostgresMaxConnIdleTime       = "postgres.max_conn_idle_time"
-	configKeyPostgresConnectTimeout        = "postgres.connect_timeout"
-	configKeyPostgresHealthCheckPeriod     = "postgres.health_check_period"
-
-	EnvPostgresDSN                   = "POSTGRES__DSN"
-	EnvPostgresMaxConns              = "POSTGRES__MAX_CONNS"
-	EnvPostgresMinConns              = "POSTGRES__MIN_CONNS"
-	EnvPostgresMaxConnLifetime       = "POSTGRES__MAX_CONN_LIFETIME"
-	EnvPostgresMaxConnLifetimeJitter = "POSTGRES__MAX_CONN_LIFETIME_JITTER"
-	EnvPostgresMaxConnIdleTime       = "POSTGRES__MAX_CONN_IDLE_TIME"
-	EnvPostgresConnectTimeout        = "POSTGRES__CONNECT_TIMEOUT"
-	EnvPostgresHealthCheckPeriod     = "POSTGRES__HEALTH_CHECK_PERIOD"
+	// EnvPostgresDSN — секрет: только env из Secret, поля в spec нет.
+	EnvPostgresDSN = "POSTGRES__DSN"
 
 	// Defaults fit one API process behind a session-mode pooler; Helm sizes
-	// MaxConns per process (worker, consumer, reconciler).
+	// MaxConns per process (worker, consumer).
 	DefaultMaxConns              = 10
 	DefaultMinConns              = 0
 	DefaultMaxConnLifetime       = 30 * time.Minute
@@ -41,73 +25,57 @@ const (
 	MaxMinConns = 1
 )
 
-// Config locates the orders database (ADR 8) and sizes the process
-// pool. Every orders process requires the DSN; it comes from a Secret, never
-// from a file in Git.
-type Config struct {
-	DSN                   string        `mapstructure:"dsn"`
-	MaxConns              int32         `mapstructure:"max_conns"`
-	MinConns              int32         `mapstructure:"min_conns"`
-	MaxConnLifetime       time.Duration `mapstructure:"max_conn_lifetime"`
-	MaxConnLifetimeJitter time.Duration `mapstructure:"max_conn_lifetime_jitter"`
-	MaxConnIdleTime       time.Duration `mapstructure:"max_conn_idle_time"`
-	ConnectTimeout        time.Duration `mapstructure:"connect_timeout"`
-	HealthCheckPeriod     time.Duration `mapstructure:"health_check_period"`
+// Defaults — значения spec.postgres по умолчанию.
+var Defaults = Config{
+	MaxConns:              DefaultMaxConns,
+	MinConns:              DefaultMinConns,
+	MaxConnLifetime:       DefaultMaxConnLifetime,
+	MaxConnLifetimeJitter: DefaultMaxConnLifetimeJitter,
+	MaxConnIdleTime:       DefaultMaxConnIdleTime,
+	ConnectTimeout:        DefaultConnectTimeout,
+	HealthCheckPeriod:     DefaultHealthCheckPeriod,
 }
 
-// Configure registers the database defaults and binds the POSTGRES__* environment.
-func Configure(loader *viper.Viper) error {
-	for key, value := range map[string]any{
-		configKeyPostgresDSN:                   "",
-		configKeyPostgresMaxConns:              DefaultMaxConns,
-		configKeyPostgresMinConns:              DefaultMinConns,
-		configKeyPostgresMaxConnLifetime:       DefaultMaxConnLifetime,
-		configKeyPostgresMaxConnLifetimeJitter: DefaultMaxConnLifetimeJitter,
-		configKeyPostgresMaxConnIdleTime:       DefaultMaxConnIdleTime,
-		configKeyPostgresConnectTimeout:        DefaultConnectTimeout,
-		configKeyPostgresHealthCheckPeriod:     DefaultHealthCheckPeriod,
-	} {
-		loader.SetDefault(key, value)
-	}
-	for key, env := range map[string]string{
-		configKeyPostgresDSN:                   EnvPostgresDSN,
-		configKeyPostgresMaxConns:              EnvPostgresMaxConns,
-		configKeyPostgresMinConns:              EnvPostgresMinConns,
-		configKeyPostgresMaxConnLifetime:       EnvPostgresMaxConnLifetime,
-		configKeyPostgresMaxConnLifetimeJitter: EnvPostgresMaxConnLifetimeJitter,
-		configKeyPostgresMaxConnIdleTime:       EnvPostgresMaxConnIdleTime,
-		configKeyPostgresConnectTimeout:        EnvPostgresConnectTimeout,
-		configKeyPostgresHealthCheckPeriod:     EnvPostgresHealthCheckPeriod,
-	} {
-		if err := loader.BindEnv(key, env); err != nil {
-			return fmt.Errorf("bind %s: %w", env, err)
-		}
-	}
-	return nil
+// Config locates the orders database (ADR 8) and sizes the process
+// pool (spec.postgres). Every orders process requires the DSN; it comes from
+// POSTGRES__DSN of a Secret, never from the file: a dsn key in the file is an
+// unknown field.
+type Config struct {
+	DSN                   string        `yaml:"-"`
+	MaxConns              int32         `yaml:"maxConns"`
+	MinConns              int32         `yaml:"minConns"`
+	MaxConnLifetime       time.Duration `yaml:"maxConnLifetime"`
+	MaxConnLifetimeJitter time.Duration `yaml:"maxConnLifetimeJitter"`
+	MaxConnIdleTime       time.Duration `yaml:"maxConnIdleTime"`
+	ConnectTimeout        time.Duration `yaml:"connectTimeout"`
+	HealthCheckPeriod     time.Duration `yaml:"healthCheckPeriod"`
 }
 
 func (cfg Config) Validate() error {
+	if strings.TrimSpace(cfg.DSN) == "" {
+		return fmt.Errorf("%s is required: orders keeps its state in PostgreSQL", EnvPostgresDSN)
+	}
 	if cfg.MaxConns < 1 {
-		return fmt.Errorf("postgres max_conns must be positive, got %d", cfg.MaxConns)
+		return fmt.Errorf("spec.postgres.maxConns must be positive, got %d", cfg.MaxConns)
 	}
 	if cfg.MinConns < 0 || cfg.MinConns > MaxMinConns {
-		return fmt.Errorf("postgres min_conns must be between 0 and %d, got %d", MaxMinConns, cfg.MinConns)
+		return fmt.Errorf("spec.postgres.minConns must be between 0 and %d, got %d", MaxMinConns, cfg.MinConns)
 	}
 	if cfg.MinConns > cfg.MaxConns {
-		return fmt.Errorf("postgres min_conns %d must not exceed max_conns %d", cfg.MinConns, cfg.MaxConns)
+		return fmt.Errorf("spec.postgres.minConns %d must not exceed maxConns %d", cfg.MinConns, cfg.MaxConns)
 	}
 	for name, value := range map[string]time.Duration{
-		"max_conn_lifetime":   cfg.MaxConnLifetime,
-		"max_conn_idle_time":  cfg.MaxConnIdleTime,
-		"connect_timeout":     cfg.ConnectTimeout,
-		"health_check_period": cfg.HealthCheckPeriod,
+		"maxConnLifetime":   cfg.MaxConnLifetime,
+		"maxConnIdleTime":   cfg.MaxConnIdleTime,
+		"connectTimeout":    cfg.ConnectTimeout,
+		"healthCheckPeriod": cfg.HealthCheckPeriod,
 	} {
 		if value <= 0 {
-			return fmt.Errorf("postgres %s must be positive, got %s", name, value)
+			return fmt.Errorf("spec.postgres.%s must be positive, got %s", name, value)
 		}
 	}
 	if cfg.MaxConnLifetimeJitter < 0 {
-		return fmt.Errorf("postgres max_conn_lifetime_jitter must not be negative, got %s", cfg.MaxConnLifetimeJitter)
+		return fmt.Errorf("spec.postgres.maxConnLifetimeJitter must not be negative, got %s", cfg.MaxConnLifetimeJitter)
 	}
 	return nil
 }

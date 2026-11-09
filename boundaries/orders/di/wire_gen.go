@@ -20,6 +20,7 @@ import (
 
 func InitializeApp(cfg config.Config) (*App, func(), error) {
 	serverConfig := cfg.Server
+	observabilityConfig := cfg.Observability
 	databaseConfig := cfg.Database
 	store, cleanup, err := NewStore(databaseConfig)
 	if err != nil {
@@ -110,7 +111,7 @@ func InitializeApp(cfg config.Config) (*App, func(), error) {
 	server := NewGRPCServer(module, diModule, subjectResolver)
 	simulatorRunner := NewSimulatorRunner(diModule)
 	projectionCatchUp := NewProjectionCatchUp(store)
-	app := NewApp(serverConfig, server, module, simulatorRunner, projectionCatchUp)
+	app := NewApp(serverConfig, observabilityConfig, server, module, simulatorRunner, projectionCatchUp)
 	return app, func() {
 		cleanup6()
 		cleanup5()
@@ -211,7 +212,7 @@ var (
 	// configSet раскрывает секции конфигурации для provider'ов, которым нужна
 	// только своя секция.
 	configSet = wire.NewSet(wire.FieldsOf(new(config.Config),
-		"Server", "Identity", "SpiceDB", "Database", "Cancellation", "Catalog", "Temporal", "Fulfillment", "ScheduledOrder", "InternalGateway", "Simulator", "SchemaRegistry"))
+		"Server", "Identity", "SpiceDB", "Database", "Cancellation", "Catalog", "Temporal", "Fulfillment", "ScheduledOrder", "InternalGateway", "Simulator", "SchemaRegistry", "Observability"))
 	// temporalAPISet — lazy Temporal client API и порт Order Fulfillment Workflow.
 	temporalAPISet = wire.NewSet(NewTemporalClient, NewFulfillmentWorkflow)
 	// grpcSet — gRPC-сервер бизнес-порта и проверка Subject.

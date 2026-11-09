@@ -1,0 +1,78 @@
+# Файл конфигурации процесса payments (ADR 17): путь передаётся в CONFIG_FILE.
+# Несекретные настройки задаются только здесь; переменные SECTION__KEY для них не читаются.
+# Неизвестный ключ на любом уровне — ошибка старта с путём ключа. Секреты (DATABASE__URI,
+# SPICEDB__PRESHARED_KEY, EVENT_STORE__SUBJECT_KEKS, EVENT_STORE__SUBJECT_REF_KEY,
+# PROVIDER__WEBHOOK_SECRET, PROVIDER__STRIPE_API_KEY) передаются только через env
+# (.env.example), полей для них в spec нет. service.instance.id — env POD_NAME, обязателен.
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Payments
+metadata:
+  # Роль процесса; payments_admin роль не сверяет.
+  name: payments
+spec:
+  server:
+    port: 8084
+  # Технический порт: health и metrics.
+  management:
+    port: 9084
+  # Длительности — <int>(ms|s|m).
+  shutdown:
+    readinessDelay: 5s
+    drainTimeout: 20s
+    telemetryFlushTimeout: 5s
+  # Service identity (ADR 27) и user assertions BFF (ADR 32) обязательны: пустое значение —
+  # процесс не стартует.
+  identity:
+    issuer: ""
+    audience: nomnom.payments
+    jwksFile: ""
+    # namespace/serviceaccount=service-name через запятую.
+    serviceAccounts: ""
+    userIssuer: ""
+    userJwksFile: ""
+    # Services, которым разрешено передавать user, через запятую.
+    userDelegates: ""
+  # Authorization через SpiceDB (ADR 18); endpoint обязателен, preshared key — env
+  # SPICEDB__PRESHARED_KEY. insecure: true — plaintext только локально.
+  spicedb:
+    endpoint: ""
+    insecure: false
+    timeout: 2s
+  provider:
+    # fake (sandbox в процессе) или stripe (Stripe test mode, нужен PROVIDER__STRIPE_API_KEY).
+    kind: fake
+    stripeTimeout: 10s
+    webhookPort: 8085
+    webhookTolerance: 5m
+  # Пул процесса (ADR 8); URI базы — env DATABASE__URI.
+  database:
+    maxConns: 10
+    # 0 или 1.
+    minConns: 0
+    maxConnLifetime: 30m
+    maxConnIdleTime: 5m
+    connectTimeout: 5s
+    acquireTimeout: 5s
+  # Снапшот Payment пишется, когда commit проходит кратное этому числу (локальный ADR 2).
+  # Обязателен: без него или меньше 1 — процесс не стартует.
+  eventStore:
+    snapshotEvery: 5
+  # OpenTelemetry (ADR 9): OTEL_* процесс не читает. Экспорт включают tracing.enabled и
+  # metrics.enabled; при включённом экспорте endpoint обязателен.
+  telemetry:
+    endpoint: ""
+    # grpc (endpoint коллектора, например http://localhost:4317) или http/protobuf (базовый
+    # URL, например http://localhost:4318: процесс добавляет /v1/traces и /v1/metrics).
+    protocol: grpc
+    # service.name; без ключа — payments.
+    # serviceName: payments
+    # Атрибуты resource; service.name и service.instance.id задавать нельзя.
+    resourceAttributes: {}
+  tracing:
+    enabled: false
+  metrics:
+    enabled: false
+    exportInterval: 60s
+  logging:
+    # debug, info, warn или error.
+    level: info

@@ -22,43 +22,56 @@ chart сейчас не используется. Решение зафикси�
 | `Deployment` | Один контейнер с образом приложения; все изменяемые параметры в `values.yaml`. |
 | `Service` (`ClusterIP`, порт `8082`) | Backend target для internal gateway и технических механизмов Kubernetes. |
 | `ServiceAccount` | Отдельный аккаунт с `automountServiceAccountToken: false`. |
-| `ConfigMap` | Несекретная конфигурация из `env`; создаётся только если `env` не пуст. |
+| `ConfigMap` | Файл конфигурации процесса `config.yaml` из `config.spec` и роли `role`; монтируется в `/etc/nomnom/config.yaml`. |
+
+Несекретная конфигурация процесса — один версионированный файл ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)).
+Chart рендерит его в `ConfigMap` (ключ `config.yaml`): `apiVersion: config.nomnom.dev/v1alpha1`,
+`kind: Restaurants`, `metadata.name` — обязательное значение `role` (`restaurants` в `values.yaml`,
+`restaurants-consumer` в `values-consumer.yaml`) и `spec` — блок values `config.spec` как есть.
+Файл монтируется в `/etc/nomnom/config.yaml` (env `CONFIG_FILE`), имя pod передаётся env `POD_NAME`
+(downward API, `service.instance.id`), аннотация `checksum/config` перезапускает pod при изменении
+файла. Chart дописывает в `spec` только поля, которыми владеет: `identity.jwksFile` и
+`identity.userJwksFile` (пути смонтированных JWKS) и `telemetry.resourceAttributes["service.version"]`
+(`image.tag`, иначе digest); такой ключ в `config.spec` — ошибка `helm template`. Ключи `spec` —
+camelCase бывших env (`MONGODB__MAX_POOL_SIZE` → `mongodb.maxPoolSize`), длительности — строки
+(`500ms`, `5s`, `1m`); неизвестный ключ останавливает процесс на старте, поэтому `env:` для
+несекретных настроек в chart нет. На уровне chart остаются только ссылки на Secret, имена ConfigMap
+JWKS и параметры развёртывания.
 
 Service identity ([ADR 27](../../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)) задаётся
-`identity.issuer`, `identity.audience` (по умолчанию `nomnom.restaurants`), `identity.serviceAccounts`
-и `identity.jwksConfigMap`, user assertions BFF ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)) —
-`identity.userJwksConfigMap`, `identity.userIssuer` и `identity.userDelegates`. Для release с gRPC API
+`config.spec.identity.issuer`, `audience` (по умолчанию `nomnom.restaurants`), `serviceAccounts` и
+ConfigMap `identity.jwksConfigMap`, user assertions BFF ([ADR 32](../../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)) —
+ConfigMap `identity.userJwksConfigMap`, `config.spec.identity.userIssuer` и `userDelegates`. Для release с gRPC API
 (`service.enabled`) все они обязательны — иначе chart не рендерится. Ключ `jwks.json` ConfigMap
 `identity.jwksConfigMap` монтируется read-only в `/etc/nomnom/identity/jwks.json`, ключ `jwks.json`
 ConfigMap `identity.userJwksConfigMap` — в `/etc/nomnom/user-identity/jwks.json` (chart их не создаёт).
 
-Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) задаётся `spicedb.endpoint`,
-`spicedb.insecure`, `spicedb.timeout` (по умолчанию `2s`) и `spicedb.presharedKeySecret`
-(`name`, `key` — по умолчанию `preshared-key`). Пока `spicedb.endpoint` пуст, переменные
-`SPICEDB__*` не задаются и приложение не стартует: `SPICEDB__ENDPOINT` обязателен. Если endpoint задан,
-рендерятся `SPICEDB__ENDPOINT`, `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` и
-`SPICEDB__PRESHARED_KEY` из `secretKeyRef` (Secret chart не создаёт); без
-`spicedb.presharedKeySecret.name` или с неверным `spicedb.timeout` chart не рендерится.
-`spicedb.insecure: true` — только для kind.
+Authorization через SpiceDB ([ADR 18](../../../docs/adr/0018-spicedb-for-authorization.md)) задаётся
+`config.spec.spicedb` (`endpoint`, `insecure`, `timeout` — по умолчанию `2s`) и
+`spicedb.presharedKeySecret` (`name`, `key` — по умолчанию `preshared-key`). Без
+`config.spec.spicedb.endpoint` процесс `restaurants` не стартует. Если endpoint задан, chart
+рендерит env `SPICEDB__PRESHARED_KEY` из `secretKeyRef` (Secret chart не создаёт); без
+`spicedb.presharedKeySecret.name` или с неверным `config.spec.spicedb.timeout` chart не рендерится.
+`insecure: true` — только для kind.
 
 Хранилище MongoDB ([ADR 8](../../../docs/adr/0008-storage-strategy-postgresql-and-mongodb.md),
 [локальный ADR 2](../docs/adr/0002-mongodb-collections-and-document-boundaries.md)) задаётся
-`mongodb.uriSecret` (`name`, `key` — по умолчанию `uri`), `mongodb.database` (по умолчанию
-`restaurants`) и `mongodb.timeout` (по умолчанию `5s`). Нужен replica set: Unit of Work использует
-multi-document транзакции. Пока `mongodb.uriSecret.name` пуст, `MONGODB__*` не задаются и
-приложение не стартует: `MONGODB__URI` обязателен. Если Secret задан, рендерятся `MONGODB__URI` из
-`secretKeyRef` (Secret chart не создаёт), `MONGODB__DATABASE` и `MONGODB__TIMEOUT`. Init container
+`mongodb.uriSecret` (`name`, `key` — по умолчанию `uri`) и `config.spec.mongodb` (`database` — по
+умолчанию `restaurants`, `timeout` — `5s`, лимиты пула). Нужен replica set: Unit of Work использует
+multi-document транзакции. Пока `mongodb.uriSecret.name` пуст, env `MONGODB__URI` не задаётся и
+процессы не стартуют. Init container
 миграций нет: каждый процесс при старте сам применяет новые миграции migrate-mongo — коллекции,
 JSON Schema validators, индексы и миграции документов (на актуальной базе — ничего) по наборам:
 `messaging` (Outbox, Inbox), затем `restaurants`, `menus`, `restaurant_orders`, `simulator`, каждый со своим changelog
 `migrations_changelog_<id>` (`id` — стабильный storage id набора, не зависит от раскладки кода), под lock migrate-mongo
 в коллекции `migrations_lock` (на время каждого набора); ошибка останавливает pod. Время миграции входит в бюджет `startupProbe`.
-Лимиты connection pool задаёт `mongodb.pool` (`maxPoolSize` 20, `minPoolSize` 0, `maxIdleTime`
-`5m`, `waitQueueTimeout` `5s`, `maxConnecting` 2) → `MONGODB__MAX_POOL_SIZE`, `MONGODB__MIN_POOL_SIZE`,
-`MONGODB__MAX_IDLE_TIME`, `MONGODB__WAIT_QUEUE_TIMEOUT`, `MONGODB__MAX_CONNECTING`;
-`values-consumer.yaml` задаёт `maxPoolSize` 5; миграция при старте идёт через тот же пул.
-С неверным `mongodb.database`, `mongodb.timeout` или лимитом пула вне диапазона приложения chart не
-рендерится.
+Лимиты connection pool — `config.spec.mongodb.maxPoolSize` (20), `minPoolSize` (0), `maxIdleTime`
+(`5m`), `waitQueueTimeout` (`5s`), `maxConnecting` (2); `values-consumer.yaml` задаёт
+`maxPoolSize` 5; миграция при старте идёт через тот же пул. С неверным `database`, `timeout` или
+лимитом пула вне диапазона приложения chart не рендерится.
+
+Кеш каталога в Valkey ([ADR 43](../../../docs/adr/0043-application-caching-policy.md)) — Secret
+`valkey.urlSecret` (env `VALKEY__URL`), `config.spec.valkey.commandTimeout` и `config.spec.cache.ttl`.
 
 Существующее архитектурное правило сохраняется: бизнес-вызовы между сервисами не обращаются
 к `Service` напрямую и проходят через internal gateway. Ingress, `HTTPRoute`/`GRPCRoute`,
@@ -98,8 +111,8 @@ helm uninstall restaurants
 
 Фоновые процессы ставятся отдельными releases того же chart с собственным values-файлом: своя
 `command`, `component` и без `Service`; коллекции и индексы процесс мигрирует сам при старте,
-поэтому порядок установки releases не важен. Brokers (`env.KAFKA__BROKERS`) и `mongodb.uriSecret`
-задаёт окружение; без них процесс не стартует.
+поэтому порядок установки releases не важен. Brokers (`config.spec.kafka.brokers`), Schema Registry
+(`config.spec.schemaRegistry.url`) и `mongodb.uriSecret` задаёт окружение; без них процесс не стартует.
 
 | Release | Values | Процесс |
 | --- | --- | --- |
@@ -107,7 +120,9 @@ helm uninstall restaurants
 
 ```bash
 helm upgrade --install restaurants-consumer ops/helm -f ops/helm/values-consumer.yaml \
-  --set env.KAFKA__BROKERS=kafka:9092 --set mongodb.uriSecret.name=restaurants-mongodb
+  --set config.spec.kafka.brokers=kafka:9092 \
+  --set config.spec.schemaRegistry.url=http://schema-registry:8081 \
+  --set mongodb.uriSecret.name=restaurants-mongodb --set valkey.urlSecret.name=restaurants-valkey
 ```
 
 Отдельного процесса публикации Outbox нет: его доставляет Debezium (см. ниже).
@@ -157,32 +172,41 @@ helm upgrade --install restaurants ops/helm --set image.tag=local
 
 ## Конфигурация
 
-Приложение слушает порт `8082` (переменная `SERVER__PORT`); `service.targetPort` должен
-совпадать с портом процесса. Несекретная конфигурация передаётся через `env` и попадает в
-`ConfigMap`.
+Приложение слушает порт `8082` (`config.spec.server.port`, по умолчанию `8082`);
+`service.targetPort` должен совпадать с портом процесса.
 
-OpenTelemetry задаётся секцией `telemetry`, а не `env`: chart сам выставляет
-`OTEL_SERVICE_NAME` (`telemetry.serviceName`: `restaurants`, в `values-consumer.yaml` —
-`restaurants-consumer`),
-`OTEL_RESOURCE_ATTRIBUTES` (`service.instance.id` — имя pod через downward API `POD_NAME`,
-`service.version` — `image.tag`, иначе digest, иначе `unknown`, плюс
-`telemetry.resourceAttributes`) и, если `telemetry.endpoint` задан,
-`OTEL_EXPORTER_OTLP_ENDPOINT` (traces и metrics по OTLP/gRPC). Явные переменные chart
-перекрывают одноимённые из `env`; `service.*` в `resourceAttributes` chart отклоняет.
+OpenTelemetry ([ADR 9](../../../docs/adr/0009-использовать-opentelemetry-и-grafana-observability-stack.md)) задаётся
+в `config.spec`, `OTEL_*` chart не задаёт и процесс не читает: `telemetry.endpoint` (OTLP collector),
+`telemetry.protocol` (`grpc` по умолчанию или `http/protobuf`), `telemetry.serviceName` (по
+умолчанию имя процесса), `telemetry.resourceAttributes`, флаги `tracing.enabled` и
+`metrics.enabled` (по умолчанию `false`; с любым из них endpoint обязателен),
+`metrics.exportInterval` (`60s`) и `logging.level` (`info`). `service.instance.id` — имя pod
+(`POD_NAME`), `service.version` дописывает chart; `service.*` в `resourceAttributes` chart
+отклоняет. Профиль kind `ops/kind/values/grafana-cloud.yaml` включает экспорт одним блоком для
+всех charts:
 
 ```yaml
-telemetry:
-  endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317
-  resourceAttributes:
-    deployment.environment.name: local
+config:
+  spec:
+    telemetry:
+      endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317
+      resourceAttributes:
+        deployment.environment.name: kind
+    tracing:
+      enabled: true
+    metrics:
+      enabled: true
 ```
 
-Адрес Alloy задаётся окружением и не хардкодится в chart; без endpoint экспорт выключен, а
+Адрес Alloy задаётся окружением и не хардкодится в chart; без флагов экспорт выключен, а
 W3C trace context всё равно передаётся. Alloy sidecar не добавляется — collector
 разворачивается отдельно.
 
 Секреты (пароли, API tokens, credentials БД и Kafka, BSR tokens) не помещаются в
-`values.yaml` и `ConfigMap`. Они подключаются из внешних Kubernetes `Secret`:
+`values.yaml` и `ConfigMap`: в файле конфигурации полей для них нет. Секреты процесса
+(`MONGODB__URI`, `VALKEY__URL`, `SPICEDB__PRESHARED_KEY`) chart подключает по ссылкам
+`mongodb.uriSecret`, `valkey.urlSecret` и `spicedb.presharedKeySecret`; прочие — из внешних
+Kubernetes `Secret`:
 
 ```yaml
 envFrom:
@@ -208,15 +232,15 @@ Secret-ресурсы chart не создаёт.
 
 ## Runtime contract
 
-Chart реализует [runtime contract](../../../docs/cloud-native-runtime.md) ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): контейнер объявляет технический порт `metrics` (`management.port`, по умолчанию `9082`), а probes обращаются к health endpoints на нём. Порт `metrics` не входит в `Service`: kubelet probes и Alloy scrape идут напрямую в pod, имя порта задано моделью NetworkPolicy [ADR 16](../../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md).
+Chart реализует [runtime contract](../../../docs/cloud-native-runtime.md) ([ADR 17](../../../docs/adr/0017-cloud-native-application-runtime.md)): контейнер объявляет технический порт `metrics` (`config.spec.management.port`, `9082`), а probes обращаются к health endpoints на нём. Порт `metrics` не входит в `Service`: kubelet probes и Alloy scrape идут напрямую в pod, имя порта задано моделью NetworkPolicy [ADR 16](../../../docs/adr/0016-запрещать-обход-internal-gateway-через-cilium-и-networkpolicy.md).
 
 | Параметр | По умолчанию | Назначение |
 | --- | --- | --- |
-| `management.port` | `9082` | Номер технического порта; передаётся приложению как `MANAGEMENT__PORT`. |
-| `shutdown.readinessDelaySeconds` | `5` | `SHUTDOWN__READINESS_DELAY`: сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
-| `shutdown.drainTimeoutSeconds` | `20` | `SHUTDOWN__DRAIN_TIMEOUT`: deadline на завершение начатых запросов. |
-| `shutdown.telemetryFlushTimeoutSeconds` | `5` | `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`: deadline финального экспорта traces и metrics после drain. |
-| `terminationGracePeriodSeconds` | `35` | Должен быть больше суммы delay, drain и telemetry flush; иначе `helm template` завершается ошибкой. |
+| `config.spec.management.port` | `9082` | Номер технического порта; обязателен — chart объявляет по нему `containerPort`. |
+| `config.spec.shutdown.readinessDelay` | `5s` | Сколько pod после `SIGTERM` продолжает обслуживать запросы с readiness `503`. |
+| `config.spec.shutdown.drainTimeout` | `20s` | Deadline на завершение начатых запросов. |
+| `config.spec.shutdown.telemetryFlushTimeout` | `5s` | Deadline финального экспорта traces и metrics после drain. |
+| `terminationGracePeriodSeconds` | `35` | Должен быть больше суммы delay, drain и telemetry flush (они обязательны в values); иначе `helm template` завершается ошибкой. |
 | `startupProbe` | `/health/startup`, каждые 2s, до 30 попыток | Пока не пройдена, liveness и readiness не проверяются. |
 | `livenessProbe` | `/health/live`, каждые 10s, 3 провала | Остаётся успешной во время shutdown. |
 | `readinessProbe` | `/health/ready`, каждые 2s, 1 провал | Исключает pod из endpoints сразу после `SIGTERM`, в пределах readiness delay. |

@@ -4,7 +4,7 @@
 
 Реализация в приложениях описана в разделе [Реализация](#реализация); обновление Helm charts выполняется следующим шагом. Открытые вопросы перечислены в [конце документа](#открытые-вопросы-по-runtime).
 
-Cloud-native awareness не означает внедрение Kubernetes SDK или Docker SDK в business/application code. Приложение опирается на переносимые механизмы: сигналы процесса, HTTP/gRPC health, environment variables, смонтированные файлы и ограничения cgroup.
+Cloud-native awareness не означает внедрение Kubernetes SDK или Docker SDK в business/application code. Приложение опирается на переносимые механизмы: сигналы процесса, HTTP/gRPC health, смонтированный файл конфигурации, environment variables для секретов и Downward API и ограничения cgroup.
 
 ## Жизненный цикл процесса
 
@@ -134,14 +134,14 @@ Health и metrics обслуживаются на **отдельном техн�
 
 | Параметр | Назначение |
 | --- | --- |
-| `shutdown.readiness_delay` | Ожидание распространения not ready (шаг 2). |
-| `shutdown.drain_timeout` | Deadline на завершение начатой работы, остановку workers и закрытие ресурсов (шаги 3–7). |
-| `shutdown.telemetry_flush_timeout` | Deadline на flush и shutdown telemetry providers (шаг 8). |
+| `shutdown.readinessDelay` | Ожидание распространения not ready (шаг 2). |
+| `shutdown.drainTimeout` | Deadline на завершение начатой работы, остановку workers и закрытие ресурсов (шаги 3–7). |
+| `shutdown.telemetryFlushTimeout` | Deadline на flush и shutdown telemetry providers (шаг 8). |
 
-Имена environment variables повторяют путь ключа конфигурации в верхнем регистре с `__` между уровнями, без префикса проекта или сервиса: каждый процесс живёт в своём контейнере, например `SHUTDOWN__DRAIN_TIMEOUT`. Должно выполняться:
+Параметры — ключи `spec` файла конфигурации ([Конфигурация](#конфигурация)). Должно выполняться:
 
 ```text
-terminationGracePeriodSeconds > readiness_delay + drain_timeout + telemetry_flush_timeout + запас
+terminationGracePeriodSeconds > readinessDelay + drainTimeout + telemetryFlushTimeout + запас
 ```
 
 Если позднее появится `preStop`, его длительность входит в тот же `terminationGracePeriodSeconds`.
@@ -160,9 +160,9 @@ terminationGracePeriodSeconds > readiness_delay + drain_timeout + telemetry_flus
 При shutdown:
 
 - новые запросы не принимаются, readiness остаётся `false` до завершения процесса;
-- выполняющиеся запросы завершаются в пределах `drain_timeout`;
+- выполняющиеся запросы завершаются в пределах `drainTimeout`;
 - клиентские deadlines и cancellation соблюдаются: истёкший deadline или отмена клиентом прекращают обработку;
-- по истечении `drain_timeout` оставшиеся запросы отменяются через cancellation, а соединения закрываются.
+- по истечении `drainTimeout` оставшиеся запросы отменяются через cancellation, а соединения закрываются.
 
 Application code корректно обрабатывает cancellation context: не игнорирует отмену, не запускает новые побочные эффекты после неё и не продолжает работу без получателя результата. Длинные операции разбиваются на шаги, между которыми проверяется отмена.
 
@@ -205,15 +205,45 @@ Lifecycle Temporal server не является частью lifecycle `orders`.
 
 ## Конфигурация
 
-Конфигурация передаётся извне:
+Конфигурация передаётся извне. Действует принцип `build once, run with different configuration`: один образ запускается во всех окружениях, а environment-specific значения не встраиваются в image.
 
-- environment variables;
-- смонтированные конфигурационные файлы при необходимости;
-- смонтированные secrets.
+Несекретная конфигурация — версионированный YAML-файл по пути из `CONFIG_FILE` ([ADR 17](adr/0017-cloud-native-application-runtime.md)):
 
-Действует принцип `build once, run with different configuration`: один образ запускается во всех окружениях, а environment-specific значения не встраиваются в image.
+```yaml
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Orders                 # сервис
+metadata:
+  name: orders-worker        # роль процесса
+spec:
+  management:
+    port: 9081
+  shutdown:
+    readinessDelay: 5s
+    drainTimeout: 20s
+  telemetry:
+    endpoint: http://alloy.nomnom-observability.svc.cluster.local:4317
+    protocol: grpc
+    serviceName: orders-worker
+    resourceAttributes:
+      deployment.environment.name: kind
+  tracing:
+    enabled: true
+  metrics:
+    enabled: true
+    exportInterval: 60s
+  logging:
+    level: info
+```
 
-Конфигурация валидируется при старте до открытия бизнес-listeners. Невалидная конфигурация приводит к fail fast: понятная ошибка с именем параметра без значения секрета, non-zero exit, без перехода в ready.
+- `kind` — `Orders`, `Delivery`, `Payments`, `Restaurants` или `ControlPlane`; `metadata.name` — роль процесса, процесс сверяет его со своей ролью. Операторские команды (`orders-admin`, `delivery-admin`, `payments_admin`, `restaurants-admin`) запускаются в pod другой роли и сверяют только `apiVersion` и `kind`.
+- Ключи `spec` — camelCase; имена секций общие для всех сервисов (`server`, `management`, `shutdown`, `identity`, `spicedb`, `kafka`, `temporal`, `telemetry`, `tracing`, `metrics`, `logging`). Длительности — строки `500ms`, `5s`, `1m`.
+- Неизвестный ключ на любом уровне — ошибка старта с путём ключа. Переменные окружения `SECTION__KEY` для несекретных настроек не читаются.
+- Секреты — только environment variables из `Secret` под фиксированными именами; в `spec` для них полей нет.
+- Downward API: имя pod — `POD_NAME`, из него берётся `service.instance.id`.
+
+Helm chart рендерит файл в `ConfigMap` из values `config.spec`, сам задаёт `apiVersion`, `kind`, `metadata.name` (значение `role`) и поля, которыми владеет (пути смонтированных JWKS, `service.version`), монтирует файл в `/etc/nomnom/config.yaml` и перезапускает pod при его изменении (аннотация `checksum/config`).
+
+Конфигурация валидируется при старте до открытия бизнес-listeners. Невалидная конфигурация приводит к fail fast: понятная ошибка с путём параметра без значения секрета, non-zero exit, без перехода в ready.
 
 Секреты не попадают в Docker image, исходный код, `ConfigMap`, logs и traces. В Kubernetes они подключаются из внешних `Secret` по [ADR 12](adr/0012-helm-charts-per-deployable-application.md).
 
@@ -316,13 +346,13 @@ composition root
 | `delivery` | `pkg/lifecycle` (`Lifecycle::bind(settings).await?.run(worker)`), `di::HttpWorker` | `9083` |
 | `payments` | `pkg/lifecycle` (`Lifecycle(config).run(worker)`), `HttpWorker` | `9084` |
 
-Общие параметры: `management.port` (`MANAGEMENT__PORT`, отличается от бизнес-порта), `shutdown.readiness_delay` (`SHUTDOWN__READINESS_DELAY`, по умолчанию `5s`, допускается `0`) и `shutdown.drain_timeout` (`SHUTDOWN__DRAIN_TIMEOUT`, по умолчанию `20s`). Длительности в environment записываются как `500ms`, `5s`, `1m`. В `payments` и `restaurants` flush телеметрии ограничен `SHUTDOWN__TELEMETRY_FLUSH_TIMEOUT`. Повторный сигнал во время shutdown завершает процесс сразу: в Go, Node.js и Python восстанавливается обработка по умолчанию, а в Rust, где `tokio` не умеет её вернуть, lifecycle прерывает drain и выходит с non-zero exit.
+Общие параметры: `management.port` (отличается от бизнес-порта), `shutdown.readinessDelay` (по умолчанию `5s`, допускается `0`) и `shutdown.drainTimeout` (по умолчанию `20s`). В `payments` и `restaurants` flush телеметрии ограничен `shutdown.telemetryFlushTimeout`. Повторный сигнал во время shutdown завершает процесс сразу: в Go, Node.js и Python восстанавливается обработка по умолчанию, а в Rust, где `tokio` не умеет её вернуть, lifecycle прерывает drain и выходит с non-zero exit.
 
 Один набор black-box сценариев проверяет contract на реальных процессах всех четырёх приложений: [`ops/runtime-contract`](../ops/runtime-contract/README.md), запуск — `make runtime-contract`. Завершение начатых запросов в пределах deadline и non-zero exit при его превышении покрыты unit-тестами lifecycle-модулей.
 
 ## Текущее состояние
 
-Charts `orders`, `restaurants`, `delivery`, `payments` и `controlplane` соответствуют contract: технический порт `metrics`, `startupProbe`/`livenessProbe`/`readinessProbe` на `/health/*`, передача `MANAGEMENT__PORT` и `SHUTDOWN__*` в контейнер и `terminationGracePeriodSeconds`, который chart проверяет против суммы readiness delay и drain timeout. Модель NetworkPolicy из ADR 16 уже соответствует contract.
+Charts `orders`, `restaurants`, `delivery`, `payments` и `controlplane` соответствуют contract: технический порт `metrics`, `startupProbe`/`livenessProbe`/`readinessProbe` на `/health/*`, `management.port` и `shutdown.*` в файле конфигурации и `terminationGracePeriodSeconds`, который chart проверяет против суммы readiness delay и drain timeout. Модель NetworkPolicy из ADR 16 уже соответствует contract.
 
 BFF использует сторонний Cosmo Router, который сам управляет health endpoints, shutdown и процессом router plugin. Для BFF contract применяется в пределах конфигурации Cosmo Router; невозможность вынести health на технический порт или иное расхождение фиксируется как явное исключение в документации BFF.
 
@@ -340,6 +370,6 @@ BFF использует сторонний Cosmo Router, который сам 
 
 Общие для Kafka consumers вопросы: commit обработанных offsets при отзыве partitions во время rebalance; cooperative rebalancing; static membership (`group.instance.id` из pod name) как компромисс между быстрым rolling restart и задержкой переназначения partitions при scale-down.
 
-Для Temporal worker `orders`: stop timeout worker, heartbeat timeout длительных Activities и их согласование с `drain_timeout`.
+Для Temporal worker `orders`: stop timeout worker, heartbeat timeout длительных Activities и их согласование с `drainTimeout`.
 
 Также остаются открытыми: значения `telemetry_flush_timeout` и параметров probes; проверка, поддерживает ли Cosmo Router health на отдельном порту, его shutdown delay и init для дочернего процесса plugin.

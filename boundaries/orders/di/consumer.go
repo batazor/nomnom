@@ -30,7 +30,7 @@ type KafkaConsumer struct {
 	dial          func(ctx context.Context, options client.Options) (client.Client, error)
 	newSubscriber func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Subscriber, error)
 	newPoison     func(cfg config.KafkaConfig, logger watermill.LoggerAdapter) (message.Publisher, error)
-	newMetrics    func(ctx context.Context, serviceName string) (*telemetry.Metrics, error)
+	newMetrics    func(ctx context.Context, cfg config.ObservabilityConfig) (*telemetry.Metrics, error)
 	logger        watermill.LoggerAdapter
 
 	metrics    *telemetry.Metrics
@@ -63,19 +63,16 @@ func NewKafkaConsumer(cfg config.Config, handlers orderdi.Consumer, schemas mess
 }
 
 // NewSchemaRegistry — Schema Registry consumer'а (FR-715, FR-719): без
-// SCHEMA_REGISTRY__URL процесс не стартует.
+// spec.schemaRegistry.url процесс не стартует.
 func NewSchemaRegistry(cfg config.SchemaRegistryConfig) (*messaging.SchemaRegistry, error) {
 	if strings.TrimSpace(cfg.URL) == "" {
-		return nil, fmt.Errorf("%s is required", config.EnvSchemaRegistryURL)
+		return nil, fmt.Errorf("%s is required", config.KeySchemaRegistryURL)
 	}
 	return messaging.NewSchemaRegistry(cfg.URL, &http.Client{Timeout: cfg.Timeout})
 }
 
-// ConsumerServiceName — service.name процесса по умолчанию; OTEL_SERVICE_NAME переопределяет.
-const ConsumerServiceName = "orders-consumer"
-
 func (c *KafkaConsumer) Start(ctx context.Context) error {
-	metrics, err := c.newMetrics(ctx, ConsumerServiceName)
+	metrics, err := c.newMetrics(ctx, c.cfg.Observability)
 	if err != nil {
 		return fmt.Errorf("start telemetry: %w", err)
 	}

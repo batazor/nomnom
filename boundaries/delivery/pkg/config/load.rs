@@ -1,106 +1,160 @@
-//! Загрузка [`AppConfig`]: файл, значения по умолчанию, переменные окружения
-//! и проверка.
+//! Загрузка конфигурации: файл `CONFIG_FILE` (заголовок, строгий `spec`),
+//! секреты из env и проверка значений.
+//!
+//! Файл читает crate `config` (формат YAML), `spec` декодирует serde с
+//! `deny_unknown_fields`; `serde_path_to_error` добавляет к ошибке путь
+//! ключа (`spec.shutdown.drainTimout`). Источников env, кроме секретов и
+//! `POD_NAME`, нет.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use config::{Config as ConfigLoader, ConfigError, File};
-use config::{ConfigBuilder, builder::DefaultState};
+use config::{Config as ConfigLoader, ConfigError, File, FileFormat};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
-use super::estimate::DELIVERY_ESTIMATE_SETTINGS;
-use super::kafka::{KAFKA_SETTINGS, KafkaConfig};
-use super::simulator::SIMULATOR_SETTINGS;
-use super::temporal::TEMPORAL_SETTINGS;
-use super::tracking::TRACKING_SETTINGS;
+use super::database;
+use super::kafka::{KafkaConfig, SchemaRegistryConfig};
+use super::telemetry::{
+    LoggingSpec, MetricsSpec, POD_NAME_ENV, TelemetrySections, TelemetrySpec, TracingSpec,
+};
 use super::{
-    AppConfig, CONFIG_KEY_DRAIN_TIMEOUT, CONFIG_KEY_MANAGEMENT_PORT, CONFIG_KEY_PORT,
-    CONFIG_KEY_READINESS_DELAY, DATABASE_SETTINGS, DEFAULT_DRAIN_TIMEOUT, DEFAULT_MANAGEMENT_PORT,
-    DEFAULT_PORT, DEFAULT_READINESS_DELAY, DRAIN_TIMEOUT_ENV, IDENTITY_SETTINGS,
-    MANAGEMENT_PORT_ENV, PORT_ENV, READINESS_DELAY_ENV, RECONCILER_SETTINGS, SPICEDB_SETTINGS,
-    WorkerConfig,
+    API_VERSION, AppConfig, CONFIG_FILE_ENV, DATABASE_URI_ENV, DeliveryEstimateConfig,
+    IdentityConfig, KIND, ManagementConfig, ReconcilerConfig, SERVER_ROLE,
+    SPICEDB_PRESHARED_KEY_ENV, ServerConfig, ShutdownConfig, SimulatorConfig, SpiceDbConfig,
+    TemporalConfig, TrackingConfig, VALKEY_URL_ENV, ValkeyConfig, WORKER_ROLE, WorkerConfig,
 };
 
+/// Заголовок файла: проверяется до `spec`, чтобы файл чужой версии или kind
+/// не давал ошибок схемы.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Header {
+    api_version: String,
+    kind: String,
+    metadata: Metadata,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Metadata {
+    /// Роль процесса.
+    name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct Document {
+    #[serde(rename = "apiVersion")]
+    _api_version: String,
+    #[serde(rename = "kind")]
+    _kind: String,
+    #[serde(rename = "metadata")]
+    _metadata: Metadata,
+    spec: Spec,
+}
+
+/// `spec` kind `Delivery`: секции всех ролей. Секции со значениями по
+/// умолчанию необязательны; секции без них обязательны только процессу,
+/// который их читает.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct Spec {
+    #[serde(default)]
+    server: ServerConfig,
+    #[serde(default)]
+    management: ManagementConfig,
+    #[serde(default)]
+    shutdown: ShutdownConfig,
+    #[serde(default)]
+    identity: Option<IdentityConfig>,
+    #[serde(default)]
+    spicedb: Option<SpiceDbConfig>,
+    #[serde(default)]
+    reconciler: ReconcilerConfig,
+    #[serde(default)]
+    temporal: Option<TemporalConfig>,
+    #[serde(default)]
+    database: database::Config,
+    #[serde(default)]
+    simulator: Option<SimulatorConfig>,
+    #[serde(default)]
+    tracking: Option<TrackingConfig>,
+    #[serde(default)]
+    kafka: Option<KafkaConfig>,
+    #[serde(default)]
+    schema_registry: Option<SchemaRegistryConfig>,
+    #[serde(default)]
+    delivery_estimate: Option<DeliveryEstimateConfig>,
+    #[serde(default)]
+    telemetry: TelemetrySpec,
+    #[serde(default)]
+    tracing: TracingSpec,
+    #[serde(default)]
+    metrics: MetricsSpec,
+    #[serde(default)]
+    logging: LoggingSpec,
+}
+
+impl Spec {
+    fn telemetry(&mut self) -> TelemetrySections {
+        TelemetrySections {
+            telemetry: std::mem::take(&mut self.telemetry),
+            tracing: std::mem::take(&mut self.tracing),
+            metrics: std::mem::take(&mut self.metrics),
+            logging: std::mem::take(&mut self.logging),
+        }
+    }
+}
+
+/// Конфигурация процесса `delivery` из `CONFIG_FILE` и env.
 pub fn load() -> Result<AppConfig, ConfigError> {
-    let config_file = std::env::var("CONFIG_FILE").ok();
-    load_from(config_file.as_deref().map(Path::new))
+    load_from(config_file().as_deref(), |name| std::env::var(name).ok())
 }
 
-/// Конфигурация `delivery-worker` из того же `CONFIG_FILE` и переменных
-/// окружения; секции процесса `delivery` в файле не мешают.
+/// Конфигурация `delivery-worker` из `CONFIG_FILE` и env; секции процесса
+/// `delivery` в файле допустимы.
 pub fn load_worker() -> Result<WorkerConfig, ConfigError> {
-    let config_file = std::env::var("CONFIG_FILE").ok();
-    load_worker_from(config_file.as_deref().map(Path::new))
+    load_worker_from(config_file().as_deref(), |name| std::env::var(name).ok())
 }
 
-/// Секция Kafka для `delivery-admin` из того же `CONFIG_FILE` и переменных
-/// окружения; остальным секциям команда не обращается.
+/// Секции Kafka и Schema Registry для `delivery-admin` из файла pod, в
+/// котором запущена команда: сверяются только `apiVersion` и `kind`.
 pub fn load_kafka() -> Result<KafkaConfig, ConfigError> {
-    let config_file = std::env::var("CONFIG_FILE").ok();
-    load_kafka_from(config_file.as_deref().map(Path::new))
+    load_kafka_from(config_file().as_deref())
 }
 
-pub(super) fn load_kafka_from(config_file: Option<&Path>) -> Result<KafkaConfig, ConfigError> {
-    let mut builder = ConfigLoader::builder();
-
-    if let Some(path) = config_file {
-        builder = builder.add_source(File::from(path).required(true));
-    }
-
-    builder = configure_kafka(builder, |name| std::env::var(name).ok())?;
-
-    let config: KafkaConfig = builder.build()?.get("kafka")?;
-    config.validate()?;
-
-    Ok(config)
+fn config_file() -> Option<PathBuf> {
+    std::env::var_os(CONFIG_FILE_ENV).map(PathBuf::from)
 }
 
-pub(super) fn load_worker_from(config_file: Option<&Path>) -> Result<WorkerConfig, ConfigError> {
-    let mut builder = ConfigLoader::builder();
-
-    if let Some(path) = config_file {
-        builder = builder.add_source(File::from(path).required(true));
-    }
-
-    builder = configure_management(builder)?;
-    builder = configure_shutdown(builder)?;
-    builder = configure_database(builder, |name| std::env::var(name).ok())?;
-    builder = configure_temporal(builder, |name| std::env::var(name).ok())?;
-
-    let loaded = builder.build()?;
-    let config = WorkerConfig {
-        management: loaded.get("management")?,
-        shutdown: loaded.get("shutdown")?,
-        database: loaded.get("database")?,
-        temporal: loaded.get("temporal")?,
+pub(super) fn load_from(
+    config_file: Option<&Path>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<AppConfig, ConfigError> {
+    let mut spec = read(config_file, Some(SERVER_ROLE))?;
+    let telemetry = spec.telemetry().resolve(SERVER_ROLE, env(POD_NAME_ENV))?;
+    let mut spicedb = required(spec.spicedb, "spec.spicedb")?;
+    spicedb.preshared_key = secret(&env, SPICEDB_PRESHARED_KEY_ENV)?;
+    let mut database = spec.database;
+    database.uri = secret(&env, DATABASE_URI_ENV)?;
+    let config = AppConfig {
+        server: spec.server,
+        management: spec.management,
+        shutdown: spec.shutdown,
+        identity: required(spec.identity, "spec.identity")?,
+        spicedb,
+        reconciler: spec.reconciler,
+        temporal: required(spec.temporal, "spec.temporal")?,
+        database,
+        simulator: required(spec.simulator, "spec.simulator")?,
+        tracking: required(spec.tracking, "spec.tracking")?,
+        valkey: ValkeyConfig {
+            url: secret(&env, VALKEY_URL_ENV)?,
+        },
+        kafka: kafka(spec.kafka, spec.schema_registry)?,
+        delivery_estimate: required(spec.delivery_estimate, "spec.deliveryEstimate")?,
+        telemetry,
     };
-    config.management.validate_port()?;
-    config.shutdown.validate()?;
-    config.database.validate()?;
-    config.temporal.validate()?;
-
-    Ok(config)
-}
-
-pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigError> {
-    let mut builder = ConfigLoader::builder();
-
-    if let Some(path) = config_file {
-        builder = builder.add_source(File::from(path).required(true));
-    }
-
-    builder = configure_server(builder)?;
-    builder = configure_management(builder)?;
-    builder = configure_shutdown(builder)?;
-    builder = configure_identity(builder, |name| std::env::var(name).ok())?;
-    builder = configure_spicedb(builder, |name| std::env::var(name).ok())?;
-    builder = configure_reconciler(builder, |name| std::env::var(name).ok())?;
-    builder = configure_temporal(builder, |name| std::env::var(name).ok())?;
-    builder = configure_database(builder, |name| std::env::var(name).ok())?;
-    builder = configure_simulator(builder, |name| std::env::var(name).ok())?;
-    builder = configure_tracking(builder, |name| std::env::var(name).ok())?;
-    builder = configure_kafka(builder, |name| std::env::var(name).ok())?;
-    builder = configure_delivery_estimate(builder, |name| std::env::var(name).ok())?;
-
-    let config: AppConfig = builder.build()?.try_deserialize()?;
     config.server.validate()?;
     config.management.validate(&config.server)?;
     config.shutdown.validate()?;
@@ -116,170 +170,91 @@ pub(super) fn load_from(config_file: Option<&Path>) -> Result<AppConfig, ConfigE
     Ok(config)
 }
 
-fn configure_server(
-    mut builder: ConfigBuilder<DefaultState>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    builder = builder.set_default(CONFIG_KEY_PORT, DEFAULT_PORT)?;
-
-    if let Ok(port) = std::env::var(PORT_ENV).or_else(|_| std::env::var("PORT")) {
-        builder = builder.set_override(CONFIG_KEY_PORT, port)?;
-    }
-
-    Ok(builder)
-}
-
-fn configure_management(
-    mut builder: ConfigBuilder<DefaultState>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    builder = builder.set_default(CONFIG_KEY_MANAGEMENT_PORT, DEFAULT_MANAGEMENT_PORT)?;
-
-    if let Ok(port) = std::env::var(MANAGEMENT_PORT_ENV) {
-        builder = builder.set_override(CONFIG_KEY_MANAGEMENT_PORT, port)?;
-    }
-
-    Ok(builder)
-}
-
-fn configure_shutdown(
-    mut builder: ConfigBuilder<DefaultState>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    builder = builder.set_default(CONFIG_KEY_DRAIN_TIMEOUT, DEFAULT_DRAIN_TIMEOUT)?;
-
-    if let Ok(timeout) = std::env::var(DRAIN_TIMEOUT_ENV) {
-        builder = builder.set_override(CONFIG_KEY_DRAIN_TIMEOUT, timeout)?;
-    }
-
-    builder = builder.set_default(CONFIG_KEY_READINESS_DELAY, DEFAULT_READINESS_DELAY)?;
-
-    if let Ok(delay) = std::env::var(READINESS_DELAY_ENV) {
-        builder = builder.set_override(CONFIG_KEY_READINESS_DELAY, delay)?;
-    }
-
-    Ok(builder)
-}
-
-pub(super) fn configure_identity(
-    mut builder: ConfigBuilder<DefaultState>,
+pub(super) fn load_worker_from(
+    config_file: Option<&Path>,
     env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name) in IDENTITY_SETTINGS {
-        builder = builder.set_default(key, "")?;
-        if let Some(value) = env(name) {
-            builder = builder.set_override(key, value)?;
-        }
+) -> Result<WorkerConfig, ConfigError> {
+    let mut spec = read(config_file, Some(WORKER_ROLE))?;
+    let telemetry = spec.telemetry().resolve(WORKER_ROLE, env(POD_NAME_ENV))?;
+    let mut database = spec.database;
+    database.uri = secret(&env, DATABASE_URI_ENV)?;
+    let config = WorkerConfig {
+        management: spec.management,
+        shutdown: spec.shutdown,
+        database,
+        temporal: required(spec.temporal, "spec.temporal")?,
+        telemetry,
+    };
+    config.management.validate_port()?;
+    config.shutdown.validate()?;
+    config.database.validate()?;
+    config.temporal.validate()?;
+
+    Ok(config)
+}
+
+pub(super) fn load_kafka_from(config_file: Option<&Path>) -> Result<KafkaConfig, ConfigError> {
+    let spec = read(config_file, None)?;
+    let config = kafka(spec.kafka, spec.schema_registry)?;
+    config.validate()?;
+
+    Ok(config)
+}
+
+/// Читает файл и проверяет заголовок; `role` — ожидаемое `metadata.name`
+/// (`None` — операторская команда, которая принимает файл любой роли).
+fn read(config_file: Option<&Path>, role: Option<&str>) -> Result<Spec, ConfigError> {
+    let Some(path) = config_file else {
+        return Err(ConfigError::Message(format!(
+            "{CONFIG_FILE_ENV} is required"
+        )));
+    };
+    let loaded = ConfigLoader::builder()
+        .add_source(File::from(path).format(FileFormat::Yaml).required(true))
+        .build()?;
+    let header: Header = decode(loaded.clone())?;
+    if header.api_version != API_VERSION || header.kind != KIND {
+        return Err(ConfigError::Message(format!(
+            "unsupported config apiVersion {:?} kind {:?}: expected apiVersion {API_VERSION} \
+             and kind {KIND}",
+            header.api_version, header.kind
+        )));
     }
-    Ok(builder)
-}
-
-pub(super) fn configure_spicedb(
-    mut builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name, default) in SPICEDB_SETTINGS {
-        builder = builder.set_default(key, default)?;
-        if let Some(value) = env(name) {
-            builder = builder.set_override(key, value)?;
-        }
+    if let Some(role) = role
+        && header.metadata.name != role
+    {
+        return Err(ConfigError::Message(format!(
+            "config metadata.name {:?} does not match the process role {role}",
+            header.metadata.name
+        )));
     }
-    Ok(builder)
+    let document: Document = decode(loaded)?;
+    Ok(document.spec)
 }
 
-fn configure_database(
-    builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    configure_settings(builder, &DATABASE_SETTINGS, env)
+/// Строгое декодирование с путём ключа в ошибке.
+fn decode<T: DeserializeOwned>(loaded: ConfigLoader) -> Result<T, ConfigError> {
+    serde_path_to_error::deserialize(loaded)
+        .map_err(|error| ConfigError::Message(format!("{}: {}", error.path(), error.inner())))
 }
 
-pub(super) fn configure_settings(
-    mut builder: ConfigBuilder<DefaultState>,
-    settings: &[(&str, &str, &str)],
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name, default) in settings {
-        builder = builder.set_default(*key, *default)?;
-        if let Some(value) = env(name) {
-            builder = builder.set_override(*key, value)?;
-        }
-    }
-    Ok(builder)
+fn required<T>(section: Option<T>, key: &str) -> Result<T, ConfigError> {
+    section.ok_or_else(|| ConfigError::Message(format!("{key} is required")))
 }
 
-pub(super) fn configure_reconciler(
-    mut builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name, default) in RECONCILER_SETTINGS {
-        builder = builder.set_default(key, default)?;
-        if let Some(value) = env(name) {
-            builder = builder.set_override(key, value)?;
-        }
-    }
-    Ok(builder)
+/// Обязательный секрет из env: отсутствие и пустое значение — ошибка.
+/// Значение не попадает в сообщение.
+fn secret(env: &impl Fn(&str) -> Option<String>, name: &str) -> Result<String, ConfigError> {
+    env(name)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ConfigError::Message(format!("{name} is required")))
 }
 
-/// Simulator без значений по умолчанию: ключ задаёт файл или переменная.
-pub(super) fn configure_simulator(
-    mut builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name) in SIMULATOR_SETTINGS {
-        if let Some(value) = env(name) {
-            builder = builder.set_override(key, value)?;
-        }
-    }
-    Ok(builder)
-}
-
-/// Tracking и Valkey без значений по умолчанию: ключ задаёт файл или
-/// переменная.
-pub(super) fn configure_tracking(
-    mut builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name) in TRACKING_SETTINGS {
-        if let Some(value) = env(name) {
-            builder = builder.set_override(key, value)?;
-        }
-    }
-    Ok(builder)
-}
-
-/// Temporal без значений по умолчанию: ключ задаёт файл или переменная.
-pub(super) fn configure_temporal(
-    builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    configure_required(builder, &TEMPORAL_SETTINGS, env)
-}
-
-/// Kafka consumer без значений по умолчанию: ключ задаёт файл или
-/// переменная.
-pub(super) fn configure_kafka(
-    builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    configure_required(builder, &KAFKA_SETTINGS, env)
-}
-
-/// Delivery Duration Estimate без значений по умолчанию: ключ задаёт файл
-/// или переменная.
-pub(super) fn configure_delivery_estimate(
-    builder: ConfigBuilder<DefaultState>,
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    configure_required(builder, &DELIVERY_ESTIMATE_SETTINGS, env)
-}
-
-fn configure_required(
-    mut builder: ConfigBuilder<DefaultState>,
-    settings: &[(&str, &str)],
-    env: impl Fn(&str) -> Option<String>,
-) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-    for (key, name) in settings {
-        if let Some(value) = env(name) {
-            builder = builder.set_override(*key, value)?;
-        }
-    }
-    Ok(builder)
+fn kafka(
+    kafka: Option<KafkaConfig>,
+    schema_registry: Option<SchemaRegistryConfig>,
+) -> Result<KafkaConfig, ConfigError> {
+    let mut kafka = required(kafka, "spec.kafka")?;
+    kafka.schema_registry_url = required(schema_registry, "spec.schemaRegistry")?.url;
+    Ok(kafka)
 }

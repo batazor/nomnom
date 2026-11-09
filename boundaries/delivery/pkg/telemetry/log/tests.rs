@@ -118,3 +118,32 @@ fn timestamp_is_utc_with_milliseconds() {
         "2000-02-29T00:00:00.001Z"
     );
 }
+
+#[test]
+fn level_applies_to_own_code_and_never_relaxes_libraries() {
+    let emit = || {
+        tracing::debug!("own debug");
+        tracing::info!("own info");
+        tracing::warn!("own warn");
+        tracing::debug!(target: "h2::proto", "library debug");
+        tracing::warn!(target: "h2::proto", "library warn");
+        tracing::warn!(target: "sqlx::query", "sqlx warn");
+    };
+    let messages = |level| -> Vec<String> {
+        capture_json_at(&resource(), level, emit)
+            .iter()
+            .map(|record| record["message"].as_str().expect("message").to_owned())
+            .collect()
+    };
+
+    assert_eq!(
+        messages(LogLevel::Debug),
+        vec!["own debug", "own info", "own warn", "library warn"]
+    );
+    assert_eq!(
+        messages(LogLevel::Info),
+        vec!["own info", "own warn", "library warn"]
+    );
+    assert_eq!(messages(LogLevel::Warn), vec!["own warn", "library warn"]);
+    assert!(messages(LogLevel::Error).is_empty());
+}
