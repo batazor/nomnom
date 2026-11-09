@@ -9,7 +9,7 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // compatibility is the global level of the Registry (FR-713): a new version
@@ -29,9 +29,7 @@ func loadEventFiles(path string) (eventFiles, error) {
 		return eventFiles{}, fmt.Errorf("read %s: %w", path, err)
 	}
 	var cfg eventFiles
-	decoder := yaml.NewDecoder(strings.NewReader(string(raw)))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&cfg); err != nil {
+	if err := yaml.Load(raw, &cfg, yaml.WithKnownFields()); err != nil {
 		return eventFiles{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 	if len(cfg.Modules) == 0 || len(cfg.Files) == 0 {

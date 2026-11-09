@@ -8,13 +8,10 @@
 package config
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -79,12 +76,10 @@ func Load(role, serviceName string) (Config, error) {
 // parse проверяет apiVersion, kind и роль, затем строго декодирует spec поверх
 // значений по умолчанию.
 func parse(data []byte, role, serviceName string) (Config, error) {
+	// Load требует ровно один документ: пустой файл и поток документов отклоняются.
 	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	if err := yaml.Load(data, &root); err != nil {
 		return Config{}, fmt.Errorf("parse: %w", err)
-	}
-	if root.Kind == 0 {
-		return Config{}, errors.New("file is empty")
 	}
 
 	// Заголовок сверяется до spec: spec чужого kind дал бы ошибки о чужих ключах.
@@ -93,7 +88,7 @@ func parse(data []byte, role, serviceName string) (Config, error) {
 		Kind       string   `yaml:"kind"`
 		Metadata   metadata `yaml:"metadata"`
 	}
-	if err := root.Decode(&header); err != nil {
+	if err := root.Load(&header); err != nil {
 		return Config{}, fmt.Errorf("decode header: %w", err)
 	}
 	if header.APIVersion != APIVersion || header.Kind != Kind {
@@ -108,14 +103,8 @@ func parse(data []byte, role, serviceName string) (Config, error) {
 	}
 
 	doc := document{Spec: defaults(serviceName)}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&doc); err != nil {
+	if err := yaml.Load(data, &doc, yaml.WithKnownFields()); err != nil {
 		return Config{}, fmt.Errorf("decode: %w", err)
-	}
-	var next yaml.Node
-	if err := decoder.Decode(&next); !errors.Is(err, io.EOF) {
-		return Config{}, errors.New("file must contain exactly one YAML document")
 	}
 	return doc.Spec, nil
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // Registry ops/semconv — источник OTel-имён, instruments, units и attributes,
@@ -54,7 +54,7 @@ func loadSemconv(t *testing.T) map[string]semconvGroup {
 		var doc struct {
 			Groups []semconvGroup `yaml:"groups"`
 		}
-		if err := yaml.Unmarshal(raw, &doc); err != nil {
+		if err := yaml.Load(raw, &doc); err != nil {
 			t.Fatalf("%s: %v", f, err)
 		}
 		for _, g := range doc.Groups {

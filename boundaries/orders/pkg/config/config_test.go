@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 
 	"nomnom/orders/pkg/config/database"
 )
@@ -30,7 +30,7 @@ func document(name string, spec map[string]any) map[string]any {
 // POD_NAME и секрет POSTGRES__DSN.
 func useConfig(t *testing.T, doc map[string]any) {
 	t.Helper()
-	raw, err := yaml.Marshal(doc)
+	raw, err := yaml.Dump(doc)
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(path, raw, 0o600))

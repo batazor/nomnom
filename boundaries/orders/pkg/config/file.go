@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"maps"
@@ -9,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 
 	"nomnom/orders/pkg/config/database"
 )
@@ -52,8 +51,9 @@ func read(serviceName string, checkName func(name string) error) (Config, error)
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 
+	// Load требует ровно один документ: пустой файл и поток документов отклоняются.
 	var document yaml.Node
-	if err := yaml.Unmarshal(raw, &document); err != nil {
+	if err := yaml.Load(raw, &document); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	var header struct {
@@ -61,7 +61,7 @@ func read(serviceName string, checkName func(name string) error) (Config, error)
 		Kind       string   `yaml:"kind"`
 		Metadata   metadata `yaml:"metadata"`
 	}
-	if err := document.Decode(&header); err != nil {
+	if err := document.Load(&header); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	if header.APIVersion != APIVersion || header.Kind != Kind {
@@ -78,9 +78,7 @@ func read(serviceName string, checkName func(name string) error) (Config, error)
 	}
 
 	decoded := file{Spec: defaults(serviceName)}
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&decoded); err != nil {
+	if err := yaml.Load(raw, &decoded, yaml.WithKnownFields()); err != nil {
 		return Config{}, fmt.Errorf("decode config %s: %w", path, err)
 	}
 
@@ -135,7 +133,7 @@ func unknownKeys(node *yaml.Node, t reflect.Type, path string) []error {
 	return errs
 }
 
-// yamlFields — ключи YAML полей структуры по правилам yaml.v3: имя из тега,
+// yamlFields — ключи YAML полей структуры по правилам go-yaml: имя из тега,
 // иначе имя поля в нижнем регистре; "-" пропускается, inline раскрывается.
 func yamlFields(t reflect.Type) map[string]reflect.Type {
 	fields := map[string]reflect.Type{}

@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // contexts — владельцы Integration Events: у каждого свой events.proto.
@@ -34,28 +32,24 @@ func (t Topic) owner() string { return t.Name[:strings.Index(t.Name, ".")] }
 func short(topic string) string { return topic[strings.LastIndex(topic, ".")+1:] }
 
 func readTopics(path string) ([]Topic, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	var docs []struct {
+		Metadata struct {
+			Name string `yaml:"name"`
+		} `yaml:"metadata"`
+		Spec struct {
+			Partitions int               `yaml:"partitions"`
+			Config     map[string]string `yaml:"config"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Load(raw, &docs, yaml.WithAllDocuments()); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	var topics []Topic
-	dec := yaml.NewDecoder(f)
-	for {
-		var doc struct {
-			Metadata struct {
-				Name string `yaml:"name"`
-			} `yaml:"metadata"`
-			Spec struct {
-				Partitions int               `yaml:"partitions"`
-				Config     map[string]string `yaml:"config"`
-			} `yaml:"spec"`
-		}
-		if err := dec.Decode(&doc); errors.Is(err, io.EOF) {
-			return topics, nil
-		} else if err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
+	for _, doc := range docs {
 		if !strings.Contains(doc.Metadata.Name, ".v1.") {
 			continue
 		}
@@ -69,6 +63,7 @@ func readTopics(path string) ([]Topic, error) {
 		}
 		topics = append(topics, t)
 	}
+	return topics, nil
 }
 
 // Event — сообщение events.proto и его комментарий.

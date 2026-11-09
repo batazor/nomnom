@@ -159,7 +159,7 @@ func TestLoadRequiresTheConfigFile(t *testing.T) {
 		useConfigFile(t, "")
 
 		_, err := Load(testRole, testServiceName)
-		require.ErrorContains(t, err, "empty")
+		require.ErrorContains(t, err, "no documents")
 	})
 }
 

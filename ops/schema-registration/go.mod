@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/testcontainers/testcontainers-go v0.44.0
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v4 v4.0.0
 	google.golang.org/protobuf v1.36.12
 )
 

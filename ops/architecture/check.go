@@ -1,16 +1,14 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const adrIndexPath = "docs/adr/README.md"
@@ -115,29 +113,25 @@ func listADRs(root string) ([]string, error) {
 }
 
 func readRouteBackends(path string) ([]string, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	var docs []struct {
+		Kind string `yaml:"kind"`
+		Spec struct {
+			Rules []struct {
+				BackendRefs []struct {
+					Name string `yaml:"name"`
+				} `yaml:"backendRefs"`
+			} `yaml:"rules"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Load(raw, &docs, yaml.WithAllDocuments()); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	var backends []string
-	dec := yaml.NewDecoder(f)
-	for {
-		var doc struct {
-			Kind string `yaml:"kind"`
-			Spec struct {
-				Rules []struct {
-					BackendRefs []struct {
-						Name string `yaml:"name"`
-					} `yaml:"backendRefs"`
-				} `yaml:"rules"`
-			} `yaml:"spec"`
-		}
-		if err := dec.Decode(&doc); errors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
+	for _, doc := range docs {
 		if doc.Kind != "GRPCRoute" {
 			continue
 		}
