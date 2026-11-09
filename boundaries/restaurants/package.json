@@ -16,7 +16,7 @@
     "test": "node --test --test-global-setup=test/support/global-containers.ts test/*.test.ts"
   },
   "engines": {
-    "node": ">=22.6"
+    "node": "^24"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

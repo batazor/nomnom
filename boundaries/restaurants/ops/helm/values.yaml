@@ -50,7 +50,7 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  # Runtime-образ: node:24-bookworm-slim, пользователь node (1000). Числовой UID нужен для проверки runAsNonRoot.
+  # Runtime-образ: node:24-trixie-slim, пользователь node (1000). Числовой UID нужен для проверки runAsNonRoot.
   runAsUser: 1000
   runAsGroup: 1000
   seccompProfile:

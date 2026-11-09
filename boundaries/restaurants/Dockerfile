@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24.11.0-bookworm-slim AS deps
+FROM node:24.22.2-trixie-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -37,14 +37,14 @@ USER node
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "--watch", "cmd/restaurants/main.ts"]
 
-FROM node:24.11.0-bookworm-slim AS production-deps
+FROM node:24.22.2-trixie-slim AS production-deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev
 
-FROM node:24.11.0-bookworm-slim AS runtime
+FROM node:24.22.2-trixie-slim AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app

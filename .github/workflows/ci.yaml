@@ -101,7 +101,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        boundary: [restaurants, ui, bff]
+        include:
+          # restaurants: @confluentinc/kafka-javascript 1.11.0 has no Node.js 26 prebuilds.
+          - boundary: restaurants
+            node: 24
+          - boundary: ui
+            node: 26
+          - boundary: bff
+            node: 26
     defaults:
       run:
         working-directory: boundaries/${{ matrix.boundary }}
@@ -115,7 +122,7 @@ jobs:
       - uses: actions/setup-node@v5
         if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
         with:
-          node-version: 26
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: boundaries/${{ matrix.boundary }}/package-lock.json
       - if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
