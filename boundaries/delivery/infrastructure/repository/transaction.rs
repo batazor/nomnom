@@ -136,6 +136,7 @@ impl Store {
     ) -> Result<(), sqlx::Error> {
         let span = crate::pkg::telemetry::db::start(
             &self.tracer,
+            self.namespace.as_deref(),
             &crate::pkg::telemetry::db::Statement::of_sql(statement),
         );
         let started = std::time::Instant::now();

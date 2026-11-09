@@ -1,4 +1,4 @@
-// Batch и экспорт всех сигналов в Grafana Cloud по OTLP/HTTP.
+// Batch и экспорт сигналов в Grafana Cloud: OTLP/HTTP и Loki для Database Observability.
 
 // Traces и logs: короткий batch, чтобы trace и его логи появлялись в Grafana быстро.
 otelcol.processor.batch "signals" {
@@ -25,5 +25,19 @@ otelcol.exporter.otlphttp "grafana_cloud" {
   client {
     endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
     auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}
+
+// Логи Database Observability (infra.alloy) — в Loki stack напрямую: приложение ищет их
+// stream selector по index label job, а OTLP делает labels записи structured metadata.
+// Token тот же, что у OTLP (logs:write).
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_LOGS_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_LOGS_USER")
+      password = sys.env("GRAFANA_CLOUD_OTLP_TOKEN")
+    }
   }
 }

@@ -60,6 +60,8 @@ Internal gateway (EnvoyProxy `internal-gateway`, [`gateway.yaml`](../kind/manife
 
 Client span PostgreSQL `orders` и `delivery` несёт `db.query.text` и `db.namespace`: в Explore у такого span есть ссылка на запрос в Database Observability (сопоставление по тексту, без sqlcommenter). Логи сервера PostgreSQL (`enable_error_logs_processing`) не подключены.
 
+Проверено 2026-11-09, kind + `make kind-deploy GRAFANA_CLOUD=1`, Alloy v1.21.3: все компоненты healthy; `pg_stat_statements` от роли `alloy` видит запросы `orders`, `payments`, `delivery` без собственных; в Loki `{job="integrations/db-o11y", instance="postgres"}` — `query_sample`, `query_association`, `explain_plan_output`, `create_statement`; метрики — 486 series с `owner` баз и слотов; spans `orders` и `delivery` в Tempo несут `db.query.text` и `db.namespace`.
+
 ## Инфраструктура
 
 Тот же Alloy собирает Prometheus-метрики для [Platform / Overview](../grafana/dashboards/README.md) и row Pods overview сервисов и отправляет их по OTLP мимо фильтра `service.namespace=nomnom`:

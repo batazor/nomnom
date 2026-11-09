@@ -110,7 +110,7 @@ kubectl -n nomnom-data logs deploy/postgres --since=15m
 kubectl -n nomnom-data exec deploy/postgres -- psql -U postgres -c 'select datname, numbackends, deadlocks from pg_stat_database'
 ```
 
-Deadlocks: найти запросы в логе PostgreSQL и use case по trace; порядок блокировок правится в коде контекста.
+Медленные и блокирующие запросы, их wait events и планы — Database Observability stack (сервер `postgres`); из client span PostgreSQL в trace есть ссылка на его запрос. Deadlocks: найти запросы в логе PostgreSQL и use case по trace; порядок блокировок правится в коде контекста. Up = 0 — Alloy не подключается ролью `alloy` к базе `postgres`.
 
 ## cdc
 

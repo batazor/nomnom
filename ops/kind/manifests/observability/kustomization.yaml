@@ -35,7 +35,7 @@ secretGenerator:
       - ../../../grafana-cloud/.env.grafana-cloud
 patches:
   # В файле есть и ключи для других инструментов (stack URL, token service account Editor для
-  # gcx и Grafana MCP): в кластер попадают только переменные OTLP.
+  # gcx и Grafana MCP): в кластер попадают только переменные OTLP и Loki stack.
   - patch: |-
       apiVersion: v1
       kind: Secret

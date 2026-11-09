@@ -4,32 +4,31 @@ use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
 use super::*;
 
 #[test]
-fn statement_summary_has_operation_and_table_only() {
+fn statement_has_operation_table_and_text() {
     assert_eq!(
         Statement::of_sql("SELECT version FROM deliveries WHERE id = $1"),
         Statement {
             operation: Some("SELECT"),
             collection: Some("deliveries".to_owned()),
+            text: "SELECT version FROM deliveries WHERE id = $1".to_owned(),
         }
     );
-    assert_eq!(
-        Statement::of_sql(
-            "INSERT INTO delivery_outbox (event_id, event_type) VALUES ($1::uuid, $2)"
-        ),
-        Statement {
-            operation: Some("INSERT"),
-            collection: Some("delivery_outbox".to_owned()),
-        }
+    let insert = Statement::of_sql(
+        "INSERT INTO delivery_outbox (event_id, event_type) VALUES ($1::uuid, $2)",
     );
     assert_eq!(
-        Statement::of_sql("update couriers SET version = version + 1 WHERE id = $1"),
-        Statement {
-            operation: Some("UPDATE"),
-            collection: Some("couriers".to_owned()),
-        }
+        (insert.operation, insert.collection.as_deref()),
+        (Some("INSERT"), Some("delivery_outbox"))
+    );
+    let update = Statement::of_sql("update couriers SET version = version + 1 WHERE id = $1");
+    assert_eq!(
+        (update.operation, update.collection.as_deref()),
+        (Some("UPDATE"), Some("couriers"))
     );
     assert_eq!(Statement::of_sql("COMMIT").operation, Some("COMMIT"));
-    assert_eq!(Statement::of_sql("VACUUM secrets"), Statement::default());
+    let unknown = Statement::of_sql("VACUUM secrets");
+    assert_eq!((unknown.operation, unknown.collection), (None, None));
+    assert_eq!(unknown.text, "VACUUM secrets");
 }
 
 #[test]
@@ -51,29 +50,54 @@ fn call_site_source_yields_the_literal_statement() {
         Statement {
             operation: Some("SELECT"),
             collection: Some("deliveries".to_owned()),
+            text: "SELECT id, order_id FROM deliveries WHERE order_id = $1".to_owned(),
         }
     );
 }
 
 #[test]
+fn statement_text_is_the_value_of_the_literal() {
+    assert_eq!(
+        Statement::of_source(stringify!(sqlx::query!(
+            "SELECT courier_id AS \"courier_id!\" FROM deliveries \
+             WHERE id = $1 AND note <> '\\'",
+            id
+        )))
+        .text,
+        r#"SELECT courier_id AS "courier_id!" FROM deliveries WHERE id = $1 AND note <> '\'"#
+    );
+    assert_eq!(
+        Statement::of_source(stringify!(sqlx::query!(
+            r#"SELECT id AS "id!" FROM deliveries WHERE note = '\n'"#
+        )))
+        .text,
+        r#"SELECT id AS "id!" FROM deliveries WHERE note = '\n'"#
+    );
+    assert_eq!(
+        Statement::of_source(stringify!(sqlx::query!("SELECT 1\nFROM deliveries"))).text,
+        "SELECT 1\nFROM deliveries"
+    );
+}
+
+#[test]
 fn column_overrides_do_not_end_the_statement_literal() {
-    let deliveries = Statement {
-        operation: Some("SELECT"),
-        collection: Some("deliveries".to_owned()),
-    };
     assert_eq!(
         Statement::of_source(stringify!(sqlx::query!(
             r#"SELECT id, courier_id AS "courier_id!" FROM deliveries WHERE id = ANY($1)"#,
             ids
-        ))),
-        deliveries
+        )))
+        .collection
+        .as_deref(),
+        Some("deliveries")
     );
     assert_eq!(
         Statement::of_source(stringify!(sqlx::query!(
             "SELECT courier_id AS \"courier_id!\" FROM deliveries WHERE id = $1",
             id
-        ))),
-        deliveries
+        )))
+        .collection
+        .as_deref(),
+        Some("deliveries")
     );
     assert_eq!(
         Statement::of_source(stringify!(sqlx::query!(
@@ -86,7 +110,7 @@ fn column_overrides_do_not_end_the_statement_literal() {
 }
 
 #[test]
-fn span_is_a_child_of_the_current_trace_and_has_no_statement_text() {
+fn span_is_a_child_of_the_current_trace_and_has_the_statement_text() {
     let exporter = InMemorySpanExporter::default();
     let provider = SdkTracerProvider::builder()
         .with_simple_exporter(exporter.clone())
@@ -95,14 +119,14 @@ fn span_is_a_child_of_the_current_trace_and_has_no_statement_text() {
     let statement = Statement::of_sql("SELECT secret_column FROM deliveries WHERE id = $1");
 
     assert!(
-        start(&tracer, &statement).is_none(),
+        start(&tracer, Some("delivery"), &statement).is_none(),
         "no span outside a trace"
     );
 
     let parent = Context::new().with_span(tracer.start("usecase confirm_pickup"));
     {
         let _attached = parent.clone().attach();
-        let context = start(&tracer, &statement);
+        let context = start(&tracer, Some("delivery"), &statement);
         end::<()>(context, &Err(sqlx::Error::PoolTimedOut));
     }
     parent.span().end();
@@ -124,7 +148,12 @@ fn span_is_a_child_of_the_current_trace_and_has_no_statement_text() {
         attributes,
         vec![
             ("db.collection.name".to_owned(), "deliveries".to_owned()),
+            ("db.namespace".to_owned(), "delivery".to_owned()),
             ("db.operation.name".to_owned(), "SELECT".to_owned()),
+            (
+                "db.query.text".to_owned(),
+                "SELECT secret_column FROM deliveries WHERE id = $1".to_owned()
+            ),
             ("db.system.name".to_owned(), "postgresql".to_owned()),
             ("error.type".to_owned(), "pool_timed_out".to_owned()),
         ]

@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	"nomnom/orders/pkg/config"
 	"nomnom/orders/pkg/telemetry"
 )
 
@@ -25,7 +26,7 @@ import (
 func installProviders(t *testing.T) (*sdkmetric.ManualReader, *tracetest.SpanRecorder) {
 	t.Helper()
 	var reader *sdkmetric.ManualReader
-	m, err := telemetry.New(context.Background(), "orders", func(producer sdkmetric.Producer) (sdkmetric.Reader, error) {
+	m, err := telemetry.New(context.Background(), config.TelemetryConfig{ServiceName: "orders"}, func(producer sdkmetric.Producer) (sdkmetric.Reader, error) {
 		reader = sdkmetric.NewManualReader(sdkmetric.WithProducer(producer))
 		return reader, nil
 	})
@@ -44,9 +45,9 @@ func installProviders(t *testing.T) (*sdkmetric.ManualReader, *tracetest.SpanRec
 	return reader, spans
 }
 
-// Query spans carry semconv attributes but neither the statement nor bind
-// parameters; db.client.operation.duration keeps only the inventory labels and
-// otelpgx's own error counter is dropped.
+// Query spans carry semconv attributes and the parameterized statement text but
+// never bind parameters; db.client.operation.duration keeps only the inventory
+// labels and otelpgx's own error counter is dropped.
 func TestQueryTracerRecordsSafeSpansAndSemconvDuration(t *testing.T) {
 	reader, spans := installProviders(t)
 	tracer := connTracer(&poolMetrics{})
@@ -73,8 +74,12 @@ func TestQueryTracerRecordsSafeSpansAndSemconvDuration(t *testing.T) {
 		attrs[kv.Key] = kv.Value
 	}
 	assert.Equal(t, "postgresql", attrs["db.system.name"].AsString())
-	assert.NotContains(t, attrs, attribute.Key("db.query.text"), "statement text is disabled")
+	assert.Equal(t, sql, attrs["db.query.text"].AsString())
+	assert.Equal(t, "SELECT", attrs["db.operation.name"].AsString())
 	assert.NotContains(t, attrs, attribute.Key("pgx.query.parameters"), "bind parameters are never recorded")
+	for key, value := range attrs {
+		assert.NotContains(t, value.Emit(), "secret-order-id", "attribute %s carries a bind parameter", key)
+	}
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))

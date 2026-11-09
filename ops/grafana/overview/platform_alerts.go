@@ -8,7 +8,7 @@ const PlatformAlertsPath = "ops/grafana/alerts/platform.json"
 // PlatformAlerts — SpiceDB, PostgreSQL, CDC Outbox, pods и сертификаты (Platform / Overview).
 func PlatformAlerts() (AlertGroup, error) {
 	spicedb := Scope{Services: []string{inventory.SpiceDB}, Job: "infra/spicedb"}
-	postgres := Scope{Services: []string{inventory.PostgreSQLServer}, Job: "infra/postgresql"}
+	postgres := Scope{Services: []string{inventory.PostgreSQLServer}, Job: jobDatabaseObservability}
 	pods := Scope{Services: inventory.AllServices, Job: jobKubernetes}
 	certs := Scope{Services: []string{inventory.CertManager}, Job: jobCertManager}
 	cdc := Scope{Services: []string{inventory.KafkaConnect}, Job: jobKafkaConnect}
@@ -20,8 +20,8 @@ func PlatformAlerts() (AlertGroup, error) {
 			Summary: "p95 запросов к SpiceDB дольше 250 ms: проверки доступа тормозят все use cases.",
 			Value:   spicedb.Quantile("0.95", "", "grpc_server_handling_seconds", spicedbAPI)},
 		{Slug: "postgres-down", Runbook: "postgres", Title: "PostgreSQL: down", Severity: Critical, For: "5m", Op: "<", Threshold: 1, DashboardID: PlatformUID,
-			Summary: "Экспортер не подключается к базе владельца: база недоступна или нет прав.",
-			Value:   Max("owner", postgres.Gauge("pg_up"))},
+			Summary: "Database Observability Alloy не подключается к серверу: сервер недоступен или у роли alloy нет прав.",
+			Value:   Max("instance", postgres.Gauge("pg_up"))},
 		{Slug: "postgres-deadlocks", Runbook: "postgres", Title: "PostgreSQL: deadlocks", Severity: Warning, For: "0s", Op: ">", Threshold: 0, DashboardID: PlatformUID,
 			Summary: "В базе владельца случились deadlocks.",
 			Value:   Sum("owner", postgres.Increase("pg_stat_database_deadlocks"))},

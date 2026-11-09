@@ -71,7 +71,7 @@ Kafka естественно входит только во входные use c
 | --- | --- |
 | `order` | Агрегат `Order`, его use cases (включая `order/complete` и `order/failorcancel`, которые вызывают Activities), порт Order Fulfillment Workflow `applications/fulfillment`, persistence, SpiceDB, Kafka и catalog |
 | [`fulfillment`](slices/fulfillment/README.md) | Процесс Order Fulfillment: доменная модель `domains/fulfillment` (маршрут, факты, сроки, отмена, компенсации), Temporal-адаптер `infrastructure/temporal`, client-адаптеры соседей `infrastructure/neighbours`, provider set worker'а `di` |
-| `simulator` | Демо-Simulator (FR-604..FR-606): switch `applications/switchsimulator` (`GetSimulator`/`SetSimulatorEnabled` требуют `platform#operate_simulator`, иначе `PERMISSION_DENIED`; состояние — однострочная таблица `simulator_state`, нет строки — выключен) и покупатель `applications/customersimulator`: пока включён, через случайную задержку в `[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` оформляет заказ настоящим Place Order от user `SIMULATOR__CUSTOMER_ID` в случайном открытом ресторане (ListRestaurants по каждому Market из `SIMULATOR__MARKET_IDS` и GetMenu через internal gateway; 1–3 доступные позиции, количество 1–2; Market заказа берёт Place Order из выбранного ресторана) и в 10% случаев после следующей задержки запрашивает отмену, пока заказ `placed` или `paid`. Тики каждые `SIMULATOR__INTERVAL` выполняет `SimulatorRunner` процесса `cmd/orders` (им владеет `App`); ошибки use cases пишутся в лог. Все пять переменных обязательны для `cmd/orders`. Каждая реплика API ведёт своего покупателя |
+| `simulator` | Демо-Simulator (FR-604..FR-606): switch `applications/switchsimulator` (`GetSimulator`/`SetSimulatorEnabled` требуют `platform#operate_simulator`, иначе `PERMISSION_DENIED`; состояние — однострочная таблица `simulator_state`, нет строки — выключен) и покупатель `applications/customersimulator`: пока включён, через случайную задержку в `[simulator.minDelay, simulator.maxDelay]` оформляет заказ настоящим Place Order от user `simulator.customerId` в случайном открытом ресторане (ListRestaurants по каждому Market из `simulator.marketIds` и GetMenu через internal gateway; 1–3 доступные позиции, количество 1–2; Market заказа берёт Place Order из выбранного ресторана) и в 10% случаев после следующей задержки запрашивает отмену, пока заказ `placed` или `paid`. Тики каждые `simulator.interval` выполняет `SimulatorRunner` процесса `cmd/orders` (им владеет `App`); ошибки use cases пишутся в лог. Все пять ключей `spec.simulator` обязательны для `cmd/orders`. Каждая реплика API ведёт своего покупателя |
 
 Зависимости направлены от `fulfillment` к `order`: адаптер реализует порт `order/applications/fulfillment` и вызывает use cases `order` из Activities; `order` не импортирует `fulfillment`, а доменная модель `fulfillment` — ничего, кроме стандартной библиотеки.
 
@@ -140,15 +140,15 @@ BFF передаёт свой service token и `x-nomnom-user-assertion`; servic
 (в том числе сам BFF) получает `PERMISSION_DENIED`. Catalog snapshot
 до транзакции читает адаптер [`slices/order/infrastructure/catalog`](slices/order/infrastructure/catalog)
 (FR-497): `restaurants.GetRestaurant` (`accepting_orders` — флаг ресторана и его расписание в момент чтения, FR-699) и `GetMenu` через internal gateway
-(`INTERNAL_GATEWAY_ADDR`; без адреса процесс не стартует) с projected token `nomnom.restaurants` API orders (`IDENTITY__TOKEN_DIR`, если задан) и общим
-deadline `CATALOG__TIMEOUT`. В snapshot попадают только запрошенные позиции; отсутствующие в меню
+(`internalGateway.address`; без адреса процесс не стартует) с projected token `nomnom.restaurants` API orders (`identity.tokenDir`, если задан) и общим
+deadline `catalog.timeout`. В snapshot попадают только запрошенные позиции; отсутствующие в меню
 недоступны. Закрытый ресторан — `RESTAURANT_NOT_ACCEPTING_ORDERS`, `NOT_FOUND` ресторана или меню и
 пустое меню — `RESTAURANT_NOT_FOUND`, цены в разных валютах — `INVALID_ORDER`, любая другая ошибка
 `restaurants` (transport, deadline, identity, отсутствующий route) — `UNAVAILABLE`. Валюта snapshot —
-валюта меню; минимум и максимум суммы — `CATALOG__MINIMUM_TOTAL`/`CATALOG__MAXIMUM_TOTAL` в этой
+валюта меню; минимум и максимум суммы — `catalog.minimumTotal`/`catalog.maximumTotal` в этой
 валюте (placeholders, пока `restaurants` их не публикует). `order_id` — UUIDv7. `PlaceOrderRequest.delivery_window_start` делает заказ запланированным (FR-681, `PREMIUM` допустим):
 после catalog snapshot и генерации `order_id` адаптер [`scheduledslots`](slices/order/infrastructure/scheduledslots)
-вызывает `restaurants.ReserveScheduledSlot` от service identity orders (deadline `CATALOG__TIMEOUT`), `Order` хранит окно из ответа,
+вызывает `restaurants.ReserveScheduledSlot` от service identity orders (deadline `catalog.timeout`), `Order` хранит окно из ответа,
 `OrderPlaced` несёт его. `slot_unavailable` — `SLOT_UNAVAILABLE` с альтернативами, `FAILED_PRECONDITION` c `ErrorInfo.reason`
 `SCHEDULED_ORDERS_UNAVAILABLE` — `SCHEDULED_ORDERS_UNAVAILABLE`, `INVALID_ARGUMENT` окна — `INVALID_ARGUMENT`; `Order` не сохраняется,
 hold истекает в `restaurants`. Повтор с тем же idempotency key возвращает сохранённый `Order` без новой резервации. `PlaceOrder` Temporal не вызывает:
@@ -161,10 +161,9 @@ workflow запускает consumer собственного `OrderPlaced` (Sta
 `GetOrder` возвращает `Order.cancellation_window { opens_at, closes_at }`, пока Order State
 допускает Order Cancellation (compound state `in_progress`); для `cancelled` и `completed` поля нет.
 Окно задаёт та же cancellation policy, что использует Request Order Cancellation: оно
-открывается в момент Place Order и длится `cancellation.window` (`CANCELLATION__WINDOW`,
-по умолчанию `5m` — placeholder до продуктового решения; `0s` или неразбираемое значение
+открывается в момент Place Order и длится `spec.cancellation.window` (по умолчанию `5m` — placeholder до продуктового решения; `0s` или неразбираемое значение
 останавливают процесс на старте). У запланированного заказа окно закрывается в
-`window_start − CANCELLATION__SCHEDULED_CUTOFF` (FR-462, обязателен, неположительный — ошибка старта).
+`window_start − spec.cancellation.scheduledCutoff` (FR-462, обязателен, неположительный — ошибка старта).
 `Order.delivery_window { start, end }` отдаётся у запланированного заказа. Открыто ли окно сейчас, решает потребитель по своему
 clock, а сам запрос отмены проверяется заново. Если политика вернёт ошибку, `GetOrder`
 отдаёт заказ без окна, а декоратор `cancellationpolicy.Observed` пишет ошибку в log и span. `SubjectResolver` проверяет projected
@@ -248,7 +247,7 @@ CQRS остаётся логическим разделением command- и qu
 
 Перед базой стоит пулер соединений, и он обязан работать в **session mode**: `orders` опирается на состояние server-сессии. Миграции берут session-level advisory lock (`pg_advisory_lock`) на своём соединении, pgx по умолчанию кэширует prepared statements на соединении (`QueryExecModeCacheStatement`). Transaction mode их ломает: lock и prepared statements окажутся на чужом server-соединении. Остальное от режима не зависит: Unit of Work и `FOR UPDATE` (назначение курьера) живут внутри одной транзакции; `LISTEN/NOTIFY`, `SET` вне транзакции и временные таблицы не используются.
 
-Каждый процесс держит собственный пул pgx (`POSTGRES__*`): `MAX_CONNS` по конкурентности роли, `MIN_CONNS` 0–1, `MAX_CONN_LIFETIME` 30m с `MAX_CONN_LIFETIME_JITTER` 5m (реплики не переоткрывают соединения одновременно), `MAX_CONN_IDLE_TIME` 5m, `CONNECT_TIMEOUT` 5s, `HEALTH_CHECK_PERIOD` 1m; недопустимое значение — ошибка startup. В session mode каждое соединение пула занимает server-соединение пулера, поэтому сумма Σ(replicas × maxConns) всех ролей должна помещаться в `pool_size` пулера для базы `orders`:
+Каждый процесс держит собственный пул pgx (`spec.postgres`): `maxConns` по конкурентности роли, `minConns` 0–1, `maxConnLifetime` 30m с `maxConnLifetimeJitter` 5m (реплики не переоткрывают соединения одновременно), `maxConnIdleTime` 5m, `connectTimeout` 5s, `healthCheckPeriod` 1m; недопустимое значение — ошибка startup. В session mode каждое соединение пула занимает server-соединение пулера, поэтому сумма Σ(replicas × maxConns) всех ролей должна помещаться в `pool_size` пулера для базы `orders`:
 
 | Роль | values | maxConns | minConns |
 | --- | --- | --- | --- |
@@ -263,7 +262,7 @@ CQRS остаётся логическим разделением command- и qu
 
 В `orders` используется compile-time DI через [`github.com/google/wire`](https://github.com/google/wire). Зависимости передаются обычными Go-конструкторами, а Wire генерирует код их сборки в composition root каждого исполняемого процесса. Provider sets группируются по функциональности и необходимым инфраструктурным компонентам.
 
-Каждый слайс описывает свои provider sets в собственном пакете `slices/<slice>/di`: у `order` это инфраструктурные `RepositorySet` (один `ProcessStore` процесса и его привязка к ролям хранилища) и `TelemetrySet` (инструменты use cases), а также наборы use cases процессов — `APISet` (`Module` API) и `ConsumerSet` (handlers Kafka consumer); у `fulfillment` — `WorkerSet` (адаптеры соседей и Activities). Вместо одного интерфейса хранилища потребители объявляют роли рядом с собой: `PlacementStore` и `ReadModels` у `Module`, `InboxStore` у `Consumer`, `fulfillmentdi.Store` у Activities, `spicedb.RevisionReader` у authorizer; Wire связывает их с одним `ProcessStore` — PostgreSQL, у которого Unit of Work и Outbox идут через декоратор бизнес-метрик `observability.ObservedStore`. Порты набора собираются в структуру зависимостей через `wire.Struct` (`Dependencies`, `Consumer`), поэтому новый порт — это поле структуры и provider, а не новый позиционный параметр у всех вызовов. Итоговая сборка процессов находится в корневом пакете `di`: `wire.go` объявляет provider sets процесса (секции конфигурации, Temporal client API, gRPC) и по injector'у на каждый процесс — `InitializeApp`, `InitializeWorker`, `InitializeConsumer`; store процесса (`NewStore`, `storeSet`) и список наборов миграций (`di/schema`) тоже здесь, потому что схема общая для всех слайсов; `wire_gen.go` генерируется командой `make generate` и коммитится. `cmd/*` только загружают конфигурацию, вызывают свой injector и передают результат в `pkg/lifecycle`. Ресурсы, созданные при сборке (пулы PostgreSQL, клиенты SpiceDB и Temporal API, соединение с internal gateway), освобождает cleanup injector'а; ресурсы, которым нужен контекст `Start` или pipeline метрик процесса (telemetry, Temporal client worker'а и consumer'а, Kafka, Watermill Router), открывает и закрывает сам lifecycle.Worker процесса. Lifecycle реализует [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live`, `/health/ready` на техническом порту `management.port` (по умолчанию `9081`, `MANAGEMENT__PORT`), а по `SIGTERM`/`SIGINT` переводит readiness в `503`, выжидает `shutdown.readiness_delay` (по умолчанию `5s`), прекращает приём запросов и дожидается начатых в пределах `shutdown.drain_timeout` (по умолчанию `20s`). Штатный shutdown — exit `0`; ошибка startup, остановка сервера до сигнала или превышение drain deadline — non-zero. Поведение проверяется `make runtime-contract` из корня репозитория.
+Каждый слайс описывает свои provider sets в собственном пакете `slices/<slice>/di`: у `order` это инфраструктурные `RepositorySet` (один `ProcessStore` процесса и его привязка к ролям хранилища) и `TelemetrySet` (инструменты use cases), а также наборы use cases процессов — `APISet` (`Module` API) и `ConsumerSet` (handlers Kafka consumer); у `fulfillment` — `WorkerSet` (адаптеры соседей и Activities). Вместо одного интерфейса хранилища потребители объявляют роли рядом с собой: `PlacementStore` и `ReadModels` у `Module`, `InboxStore` у `Consumer`, `fulfillmentdi.Store` у Activities, `spicedb.RevisionReader` у authorizer; Wire связывает их с одним `ProcessStore` — PostgreSQL, у которого Unit of Work и Outbox идут через декоратор бизнес-метрик `observability.ObservedStore`. Порты набора собираются в структуру зависимостей через `wire.Struct` (`Dependencies`, `Consumer`), поэтому новый порт — это поле структуры и provider, а не новый позиционный параметр у всех вызовов. Итоговая сборка процессов находится в корневом пакете `di`: `wire.go` объявляет provider sets процесса (секции конфигурации, Temporal client API, gRPC) и по injector'у на каждый процесс — `InitializeApp`, `InitializeWorker`, `InitializeConsumer`; store процесса (`NewStore`, `storeSet`) и список наборов миграций (`di/schema`) тоже здесь, потому что схема общая для всех слайсов; `wire_gen.go` генерируется командой `make generate` и коммитится. `cmd/*` только загружают файл конфигурации своей роли (`config.Load`), настраивают logger, вызывают свой injector и передают результат в `pkg/lifecycle`. Ресурсы, созданные при сборке (пулы PostgreSQL, клиенты SpiceDB и Temporal API, соединение с internal gateway), освобождает cleanup injector'а; ресурсы, которым нужен контекст `Start` или pipeline метрик процесса (telemetry, Temporal client worker'а и consumer'а, Kafka, Watermill Router), открывает и закрывает сам lifecycle.Worker процесса. Lifecycle реализует [runtime contract](../../docs/cloud-native-runtime.md): `/health/startup`, `/health/live`, `/health/ready` на техническом порту `spec.management.port` (по умолчанию `9081`), а по `SIGTERM`/`SIGINT` переводит readiness в `503`, выжидает `spec.shutdown.readinessDelay` (по умолчанию `5s`), прекращает приём запросов и дожидается начатых в пределах `spec.shutdown.drainTimeout` (по умолчанию `20s`). Штатный shutdown — exit `0`; ошибка startup, остановка сервера до сигнала или превышение drain deadline — non-zero. Поведение проверяется `make runtime-contract` из корня репозитория.
 
 Импорты Wire и объявления сборки не входят в доменную модель и обработчики use cases. Composition root явно владеет запуском, остановкой и освобождением ресурсов. Доменные компоненты и обработчики можно создавать в тестах напрямую через конструкторы.
 
@@ -369,7 +368,7 @@ Business cancellation — Update `CancellationRequested`: домен `Order` р�
 - Каждая Activity имеет Start-To-Close timeout и Retry Policy; длительная — heartbeat. Transport failure (`UNAVAILABLE`, timeout) повторяется, business rejection возвращается результатом.
 - Idempotency key финансовых и компенсационных операций — `order_id + step`, не зависит от attempt и run ID.
 - Activity, меняющая `orders`, вызывает handler слайса со своим UoW (`Order` + Outbox); прямой publish в Kafka запрещён.
-- Вызовы других контекстов идут через [internal gateway](../../ops/kind/README.md#internal-gateway) (`INTERNAL_GATEWAY_ADDR`) от `service` identity worker'а; authorization выполняет целевой контекст по [security](../../docs/security.md).
+- Вызовы других контекстов идут через [internal gateway](../../ops/kind/README.md#internal-gateway) (`internalGateway.address`) от `service` identity worker'а; authorization выполняет целевой контекст по [security](../../docs/security.md).
 - Ожидания — Signal + Temporal timer, polling запрещён. Timer ведёт к бизнес-ветке (cancellation, compensation); workflow-level timeout не задаётся. Courier Assignment workflow ждёт без срока (FR-709): поиском владеет Assignment Workflow `delivery`. `PreparationDelayed` продлевает таймер Preparation.
 
 ### Saga
@@ -408,7 +407,7 @@ Workflow Stage публикуется низкокардинальным Search 
 
 Для `orders` observability охватывает gRPC, PostgreSQL, Watermill/Kafka, Temporal workflows и Activities, API и workers. W3C Trace Context передаётся через gRPC metadata и Watermill message metadata/Kafka headers; telemetry при replay workflow не должна повторно считаться бизнес-результатом.
 
-`pkg/telemetry` собирает три сигнала каждого процесса с одним resource: `service.namespace=nomnom`, `service.name` роли (`orders`, `orders-worker`, `orders-consumer`; `OTEL_SERVICE_NAME` переопределяет), `service.version` (VCS revision сборки, Helm — image tag через `OTEL_RESOURCE_ATTRIBUTES`), `deployment.environment.name` и `service.instance.id` из `OTEL_RESOURCE_ATTRIBUTES`.
+`pkg/telemetry` собирает три сигнала каждого процесса с одним resource из файла конфигурации (`spec.telemetry`, `spec.tracing`, `spec.metrics`, `spec.logging`; `OTEL_*` и `LOG__LEVEL` процесс не читает): `service.namespace=nomnom`, `service.name` — `telemetry.serviceName` (по умолчанию роль: `orders`, `orders-worker`, `orders-consumer`), `service.version` (VCS revision сборки; Helm задаёт image tag в `telemetry.resourceAttributes`), атрибуты окружения из `telemetry.resourceAttributes` (например `deployment.environment.name`; `service.name` и `service.instance.id` в них — ошибка старта) и `service.instance.id` из env `POD_NAME` (обязателен). OTLP коллектор — `telemetry.endpoint` (базовый URL), протокол `telemetry.protocol`: `grpc` (по умолчанию) или `http/protobuf` (пути `/v1/traces`, `/v1/metrics` добавляет процесс).
 
 | Процесс | Traces | Metrics | Logs |
 | --- | --- | --- | --- |
@@ -416,9 +415,9 @@ Workflow Stage публикуется низкокардинальным Search 
 | `orders-worker` | Temporal workflow task и Activity, use cases, PostgreSQL, вызовы соседей через gateway | Temporal SDK, use cases, domain, `db.client.*`, gRPC client, runtime | JSON, Temporal SDK |
 | `orders-consumer` | Kafka receive (otelsarama) → process (parent из headers), use cases, PostgreSQL, SpiceDB, Temporal client | Watermill consumer, `nomnom.messaging.*`, use cases, `db.client.*`, Temporal SDK, runtime | JSON, Watermill, Temporal SDK |
 
-- **Traces** экспортируются по OTLP gRPC, только если задан `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`; без них trace context всё равно передаётся соседям. W3C Trace Context (без baggage для Kafka и Temporal) идёт через gRPC metadata, Temporal headers (`contrib/opentelemetry` interceptor client'а, worker его наследует) и Kafka: Outbox записывает `traceparent`/`tracestate` контекста use case в metadata события (`messaging.InjectTraceContext`), строка Outbox хранит `traceparent`, Debezium отдаёт его заголовком, consumer извлекает его до span обработки. PostgreSQL — `otelpgx` поверх pgx: client spans только внутри trace, без текста statement и bind parameters. SpiceDB — client spans `otelgrpc` без RPC-метрик.
-- **Metrics** — по OTLP при `OTEL_EXPORTER_OTLP_ENDPOINT` (или `..._METRICS_ENDPOINT`). `db.client.operation.duration` (`otelpgx`) — с labels `db.system.name`, `db.operation.name`; пул — `db.client.connection.*` (`repository/pool_metrics.go`).
-- **Logs** — одна JSON-запись на строку в stdout: `timestamp` (UTC, RFC 3339), `severity` (`DEBUG`…`ERROR`), `message`, resource-поля `service.*` и `deployment.environment.name`, `trace_id`/`span_id` только внутри span, ошибки — `error.message` и `error.type`. Через тот же handler идут `slog`, `log.Printf`, gRPC (`grpclog`, info/warning — на уровне debug), Watermill и Temporal SDK. Redaction: поля с именами `*token*`, `*password*`, `*secret*`, `*dsn*`, `authorization`, `cookie`, `payload` и байтовые значения заменяются на `[REDACTED]`; userinfo URL/DSN, `password=`, bearer/basic credentials и JWT вырезаются из любого текста. `LOG__LEVEL` — `debug`, `info` (по умолчанию), `warn`, `error`.
+- **Traces** экспортируются по OTLP, только если `tracing.enabled: true` (тогда `telemetry.endpoint` обязателен); без флага trace context всё равно передаётся соседям. W3C Trace Context (без baggage для Kafka и Temporal) идёт через gRPC metadata, Temporal headers (`contrib/opentelemetry` interceptor client'а, worker его наследует) и Kafka: Outbox записывает `traceparent`/`tracestate` контекста use case в metadata события (`messaging.InjectTraceContext`), строка Outbox хранит `traceparent`, Debezium отдаёт его заголовком, consumer извлекает его до span обработки. PostgreSQL — `otelpgx` поверх pgx: client spans только внутри trace, с `db.namespace` и параметризованным текстом statement (`db.query.text`, по нему Grafana открывает запрос в Database Observability), без bind parameters. SpiceDB — client spans `otelgrpc` без RPC-метрик.
+- **Metrics** — по OTLP при `metrics.enabled: true` раз в `metrics.exportInterval` (по умолчанию `60s`); endpoint без флагов ничего не экспортирует. `db.client.operation.duration` (`otelpgx`) — с labels `db.system.name`, `db.operation.name`; пул — `db.client.connection.*` (`repository/pool_metrics.go`).
+- **Logs** — одна JSON-запись на строку в stdout: `timestamp` (UTC, RFC 3339), `severity` (`DEBUG`…`ERROR`), `message`, resource-поля `service.*` и `deployment.environment.name`, `trace_id`/`span_id` только внутри span, ошибки — `error.message` и `error.type`. Через тот же handler идут `slog`, `log.Printf`, gRPC (`grpclog`, info/warning — на уровне debug), Watermill и Temporal SDK. Redaction: поля с именами `*token*`, `*password*`, `*secret*`, `*dsn*`, `authorization`, `cookie`, `payload` и байтовые значения заменяются на `[REDACTED]`; userinfo URL/DSN, `password=`, bearer/basic credentials и JWT вырезаются из любого текста. `logging.level` — `debug`, `info` (по умолчанию), `warn`, `error`; до загрузки файла ошибки старта пишутся тем же JSON на уровне `info`.
 
 В kind traces API уходят в приёмник проверок `trace-capture` ([`ops/kind`](../../ops/kind/README.md#проверки)). Общие правила и путь Pyroscope для Go описаны в [общесистемной документации observability](../../docs/observability.md).
 
@@ -511,39 +510,65 @@ Temporal worker `cmd/orders-worker` и consumer `cmd/orders-consumer` локал
 разворачивает Temporal Worker Controller ([ADR 5](docs/adr/0005-order-fulfillment-orchestration.md#versioning-workflow-code)),
 поэтому оба процесса работают только в kind (`make kind-deploy` в корне репозитория).
 
-| Переменная | По умолчанию | Назначение |
+Несекретная конфигурация процесса — только файл `CONFIG_FILE` ([`config.example.yaml`](config.example.yaml),
+`make run` подставляет его): `apiVersion: config.nomnom.dev/v1alpha1`, `kind: Orders`, `metadata.name` — роль
+процесса (`orders`, `orders-worker`, `orders-consumer`), `spec` — секции ниже. Процесс не стартует (non-zero exit до
+открытия портов), если `CONFIG_FILE` не задан или файла нет, `apiVersion` или `kind` другие, `metadata.name` не его
+роль или в файле есть неизвестный ключ на любом уровне (ошибка называет путь, например `spec.shutdown.drainTimout`).
+Весь `spec` проверяется на неизвестные ключи, секции других ролей допустимы. `orders-admin` запускается в pod
+`orders-consumer` и сверяет только `apiVersion` и `kind`. Переменные `SECTION__KEY` для несекретных настроек не
+читаются. Ключи — camelCase, длительности — строки Go (`500ms`, `5s`, `2m`).
+
+| Ключ `spec` | По умолчанию | Назначение |
 | --- | --- | --- |
-| `TEMPORAL__HOST_PORT` | `localhost:7233` | Адрес Temporal Frontend |
-| `TEMPORAL__NAMESPACE` | `default` | Namespace окружения |
-| `TEMPORAL__CONNECT_TIMEOUT` | `10s` | Предел подключения и проверки Search Attribute в startup |
-| `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES` | `false` | Создать `OrderFulfillmentStage`, если его нет (нужны права оператора) |
-| `TEMPORAL_DEPLOYMENT_NAME`, `TEMPORAL_WORKER_BUILD_ID` | — | Worker Deployment Version worker'а; задаёт Temporal Worker Controller, без них worker не стартует |
-| `FULFILLMENT__<KEY>` | см. `config.example.yaml` | `Policy` workflow (placeholders), `PUBLISH_STAGE`, `NEIGHBOURS` (также выбирает catalog Place Order) |
-| `CATALOG__MINIMUM_TOTAL`, `CATALOG__MAXIMUM_TOTAL`, `CATALOG__TIMEOUT` | `0`, `100000`, `2s` | Лимиты суммы Place Order в валюте меню (placeholders) и deadline чтения `GetRestaurant` + `GetMenu` |
-| `CANCELLATION__SCHEDULED_CUTOFF` | — (обязателен) | Окно отмены запланированного заказа закрывается в `window_start − cutoff` (FR-462) |
-| `SCHEDULED_ORDER__PREPARATION_BUFFER`, `SCHEDULED_ORDER__REPLAN_LEAD` | — (обязательны) | Буфер `start_at` и опережение контрольной точки плана запланированного заказа (FR-677, FR-693); пустое или неположительное — ошибка старта всех процессов |
-| `IDENTITY__ISSUER`, `IDENTITY__AUDIENCE`, `IDENTITY__JWKS_FILE` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них все вызовы `UNAUTHENTICATED` |
-| `IDENTITY__SERVICE_ACCOUNTS` | — | Allowlist `namespace/serviceaccount=service-name,…` |
-| `IDENTITY__TOKEN_DIR` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker; API — catalog `restaurants`, его чтения identity не требуют); пусто — без credentials |
-| `IDENTITY__USER_ISSUER`, `IDENTITY__USER_JWKS_FILE`, `IDENTITY__USER_DELEGATES` | —, —, — | User assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)): ожидаемый `iss`, JWKS BFF (только EC P-256) и services-делегаты через запятую (в развёртываниях `bff`). Обязательны для gRPC API вместе с `IDENTITY__ISSUER`: пустая настройка или неразбираемый JWKS — ошибка startup |
-| `SPICEDB__ENDPOINT`, `SPICEDB__PRESHARED_KEY` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
-| `POSTGRES__DSN`, `POSTGRES__MAX_CONNS` | —, `10` | PostgreSQL orders (обязателен для всех процессов); локально — `make postgres-dev`; схему процесс создаёт сам при старте |
-| `POSTGRES__MIN_CONNS`, `POSTGRES__MAX_CONN_LIFETIME`, `POSTGRES__MAX_CONN_LIFETIME_JITTER`, `POSTGRES__MAX_CONN_IDLE_TIME`, `POSTGRES__CONNECT_TIMEOUT`, `POSTGRES__HEALTH_CHECK_PERIOD` | `0`, `30m`, `5m`, `5m`, `5s`, `1m` | Лимиты пула pgx процесса ([Пулер PostgreSQL](#пулер-postgresql)); `MIN_CONNS` — 0 или 1, длительности положительные |
-| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_EXPORTER_OTLP_ENDPOINT` | имя роли, —, — | Resource и OTLP export traces/metrics ([Observability](#observability)); Helm задаёт `telemetry.serviceName`, `telemetry.resourceAttributes`, `telemetry.otlpEndpoint` |
-| `LOG__LEVEL` | `info` | Минимальный уровень JSON-логов: `debug`, `info`, `warn`, `error` (Helm `telemetry.logLevel`) |
-| `SPICEDB__INSECURE`, `SPICEDB__TIMEOUT` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
+| `server.port`, `management.port` | `8081`, `9081` | Бизнес-порт gRPC и технический порт health/metrics; должны различаться |
+| `shutdown.readinessDelay`, `shutdown.drainTimeout` | `5s`, `20s` | Бюджет graceful shutdown; `drainTimeout` положительный |
+| `temporal.hostPort`, `temporal.namespace` | `localhost:7233`, `default` | Адрес Temporal Frontend и namespace окружения |
+| `temporal.connectTimeout` | `10s` | Предел подключения и проверки Search Attribute в startup |
+| `temporal.registerSearchAttributes` | `false` | Создать `OrderFulfillmentStage`, если его нет (нужны права оператора) |
+| `fulfillment.*` | см. `config.example.yaml` | `Policy` workflow (placeholders) и `publishStage` |
+| `catalog.minimumTotal`, `catalog.maximumTotal`, `catalog.timeout` | `"0"`, `"100000"`, `2s` | Лимиты суммы Place Order в валюте меню (placeholders) и deadline чтения `GetRestaurant` + `GetMenu` |
+| `cancellation.window` | `5m` | Окно отмены от Place Order (placeholder) |
+| `cancellation.scheduledCutoff` | — (обязателен) | Окно отмены запланированного заказа закрывается в `window_start − cutoff` (FR-462) |
+| `scheduledOrder.preparationBuffer`, `scheduledOrder.replanLead` | — (обязательны) | Буфер `start_at` и опережение контрольной точки плана запланированного заказа (FR-677, FR-693); пустое или неположительное — ошибка старта всех процессов |
+| `internalGateway.address` | — (обязателен) | Internal gateway для синхронных вызовов других контекстов |
+| `kafka.brokers`, `kafka.clientId`, `kafka.consumerGroup`, `kafka.initialOffset` | `[localhost:9092]`, `orders`, `orders`, `oldest` | Kafka consumer'а; `clientId` — service.name процесса |
+| `schemaRegistry.url`, `schemaRegistry.timeout` | —, `5s` | Schema Registry (FR-715); `url` обязателен `orders-consumer` |
+| `identity.issuer`, `identity.audience`, `identity.jwksFile` | —, `nomnom.orders`, — | Проверка входящего projected ServiceAccount token ([ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md)); без них API не стартует |
+| `identity.serviceAccounts` | — | Allowlist `namespace/serviceaccount=service-name,…` |
+| `identity.tokenDir` | — | Каталог projected tokens `<audience>` для вызовов соседей (worker; API — catalog `restaurants`); пусто — без credentials |
+| `identity.userIssuer`, `identity.userJwksFile`, `identity.userDelegates` | —, —, — | User assertion BFF ([ADR 32](../../docs/adr/0032-user-identity-via-bff-signed-assertions.md)): ожидаемый `iss`, JWKS BFF (только EC P-256) и services-делегаты через запятую (в развёртываниях `bff`). Обязательны для gRPC API вместе с `identity.issuer`: пустая настройка или неразбираемый JWKS — ошибка startup |
+| `spicedb.endpoint` | — | SpiceDB authorization ([`slices/order/infrastructure/spicedb`](slices/order/infrastructure/spicedb)): `order#view`/`cancel`, `customer#view_orders`, `TOUCH order#customer`/`restaurant` при оформлении, `order#delivery` в `orders-consumer`; обязателен для API и consumer: без endpoint они не стартуют |
+| `spicedb.insecure`, `spicedb.timeout` | `false`, `2s` | Plaintext (только kind/локально) и deadline проверки; ошибка или timeout — отказ |
+| `postgres.maxConns`, `postgres.minConns` | `10`, `0` | Пул pgx процесса ([Пулер PostgreSQL](#пулер-postgresql)); `minConns` — 0 или 1 |
+| `postgres.maxConnLifetime`, `maxConnLifetimeJitter`, `maxConnIdleTime`, `connectTimeout`, `healthCheckPeriod` | `30m`, `5m`, `5m`, `5s`, `1m` | Лимиты пула; длительности положительные |
+| `simulator.*` | — (обязательны `cmd/orders`) | Demo customer Simulator: `interval`, `minDelay`, `maxDelay`, `customerId`, `marketIds` |
+| `telemetry.endpoint`, `telemetry.protocol` | —, `grpc` | OTLP коллектор ([Observability](#observability)); endpoint обязателен, если включён `tracing` или `metrics`; протокол `grpc` или `http/protobuf` |
+| `telemetry.serviceName`, `telemetry.resourceAttributes` | роль, — | `service.name` и атрибуты resource окружения |
+| `tracing.enabled`, `metrics.enabled`, `metrics.exportInterval` | `false`, `false`, `60s` | Экспорт spans и метрик |
+| `logging.level` | `info` | Минимальный уровень JSON-логов: `debug`, `info`, `warn`, `error` |
+
+Секреты и значения среды — только env, полей в `spec` для них нет (секрет в файле — неизвестный ключ):
+
+| Переменная | Назначение |
+| --- | --- |
+| `CONFIG_FILE` | Путь к файлу конфигурации; обязателен |
+| `POD_NAME` | `service.instance.id` процесса (Downward API); обязателен |
+| `POSTGRES__DSN` | PostgreSQL orders, обязателен всем процессам; локально — `make postgres-dev`; схему процесс создаёт сам при старте |
+| `SPICEDB__PRESHARED_KEY` | Ключ SpiceDB; обязателен, если задан `spicedb.endpoint` |
+| `TEMPORAL_DEPLOYMENT_NAME`, `TEMPORAL_WORKER_BUILD_ID` | Worker Deployment Version worker'а; задаёт Temporal Worker Controller, без них worker не стартует |
 
 Проверка caller разделена по ответственности: [`jwks.go`](infrastructure/grpc/jwks.go) читает ключи,
 [`service_token.go`](infrastructure/grpc/service_token.go) (`serviceTokenVerifier`) проверяет service token,
 [`user_assertion.go`](infrastructure/grpc/user_assertion.go) (`userAssertionVerifier`) — user assertion и
 делегатов, resolver в [`identity.go`](infrastructure/grpc/identity.go) соединяет их. Порядок: service token
 (`authorization`, ADR 27) → без metadata `x-nomnom-user-assertion` результат `Subject{service}` → service
-входит в `IDENTITY__USER_DELEGATES` → assertion: только ES256 с `kid` из JWKS BFF, `iss`, `aud` содержит
-`IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, обязательный `iat` и `exp - iat ≤ 60 s`, непустые `sub` и
+входит в `identity.userDelegates` → assertion: только ES256 с `kid` из JWKS BFF, `iss`, `aud` содержит
+`identity.audience`, `exp`/`nbf` с допуском 30 s, обязательный `iat` и `exp - iat ≤ 60 s`, непустые `sub` и
 `jti` → `Subject{user, sub}`. Повторный или пустой assertion и любое нарушение — `UNAUTHENTICATED`; принятие и
 отказ пишутся в log с делегатом и `jti`, без самих tokens.
 
-Activities вызывают командные API `payments`, `restaurants`, `delivery` через `INTERNAL_GATEWAY_ADDR` клиентами [`neighbours/grpcclient`](slices/fulfillment/infrastructure/neighbours/grpcclient). Подключение к gateway, projected token целевого контекста из `IDENTITY__TOKEN_DIR` (ADR 27) и сгенерированные клиенты соседей лежат в общем пакете [`infrastructure/gateway`](infrastructure/gateway) (Go-код генерируется `make proto-generate` из workspace-модулей до публикации в BSR): им пользуются и Activities fulfillment, и каталог Place Order, поэтому слайс `order` не зависит от слайса `fulfillment`; `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
+Activities вызывают командные API `payments`, `restaurants`, `delivery` через `internalGateway.address` клиентами [`neighbours/grpcclient`](slices/fulfillment/infrastructure/neighbours/grpcclient). Подключение к gateway, projected token целевого контекста из `identity.tokenDir` (ADR 27) и сгенерированные клиенты соседей лежат в общем пакете [`infrastructure/gateway`](infrastructure/gateway) (Go-код генерируется `make proto-generate` из workspace-модулей до публикации в BSR): им пользуются и Activities fulfillment, и каталог Place Order, поэтому слайс `order` не зависит от слайса `fulfillment`; `UNAUTHENTICATED` и `PERMISSION_DENIED` клиент считает retryable.
 
 ## Проверка
 
@@ -578,19 +603,18 @@ make format
 
 ```bash
 docker build --target runtime -t nomnom/orders:local boundaries/orders
-docker run --rm -p 8081:8081 -p 9081:9081 \
-  -e SERVER__PORT=8081 \
-  nomnom/orders:local
 ```
 
 Образ содержит статический Go-бинарник и TLS CA, запускается как distroless-пользователь
-`nonroot`. Конфигурация передаётся переменными окружения. Локальный YAML-файл можно
-подключить read-only и указать через `CONFIG_FILE`:
+`nonroot`. Несекретная конфигурация — файл, подключённый read-only и указанный через `CONFIG_FILE`;
+секреты и имя pod — env:
 
 ```bash
-docker run --rm -p 8081:8081 \
-  -v "$PWD/boundaries/orders/config.example.yaml:/config/orders.yaml:ro" \
-  -e CONFIG_FILE=/config/orders.yaml \
+docker run --rm -p 8081:8081 -p 9081:9081 \
+  -v "$PWD/boundaries/orders/config.example.yaml:/etc/nomnom/config.yaml:ro" \
+  -e CONFIG_FILE=/etc/nomnom/config.yaml -e POD_NAME=orders-local \
+  -e POSTGRES__DSN=postgres://orders:orders@host.docker.internal:5433/orders?sslmode=disable \
+  -e SPICEDB__PRESHARED_KEY=devkey \
   nomnom/orders:local
 ```
 

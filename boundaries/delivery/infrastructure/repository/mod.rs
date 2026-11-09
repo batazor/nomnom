@@ -31,7 +31,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use sqlx::postgres::PgPool;
+use sqlx::postgres::{PgConnectOptions, PgPool};
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 
 pub use migrate::{MIGRATION_SETS, MigrationSet, migrate};
@@ -81,6 +81,8 @@ pub struct Store {
     transactions: TransactionMetrics,
     /// Client spans of statements (`pkg/telemetry/db`).
     tracer: opentelemetry::global::BoxedTracer,
+    /// Database of the URI: `db.namespace` of the statement spans.
+    namespace: Option<String>,
     mapper: Arc<dyn OutboxMapper>,
     runtime: Option<Runtime>,
 }
@@ -97,10 +99,18 @@ impl Store {
             .enable_all()
             .build()
             .map_err(|error| format!("store runtime: {error}"))?;
-        let uri = config.uri.clone();
+        let connect: PgConnectOptions = match config.uri.parse() {
+            Ok(connect) => connect,
+            Err(error) => {
+                runtime.shutdown_background();
+                return Err(format!("database URI: {error}"));
+            }
+        };
+        let namespace = connect.get_database().map(str::to_owned);
         let metrics = PoolMetrics::global();
         let options = metrics.instrument(pool_options(config, config.max_conns));
-        let pool = blocking(|| runtime.block_on(async move { options.connect(&uri).await }));
+        let pool =
+            blocking(|| runtime.block_on(async move { options.connect_with(connect).await }));
         let pool = match pool {
             Ok(pool) => pool,
             Err(error) => {
@@ -115,6 +125,7 @@ impl Store {
             metrics,
             transactions: TransactionMetrics::global(),
             tracer: opentelemetry::global::tracer(crate::pkg::telemetry::db::INSTRUMENTATION),
+            namespace,
             pool: Some(pool),
             mapper: Arc::new(NoIntegrationEvents),
             runtime: Some(runtime),
@@ -219,7 +230,11 @@ macro_rules! sql {
         let statement = STATEMENT
             .get_or_init(|| crate::pkg::telemetry::db::Statement::of_source(stringify!($body)));
         let mut lease = $store.lease()?;
-        let span = crate::pkg::telemetry::db::start(&$store.tracer, statement);
+        let span = crate::pkg::telemetry::db::start(
+            &$store.tracer,
+            $store.namespace.as_deref(),
+            statement,
+        );
         let started = std::time::Instant::now();
         let result = {
             let $connection: &mut sqlx::PgConnection = &mut *lease.connection;

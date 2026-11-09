@@ -37,12 +37,15 @@ Grafana предоставляет data sources, dashboards, Explore и пере
 | Метрики приложений | OpenTelemetry SDK → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
 | Метрики инфраструктуры | exporter или `/metrics` → Alloy scrape → remote write → Grafana Cloud Metrics |
 | Метрики компонентов без SDK (Temporal server) | OBI → OTLP → Alloy → OTLP/HTTP → Grafana Cloud Metrics |
+| Database Observability PostgreSQL | Alloy `database_observability.postgres` → метрики: OTLP/HTTP → Grafana Cloud Metrics, query samples/explain plans/схема: `loki.write` → Loki |
 | Logs | JSON stdout → Alloy → Loki |
 | Profiles | Pyroscope SDK → Alloy `pyroscope.receive_http` → `pyroscope.write` → Pyroscope |
 
 Profiles имеют отдельный путь, потому что Pyroscope SDK и протокол профилей не считаются взаимозаменяемыми с OTLP traces/metrics. Один источник метрик или логов получает один основной путь доставки.
 
 Все сигналы используют общую идентификацию через `service.namespace=nomnom`, стабильный `service.name`, `service.version`, `deployment.environment.name` и, при необходимости, `service.instance.id`. Индивидуальные `order_id`, `user_id`, `workflow_id` и `trace_id` не становятся metric labels или индексируемыми Loki labels.
+
+Процесс настраивает OpenTelemetry из файла конфигурации ([ADR 17](0017-cloud-native-application-runtime.md)), а не из `OTEL_*`: `spec.telemetry` задаёт OTLP endpoint, протокол (`grpc` или `http/protobuf`), `service.name` и resource attributes окружения, `spec.tracing.enabled` и `spec.metrics.enabled` явно включают экспорт traces и metrics, `spec.metrics.exportInterval` — интервал экспорта, `spec.logging.level` — уровень логов. Endpoint без флагов экспорт не включает, а включённый экспорт без endpoint — ошибка старта. `service.instance.id` — имя pod из Downward API (`POD_NAME`).
 
 Инструментирование транспорта, БД, Kafka и внешних клиентов относится к `infrastructure/`. Use cases наблюдаются через декораторы и application ports. SDK providers/exporters, logger и profiler собираются через принятый DI в composition root, а process-level lifecycle находится в bootstrap. `domains/`, включая `vo/`, остаются независимыми от observability SDK.
 
@@ -53,6 +56,12 @@ Profiles имеют отдельный путь, потому что Pyroscope S
 OpenTelemetry eBPF Instrumentation (OBI) дополняет SDK и не заменяет его: propagation через Outbox, Temporal spans и бизнес-метрики снаружи процесса не наблюдаются. OBI выбирает только перечисленные компоненты без SDK, сервисы с SDK не инструментирует. Сейчас это Temporal server: RED-метрики gRPC и связи между сервисами. Режим — только метрики, без traces и propagation, без агента в процессе и без `SYS_ADMIN`.
 
 Компонент добавляется, только если он даёт данные, которых нет в его метриках, и окупает series квоты. Замер на kind (2026-11-01, стенд без нагрузки): Temporal — 651 series; с SQL-метриками было больше 1400 при СУБД `other_sql`, поэтому SQL выключен. Kafka Connect не включён: процесс подхватывается, но метрик нет ни без `SYS_ADMIN`, ни с ним; причина не найдена.
+
+### Database Observability
+
+Серверная сторона PostgreSQL собирается приложением Grafana Cloud Database Observability: Alloy `database_observability.postgres` читает `pg_stat_statements`, `pg_stat_activity`, каталоги и планы запросов. Компонент один на сервер, а не на базу владельца: коллекторы обходят все базы сервера сами. Его встроенный postgres_exporter заменяет отдельные `prometheus.exporter.postgres`, метрики идут общим OTLP-путём с `job="integrations/db-o11y"`. Логи компонента — исключение из пути Logs: приложение ищет их по index label `job`, а OTLP делает labels записи structured metadata, поэтому они пишутся `loki.write` прямо в Loki.
+
+Client span PostgreSQL несёт параметризованный текст запроса (`db.query.text`, placeholders `$n`, значения — bind parameters) и `db.namespace`. По ним Grafana связывает span с запросом в Database Observability (trace linkage по тексту). sqlcommenter (`traceparent` в комментарии SQL) для точного совпадения не используется: уникальный текст каждого выполнения ломает кеш prepared statements pgx и sqlx, несовместим с `sqlx::query!`, а Alloy видит только выполнения, попавшие в опрос раз в 10 секунд.
 
 ### Поддержка языков
 

@@ -16,7 +16,7 @@
 
 ## Состояние на дату генерации
 
-Метрик в инвентаре: 144; пар «метрика × сервис» со статусом «есть»: 155.
+Метрик в инвентаре: 152; пар «метрика × сервис» со статусом «есть»: 163.
 
 Подтверждение статуса «есть»: 2026-10-25: kind → OTLP → Grafana Alloy → Grafana Cloud (`ops/grafana-cloud`): подтверждены метрики `orders`, `orders-worker`, `orders-consumer`, а также rpc server/client, use case, process и db client метрики `restaurants`, `delivery`, `payments` (имена и labels — запросом series).
 
@@ -335,11 +335,19 @@ Alloy scrape `:9090` pod SpiceDB, `job="infra/spicedb"`. Серверная ст
 
 ## PostgreSQL (сервер)
 
-Alloy `prometheus.exporter.postgres` по владельцу (ADR 8), `job="infra/postgresql"`, label `owner`; `stat_database` и размер — только база владельца. Клиентская сторона — row Dependencies сервисов. Platform / Overview.
+Встроенный postgres_exporter Database Observability Alloy (ADR 9), один на сервер: `job="integrations/db-o11y"`, `instance="postgres"`; label `owner` — база владельца (ADR 8) из `datname` или слот `<owner>_outbox` из `slot_name`, метрики остальных баз отбрасываются. Query samples, explain plans и схема — логи Loki того же `job`, приложение Database Observability. Клиентская сторона — row Dependencies сервисов. Platform / Overview.
 
 | Метрика | Источник | Тип | Labels | Сервис → статус | Примечание |
 | --- | --- | --- | --- | --- | --- |
-| `pg_up` | postgres_exporter | gauge | `owner` | `postgresql`: есть | — |
+| `pg_up` | postgres_exporter | gauge | `instance`, `server_id` | `postgresql`: есть | Сервер, без `owner`. |
+| `database_observability_connection_info` | Database Observability Alloy | gauge | `instance`, `server_id`, `engine`, `engine_version`, `provider_name` | `postgresql`: есть | Сервер для приложения Database Observability. |
+| `pg_stat_statements_calls_total` | postgres_exporter `stat_statements` | counter | `owner`, `datname`, `user`, `queryid` | `postgresql`: есть | Верхние 100 запросов сервера без роли `alloy`; для приложения Database Observability, не для dashboards. |
+| `pg_stat_statements_seconds_total` | postgres_exporter `stat_statements` | counter | `owner`, `datname`, `user`, `queryid` | `postgresql`: есть | — |
+| `pg_stat_statements_rows_total` | postgres_exporter `stat_statements` | counter | `owner`, `datname`, `user`, `queryid` | `postgresql`: есть | — |
+| `pg_stat_statements_block_read_seconds_total` | postgres_exporter `stat_statements` | counter | `owner`, `datname`, `user`, `queryid` | `postgresql`: есть | — |
+| `pg_stat_statements_block_write_seconds_total` | postgres_exporter `stat_statements` | counter | `owner`, `datname`, `user`, `queryid` | `postgresql`: есть | — |
+| `database_observability_logs_processing_enabled` | Database Observability Alloy | gauge | `instance`, `server_id` | `postgresql`: есть | 0 — логи сервера PostgreSQL в компонент не подключены. |
+| `database_observability_pg_error_log_parse_failures_total` | Database Observability Alloy | counter | `instance`, `server_id` | `postgresql`: есть | — |
 | `pg_replication_slot_slot_current_wal_lsn` | postgres_exporter `replication_slot` | gauge | `owner`, `slot_name`, `slot_type` | `postgresql`: есть | Имена и labels сняты scrape экспортера на стенде 2026-10-26 (Debezium 3.7.0.Final, JMX exporter 1.7.0, Alloy 1.21.2). |
 | `pg_replication_slot_slot_confirmed_flush_lsn` | postgres_exporter `replication_slot` | gauge | `owner`, `slot_name`, `slot_type` | `postgresql`: есть | current − confirmed_flush — WAL, который слот Debezium держит на диске (ADR 37). |
 | `pg_replication_slot_slot_is_active` | postgres_exporter `replication_slot` | gauge | `owner`, `slot_name`, `slot_type` | `postgresql`: есть | 0 — коннектор не читает слот, WAL копится. |

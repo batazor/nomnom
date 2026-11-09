@@ -83,7 +83,7 @@ make kind-down
 - `orders-worker` (Temporal worker Order Fulfillment Workflow) — release chart `orders` с
   `values-worker.yaml` и [`values/orders-worker.yaml`](values/orders-worker.yaml): тот же образ,
   своя `command`, без Service, `dependsOn: [orders]`. Worker опрашивает Temporal в `nomnom-infra` (Search Attribute стадии
-  создаёт сам: `TEMPORAL__REGISTER_SEARCH_ATTRIBUTES=true`, dev server держит namespace в памяти) и
+  создаёт сам: `temporal.registerSearchAttributes: true`, dev server держит namespace в памяти) и
   вызывает restaurants, delivery и payments через internal gateway с projected tokens их audiences;
   ServiceAccount `nomnom-orders/orders-worker` — в allowlist всех трёх. Egress к PostgreSQL, Kafka и
   Temporal разрешён `manifests/netpol/app-infrastructure.yaml` для всех pod `nomnom-orders`.
@@ -109,7 +109,7 @@ make kind-down
   ([`kafka-connect/schema-framing`](kafka-connect/schema-framing), jar в образе Connect)
   оформляет value стримов Integration Events в wire format Registry; Change Notifications
   проходят без изменений. Consumers `orders`, `restaurants` и `delivery` читают Registry по
-  `SCHEMA_REGISTRY__URL`, egress `:8081` открыт `manifests/netpol/app-infrastructure.yaml`.
+  `schemaRegistry.url` файла конфигурации, egress `:8081` открыт `manifests/netpol/app-infrastructure.yaml`.
   Тесты SMT — `mvn package` в `kafka-connect/schema-framing` (Kafka и Schema Registry из testcontainers).
 - Redpanda Console ([`manifests/messaging/console.yaml`](manifests/messaging/console.yaml)) — web UI
   Kafka: topics и записи с headers (в том числе `<stream>.dlq`), consumer groups и offsets,
@@ -138,7 +138,8 @@ make kind-down
   `nomnom-data` (`emptyDir`). Secret DSN
   кладётся в неймспейс приложения (для `delivery` — `delivery-postgres`, ключ `dsn`) и ведёт в PgBouncer
   (`pgbouncer.nomnom-data:6432`, session mode, `pool_size` — `postgres.pooler` в `bootstrap/values.yaml`);
-  напрямую к серверу ходят только Debezium и экспортеры Alloy. Миграции
+  напрямую к серверу ходят только Debezium и Database Observability Alloy (сервер загружает
+  `pg_stat_statements`). Миграции
   каждый процесс применяет сам при старте ([ADR 42](../../docs/adr/0042-schema-migrations-at-process-startup.md)).
 
 - Profile `grafana-cloud` (`make kind-deploy GRAFANA_CLOUD=1`) добавляет Alloy в

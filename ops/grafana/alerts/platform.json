@@ -104,14 +104,14 @@
       "annotations": {
         "dashboard_url": "/d/nomnom-platform-overview",
         "runbook_url": "https://github.com/batazor/nomnom/blob/main/docs/runbooks.md#postgres",
-        "summary": "Экспортер не подключается к базе владельца: база недоступна или нет прав."
+        "summary": "Database Observability Alloy не подключается к серверу: сервер недоступен или у роли alloy нет прав."
       },
       "condition": "C",
       "data": [
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "max by (owner) (pg_up{job=\"infra/postgresql\"})",
+            "expr": "max by (instance) (pg_up{job=\"integrations/db-o11y\"})",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -160,7 +160,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "sum by (owner) (increase(pg_stat_database_deadlocks{job=\"infra/postgresql\"}[5m]))",
+            "expr": "sum by (owner) (increase(pg_stat_database_deadlocks{job=\"integrations/db-o11y\"}[5m]))",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -356,7 +356,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "min by (owner, slot_name) (pg_replication_slot_slot_is_active{job=\"infra/postgresql\"})",
+            "expr": "min by (owner, slot_name) (pg_replication_slot_slot_is_active{job=\"integrations/db-o11y\"})",
             "instant": true,
             "range": false,
             "refId": "A"
@@ -405,7 +405,7 @@
         {
           "datasourceUid": "${metrics}",
           "model": {
-            "expr": "max by (owner, slot_name) (pg_replication_slot_slot_current_wal_lsn{job=\"infra/postgresql\"} - pg_replication_slot_slot_confirmed_flush_lsn{job=\"infra/postgresql\"})",
+            "expr": "max by (owner, slot_name) (pg_replication_slot_slot_current_wal_lsn{job=\"integrations/db-o11y\"} - pg_replication_slot_slot_confirmed_flush_lsn{job=\"integrations/db-o11y\"})",
             "instant": true,
             "range": false,
             "refId": "A"

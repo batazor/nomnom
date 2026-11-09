@@ -53,60 +53,52 @@ prometheus.relabel "spicedb" {
   forward_to = [otelcol.receiver.prometheus.infra.receiver]
 }
 
-// PostgreSQL: по экспортеру на базу владельца (ADR 8) одного сервера postgres; DSN из
-// Secret alloy-postgres (chart ops/kind/bootstrap) — роль alloy (pg_monitor), не роль
-// сервиса. Только база владельца, без pg_settings. replication_slot —
-// слот Debezium <owner>_outbox (ADR 37): отставание CDC от WAL и активность слота.
-prometheus.exporter.postgres "orders" {
-  data_source_names  = [sys.env("POSTGRES_ORDERS_DSN")]
-  enabled_collectors = ["database", "stat_database", "replication_slot"]
-  autodiscovery {
-    enabled = false
+// PostgreSQL: Database Observability сервера postgres (ADR 9) — один компонент на сервер:
+// коллекторы обходят все базы сами, компонент на базу утроил бы данные. DSN из Secret
+// alloy-postgres (chart ops/kind/bootstrap) — роль alloy (pg_monitor, pg_read_all_data) в базе
+// postgres, где есть pg_stat_statements; сама postgres исключена. Query details, samples,
+// schema и explain plans — логи (loki.write в export.alloy); встроенный postgres_exporter —
+// метрики: размер и stat_database баз, слоты Debezium <owner>_outbox (ADR 37) и
+// pg_stat_statements для приложения Database Observability.
+database_observability.postgres "postgres" {
+  data_source_name  = sys.env("POSTGRES_DSN")
+  forward_to        = [loki.relabel.postgres.receiver]
+  exclude_databases = ["postgres"]
+
+  prometheus_exporter {
+    enabled_collectors = ["database", "stat_database", "replication_slot", "stat_statements"]
+
+    autodiscovery {
+      enabled = false
+    }
+
+    stat_statements {
+      exclude_users = ["alloy"]
+    }
   }
 }
 
-prometheus.exporter.postgres "payments" {
-  data_source_names  = [sys.env("POSTGRES_PAYMENTS_DSN")]
-  enabled_collectors = ["database", "stat_database", "replication_slot"]
-  autodiscovery {
-    enabled = false
+// instance логов и метрик один — по нему приложение связывает их; job=integrations/db-o11y и
+// server_id компонент ставит сам.
+loki.relabel "postgres" {
+  rule {
+    target_label = "instance"
+    replacement  = "postgres"
   }
-}
-
-prometheus.exporter.postgres "delivery" {
-  data_source_names  = [sys.env("POSTGRES_DELIVERY_DSN")]
-  enabled_collectors = ["database", "stat_database", "replication_slot"]
-  autodiscovery {
-    enabled = false
-  }
+  forward_to = [loki.write.grafana_cloud.receiver]
 }
 
 discovery.relabel "postgres" {
-  targets = array.concat(
-    prometheus.exporter.postgres.orders.targets,
-    prometheus.exporter.postgres.payments.targets,
-    prometheus.exporter.postgres.delivery.targets,
-  )
+  targets = database_observability.postgres.postgres.targets
   rule {
-    source_labels = ["__meta_component_id"]
-    regex         = "prometheus\\.exporter\\.postgres\\.(.+)"
-    target_label  = "owner"
-  }
-  rule {
-    source_labels = ["owner"]
-    target_label  = "instance"
-    replacement   = "postgres-$1"
-  }
-  // Экспортер задаёт свой job (integrations/postgres), он важнее job_name scrape.
-  rule {
-    target_label = "job"
-    replacement  = "infra/postgresql"
+    target_label = "instance"
+    replacement  = "postgres"
   }
 }
 
 prometheus.scrape "postgres" {
   targets         = discovery.relabel.postgres.output
-  job_name        = "infra/postgresql"
+  job_name        = "integrations/db-o11y"
   scrape_interval = "60s"
   forward_to      = [prometheus.relabel.postgres.receiver]
 }
@@ -114,14 +106,26 @@ prometheus.scrape "postgres" {
 prometheus.relabel "postgres" {
   rule {
     source_labels = ["__name__"]
-    regex         = "pg_up|pg_database_size_bytes|pg_stat_database_(numbackends|xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|conflicts|temp_bytes)|pg_replication_slot_slot_(current_wal_lsn|confirmed_flush_lsn|is_active)"
+    regex         = "pg_up|pg_database_size_bytes|pg_stat_database_(numbackends|xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|conflicts|temp_bytes)|pg_replication_slot_slot_(current_wal_lsn|confirmed_flush_lsn|is_active)|pg_stat_statements_.+|database_observability_.+"
     action        = "keep"
   }
-  // stat_database и размер есть у каждой базы сервера: только база владельца
-  // (datname == owner); pg_up и слоты (без datname, сервер — владельца) проходят всегда.
+  // owner — база владельца (ADR 8) или слот его Outbox; у pg_up и
+  // database_observability_* владельца нет, они про сервер.
   rule {
-    source_labels = ["__name__", "datname", "owner"]
-    regex         = "pg_up;.*;.*|pg_replication_slot_.+;.*;.*|pg_(database_size_bytes|stat_database_.+);(orders;orders|payments;payments|delivery;delivery)"
+    source_labels = ["datname"]
+    regex         = "(orders|payments|delivery)"
+    target_label  = "owner"
+  }
+  rule {
+    source_labels = ["slot_name"]
+    regex         = "(orders|payments|delivery)_outbox"
+    target_label  = "owner"
+  }
+  // Метрики баз и слотов — только владельцев: служебные базы и строка общих объектов
+  // pg_stat_database (без datname) отбрасываются.
+  rule {
+    source_labels = ["__name__", "owner"]
+    regex         = "(pg_up|database_observability_.+);.*|pg_(database_size_bytes|stat_database_.+|stat_statements_.+|replication_slot_.+);(orders|payments|delivery)"
     action        = "keep"
   }
   forward_to = [otelcol.receiver.prometheus.infra.receiver]

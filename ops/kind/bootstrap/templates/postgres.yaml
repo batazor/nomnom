@@ -4,8 +4,8 @@
 #     принадлежит владельцу (PostgreSQL 15+: pg_database_owner);
 #   - pg_hba пускает по TCP роль только в её базу; REPLICATION у роли — для слота Debezium
 #     <owner>_outbox своей базы (CDC Outbox, ADR 37), реплик сервера нет;
-#   - экспортеры Alloy ходят ролью alloy (pg_monitor, CONNECT ко всем базам владельцев), а не
-#     ролями сервисов: pg_monitor видит запросы всех баз, сервисам он не нужен.
+#   - Database Observability Alloy ходит ролью alloy, а не ролями сервисов: pg_monitor видит
+#     запросы всех баз, pg_read_all_data нужен explain plans и схеме таблиц; сервисам — нет.
 # emptyDir: данные не переживают пересоздание Pod; init SQL выполняется на пустом PGDATA.
 # Пароль владельца — Secret postgres-<owner> (nomnom-data), DSN приложения — Secret
 # <owner>-postgres (nomnom-<owner>, ключ dsn); оба из одного значения, сохраняемого между deploy.
@@ -14,10 +14,8 @@
 {{- $admin := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "postgres-admin" "key" "password" "length" 48) }}
 {{- $alloy := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" "postgres-alloy" "key" "password" "length" 48) }}
 {{- $pooler := "pgbouncer.nomnom-data.svc.cluster.local" }}
-{{- $dsns := dict }}
 {{- range $owner := .Values.postgres.owners }}
 {{- $password := include "bootstrap.secretValue" (dict "root" $ "namespace" "nomnom-data" "name" (printf "postgres-%s" $owner) "key" "password" "length" 48) }}
-{{- $_ := set $dsns (printf "POSTGRES_%s_DSN" (upper $owner)) (printf "postgres://alloy:%s@%s:5432/%s?sslmode=disable" $alloy $host $owner) }}
 ---
 apiVersion: v1
 kind: Secret
@@ -73,17 +71,23 @@ metadata:
     {{- include "bootstrap.labels" . | nindent 4 }}
 data:
   # Сокет — только изнутри pod (kubectl exec): psql -U <owner> -d <owner> без пароля.
+  # alloy подключается к postgres (pg_stat_statements) и к каждой базе владельца (схема таблиц).
   pg_hba.conf: |
     local all all trust
+    host postgres alloy all scram-sha-256
     {{- range $owner := .Values.postgres.owners }}
     host {{ $owner }} {{ $owner }} all scram-sha-256
     host {{ $owner }} alloy all scram-sha-256
     {{- end }}
   # Роли и базы владельцев. Entrypoint образа выполняет файл psql (ON_ERROR_STOP) на пустом
   # PGDATA; пароли — env PASSWORD_ALLOY и PASSWORD_<OWNER> через \getenv, не в ConfigMap.
+  # pg_stat_statements читает общую память сервера: расширение нужно только в базе postgres,
+  # куда подключается Alloy; запросы самого Alloy в статистику не попадают.
   10-owners.sql: |
     \getenv password PASSWORD_ALLOY
-    CREATE ROLE alloy LOGIN PASSWORD :'password' IN ROLE pg_monitor;
+    CREATE ROLE alloy LOGIN PASSWORD :'password' IN ROLE pg_monitor, pg_read_all_data;
+    ALTER ROLE alloy SET pg_stat_statements.track = 'none';
+    CREATE EXTENSION pg_stat_statements;
     {{- range $owner := .Values.postgres.owners }}
 
     \getenv password PASSWORD_{{ upper $owner }}
@@ -128,7 +132,8 @@ spec:
         - name: postgres
           image: {{ .Values.images.postgres }}
           # ADR 37: Debezium читает Outbox каждого владельца из WAL через pgoutput — по слоту и
-          # wal sender на коннектор, с запасом.
+          # wal sender на коннектор, с запасом. pg_stat_statements, query id и 4 KiB текста
+          # запроса в pg_stat_activity — для Database Observability Alloy (ADR 9).
           args:
             - -c
             - wal_level=logical
@@ -138,6 +143,14 @@ spec:
             - max_wal_senders=8
             - -c
             - hba_file=/etc/postgresql/pg_hba.conf
+            - -c
+            - shared_preload_libraries=pg_stat_statements
+            - -c
+            - compute_query_id=on
+            - -c
+            - pg_stat_statements.track=all
+            - -c
+            - track_activity_query_size=4096
           env:
             - name: POSTGRES_USER
               value: postgres
@@ -220,8 +233,8 @@ spec:
       port: 5432
       targetPort: postgres
 ---
-# DSN экспортеров PostgreSQL Alloy (profile grafana-cloud, ADR 9): POSTGRES_<OWNER>_DSN —
-# роль alloy в базе владельца.
+# DSN Database Observability Alloy (profile grafana-cloud, ADR 9): роль alloy, база postgres;
+# коллекторы обходят базы владельцев сами.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -231,6 +244,4 @@ metadata:
     {{- include "bootstrap.labels" . | nindent 4 }}
 type: Opaque
 data:
-  {{- range $name, $dsn := $dsns }}
-  {{ $name }}: {{ $dsn | b64enc }}
-  {{- end }}
+  POSTGRES_DSN: {{ printf "postgres://alloy:%s@%s:5432/postgres?sslmode=disable" $alloy $host | b64enc }}

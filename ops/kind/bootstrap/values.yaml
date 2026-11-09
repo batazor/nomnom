@@ -35,7 +35,7 @@ authz:
 
 # ADR 8: владельцы баз одного сервера PostgreSQL (templates/postgres.yaml): у каждого своя роль и
 # база. Пароль — Secret postgres-<owner> (nomnom-data), DSN — Secret <owner>-postgres
-# (nomnom-<owner>, ключ dsn), DSN экспортеров Alloy (роль alloy) — Secret alloy-postgres.
+# (nomnom-<owner>, ключ dsn), DSN Database Observability Alloy (роль alloy) — Secret alloy-postgres.
 postgres:
   owners:
     - orders

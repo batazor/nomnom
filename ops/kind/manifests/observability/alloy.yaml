@@ -66,18 +66,21 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        # Без endpoint, instance ID или token Alloy молча отбрасывал бы метрики: pod не
-        # стартует, и Skaffold status check падает с этим сообщением.
+        # Без endpoint, instance ID, token или Loki stack (логи Database Observability) Alloy
+        # молча отбрасывал бы сигналы: pod не стартует, и Skaffold status check падает с этим
+        # сообщением.
         - name: require-grafana-cloud
-          image: docker.io/grafana/alloy:v1.21.2@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
+          image: docker.io/grafana/alloy:v1.21.3@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4
           command:
             - sh
             - -c
             - >-
               test -n "$GRAFANA_CLOUD_OTLP_ENDPOINT" && test -n "$GRAFANA_CLOUD_OTLP_INSTANCE_ID" &&
-              test -n "$GRAFANA_CLOUD_OTLP_TOKEN" || {
-              echo "GRAFANA_CLOUD_OTLP_ENDPOINT, GRAFANA_CLOUD_OTLP_INSTANCE_ID and GRAFANA_CLOUD_OTLP_TOKEN
-              must be set in ops/grafana-cloud/.env.grafana-cloud" >&2; exit 1; }
+              test -n "$GRAFANA_CLOUD_OTLP_TOKEN" && test -n "$GRAFANA_CLOUD_LOGS_URL" &&
+              test -n "$GRAFANA_CLOUD_LOGS_USER" || {
+              echo "GRAFANA_CLOUD_OTLP_ENDPOINT, GRAFANA_CLOUD_OTLP_INSTANCE_ID, GRAFANA_CLOUD_OTLP_TOKEN,
+              GRAFANA_CLOUD_LOGS_URL and GRAFANA_CLOUD_LOGS_USER must be set in
+              ops/grafana-cloud/.env.grafana-cloud" >&2; exit 1; }
           envFrom:
             - secretRef:
                 name: grafana-cloud-otlp
@@ -93,7 +96,7 @@ spec:
               drop: [ALL]
       containers:
         - name: alloy
-          image: docker.io/grafana/alloy:v1.21.2@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
+          image: docker.io/grafana/alloy:v1.21.3@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4
           args:
             - run
             - /etc/alloy
@@ -103,7 +106,7 @@ spec:
           envFrom:
             - secretRef:
                 name: grafana-cloud-otlp
-            # POSTGRES_<OWNER>_DSN экспортеров PostgreSQL (chart ops/kind/bootstrap).
+            # POSTGRES_DSN Database Observability (chart ops/kind/bootstrap).
             - secretRef:
                 name: alloy-postgres
             # VALKEY_<OWNER>_PASSWORD экспортеров Valkey (chart ops/kind/bootstrap).
@@ -123,7 +126,7 @@ spec:
               path: /-/ready
               port: http
             periodSeconds: 5
-          # OTLP-буферы, Faro и экспортеры PostgreSQL/Valkey в одном процессе.
+          # OTLP-буферы, Faro, Database Observability и экспортер Valkey в одном процессе.
           resources:
             requests:
               memory: 128Mi

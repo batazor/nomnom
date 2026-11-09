@@ -41,7 +41,7 @@ Rust.
 | **Register Courier** | Оператор или диспетчер Courier Pool | Создать курьера в системе доставки | Создан `Courier` с именем (1–64 символа) и исходным состоянием доступности | Authoritative authorization в `delivery`, `platform#manage_couriers` ([FR-301](../../openspec/changes/add-cook-and-courier-pools/)) |
 | **Retire Courier** | Оператор или диспетчер Courier Pool | Убрать курьера из Courier Pool | Курьер вне линии выбыл и больше не получает офферов; на линии — `OnLine` | `platform#manage_couriers` ([FR-619](../../openspec/changes/add-cook-and-courier-pools/)) |
 | **Set Courier Availability** | Курьер или диспетчер Courier Pool | Изменить доступность курьера для новых назначений | `Courier` отмечен available или unavailable; позиция курьера не изменена; выбывший не возвращается | Не совмещается с location update; `courier#act`, иначе `platform#manage_couriers` ([FR-620](../../openspec/changes/add-cook-and-courier-pools/)) |
-| **Update Courier Location** | Курьерское приложение | Обновить последнюю известную позицию курьера | Позиция записана, если сохранённая старше `TRACKING__PERSIST_INTERVAL`; у курьера с активной доставкой точка опубликована в её Tracking Channel | FR-303, FR-661; см. «Live tracking» |
+| **Update Courier Location** | Курьерское приложение | Обновить последнюю известную позицию курьера | Позиция записана, если сохранённая старше `spec.tracking.persistInterval`; у курьера с активной доставкой точка опубликована в её Tracking Channel | FR-303, FR-661; см. «Live tracking» |
 | **Create Delivery** | Fulfillment process `orders` | Запросить доставку оформленного заказа | Создана идемпотентная `Delivery` для заказа | Вызывается Temporal Activity через API `delivery`; после commit, и на повторе, запускает Assignment Workflow доставки |
 | **Find Courier** | Процесс назначения `delivery` | Подобрать подходящего доступного курьера | Выбран кандидат или зафиксировано отсутствие кандидата; алгоритм остаётся внутри `delivery` | Может запускаться запросом orchestration, но выбор выполняет `delivery` |
 | **Offer Delivery** | Процесс назначения `delivery` | Предложить конкретному курьеру принять доставку | Создано актуальное ограниченное по времени `Delivery Offer` и `DeliveryOffered` в Outbox; `Courier Assignment` ещё не создан | Учитывает результат Find Courier |
@@ -66,7 +66,7 @@ Rust.
 | **Get Order Delivery** | Тот, кто видит заказ (покупатель) | Узнать, кто везёт заказ, и следить за ним | Имя курьера доставки в `Assigned`, `PickedUp`, `Delivered` и, пока доставка в `Assigned`/`PickedUp` с каналом, Tracking Channel, Virtual City, точки pickup и dropoff и сохранённая позиция курьера; без доставки — пусто | Одна проверка `order#view`, один запрос query model `delivery` ([FR-626](../../openspec/changes/add-cook-and-courier-pools/), [FR-660](../../openspec/changes/add-live-courier-tracking/)) |
 | **Get Courier Current Delivery** | Курьер | Получить свою активную доставку | Возвращено текущее назначение и разрешённое представление `Delivery` либо отсутствие активной доставки | Query model `delivery`; проверка принадлежности курьеру |
 | **List Available Delivery Offers** | Курьер | Получить актуальные предложения, доступные этому курьеру | Возвращён список непротухших `Delivery Offer` без изменения состояния | Query model `delivery`; проверка адресата offer |
-| **Estimate Delivery Duration** | Fulfillment process `orders` | Оценить доставку в Market для плана запланированного заказа | Медианы `courier_lead` и `transit` последних `DELIVERY_ESTIMATE__SAMPLE_SIZE` длительностей Market; вид без набранной выборки — его базовое значение `DELIVERY_ESTIMATE__BASELINE_*` | `platform#coordinate_delivery` (как команды fulfillment); пустой или не slug `market_id` — `INVALID_ARGUMENT` ([FR-691](../../openspec/changes/add-scheduled-orders/specs/delivery-duration-estimate/spec.md)) |
+| **Estimate Delivery Duration** | Fulfillment process `orders` | Оценить доставку в Market для плана запланированного заказа | Медианы `courier_lead` и `transit` последних `spec.deliveryEstimate.sampleSize` длительностей Market; вид без набранной выборки — его базовое значение `spec.deliveryEstimate.baseline*` | `platform#coordinate_delivery` (как команды fulfillment); пустой или не slug `market_id` — `INVALID_ARGUMENT` ([FR-691](../../openspec/changes/add-scheduled-orders/specs/delivery-duration-estimate/spec.md)) |
 | **Get Simulator** | Оператор платформы | Узнать, включён ли демо Simulator | `enabled`; без записи в хранилище — `false` | `platform#operate_simulator`, иначе `PERMISSION_DENIED` (FR-604) |
 
 ## Структура слайсов
@@ -83,26 +83,26 @@ Accept Delivery Offer, Reassign Courier, Confirm Delivery, Report Delivery Failu
 
 Слайс `slices/simulator` (change [`add-demo-simulator`](../../openspec/changes/add-demo-simulator/), FR-604…FR-606) владеет переключателем Simulator (таблица `simulator`, одна строка; нет строки — выключен) и глобальной выборкой работы (pending offers всех курьеров, доставки в `assigned`/`picked_up`). RPC `GetSimulator` и `SetSimulatorEnabled` требуют `platform#operate_simulator`.
 
-Фоновый `di::SimulatorWorker` каждые `SIMULATOR__INTERVAL` читает переключатель: выключенный Simulator сбрасывает расписание и ничего не меняет. Включённый назначает новой сущности момент `firstSeen + random[SIMULATOR__MIN_DELAY, SIMULATOR__MAX_DELAY]` и, когда он наступил, вызывает настоящий use case от имени курьера (`Subject::User(courier_id)`): pending offer — accept 85% / reject 15%; `Assigned` — Confirm Pickup 95% / Report Delivery Failure 5%; `PickedUp` — Confirm Delivery 95% / Report Delivery Failure 5% (причина — случайный код каталога, не требующий пояснения). Offer живёт 60s, поэтому верхняя граница его задержки обрезается до `expiresAt − SIMULATOR__INTERVAL`; если не успевает и `MIN_DELAY`, offer получает действие на последнем проходе до истечения. Сроки — запланированные моменты (FR-610): принимая offer, Simulator сразу выбирает задержку Pickup и передаёт `expected_pickup_at = now + delay`, а Pickup ставит в расписание на этот момент; подтверждая Pickup, так же выбирает задержку вручения, передаёт `expected_delivered_at` и вручает в этот момент. Планы живут только в расписании процесса: после выключения или рестарта доставка планируется заново от первого прохода. Отказ use case пишется в лог, запись расписания удаляется, Simulator продолжает. `SIMULATOR__INTERVAL`, `SIMULATOR__MIN_DELAY` и `SIMULATOR__MAX_DELAY` обязательны, значений по умолчанию нет; `MIN_DELAY > MAX_DELAY` или нулевое значение завершают startup (kind: 5s / 30s / 2m).
+Фоновый `di::SimulatorWorker` каждые `spec.simulator.interval` читает переключатель: выключенный Simulator сбрасывает расписание и ничего не меняет. Включённый назначает новой сущности момент `firstSeen + random[spec.simulator.minDelay, spec.simulator.maxDelay]` и, когда он наступил, вызывает настоящий use case от имени курьера (`Subject::User(courier_id)`): pending offer — accept 85% / reject 15%; `Assigned` — Confirm Pickup 95% / Report Delivery Failure 5%; `PickedUp` — Confirm Delivery 95% / Report Delivery Failure 5% (причина — случайный код каталога, не требующий пояснения). Offer живёт 60s, поэтому верхняя граница его задержки обрезается до `expiresAt − spec.simulator.interval`; если не успевает и `MIN_DELAY`, offer получает действие на последнем проходе до истечения. Сроки — запланированные моменты (FR-610): принимая offer, Simulator сразу выбирает задержку Pickup и передаёт `expected_pickup_at = now + delay`, а Pickup ставит в расписание на этот момент; подтверждая Pickup, так же выбирает задержку вручения, передаёт `expected_delivered_at` и вручает в этот момент. Планы живут только в расписании процесса: после выключения или рестарта доставка планируется заново от первого прохода. Отказ use case пишется в лог, запись расписания удаляется, Simulator продолжает. `spec.simulator.interval`, `spec.simulator.minDelay` и `spec.simulator.maxDelay` обязательны, значений по умолчанию нет; `MIN_DELAY > MAX_DELAY` или нулевое значение завершают startup (kind: 5s / 30s / 2m).
 
-Движение (FR-662, FR-667, change [`add-live-courier-tracking`](../../openspec/changes/add-live-courier-tracking/)): доставку с точками Virtual City Simulator ведёт по случайному кратчайшему пути по улицам — в `Assigned` от перекрёстка у сохранённой позиции курьера (позиция вне рамки прижимается к краю) к pickup, в `PickedUp` от pickup к dropoff — с прибытием в запланированный момент шага (`expected_pickup_at`, `expected_delivered_at`). Каждые `SIMULATOR__TRACK_INTERVAL` (`di/simulator_worker/movement.rs`) он вызывает настоящий Update Courier Location от имени курьера с точкой маршрута по доле прошедшего времени; после прибытия курьер стоит в конечной точке до действия. Проход расписания идёт раз в `SIMULATOR__INTERVAL` внутри того же цикла. Маршруты живут в памяти, после рестарта строятся заново. `SIMULATOR__TRACK_INTERVAL` обязателен; ноль или значение больше `SIMULATOR__INTERVAL` завершают startup (kind: 1s). Доставки, созданные до точек, Simulator не двигает.
+Движение (FR-662, FR-667, change [`add-live-courier-tracking`](../../openspec/changes/add-live-courier-tracking/)): доставку с точками Virtual City Simulator ведёт по случайному кратчайшему пути по улицам — в `Assigned` от перекрёстка у сохранённой позиции курьера (позиция вне рамки прижимается к краю) к pickup, в `PickedUp` от pickup к dropoff — с прибытием в запланированный момент шага (`expected_pickup_at`, `expected_delivered_at`). Каждые `spec.simulator.trackInterval` (`di/simulator_worker/movement.rs`) он вызывает настоящий Update Courier Location от имени курьера с точкой маршрута по доле прошедшего времени; после прибытия курьер стоит в конечной точке до действия. Проход расписания идёт раз в `spec.simulator.interval` внутри того же цикла. Маршруты живут в памяти, после рестарта строятся заново. `spec.simulator.trackInterval` обязателен; ноль или значение больше `spec.simulator.interval` завершают startup (kind: 1s). Доставки, созданные до точек, Simulator не двигает.
 
 ## Live tracking
 
-Change [`add-live-courier-tracking`](../../openspec/changes/add-live-courier-tracking/) (FR-658…FR-669). Адресов в проекте нет, поэтому пространство доставки — **Virtual City** (`slices/delivery/domains/delivery/tracking.rs`): сетка `TRACKING__CITY_BLOCKS × TRACKING__CITY_BLOCKS` кварталов со стороной `TRACKING__BLOCK_METERS` от юго-западного угла `TRACKING__CITY_ORIGIN_LATITUDE`/`_LONGITUDE`. Координаты остаются широтой и долготой, контракт `UpdateCourierLocation` не меняется.
+Change [`add-live-courier-tracking`](../../openspec/changes/add-live-courier-tracking/) (FR-658…FR-669). Адресов в проекте нет, поэтому пространство доставки — **Virtual City** (`slices/delivery/domains/delivery/tracking.rs`): сетка `spec.tracking.cityBlocks × spec.tracking.cityBlocks` кварталов со стороной `spec.tracking.blockMeters` от юго-западного угла `spec.tracking.cityOriginLatitude`/`_LONGITUDE`. Координаты остаются широтой и долготой, контракт `UpdateCourierLocation` не меняется.
 
 - **Точки и канал.** Create Delivery выбирает два разных случайных перекрёстка (pickup, dropoff) и Tracking Channel — 128 случайных бит в 32 hex-символах (`RandomSource`, в процессе — ОС через `getrandom`) — и хранит их в `deliveries` (`pickup_x`, `pickup_y`, `dropoff_x`, `dropoff_y`, `tracking_channel`, миграция `0008_delivery_tracking.sql`); повтор возвращает сохранённые. Доставки до миграции живут без точек и канала.
-- **Поток позиций.** Update Courier Location пишет позицию в `courier_positions` условным upsert, только если сохранённая старше `TRACKING__PERSIST_INTERVAL`, затем читает канал активной доставки курьера (порт `ActiveTrackingChannel`: слайс `courier` не знает `Delivery`, читает адаптер `Store`) и публикует в Valkey канал `delivery.tracks.<channel>` JSON `{"__typename":"CourierPosition","channel",…,"recordedAt"}` (`slices/courier/infrastructure/tracks.rs`). Ни Integration Event, ни Outbox на точку нет. Ошибка публикации — `UNAVAILABLE`.
+- **Поток позиций.** Update Courier Location пишет позицию в `courier_positions` условным upsert, только если сохранённая старше `spec.tracking.persistInterval`, затем читает канал активной доставки курьера (порт `ActiveTrackingChannel`: слайс `courier` не знает `Delivery`, читает адаптер `Store`) и публикует в Valkey канал `delivery.tracks.<channel>` JSON `{"__typename":"CourierPosition","channel",…,"recordedAt"}` (`slices/courier/infrastructure/tracks.rs`). Ни Integration Event, ни Outbox на точку нет. Ошибка публикации — `UNAVAILABLE`.
 - **Чтение.** Get Order Delivery (`order#view`, permission `ViewOrderDelivery`, одна проверка и один SQL) отдаёт имя курьера и трекинг: канал, Virtual City, точки и сохранённую позицию; Router подписывает клиентов на канал сам (ADR 36).
 
-| Переменная | Ключ TOML | Значение |
-| --- | --- | --- |
-| `TRACKING__CITY_ORIGIN_LATITUDE` | `tracking.city_origin_latitude` | Широта юго-западного угла; обязательна |
-| `TRACKING__CITY_ORIGIN_LONGITUDE` | `tracking.city_origin_longitude` | Долгота юго-западного угла; обязательна |
-| `TRACKING__CITY_BLOCKS` | `tracking.city_blocks` | Кварталов по стороне, не меньше 2 |
-| `TRACKING__BLOCK_METERS` | `tracking.block_meters` | Сторона квартала в метрах, положительная |
-| `TRACKING__PERSIST_INTERVAL` | `tracking.persist_interval` | Минимальный интервал записи позиции в PostgreSQL, положительный |
-| `VALKEY__URL` | `valkey.url` | `redis://`/`rediss://` URL ACL-пользователя, который только публикует в `delivery.tracks.*`; только из Secret |
+| Ключ `spec` или секрет env | Значение |
+| --- | --- |
+| `spec.tracking.cityOriginLatitude` | Широта юго-западного угла; обязательна |
+| `spec.tracking.cityOriginLongitude` | Долгота юго-западного угла; обязательна |
+| `spec.tracking.cityBlocks` | Кварталов по стороне, не меньше 2 |
+| `spec.tracking.blockMeters` | Сторона квартала в метрах, положительная |
+| `spec.tracking.persistInterval` | Минимальный интервал записи позиции в PostgreSQL, положительный |
+| `VALKEY__URL` | Секрет env из Kubernetes Secret, в файле поля нет. `redis://`/`rediss://` URL ACL-пользователя, который только публикует в `delivery.tracks.*`; только из Secret |
 
 Значений по умолчанию нет: пустое или невалидное значение, рамка вне диапазонов широты и долготы и недоступный Valkey (`PING` при старте) завершают startup. В kind — 12 × 12 кварталов по 150 м от `(52.515, 13.385)`, интервал 15s, Valkey `valkey-delivery` в `nomnom-data`.
 
@@ -164,17 +164,17 @@ Transport adapter уже маппит application errors в gRPC status codes; �
 По [ADR 27](../../docs/adr/0027-service-identity-via-projected-serviceaccount-tokens.md) workloads других контекстов (Activities `orders-worker` и т. п.) предъявляют projected ServiceAccount token в gRPC metadata `authorization: Bearer <jwt>`. `ServiceTokenSubjectResolver` (`infrastructure/grpc/identity.rs`, `jsonwebtoken`) только соединяет verifier'ы модулей `identity/service_token.rs` и `identity/user_assertion.rs`; ключи разбирает `identity/jwks.rs`, файлы и allowlist читает `identity/config.rs`. Проверяется:
 
 - `alg` ровно `RS256` или `ES256` (`none`, HS* и прочие отклоняются), `kid` обязателен и есть в JWKS, алгоритм совпадает с типом ключа (RSA → RS256, EC P-256 → ES256);
-- подпись, `iss` равен `IDENTITY__ISSUER`, `aud` (строка или массив) содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s;
+- подпись, `iss` равен `spec.identity.issuer`, `aud` (строка или массив) содержит `spec.identity.audience`, `exp`/`nbf` с допуском 30 s;
 - `sub` = `system:serviceaccount:<namespace>:<serviceaccount>` есть в allowlist → `Subject::Service(<service-name>)`.
 
 Любой отказ — `UNAUTHENTICATED` с общим сообщением; причина пишется только в stderr. Что разрешено service subject, решает authorization use case, не resolver.
 
-| Переменная | Ключ TOML | Значение |
-| --- | --- | --- |
-| `IDENTITY__ISSUER` | `identity.issuer` | Issuer кластера (`/.well-known/openid-configuration`) |
-| `IDENTITY__AUDIENCE` | `identity.audience` | Audience контекста, в кластере `nomnom.delivery` |
-| `IDENTITY__JWKS_FILE` | `identity.jwks_file` | Файл JWKS кластера (`/openid/v1/jwks`); Helm монтирует `/etc/nomnom/identity/jwks.json` |
-| `IDENTITY__SERVICE_ACCOUNTS` | `identity.service_accounts` | Allowlist `namespace/serviceaccount=service-name` через запятую, например `nomnom/orders-worker=orders-worker` |
+| Ключ `spec` или секрет env | Значение |
+| --- | --- |
+| `spec.identity.issuer` | Issuer кластера (`/.well-known/openid-configuration`) |
+| `spec.identity.audience` | Audience контекста, в кластере `nomnom.delivery` |
+| `spec.identity.jwksFile` | Файл JWKS кластера (`/openid/v1/jwks`); Helm монтирует `/etc/nomnom/identity/jwks.json` |
+| `spec.identity.serviceAccounts` | Allowlist `namespace/serviceaccount=service-name` через запятую, например `nomnom/orders-worker=orders-worker` |
 
 Issuer, audience и путь к JWKS обязательны: без них процесс не стартует. Нечитаемый или невалидный JWKS (нет usable RS256/ES256 ключей, ключ без `kid`, дубликат `kid`), пустой allowlist при заданной проверке и неверный формат allowlist завершают startup ошибкой. JWKS читается один раз при старте: после ротации signing key кластера нужен restart. Тесты проходят по общим векторам `tests/identity/fixtures` (AC-461).
 
@@ -184,22 +184,22 @@ Issuer, audience и путь к JWKS обязательны: без них пр�
 
 1. service token (выше); без него assertion не рассматривается;
 2. assertion нет → `Subject::Service(<service-name>)`, как раньше;
-3. assertion повторён или пуст или service не входит в `IDENTITY__USER_DELEGATES` → `UNAUTHENTICATED`;
-4. `UserAssertionVerifier`: `alg` ровно `ES256`, `kid` есть в JWKS BFF (ключи EC P-256), `iss` равен `IDENTITY__USER_ISSUER`, `aud` содержит `IDENTITY__AUDIENCE`, `exp`/`nbf` с допуском 30 s, `iat` обязателен, `exp - iat ≤ 60 s`, `sub` непустой и без пробелов по краям, `jti` непустой → `Subject::User(<sub>)`.
+3. assertion повторён или пуст или service не входит в `spec.identity.userDelegates` → `UNAUTHENTICATED`;
+4. `UserAssertionVerifier`: `alg` ровно `ES256`, `kid` есть в JWKS BFF (ключи EC P-256), `iss` равен `spec.identity.userIssuer`, `aud` содержит `spec.identity.audience`, `exp`/`nbf` с допуском 30 s, `iat` обязателен, `exp - iat ≤ 60 s`, `sub` непустой и без пробелов по краям, `jti` непустой → `Subject::User(<sub>)`.
 
 Service identity делегата остаётся в `Caller::delegate` (`ServiceTokenSubjectResolver::authenticate`); принятие и отказ пишутся в stderr с `jti` и делегатом, без token.
 
-| Переменная | Ключ TOML | Значение |
-| --- | --- | --- |
-| `IDENTITY__USER_ISSUER` | `identity.user_issuer` | Ожидаемый `iss` assertion, `nomnom-bff` |
-| `IDENTITY__USER_JWKS_FILE` | `identity.user_jwks_file` | JWKS BFF; Helm монтирует `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` |
-| `IDENTITY__USER_DELEGATES` | `identity.user_delegates` | Services через запятую, которым разрешено передавать user subject, в развёртываниях `bff` |
+| Ключ `spec` или секрет env | Значение |
+| --- | --- |
+| `spec.identity.userIssuer` | Ожидаемый `iss` assertion, `nomnom-bff` |
+| `spec.identity.userJwksFile` | JWKS BFF; Helm монтирует `/etc/nomnom/user-identity/jwks.json` из `identity.userJwksConfigMap` |
+| `spec.identity.userDelegates` | Services через запятую, которым разрешено передавать user subject, в развёртываниях `bff` |
 
 Все три переменные обязательны: пустая завершает startup ошибкой. Нечитаемый JWKS BFF, JWKS без ES256-ключей и неверный формат списка делегатов завершают startup ошибкой. Ротация ключа BFF: новый `kid` добавляется в ConfigMap, затем rollout restart, затем BFF переключается на новый ключ. Тесты проходят по `tests/identity/fixtures/user-vectors.json` с часами, зафиксированными на `now` (FR-471–FR-473).
 
 ## Авторизация (SpiceDB)
 
-Use cases проверяют права через порты `CourierAuthorization` и `DeliveryAuthorization` (`slices/*/applications/authorization.rs`). При заданном `SPICEDB__ENDPOINT` оба порта закрывает `SpiceDbAuthorization` (`infrastructure/spicedb`, [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md), FR-435): каждый check — `PermissionsService.CheckPermission` (consistency `minimize_latency`, для ресурса с сохранённой revision — `at_least_as_fresh`, см. «Authorization revisions») по [схеме](../../authorization/schema.zed) и нормативной таблице [design.md](../../openspec/changes/archive/2026-10-25-add-spicedb-authorization/design.md):
+Use cases проверяют права через порты `CourierAuthorization` и `DeliveryAuthorization` (`slices/*/applications/authorization.rs`). При заданном `spec.spicedb.endpoint` оба порта закрывает `SpiceDbAuthorization` (`infrastructure/spicedb`, [ADR 18](../../docs/adr/0018-spicedb-for-authorization.md), FR-435): каждый check — `PermissionsService.CheckPermission` (consistency `minimize_latency`, для ресурса с сохранённой revision — `at_least_as_fresh`, см. «Authorization revisions») по [схеме](../../authorization/schema.zed) и нормативной таблице [design.md](../../openspec/changes/archive/2026-10-25-add-spicedb-authorization/design.md):
 
 | Порт / permission | SpiceDB check |
 | --- | --- |
@@ -213,18 +213,18 @@ Use cases проверяют права через порты `CourierAuthorizat
 
 Subject: `Subject::User(id)` → `user:<id>`, `Subject::Service(id)` → `service:<id>`. Fulfillment-команды разрешены `service:orders-worker` grant'ом `platform:nomnom#fulfillment` из [`authorization/bootstrap.yaml`](../../authorization/bootstrap.yaml).
 
-Fail closed: разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION`, conditional и неизвестные значения — `AuthorizationError::Denied`. Ошибка gRPC, недоступность или превышение `SPICEDB__TIMEOUT` — `AuthorizationError::Unavailable` («authorization unavailable», gRPC `UNAVAILABLE`), а не разрешение. Соединение ленивое: недоступный SpiceDB не мешает startup.
+Fail closed: разрешает только `PERMISSIONSHIP_HAS_PERMISSION`; `NO_PERMISSION`, conditional и неизвестные значения — `AuthorizationError::Denied`. Ошибка gRPC, недоступность или превышение `spec.spicedb.timeout` — `AuthorizationError::Unavailable` («authorization unavailable», gRPC `UNAVAILABLE`), а не разрешение. Соединение ленивое: недоступный SpiceDB не мешает startup.
 
 Официального Rust SDK у SpiceDB нет: stubs `authzed.api.v1` (`CheckPermission`, `WriteRelationships`, `ReadRelationships` и их типы) генерируются buf remote plugins `neoeinstein-prost`/`neoeinstein-tonic` из `buf.build/authzed/api:v1.57.0` (`infrastructure/spicedb/buf.gen.yaml`, `make generate-spicedb`) и коммитятся в `infrastructure/spicedb/gen`. Preshared key передаётся interceptor'ом как `authorization: Bearer <key>`. Порты синхронные, а handlers tonic — async, поэтому клиент работает в собственном потоке с current-thread runtime, а ожидание ответа на multi-thread runtime выполняется через `block_in_place`.
 
-| Переменная | Ключ TOML | Значение |
-| --- | --- | --- |
-| `SPICEDB__ENDPOINT` | `spicedb.endpoint` | gRPC endpoint `host:port` (или URL со схемой, совпадающей с `insecure`). Обязателен: пусто — ошибка startup |
-| `SPICEDB__PRESHARED_KEY` | `spicedb.preshared_key` | Preshared key SpiceDB; в Kubernetes только из Secret. Обязателен при заданном endpoint, иначе ошибка startup |
-| `SPICEDB__INSECURE` | `spicedb.insecure` | `true` — plaintext без TLS (только kind/локально); по умолчанию `false`, TLS с корнями webpki |
-| `SPICEDB__TIMEOUT` | `spicedb.timeout` | Deadline одного check, по умолчанию `2s`; должен быть положительным |
+| Ключ `spec` или секрет env | Значение |
+| --- | --- |
+| `spec.spicedb.endpoint` | gRPC endpoint `host:port` (или URL со схемой, совпадающей с `insecure`). Обязателен: пусто — ошибка startup |
+| `SPICEDB__PRESHARED_KEY` | Секрет env из Kubernetes Secret, в файле поля нет. Preshared key SpiceDB; в Kubernetes только из Secret. Обязателен при заданном endpoint, иначе ошибка startup |
+| `spec.spicedb.insecure` | `true` — plaintext без TLS (только kind/локально); по умолчанию `false`, TLS с корнями webpki |
+| `spec.spicedb.timeout` | Deadline одного check, по умолчанию `2s`; должен быть положительным |
 
-`SPICEDB__ENDPOINT` обязателен: при пустом значении процесс завершается ошибкой startup. `StaticAuthorization` из `infrastructure/memory` используется только тестовым графом `di::build()`.
+`spec.spicedb.endpoint` обязателен: при пустом значении процесс завершается ошибкой startup. `StaticAuthorization` из `infrastructure/memory` используется только тестовым графом `di::build()`.
 
 Integration-тесты (`tests/spicedb_authorization.rs`) выполняются против SpiceDB, который тест сам поднимает через testcontainers (`authzed/spicedb` той же версии, что в `ops/kind/bootstrap/values.yaml`, memory datastore с `authorization/bootstrap.yaml`, ключ `devkey`, `tests/support/mod.rs`). Переменных окружения и внешних инстансов нет, нужен только Docker:
 
@@ -247,11 +247,11 @@ make test-spicedb   # cargo test --test spicedb_authorization --test spicedb_rel
 
 Reconciliation (`infrastructure/reconcile.rs`, порт алгоритма `orders`): для `courier#self` (зарегистрированные курьеры) и `delivery#courier` (активные назначения по `Delivery::active_courier()`; связь доставленной или неуспешной доставки удаляется как stale и не восстанавливается, AC-693) граф читается страницами `ReadRelationships` с `fully_consistent`, хранилище — постранично по id и только committed state. Orphan/stale связь удаляется, только если была orphan на двух проходах с интервалом не меньше grace (кандидаты в памяти процесса); missing связь восстанавливается `TOUCH` так же только после двух проходов с интервалом не меньше grace, на которых она отсутствовала при том же subject и той же версии строки `Courier`/`Delivery` в хранилище: Reassign Courier и Cancel Delivery делают `DELETE` до `UPDATE` строки и без row lock, и проход, прочитавший граф после `DELETE`, а хранилище до commit, иначе вернул бы снятому курьеру доступ (FR-563). Кандидат missing ключуется версией строки: страницы `ReconciliationStore::courier_page`/`assignment_page` возвращают `version`, и если между проходами версия изменилась (writer закоммитил, например курьера сняли, снова назначили и снова сняли, а второй `DELETE` ещё не закоммичен), grace начинается заново с новой версией, и такой subject не восстанавливается (AC-760). Пока кандидат ждёт grace (первое наблюдение, внутри grace или после смены версии), он считается в `missing_pending`; кандидат, ставший present или потерявший subject, забывается; id вне грамматики SpiceDB `^[a-zA-Z0-9/_|\-=+]+$` пропускаются и считаются `unrepairable`. Каждый проход пишет в stdout `checked`, `orphans_pending`, `orphans_deleted`, `missing_pending`, `missing_repaired`, `unrepairable`. Reconciler читает PostgreSQL через порт `ReconciliationStore` и работает фоновой задачей основного процесса (`ReconcilingWorker`): первый проход через `min(10s, interval)` после старта, остановка по сигналу shutdown (проход прерывается на границе страницы).
 
-| Переменная | Ключ TOML | Значение |
-| --- | --- | --- |
-| `RECONCILER__INTERVAL` | `reconciler.interval` | Интервал между проходами, по умолчанию `5m`; положительный |
-| `RECONCILER__GRACE` | `reconciler.grace` | Минимальный интервал между двумя проходами до удаления orphan или восстановления missing, по умолчанию `10m` |
-| `RECONCILER__PAGE_SIZE` | `reconciler.page_size` | Размер страницы, по умолчанию `500`; `1..1000` |
+| Ключ `spec` или секрет env | Значение |
+| --- | --- |
+| `spec.reconciler.interval` | Интервал между проходами, по умолчанию `5m`; положительный |
+| `spec.reconciler.grace` | Минимальный интервал между двумя проходами до удаления orphan или восстановления missing, по умолчанию `10m` |
+| `spec.reconciler.pageSize` | Размер страницы, по умолчанию `500`; `1..1000` |
 
 ### Authorization revisions (ZedToken)
 
@@ -280,13 +280,13 @@ Signal `wake` (причина — только для Event History) use cases �
 
 `DeliveryOffered` и `DeliveryOfferExpired` — внутренние факты: не публикуются; истечение считается в `nomnom.delivery.offers{nomnom.outcome="expired"}`. Queries (`ListAvailableDeliveryOffers`, `is_open_at`) считают `expired` закрытым, как и pending offer после `expiresAt`. Spans и `nomnom.usecase.duration` шагов (`advance_assignment`, `expire_delivery_offer`) пишет `delivery-worker`; trace context через Temporal headers не переносится.
 
-| Переменная | Ключ TOML | Значение |
-| --- | --- | --- |
-| `TEMPORAL__HOST_PORT` | `temporal.host_port` | `host:port` frontend Temporal; обязателен `delivery` и `delivery-worker` |
-| `TEMPORAL__NAMESPACE` | `temporal.namespace` | Namespace; обязателен |
-| `TEMPORAL__CONNECT_TIMEOUT` | `temporal.connect_timeout` | Таймаут подключения при старте; положительный |
+| Ключ `spec` или секрет env | Значение |
+| --- | --- |
+| `spec.temporal.hostPort` | `host:port` frontend Temporal; обязателен `delivery` и `delivery-worker` |
+| `spec.temporal.namespace` | Namespace; обязателен |
+| `spec.temporal.connectTimeout` | Таймаут подключения при старте; положительный |
 
-Значений по умолчанию нет: пустое или невалидное значение, недоступный Temporal завершают startup. `delivery-worker` читает только `MANAGEMENT__*`, `SHUTDOWN__*`, `DATABASE__*` и `TEMPORAL__*` из того же `CONFIG_FILE`; схему мигрирует процесс `delivery`. SDK подключён без default features и с `vendored-protox`: сборке не нужен `protoc`.
+Значений по умолчанию нет: пустое или невалидное значение, недоступный Temporal завершают startup. `delivery-worker` требует только секции `spec.management`, `spec.shutdown`, `spec.database`, `spec.temporal` и телеметрии файла своей роли (`metadata.name: delivery-worker`) и секрет `DATABASE__URI`; секции роли `delivery` в файле допустимы, неизвестные ключи — нет; схему мигрирует процесс `delivery`. SDK подключён без default features и с `vendored-protox`: сборке не нужен `protoc`.
 
 Integration-тест `tests/assignment_workflow.rs` поднимает Temporal dev server (`temporalio/temporal:1.9.1`) и PostgreSQL из testcontainers и проверяет предложение после создания, истечение по таймеру, ожидание без кандидата, пробуждение курьером и завершение после Pickup.
 
@@ -298,17 +298,17 @@ Integration-тест `tests/assignment_workflow.rs` поднимает Temporal 
 - **Unit of Work.** Порты не принимают handle транзакции: соединение текущей транзакции хранится в thread-local слоте store, поэтому записи агрегатов и Outbox внутри `run` фиксируются или откатываются вместе. Вложенные Unit of Work не поддерживаются.
 - **Outbox.** Таблица `delivery_outbox` — запись контракта [ADR 37](../../docs/adr/0037-outbox-delivery-via-debezium-cdc.md) (поля сообщения Kafka, `traceparent` — `''` без span, `created_at` для retention); `event_id` — UUIDv5 от `{aggregate_type}:{aggregate_id}:{aggregate_version}:{event_type}`, `aggregate_version` — версия, записанная той же транзакцией. Domain Event → Integration Event переводит `OutboxMapper` (`Store::with_outbox_mapper`). Процесс `delivery` подключает `DeliveryIntegrationEvents` (`slices/delivery/infrastructure`) в `di::store`; `NoIntegrationEvents` (ничего не пишется) остаётся значением по умолчанию `Store::connect` для тестов.
 - **Sync порты над async sqlx.** Store владеет tokio runtime пула; вызовы идут через `block_in_place` на multi-thread runtime процесса и через scoped thread на current-thread runtime.
-- **Compile-time checked запросы.** Каждый statement — литерал `sqlx::query!` / `query_as!` / `query_scalar!`: SQL, типы параметров и колонок и их nullability проверяются при компиляции по мигрированной схеме. Строки агрегатов читаются `query_as!` в `CourierRow`/`DeliveryRow`/`OfferRow` (`infrastructure/repository/rows.rs`), в доменные типы их переводит infrastructure; read models берут записи `query!`. Где Postgres выводит nullability неверно, колонка переопределяется в SQL (`courier_id AS "courier_id!"` после `courier_id IS NOT NULL`). Динамического SQL нет: макрос принимает только литерал, поэтому CTE retention Outbox повторяется в каждом statement записи Outbox. Обёртка `sql!` берёт операцию и таблицу span/метрики из литерала вызова (`Statement::of_source`, обычный или raw literal).
+- **Compile-time checked запросы.** Каждый statement — литерал `sqlx::query!` / `query_as!` / `query_scalar!`: SQL, типы параметров и колонок и их nullability проверяются при компиляции по мигрированной схеме. Строки агрегатов читаются `query_as!` в `CourierRow`/`DeliveryRow`/`OfferRow` (`infrastructure/repository/rows.rs`), в доменные типы их переводит infrastructure; read models берут записи `query!`. Где Postgres выводит nullability неверно, колонка переопределяется в SQL (`courier_id AS "courier_id!"` после `courier_id IS NOT NULL`). Динамического SQL нет: макрос принимает только литерал, поэтому CTE retention Outbox повторяется в каждом statement записи Outbox. Обёртка `sql!` берёт текст, операцию и таблицу span/метрики из литерала вызова (`Statement::of_source`, обычный или raw literal).
 - **Offline query cache.** `.sqlx/` (закоммичен) — кеш описаний запросов: сборка без `DATABASE_URL` (переменная sqlx-cli и макросов sqlx, не конфиг процесса; и Docker-образ, `SQLX_OFFLINE=true`) проверяет запросы по нему и к базе не ходит. После изменения запроса или миграции кеш пересобирается `make sqlx-prepare`: одноразовый PostgreSQL через `docker run` (не kind), миграции всех наборов через `psql` в порядке `MIGRATION_SETS`, `cargo sqlx prepare -- --all-targets`, остановка контейнера; `make sqlx-prepare-check` сверяет кеш без перезаписи. Нужен sqlx-cli версии sqlx из `Cargo.lock`: `cargo install sqlx-cli --no-default-features --features rustls,postgres --version 0.9.0`.
 
-| Переменная | Ключ | Назначение |
-| --- | --- | --- |
-| `DATABASE__URI` | `database.uri` | PostgreSQL connection URI `postgresql://user:password@host:5432/db` (или схема `postgres://`); только из Secret. Пусто, libpq key=value или другая схема — ошибка загрузки конфига; база недоступна или миграция не применилась — ошибка startup |
-| `DATABASE__MAX_CONNS` | `database.max_conns` | Размер пула процесса, по умолчанию `10`; `1..100`. Миграции при старте открывают отдельное одно соединение (`MIGRATE_MAX_CONNS`) |
-| `DATABASE__MIN_CONNS` | `database.min_conns` | Idle-минимум, по умолчанию `0`; `0..1` и не больше `max_conns` |
-| `DATABASE__MAX_LIFETIME` | `database.max_lifetime` | Соединение старше закрывается при возврате в пул, по умолчанию `30m`; положительный |
-| `DATABASE__IDLE_TIMEOUT` | `database.idle_timeout` | Простаивающее дольше соединение закрывается (выше `min_conns`), по умолчанию `5m`; положительный и не больше `max_lifetime` |
-| `DATABASE__ACQUIRE_TIMEOUT` | `database.acquire_timeout` | Ожидание соединения пула, затем `UNAVAILABLE` и `db.client.connection.timeouts`. По умолчанию `5s`; положительный |
+| Ключ `spec` или секрет env | Назначение |
+| --- | --- |
+| `DATABASE__URI` | Секрет env из Kubernetes Secret, в файле поля нет. PostgreSQL connection URI `postgresql://user:password@host:5432/db` (или схема `postgres://`). Пусто, libpq key=value или другая схема — ошибка загрузки конфига; база недоступна или миграция не применилась — ошибка startup |
+| `spec.database.maxConns` | Размер пула процесса, по умолчанию `10`; `1..100`. Миграции при старте открывают отдельное одно соединение (`MIGRATE_MAX_CONNS`) |
+| `spec.database.minConns` | Idle-минимум, по умолчанию `0`; `0..1` и не больше `maxConns` |
+| `spec.database.maxLifetime` | Соединение старше закрывается при возврате в пул, по умолчанию `30m`; положительный |
+| `spec.database.idleTimeout` | Простаивающее дольше соединение закрывается (выше `minConns`), по умолчанию `5m`; положительный и не больше `maxLifetime` |
+| `spec.database.acquireTimeout` | Ожидание соединения пула, затем `UNAVAILABLE` и `db.client.connection.timeouts`. По умолчанию `5s`; положительный |
 
 Невалидные значения завершают startup. Helm передаёт их из `database.pool.*` (`ops/helm/values.yaml`), URI — из Secret `database.uriSecret`.
 
@@ -402,9 +402,9 @@ Shaku импортируют только модули `di`; `domains/`, `applic
 
 `pkg/lifecycle` реализует [runtime contract](../../docs/cloud-native-runtime.md) ([ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md)):
 
-- технический порт `management.port` (по умолчанию `9083`, переменная `MANAGEMENT__PORT`, отличается от `server.port`) отдаёт `GET /health/startup`, `/health/live`, `/health/ready` с JSON `{"status":"ok"}` или `{"status":"unavailable","reason":"initializing|shutting_down"}`;
+- технический порт `spec.management.port` (по умолчанию `9083`, отличается от `spec.server.port`) отдаёт `GET /health/startup`, `/health/live`, `/health/ready` с JSON `{"status":"ok"}` или `{"status":"unavailable","reason":"initializing|shutting_down"}`;
 - ready наступает после открытия бизнес-порта и запуска worker; ошибка открытия порта или завершение worker без сигнала — non-zero exit;
-- `SIGTERM`/`SIGINT`: not ready (liveness остаётся 200) → `shutdown.readiness_delay` (по умолчанию `5s`, `SHUTDOWN__READINESS_DELAY`, ноль допустим) → worker закрывает listener и ждёт начатые соединения в пределах `shutdown.drain_timeout` (`20s`, `SHUTDOWN__DRAIN_TIMEOUT`) → технический порт закрывается последним → exit `0`; истёкший deadline прерывает соединения и даёт non-zero exit;
+- `SIGTERM`/`SIGINT`: not ready (liveness остаётся 200) → `spec.shutdown.readinessDelay` (по умолчанию `5s`, ноль допустим) → worker закрывает listener и ждёт начатые соединения в пределах `spec.shutdown.drainTimeout` (по умолчанию `20s`) → технический порт закрывается последним → exit `0`; истёкший deadline прерывает соединения и даёт non-zero exit;
 - повторный сигнал во время shutdown прерывает worker и завершает процесс с non-zero exit: tokio не позволяет вернуть обработчик сигнала по умолчанию.
 
 ## Событийная интеграция
@@ -415,7 +415,7 @@ Consumers интеграционных событий `delivery` использ�
 
 ### Kafka consumer
 
-Процесс `delivery` читает Kafka одной группой `KAFKA__CONSUMER_GROUP` (chart: `delivery`) на `rdkafka` (`infrastructure/messaging`, worker `di::ConsumingWorker`): брокеры — `KAFKA__BROKERS`, начальный offset новой группы — `KAFKA__INITIAL_OFFSET` (`oldest` или `newest`), Schema Registry записей стрима — `SCHEMA_REGISTRY__URL` (http(s), FR-715); все четыре обязательны, пустое или неизвестное значение завершает startup. Offset сообщения подтверждается после обработки:
+Процесс `delivery` читает Kafka одной группой `spec.kafka.consumerGroup` (chart: `delivery`) на `rdkafka` (`infrastructure/messaging`, worker `di::ConsumingWorker`): брокеры — `spec.kafka.brokers`, начальный offset новой группы — `spec.kafka.initialOffset` (`oldest` или `newest`), Schema Registry записей стрима — `spec.schemaRegistry.url` (http(s), FR-715); все четыре обязательны, пустое или неизвестное значение завершает startup. Offset сообщения подтверждается после обработки:
 
 - успех, повтор по Inbox или тип, который consumer не читает, — commit;
 - нет `event_id`, `event_type`, `occurred_at` (RFC 3339 UTC) или payload, value не в wire format Schema Registry, id схемы неизвестен или её subjects не содержат `event_type`, payload не декодируется, permanent-ошибка или panic use case — сообщение уходит в `<stream>.dlq` с ключом, payload, исходными заголовками и `reason_poisoned`, `topic_poisoned`, `consumer_group_poisoned` (как у `orders` и `restaurants`, [разбор DLQ](../../docs/dlq.md)), затем commit;
@@ -436,9 +436,9 @@ Read model собственных фактов Delivery по образцу Wait
 | `DeliveryCancelled`, `DeliveryFailed` | transit закрыт без длительности; без открытого transit конец запоминается там же |
 | остальные | commit без обработки |
 
-Длительности хранятся по Market и виду в `delivery_duration_samples` (одна длительность вида на доставку); после вставки остаются последние `DELIVERY_ESTIMATE__SAMPLE_SIZE`. Доставка, сохранённая до появления `created_at`, не даёт `courier_lead`; вручение без открытого transit (Pickup до появления статистики) — `transit`; отрицательный интервал (часы процесса и базы разошлись) не записывается. Market берётся из доставки: у `Delivery` нет адресов, статистика общая по Market.
+Длительности хранятся по Market и виду в `delivery_duration_samples` (одна длительность вида на доставку); после вставки остаются последние `spec.deliveryEstimate.sampleSize`. Доставка, сохранённая до появления `created_at`, не даёт `courier_lead`; вручение без открытого transit (Pickup до появления статистики) — `transit`; отрицательный интервал (часы процесса и базы разошлись) не записывается. Market берётся из доставки: у `Delivery` нет адресов, статистика общая по Market.
 
-Estimate Delivery Duration отдаёт медиану каждого вида, когда в выборке Market не меньше `DELIVERY_ESTIMATE__SAMPLE_SIZE` длительностей, иначе — `DELIVERY_ESTIMATE__BASELINE_COURIER_LEAD` или `DELIVERY_ESTIMATE__BASELINE_TRANSIT`; виды переключаются на медиану независимо. Все три параметра обязательны, значений по умолчанию нет; пустое или нечисловое значение завершает загрузку конфигурации, нулевое — сборку процесса (`DeliveryEstimatePolicy`), до открытия портов. Значения chart — 50, 15m и 20m.
+Estimate Delivery Duration отдаёт медиану каждого вида, когда в выборке Market не меньше `spec.deliveryEstimate.sampleSize` длительностей, иначе — `spec.deliveryEstimate.baselineCourierLead` или `spec.deliveryEstimate.baselineTransit`; виды переключаются на медиану независимо. Все три параметра обязательны, значений по умолчанию нет; пустое или нечисловое значение завершает загрузку конфигурации, нулевое — сборку процесса (`DeliveryEstimatePolicy`), до открытия портов. Значения chart — 50, 15m и 20m.
 
 ### Публикация Integration Events
 
@@ -474,13 +474,24 @@ Kafka headers те же, что слал relay, и совпадают с `orders
 
 ### Observability
 
-Контракт — [docs/observability.md](../../docs/observability.md); pipeline — `pkg/telemetry`, по образцу `orders/pkg/telemetry`. Процесс `delivery` использует resource: `service.namespace=nomnom`, `service.name` (имя процесса или `OTEL_SERVICE_NAME`), `service.version`, `service.instance.id`, `deployment.environment.name` из `OTEL_RESOURCE_ATTRIBUTES` (Helm: `telemetry.*`, pod name и image tag).
+Контракт — [docs/observability.md](../../docs/observability.md); pipeline — `pkg/telemetry`, по образцу `orders/pkg/telemetry`. Телеметрия настраивается только файлом конфигурации: `OTEL_*` и `LOG__LEVEL` процесс не читает, endpoint, протокол, resource, интервал и sampler передаются SDK явно. Resource процесса: `service.namespace=nomnom`, `service.name` (`spec.telemetry.serviceName`, по умолчанию роль процесса), `service.instance.id` (env `POD_NAME`, обязателен), атрибуты `spec.telemetry.resourceAttributes` (Helm дописывает `service.version` из `image.tag`, окружение — `deployment.environment.name`); `service.name` и `service.instance.id` в `resourceAttributes` — ошибка startup.
+
+| Ключ `spec` | Значение |
+| --- | --- |
+| `telemetry.endpoint` | URL OTLP коллектора; значения по умолчанию нет, обязателен, если включён `tracing` или `metrics` |
+| `telemetry.protocol` | `grpc` (по умолчанию) или `http/protobuf` (`<endpoint>/v1/traces`, `<endpoint>/v1/metrics`); другое значение — ошибка startup |
+| `telemetry.serviceName` | `service.name`, по умолчанию роль процесса (`delivery`, `delivery-worker`) |
+| `telemetry.resourceAttributes` | Атрибуты resource окружения |
+| `tracing.enabled` | Экспорт spans, по умолчанию `false` |
+| `metrics.enabled` | Экспорт metrics, по умолчанию `false`; endpoint без флагов ничего не экспортирует |
+| `metrics.exportInterval` | Интервал экспорта metrics, по умолчанию `60s`; положительный |
+| `logging.level` | `debug`, `info` (по умолчанию), `warn` или `error` — уровень кода процесса |
 
 | Сигнал | Что есть |
 | --- | --- |
-| Traces | W3C `traceparent`/`tracestate` (baggage не передаётся). TracerProvider с batch OTLP gRPC exporter — только при `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`. Server span `package.Service/Method` на каждый gRPC-вызов (`infrastructure/grpc/tracing.rs`, продолжает входящий trace); span `usecase <name>` на каждый use case (`slices/<slice>/infrastructure/observed_use_cases.rs`); client span и `traceparent` в metadata на каждый вызов SpiceDB; client span PostgreSQL на statement внутри trace (`db.system.name`, `db.operation.name`, `db.collection.name`, без текста и параметров); Outbox хранит `traceparent` span'а, записавшего событие: gRPC server span продолжает входящий `traceparent` и остаётся текущим контекстом, пока handler синхронно выполняет Unit of Work, а запись Outbox (`infrastructure/repository/outbox.rs`) пишет его `traceparent` в колонку `traceparent` строки (без span — `''`; `tests/outbox_tracing.rs`); Debezium передаёт его в Kafka header `traceparent`, consumer продолжает trace команды. |
-| Metrics | При `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` или `OTEL_EXPORTER_OTLP_ENDPOINT`: `rpc.server.call.duration` и `rpc.client.call.duration` (`rpc.system.name`, `rpc.method`, `rpc.response.status_code` — имя кода; client — `server.address`, `server.port`, `error.type`), `nomnom.usecase.duration` (`nomnom.usecase.name`, `nomnom.usecase.kind`, `nomnom.outcome`, `error.type`), `db.client.operation.duration` и `db.client.connection.*` пула, `process.cpu.time`, `process.memory.usage`, `process.thread.count` (procfs) и бизнес-метрики; публикацию Outbox измеряют метрики Kafka Connect и Debezium. Длительности — явные buckets в секундах. |
-| Logs | Одна JSON-запись на строку в stdout (`pkg/telemetry/log.rs`, `tracing`): `timestamp` (UTC), `severity`, `message`, поля resource, `trace_id`/`span_id` только внутри span, `operation`, `outcome`, `error.type`, `error.message`. Библиотеки — от `WARN` (`sqlx` — `ERROR`). Токены, ключи, payload и bind parameters не логируются. |
+| Traces | W3C `traceparent`/`tracestate` (baggage не передаётся). TracerProvider с batch OTLP exporter — только при `spec.tracing.enabled`. Server span `package.Service/Method` на каждый gRPC-вызов (`infrastructure/grpc/tracing.rs`, продолжает входящий trace); span `usecase <name>` на каждый use case (`slices/<slice>/infrastructure/observed_use_cases.rs`); client span и `traceparent` в metadata на каждый вызов SpiceDB; client span PostgreSQL на statement внутри trace (`db.system.name`, `db.namespace`, `db.operation.name`, `db.collection.name` и `db.query.text` — текст литерала `sqlx::query!`, по нему Grafana открывает запрос в Database Observability; параметры не записываются); Outbox хранит `traceparent` span'а, записавшего событие: gRPC server span продолжает входящий `traceparent` и остаётся текущим контекстом, пока handler синхронно выполняет Unit of Work, а запись Outbox (`infrastructure/repository/outbox.rs`) пишет его `traceparent` в колонку `traceparent` строки (без span — `''`; `tests/outbox_tracing.rs`); Debezium передаёт его в Kafka header `traceparent`, consumer продолжает trace команды. |
+| Metrics | При `spec.metrics.enabled`: `rpc.server.call.duration` и `rpc.client.call.duration` (`rpc.system.name`, `rpc.method`, `rpc.response.status_code` — имя кода; client — `server.address`, `server.port`, `error.type`), `nomnom.usecase.duration` (`nomnom.usecase.name`, `nomnom.usecase.kind`, `nomnom.outcome`, `error.type`), `db.client.operation.duration` и `db.client.connection.*` пула, `process.cpu.time`, `process.memory.usage`, `process.thread.count` (procfs) и бизнес-метрики; публикацию Outbox измеряют метрики Kafka Connect и Debezium. Длительности — явные buckets в секундах. |
+| Logs | Одна JSON-запись на строку в stdout (`pkg/telemetry/log.rs`, `tracing`): `timestamp` (UTC), `severity`, `message`, поля resource, `trace_id`/`span_id` только внутри span, `operation`, `outcome`, `error.type`, `error.message`. Код процесса — от `spec.logging.level`, библиотеки — от `WARN` или от этого уровня, если он строже (`sqlx` — `ERROR`). Токены, ключи, payload и bind parameters не логируются. |
 
 Классификация use cases: `rejected` — `permission_denied`, `invalid_argument`, `not_found`, `already_exists`, `failed_precondition`; `error` — `concurrent_modification`, `unavailable`, `transaction`, `internal`. `Telemetry::shutdown` выгружает spans и точки после drain.
 
@@ -505,7 +516,7 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_tracing
 - application handlers всех 19 use cases в `slices/<slice>/applications/<usecase>/mod.rs` с unit-тестами;
 - порты: `Subject`/`AuthorizationError` (`pkg/authz`), `UnitOfWork` и `Clock` (`applications` слайса `delivery`), `RepositoryError` (`pkg/persistence`), `CourierAuthorization` и `DeliveryAuthorization`, порт занятости курьера `CourierAssignment`, `DeliveryOutbox`, `DeliveryInbox`, `DeliveryDurationStatistics`, `CourierLocator`, `CourierLocationStore`, read models `CourierCurrentDeliveryReadModel`, `PendingDeliveryOffersReadModel` и `DeliveryDurationSamples`, параметры `AssignmentPolicy` и `DeliveryEstimatePolicy`;
 - `ServiceTokenSubjectResolver`: service identity по projected ServiceAccount token (ADR 27) и user identity по assertion BFF (ADR 32);
-- `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `SPICEDB__ENDPOINT`;
+- `SpiceDbAuthorization`: SpiceDB-адаптер `CourierAuthorization` и `DeliveryAuthorization` (ADR 18, FR-435), выбирается при заданном `spec.spicedb.endpoint`;
 - `Store` (`infrastructure/repository`): все порты хранилища на `sqlx`, optimistic concurrency по `version`, Unit of Work, Outbox по контракту ADR 37 (retention при записи), встроенные миграции при старте процесса;
 - публикация Integration Events: mapper `DeliveryIntegrationEvents` (4 события `events.proto`), публикует коннектор Debezium `delivery-outbox` (CDC, ADR 37, Helm `cdc.*`);
 - Идентификаторы создают сами use cases через `Uuid::now_v7()`: UUIDv7-идентификаторы `Delivery` и offer, уникальные между перезапусками и репликами (FR-541);
@@ -521,6 +532,31 @@ DOCKER_CONFIG=$(mktemp -d) cargo test --test outbox_tracing
 ```bash
 make run
 ```
+
+`make run` запускает процесс `delivery` с `CONFIG_FILE=config.example.yaml` и `POD_NAME=delivery-local`; секреты `DATABASE__URI`, `VALKEY__URL` и `SPICEDB__PRESHARED_KEY` задаются в env оболочки.
+
+## Конфигурация
+
+По [ADR 17](../../docs/adr/0017-cloud-native-application-runtime.md) несекретная конфигурация процесса — только YAML-файл по пути из env `CONFIG_FILE` в формате ресурса Kubernetes ([`config.example.yaml`](config.example.yaml)):
+
+```yaml
+apiVersion: config.nomnom.dev/v1alpha1
+kind: Delivery
+metadata:
+  name: delivery          # роль процесса: delivery или delivery-worker
+spec:
+  shutdown:
+    drainTimeout: 20s
+  temporal:
+    hostPort: localhost:7233
+```
+
+- Процесс завершается с non-zero exit до открытия портов, если `CONFIG_FILE` не задан или файла нет, `apiVersion` не `config.nomnom.dev/v1alpha1`, `kind` не `Delivery`, `metadata.name` не роль процесса или в файле есть неизвестный ключ на любом уровне (ошибка содержит путь ключа, например `spec.shutdown.drainTimout`).
+- Ключи `spec` — camelCase прежних переменных (`TEMPORAL__HOST_PORT` → `spec.temporal.hostPort`), длительности — строки (`500ms`, `5s`, `2m`). Переменные `SECTION__KEY` несекретных настроек не читаются.
+- Процесс проверяет на неизвестные ключи весь `spec` kind `Delivery`, но требует только свои секции: `delivery` — `identity`, `spicedb`, `temporal`, `simulator`, `tracking`, `kafka`, `schemaRegistry`, `deliveryEstimate`; `delivery-worker` — `temporal`. Секции со значениями по умолчанию (`server`, `management`, `shutdown`, `reconciler`, `database`, телеметрия) необязательны.
+- `delivery-admin` запускается в pod `delivery` и читает его файл: сверяет только `apiVersion` и `kind` и требует `kafka` и `schemaRegistry`.
+- Секреты — только env из Kubernetes Secret: `DATABASE__URI` (оба процесса), `VALKEY__URL` и `SPICEDB__PRESHARED_KEY` (`delivery`). Полей для них в `spec` нет: `spec.database.uri` в файле — неизвестный ключ. Пустой обязательный секрет завершает startup.
+- `service.instance.id` — env `POD_NAME` (Downward API), обязателен.
 
 ## Проверка
 
@@ -541,25 +577,20 @@ make format
 
 ```bash
 docker build --target runtime -t nomnom/delivery:local boundaries/delivery
-docker run --rm -p 8083:8083 -p 9083:9083 \
-  -e SERVER__PORT=8083 \
-  nomnom/delivery:local
 ```
 
 Release-бинарник собирается с отладочной информацией и без stripping, чтобы сохранить
 данные для символизации Pyroscope-профилей. Runtime основан на Debian с `ca-certificates`
 и запускается непривилегированным пользователем `app`; `tini` пересылает сигналы
-приложению. TOML-конфигурацию можно подключить
-read-only через `CONFIG_FILE`:
+приложению. Файл конфигурации подключается read-only через `CONFIG_FILE`, секреты — env:
 
 ```bash
-docker run --rm -p 8083:8083 \
-  -v "$PWD/boundaries/delivery/config.example.toml:/config/delivery.toml:ro" \
-  -e CONFIG_FILE=/config/delivery.toml \
+docker run --rm -p 8083:8083 -p 9083:9083 \
+  -v "$PWD/boundaries/delivery/config.example.yaml:/etc/nomnom/config.yaml:ro" \
+  -e CONFIG_FILE=/etc/nomnom/config.yaml -e POD_NAME=delivery-local \
+  -e DATABASE__URI -e VALKEY__URL -e SPICEDB__PRESHARED_KEY \
   nomnom/delivery:local
 ```
-
-Текущий HTTP-каркас не требует внешних сервисов.
 
 ## Развёртывание
 

@@ -7,15 +7,15 @@ import (
 )
 
 // newQueryTracer instruments pgx operations (docs/observability.md#postgresql-и-mongodb)
-// with otelpgx: client spans with db.system.name, db.operation.name and
-// server/database attributes, and semconv db.client.operation.duration. Bind
-// parameters are never recorded and the statement text is disabled, so spans
-// carry no query data. Pool acquire is measured by poolMetrics, not as spans.
-// Providers are the global ones: telemetry.Start registers them later and the
-// global delegates pick them up.
+// with otelpgx: client spans with db.system.name, db.namespace, db.operation.name,
+// server attributes and db.query.text, and semconv db.client.operation.duration.
+// The statement text is parameterized ($n placeholders, values are bound), so it
+// carries no data and lets Database Observability match the span to the query.
+// Bind parameters are never recorded. Pool acquire is measured by poolMetrics,
+// not as spans. Providers are the global ones: telemetry.Start registers them
+// later and the global delegates pick them up.
 func newQueryTracer() *otelpgx.Tracer {
 	return otelpgx.NewTracer(
-		otelpgx.WithDisableSQLStatementInAttributes(),
 		otelpgx.WithMetricOperationName(otelpgx.SQLOperationName),
 		otelpgx.WithDisableAcquireTracer(),
 	)
