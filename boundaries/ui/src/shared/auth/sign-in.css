@@ -29,7 +29,6 @@
   font-weight: 650;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: box-shadow var(--motion-fast) ease;
 }
 
 .account-avatar[data-hover],

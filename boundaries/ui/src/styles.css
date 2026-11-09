@@ -374,16 +374,23 @@ a,
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* Hover colors switch instantly: the pointer sweeps across many buttons and
+     a fade leaves them trailing behind it. Only the press eases. */
   .nomnom-button {
     transition:
       transform var(--motion-fast) var(--motion-easing),
-      opacity var(--motion-fast) var(--motion-easing),
-      background-color var(--motion-fast) var(--motion-easing),
-      border-color var(--motion-fast) var(--motion-easing);
+      opacity var(--motion-fast) var(--motion-easing);
   }
 
+  /* Pressed buttons give a little under the finger. Headless UI sets
+     data-active only on enabled buttons, so disabled ones stay put. A
+     full-width button shrinks less, as its edges travel further. */
   .nomnom-button[data-active] {
-    transform: translateY(1px);
+    transform: scale(0.97);
+  }
+
+  .nomnom-button[data-full-width][data-active] {
+    transform: scale(0.99);
   }
 
   .nomnom-switch-control,
@@ -685,12 +692,6 @@ a,
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .nomnom-help-button {
-    transition:
-      background-color var(--motion-fast) var(--motion-easing),
-      color var(--motion-fast) var(--motion-easing);
-  }
-
   .nomnom-help-panel {
     transition:
       opacity var(--motion-fast) var(--motion-easing),
