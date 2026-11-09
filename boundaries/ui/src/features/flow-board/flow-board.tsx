@@ -1,5 +1,11 @@
 import { LayoutGroup, m } from "motion/react";
-import { type ReactNode, useCallback, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useClient, useQuery } from "urql";
 import type { CourierPoolViewFragment } from "../../shared/graphql/generated/graphql";
 import {
@@ -71,6 +77,20 @@ function Board() {
     if (selectedRestaurantId) setKitchenRestaurantId(selectedRestaurantId);
   }
 
+  // Where focus goes once the pressed control has left the screen (FR-780):
+  // the new order's chip, the opened restaurant or the card it was opened
+  // from. Only lost focus is moved; a user who has moved on keeps theirs.
+  const focusNext = useRef<string | null>(null);
+  const [backFrom, setBackFrom] = useState<string | null>(null);
+  useEffect(() => {
+    const selector = focusNext.current;
+    if (!selector) return;
+    focusNext.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    document.querySelector<HTMLElement>(selector)?.focus();
+  });
+
   const { remove } = orders;
   const forget = useCallback(
     (orderId: string) => {
@@ -93,11 +113,13 @@ function Board() {
     await client
       .query(ViewRestaurantDocument, { id: restaurantId })
       .toPromise();
+    focusNext.current = "#restaurant-title";
     setCustomerRestaurantId(restaurantId);
     setKitchenRestaurantId(restaurantId);
   }
 
   function placed(orderId: string) {
+    focusNext.current = '.board-strip .board-chip[aria-pressed="true"]';
     orders.add(orderId);
     setSelectedOrderId(orderId);
   }
@@ -145,7 +167,10 @@ function Board() {
                 <div className="board-restaurant" key={customerRestaurantId}>
                   <Button
                     className="board-restaurant-back"
-                    onClick={() => setCustomerRestaurantId(null)}
+                    onClick={() => {
+                      setBackFrom(customerRestaurantId);
+                      setCustomerRestaurantId(null);
+                    }}
                     size="sm"
                     variant="ghost"
                   >
@@ -159,6 +184,7 @@ function Board() {
               ) : (
                 <>
                   <RestaurantPicker
+                    focusRestaurantId={backFrom}
                     onSelect={(restaurantId) =>
                       void openRestaurant(restaurantId)
                     }
@@ -277,7 +303,11 @@ function BoardColumn({
       {...drop}
     >
       <header className="board-column-header">
-        <h2 id={`board-column-${column}-title`}>{t(columnTitle[column])}</h2>
+        {/* Focus lands here when the card a user acted on leaves an empty
+          column (FR-780). */}
+        <h2 id={`board-column-${column}-title`} tabIndex={-1}>
+          {t(columnTitle[column])}
+        </h2>
         <HelpTip label={t("help.about", { topic: t(columnTitle[column]) })}>
           {t(`board.${column}.lead` as MessageKey)}
         </HelpTip>

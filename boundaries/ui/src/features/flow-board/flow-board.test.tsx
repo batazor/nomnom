@@ -303,6 +303,214 @@ describe("flow board", () => {
     expect(within(selectedKitchenCard()).getByText(/Тимур/)).toBeVisible();
   });
 
+  // AC-1099
+  it("offers an accepted order to a courier picked by keyboard from its card", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await placeOrder(user);
+    const accept = await waitFor(selectedKitchenCard);
+    await user.click(within(accept).getByRole("button", { name: "Принять" }));
+
+    const offer = await waitFor(() =>
+      within(selectedKitchenCard()).getByRole("button", {
+        name: "Предложить курьеру",
+      }),
+    );
+    offer.focus();
+    await user.keyboard("{Enter}");
+    // Only a free courier on line with no offer is listed.
+    // Headless UI keeps DOM focus on the menu and marks the active item.
+    expect(
+      await screen.findByRole("menuitem", { name: "Тимур" }),
+    ).toHaveAttribute("data-focus");
+    expect(
+      screen.queryByRole("menuitem", { name: "Анна" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+
+    const members = within(column("Курьер")).getByRole("list", {
+      name: "Курьеры платформы",
+    });
+    expect(
+      await within(members).findByText("получил предложение"),
+    ).toBeVisible();
+    expect(within(selectedKitchenCard()).getByText(/Тимур/)).toBeVisible();
+    // The order has a courier now, so its menu is gone; focus stays on the
+    // card (FR-780).
+    await waitFor(() =>
+      expect(
+        selectedKitchenCard().querySelector(".board-card-head"),
+      ).toHaveFocus(),
+    );
+  });
+
+  // AC-1100
+  it("says so when no courier is free to offer an order to", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await placeOrder(user);
+    const accept = await waitFor(selectedKitchenCard);
+    await user.click(within(accept).getByRole("button", { name: "Принять" }));
+    await user.click(
+      await within(column("Курьер")).findByRole("button", {
+        name: "Снять с линии: Тимур",
+      }),
+    );
+    await within(column("Курьер")).findByRole("button", {
+      name: "На линию: Тимур",
+    });
+
+    await user.click(
+      within(selectedKitchenCard()).getByRole("button", {
+        name: "Предложить курьеру",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Нет свободных курьеров" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
+  });
+
+  // AC-1101
+  it("has no offer menu for a user who sees no Courier Pool", async () => {
+    mockServer.use(...courierPoolDeniedHandlers);
+    const user = userEvent.setup();
+    renderBoard();
+    await placeOrder(user);
+    const accept = await waitFor(selectedKitchenCard);
+    await user.click(within(accept).getByRole("button", { name: "Принять" }));
+
+    await within(selectedKitchenCard()).findByText("Ждёт в очереди");
+    expect(
+      within(column("Кухня")).queryByRole("button", {
+        name: "Предложить курьеру",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  // AC-1103, AC-1105
+  it("keeps keyboard focus on the order through placing and accepting it", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: /^Кухня №8/ }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить в корзину: Манго и клейкий рис",
+      }),
+    );
+    screen.getByRole("button", { name: "Оформить заказ" }).focus();
+    await user.keyboard("{Enter}");
+
+    const chip = await screen.findByRole("button", {
+      name: /Кухня №8.*Оплачен/,
+    });
+    await waitFor(() => expect(chip).toHaveFocus());
+
+    const card = await waitFor(selectedKitchenCard);
+    within(card).getByRole("button", { name: "Принять" }).focus();
+    await user.keyboard("{Enter}");
+
+    await within(selectedKitchenCard()).findByText("Ждёт в очереди");
+    await waitFor(() =>
+      expect(
+        selectedKitchenCard().querySelector(".board-card-head"),
+      ).toHaveFocus(),
+    );
+  });
+
+  // AC-1104
+  it("moves focus to the card at the rejected one's place", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    // The mock kitchen already has one incoming order; the placed one is the
+    // second.
+    await placeOrder(user);
+    const incoming = () =>
+      column("Кухня").querySelectorAll<HTMLElement>(
+        '.board-card[data-stage="RECEIVED"]',
+      );
+    await waitFor(() => expect(incoming()).toHaveLength(2));
+
+    // Cards are re-rendered by kitchenChanged: look them up by order each time.
+    const [first, second] = [...incoming()].map((card) => card.dataset.focusKey);
+    const card = (key: string | undefined) => {
+      const found = column("Кухня").querySelector<HTMLElement>(
+        `.board-card[data-focus-key="${key}"]`,
+      );
+      if (!found) throw new Error(`No kitchen card of order ${key}`);
+      return found;
+    };
+    within(card(first)).getByRole("button", { name: "Отклонить" }).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(incoming()).toHaveLength(1));
+    await waitFor(() =>
+      expect(card(second).querySelector(".board-card-head")).toHaveFocus(),
+    );
+
+    // The other kitchen cards are past RECEIVED: the one now at its place
+    // takes focus.
+    within(card(second)).getByRole("button", { name: "Отклонить" }).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(incoming()).toHaveLength(0));
+    await waitFor(() =>
+      expect(document.activeElement).toHaveClass("board-card-head"),
+    );
+    expect(column("Кухня")).toContainElement(
+      document.activeElement as HTMLElement,
+    );
+  });
+
+  it("leaves focus where the user moved it while the answer was on its way", async () => {
+    const user = userEvent.setup();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderBoard();
+    await placeOrder(user);
+    mockServer.use(
+      publicGraphql.mutation("ApplyKitchenAction", async () => {
+        await gate;
+      }),
+    );
+
+    const card = await waitFor(selectedKitchenCard);
+    within(card).getByRole("button", { name: "Принять" }).focus();
+    await user.keyboard("{Enter}");
+    const elsewhere = within(column("Курьер")).getByRole("button", {
+      name: "Выйти на линию",
+    });
+    elsewhere.focus();
+    release();
+
+    await within(selectedKitchenCard()).findByText("Ждёт в очереди");
+    expect(elsewhere).toHaveFocus();
+  });
+
+  // AC-1106
+  it("focuses the opened restaurant, then its card after going back", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+
+    const card = await screen.findByRole("button", { name: /^Кухня №8/ });
+    card.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 3, name: "Кухня №8" }),
+      ).toHaveFocus(),
+    );
+
+    screen.getByRole("button", { name: "← Все рестораны" }).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^Кухня №8/ }),
+      ).toHaveFocus(),
+    );
+  });
+
   it("grows the order details out of the timeline", async () => {
     const user = userEvent.setup();
     renderBoard();

@@ -120,9 +120,10 @@ export function CartPanel({
                         </output>
                         <Button
                           aria-label={t("cart.increase", { item: item.name })}
-                          disabled={
-                            !item.available || line.quantity >= maxQuantity
+                          aria-disabled={
+                            line.quantity >= maxQuantity || undefined
                           }
+                          disabled={!item.available}
                           isIconOnly
                           onClick={() => onQuantity(item.id, line.quantity + 1)}
                           size="sm"

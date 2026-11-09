@@ -13,8 +13,12 @@ const folderSize = 4;
 // chosen card into the restaurant.
 export function RestaurantPicker({
   onSelect,
+  focusRestaurantId = null,
 }: {
   onSelect: (restaurantId: string) => void;
+  // The restaurant the user came back from: its card takes the focus the
+  // back button lost, once the list shows it (FR-780).
+  focusRestaurantId?: string | null;
 }) {
   const { t } = useI18n();
   const pages = useRestaurantPages();
@@ -29,6 +33,20 @@ export function RestaurantPicker({
     }
     shown.current = pages.restaurants.length;
   }, [pages.restaurants.length, pages.loadedBefore]);
+
+  const returned = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusRestaurantId || returned.current === focusRestaurantId) return;
+    const index = pages.restaurants.findIndex(
+      (restaurant) => restaurant.id === focusRestaurantId,
+    );
+    const card = buttons.current.get(index);
+    if (!card) return;
+    returned.current = focusRestaurantId;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    card.focus();
+  }, [focusRestaurantId, pages.restaurants]);
 
   if (pages.initialFailed) {
     return (

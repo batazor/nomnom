@@ -382,6 +382,8 @@ export const messages = {
     "board.trip.late": "Опаздывает на {minutes} мин, ждали к {time}",
     "board.couriers.offered": "получил предложение",
     "board.couriers.free": "свободен",
+    "board.offer.action": "Предложить курьеру",
+    "board.offer.none": "Нет свободных курьеров",
     "board.couriers.add": "Добавить курьера",
     "board.couriers.retireOne": "Убрать курьера",
     "board.couriers.problem.COURIER_NAME_INVALID":
@@ -814,6 +816,8 @@ export const messages = {
     "board.trip.late": "{minutes} min late, expected by {time}",
     "board.couriers.offered": "has an offer",
     "board.couriers.free": "free",
+    "board.offer.action": "Offer to a courier",
+    "board.offer.none": "No free couriers",
     "board.couriers.add": "Add a courier",
     "board.couriers.retireOne": "Remove a courier",
     "board.couriers.problem.COURIER_NAME_INVALID":

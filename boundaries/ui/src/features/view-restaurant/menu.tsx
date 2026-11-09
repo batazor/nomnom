@@ -52,9 +52,9 @@ export function Menu({
                 <Button
                   aria-describedby={item.available ? undefined : soldOutId}
                   aria-label={t("menu.addLabel", { item: item.name })}
-                  disabled={
-                    !item.available || !acceptingOrders || inCart >= maxQuantity
-                  }
+                  // At the limit the button its own press switched off keeps focus.
+                  aria-disabled={inCart >= maxQuantity || undefined}
+                  disabled={!item.available || !acceptingOrders}
                   onClick={() => onAdd(item)}
                   size="sm"
                   variant="outline"

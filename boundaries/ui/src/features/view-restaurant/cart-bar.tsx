@@ -23,17 +23,37 @@ export function CartBar({
   // Hidden once the checkout form itself is on screen, not when the cart's
   // top edge peeks in: the full cart is in reach only with its order button.
   const checkoutInView = useInView(formId);
+  // A bar with focus inside stays until focus has moved to the form's own
+  // order button: removing it would drop focus to the body (FR-780).
+  const [focusWithin, setFocusWithin] = useState(false);
+  const handOver = checkoutInView && focusWithin;
+  useEffect(() => {
+    if (!handOver) return;
+    document
+      .querySelector<HTMLElement>(`#${CSS.escape(formId)} [type="submit"]`)
+      ?.focus();
+  }, [handOver, formId]);
 
-  if (checkoutInView) return null;
+  if (checkoutInView && !focusWithin) return null;
   return (
-    <div className="cart-bar">
+    // biome-ignore lint/a11y/noStaticElementInteractions: focus tracking only, so the bar outlives the focus inside it; its buttons are the controls.
+    <div
+      className="cart-bar"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocusWithin(false);
+        }
+      }}
+      onFocus={() => setFocusWithin(true)}
+    >
       <button
         className="cart-bar-summary"
-        onClick={() =>
-          document
-            .getElementById(cartId)
-            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
+        onClick={() => {
+          const cart = document.getElementById(cartId);
+          cart?.scrollIntoView({ behavior: "smooth", block: "start" });
+          // Focus follows the eye to the full cart's heading.
+          cart?.querySelector<HTMLElement>("h4")?.focus({ preventScroll: true });
+        }}
         type="button"
       >
         <span className="cart-bar-title">{t("cart.title")}</span>

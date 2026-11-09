@@ -104,9 +104,10 @@ describe("demo simulator", () => {
     });
     await user.click(toggle);
 
-    expect(
-      screen.getByRole("switch", { name: "Эмулятор", checked: false }),
-    ).toBeDisabled();
+    // AC-1102: the busy switch keeps focus and ignores presses.
+    const busy = screen.getByRole("switch", { name: "Эмулятор", checked: false });
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(busy).toHaveFocus();
     expect(document.querySelector(".demo-simulator")).toHaveAttribute(
       "aria-busy",
       "true",

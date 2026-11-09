@@ -25,7 +25,8 @@ import { Button } from "../../shared/ui";
 import { OpeningHours, RestaurantOpening } from "../manage-restaurant";
 import { useDragSource } from "./board-dnd";
 import { CookPoolPanel } from "./cook-pool";
-import { useCourierOf } from "./courier-pool";
+import { OfferToCourier, useCourierOf } from "./courier-pool";
+import { useFocusAfterAction } from "./focus-after-action";
 import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
@@ -198,6 +199,8 @@ function KitchenOrders({
     pause: data?.kitchen === null,
   });
   const kitchen = useLatest(data?.kitchen, pushed?.kitchenChanged);
+  const cards = useRef<HTMLUListElement>(null);
+  const focus = useFocusAfterAction(cards);
 
   if (!data && error) {
     return (
@@ -240,10 +243,14 @@ function KitchenOrders({
         queued={kitchen.orders.some((order) => order.stage === "QUEUED")}
         restaurantId={restaurantId}
       />
-      <ul aria-label={t("board.kitchen.orders")} className="board-cards">
+      <ul
+        aria-label={t("board.kitchen.orders")}
+        className="board-cards"
+        ref={cards}
+      >
         {/* Orders arrive with kitchenChanged: new ones slide in, finished
           ones fade out, and the rest move to their new place. */}
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} onExitComplete={focus.afterExit}>
           {[
             ...kitchen.orders.filter((order) => order.stage === "RECEIVED"),
             // Between the incoming orders and the queue: the scheduled ones
@@ -278,6 +285,7 @@ function KitchenOrders({
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
                 <KitchenOrderCard
+                  onAct={() => focus.mark(order.orderId)}
                   onOpen={() => onOpenOrder(order.orderId)}
                   order={order}
                   restaurantId={restaurantId}
@@ -423,12 +431,15 @@ function KitchenOrderCard({
   restaurantId,
   selected,
   onOpen,
+  onAct,
   zoned,
 }: {
   order: KitchenOrder;
   restaurantId: string;
   selected: boolean;
   onOpen: () => void;
+  // Called before an action: the column keeps focus on the card (FR-780).
+  onAct: () => void;
   zoned: ZonedFormatters;
 }) {
   const { t, formatters } = useI18n();
@@ -440,6 +451,7 @@ function KitchenOrderCard({
   const receivedTime = formatters.time.format(Date.parse(order.receivedAt));
 
   async function send(action: KitchenAction) {
+    onAct();
     setProblem(null);
     const result = await apply({
       input: { restaurantId, kitchenOrderId: order.id, action },
@@ -462,6 +474,7 @@ function KitchenOrderCard({
   return (
     <article
       className="board-card"
+      data-focus-key={order.orderId}
       data-selected={selected}
       data-stage={order.stage}
       {...drag}
@@ -542,7 +555,7 @@ function KitchenOrderCard({
         )}
         {order.stage === "RECEIVED" ? (
           <Button
-            disabled={fetching}
+            isPending={fetching}
             onClick={() => send("REJECT")}
             size="sm"
             variant="ghost"
@@ -550,6 +563,14 @@ function KitchenOrderCard({
             {t("board.kitchen.action.REJECT")}
           </Button>
         ) : null}
+        {/* Dragging the card has a twin a keyboard reaches (FR-779). */}
+        {order.stage === "RECEIVED" ? null : (
+          <OfferToCourier
+            onAct={onAct}
+            onProblem={setProblem}
+            orderId={order.orderId}
+          />
+        )}
       </div>
       {problem ? (
         <p className="board-error" role="alert">

@@ -19,6 +19,7 @@ import {
 } from "../../shared/graphql/generated/graphql";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
+import { Menu, MenuButton, MenuItem, MenuItems } from "../../shared/ui";
 import { CourierTrip } from "./courier-trip";
 import {
   PoolLoad,
@@ -104,6 +105,79 @@ const problemMessage: Record<CourierPoolProblemCode, MessageKey> = {
   OFFER_REFUSED: "board.couriers.problem.OFFER_REFUSED",
 };
 
+// Offer Delivery To Courier (FR-779): one call for a kitchen card dropped on
+// a courier's row and for a courier picked from the card's menu. Resolves to
+// the problem to show, null once the courier has the offer.
+export function useOfferDelivery() {
+  const [, offer] = useMutation(OfferDeliveryToCourierDocument);
+  return async (
+    orderId: string,
+    courierId: string,
+  ): Promise<MessageKey | null> => {
+    const result = await offer({ orderId, courierId });
+    if (result.error) return "board.actionFailed";
+    const problem = result.data?.offerDeliveryToCourier.problem;
+    return problem ? problemMessage[problem] : null;
+  };
+}
+
+// The way to offer an order without dragging it (FR-779, AC-1099–AC-1101):
+// a menu of the free couriers with no offer, on a kitchen card a dispatcher
+// could drag. No free courier: one disabled item says so. Nothing for a user
+// who sees no Courier Pool, or once the order has a courier.
+export function OfferToCourier({
+  orderId,
+  onAct,
+  onProblem,
+}: {
+  orderId: string;
+  onAct: () => void;
+  onProblem: (problem: MessageKey | null) => void;
+}) {
+  const { t } = useI18n();
+  const pool = useCourierPool();
+  const courier = useCourierOf(orderId);
+  const offerDelivery = useOfferDelivery();
+  if (!pool || courier) return null;
+  const free = pool.couriers.filter(
+    (member) => member.availability === "AVAILABLE" && !member.offeredOrderId,
+  );
+
+  return (
+    <Menu as="div" className="board-offer">
+      <MenuButton
+        className="nomnom-button"
+        data-size="sm"
+        data-variant="outline"
+      >
+        {t("board.offer.action")}
+      </MenuButton>
+      <MenuItems anchor="bottom start" className="board-offer-items">
+        {free.length === 0 ? (
+          <MenuItem disabled>
+            <span className="board-offer-item">{t("board.offer.none")}</span>
+          </MenuItem>
+        ) : (
+          free.map((member) => (
+            <MenuItem key={member.id}>
+              <button
+                className="board-offer-item"
+                onClick={async () => {
+                  onAct();
+                  onProblem(await offerDelivery(orderId, member.id));
+                }}
+                type="button"
+              >
+                {member.name}
+              </button>
+            </MenuItem>
+          ))
+        )}
+      </MenuItems>
+    </Menu>
+  );
+}
+
 type Outcome = Readonly<{
   error?: unknown;
   problem?: CourierPoolProblemCode | null;
@@ -120,7 +194,7 @@ export function CourierPoolPanel() {
   const [adding, add] = useMutation(AddCourierDocument);
   const [lining, setOnLine] = useMutation(SetCourierOnLineDocument);
   const [retiring, retire] = useMutation(RetireCourierDocument);
-  const [, offer] = useMutation(OfferDeliveryToCourierDocument);
+  const offerDelivery = useOfferDelivery();
   const [problem, setProblem] = useState<MessageKey | null>(null);
   if (!pool) return null;
 
@@ -132,11 +206,7 @@ export function CourierPoolPanel() {
   }
 
   async function offerTo(courierId: string, orderId: string) {
-    const result = await offer({ orderId, courierId });
-    settle({
-      error: result.error,
-      problem: result.data?.offerDeliveryToCourier.problem,
-    });
+    setProblem(await offerDelivery(orderId, courierId));
   }
 
   const members: PoolMember[] = pool.couriers.map((courier) => ({

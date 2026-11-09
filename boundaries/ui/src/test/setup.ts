@@ -22,6 +22,12 @@ if (typeof window !== "undefined") {
       return [];
     }
   } as unknown as typeof IntersectionObserver;
+  // Nor ResizeObserver, which Headless UI menus use to follow their button.
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
   // jsdom does not scroll either.
   Element.prototype.scrollIntoView = () => {};
 }

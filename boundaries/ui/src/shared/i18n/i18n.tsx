@@ -1,4 +1,10 @@
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import type { SupportedLocale } from "../config/runtime-config";
 import { type MessageKey, messages } from "./messages";
@@ -68,6 +74,11 @@ export function I18nProvider({
     }),
     [locale],
   );
+  // Screen readers pick the voice from the document language, so it follows
+  // the configured locale rather than the markup.
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

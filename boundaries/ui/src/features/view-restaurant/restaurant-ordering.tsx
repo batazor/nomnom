@@ -149,7 +149,8 @@ function RestaurantView({
         layoutId={`restaurant-${restaurant.id}`}
         transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
       >
-        <m.h3 id="restaurant-title" layout="position">
+        {/* Takes focus when the restaurant opens from its card (FR-780). */}
+        <m.h3 id="restaurant-title" layout="position" tabIndex={-1}>
           {restaurant.name}
         </m.h3>
         {restaurant.acceptingOrders ? null : (

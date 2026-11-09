@@ -1,5 +1,5 @@
 import { AnimatePresence, m } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useSubscription } from "urql";
 
 import {
@@ -15,6 +15,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { Button, Illustration } from "../../shared/ui";
 import { CourierPoolPanel } from "./courier-pool";
+import { useFocusAfterAction } from "./focus-after-action";
 import { orderCardId } from "./order-card-id";
 import { useLatest } from "./use-latest";
 
@@ -60,6 +61,8 @@ export function CourierColumn({
   const [accepting, acceptOffer] = useMutation(AcceptDeliveryOfferDocument);
   const [acting, applyAction] = useMutation(ApplyCourierDeliveryActionDocument);
   const [problem, setProblem] = useState<MessageKey | null>(null);
+  const work = useRef<HTMLDivElement>(null);
+  const focus = useFocusAfterAction(work);
 
   function settle(outcome: Outcome) {
     if (outcome.error) setProblem("board.actionFailed");
@@ -89,7 +92,7 @@ export function CourierColumn({
   const delivery = courier.currentDelivery;
 
   return (
-    <div className="board-courier">
+    <div className="board-courier" ref={work}>
       <CourierPoolPanel />
       <div className="board-courier-state">
         <p className="board-state" data-availability={courier.availability}>
@@ -126,6 +129,7 @@ export function CourierColumn({
       {delivery ? (
         <m.article
           className="board-card"
+          data-focus-key={delivery.orderId}
           data-selected={delivery.orderId === selectedOrderId}
           data-stage={delivery.stage}
           layoutId={orderCardId("courier", delivery.orderId)}
@@ -150,6 +154,7 @@ export function CourierColumn({
             <Button
               isPending={acting.fetching}
               onClick={async () => {
+                focus.mark(delivery.orderId);
                 const result = await applyAction({
                   deliveryId: delivery.id,
                   action:
@@ -174,7 +179,7 @@ export function CourierColumn({
 
       {courier.offers.length > 0 ? (
         <ul aria-label={t("board.courier.offers")} className="board-cards">
-          <AnimatePresence initial={false}>
+          <AnimatePresence initial={false} onExitComplete={focus.afterExit}>
             {courier.offers.map((offer) => (
               <m.li
                 key={offer.id}
@@ -184,7 +189,11 @@ export function CourierColumn({
                 layout
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <article className="board-card" data-stage="OFFER">
+                <article
+                  className="board-card"
+                  data-focus-key={offer.orderId}
+                  data-stage="OFFER"
+                >
                   <div className="board-card-head">
                     <span className="board-card-title">
                       {t("board.courier.offer")}
@@ -195,6 +204,7 @@ export function CourierColumn({
                     <Button
                       isPending={accepting.fetching}
                       onClick={async () => {
+                        focus.mark(offer.orderId);
                         const result = await acceptOffer({ offerId: offer.id });
                         settle({
                           error: result.error,

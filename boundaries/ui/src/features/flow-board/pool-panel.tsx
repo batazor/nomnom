@@ -121,7 +121,7 @@ function PoolMemberRow({
         {member.state === "working" ? null : member.onLine ? (
           <Button
             aria-label={t("board.pool.takeOffNamed", { name: member.name })}
-            disabled={pending}
+            isPending={pending}
             onClick={() => onLine(member, false)}
             size="sm"
             variant="ghost"
@@ -131,7 +131,7 @@ function PoolMemberRow({
         ) : (
           <Button
             aria-label={t("board.pool.putOnNamed", { name: member.name })}
-            disabled={pending}
+            isPending={pending}
             onClick={() => onLine(member, true)}
             size="sm"
             variant="outline"
@@ -173,7 +173,8 @@ export function PoolSize({
     <span className="board-pool-size">
       <Button
         aria-label={removeLabel}
-        disabled={pending || !canRemove}
+        disabled={!canRemove}
+        isPending={pending}
         isIconOnly
         onClick={onRemove}
         size="sm"
@@ -183,7 +184,7 @@ export function PoolSize({
       </Button>
       <Button
         aria-label={addLabel}
-        disabled={pending}
+        isPending={pending}
         isIconOnly
         onClick={onAdd}
         size="sm"

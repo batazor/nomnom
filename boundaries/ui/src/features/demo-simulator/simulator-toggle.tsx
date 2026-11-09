@@ -47,7 +47,7 @@ export function SimulatorToggle() {
     <div aria-busy={sending || undefined} className="demo-simulator">
       <Switch
         checked={enabled}
-        disabled={sending}
+        isPending={sending}
         label={t("simulator.label")}
         onChange={() => void toggle()}
       />
