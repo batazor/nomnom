@@ -136,7 +136,9 @@ type row struct {
 	scope     Scope
 	collapsed bool
 	vars      []dashboard.VariableKind
-	panels    []Panel
+	// filter — ключи Filter row (ad hoc); каждый есть у всех метрик row.
+	filter []string
+	panels []Panel
 }
 
 type generator struct {
@@ -169,7 +171,7 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 		// SLO относится к сервису целиком: без фильтра instance и version.
 		{title: "SLO", scope: Scope{Var: "service", Services: opts.Services}, panels: g.sloPanels(Scope{Var: "service", Services: opts.Services})},
 		{title: "Runtime", scope: main, collapsed: true, panels: g.runtime(main)},
-		{title: "Pods", scope: servicePods(opts), collapsed: true, panels: pods(servicePods(opts))},
+		{title: "Pods", scope: servicePods(opts), collapsed: true, filter: []string{"pod"}, panels: pods(servicePods(opts))},
 		{title: "Dependencies", scope: main, collapsed: true, panels: g.dependencies(main)},
 	}
 	if opts.Cache {
@@ -239,7 +241,8 @@ func ServiceOverview(opts Options) (Dashboard, error) {
 		return Dashboard{}, fmt.Errorf("%s: %s", uid, strings.Join(g.errs, "; "))
 	}
 
-	manifest, err := dashboard.Manifest(uid, g.dash).Build()
+	manifest, err := dashboard.Manifest(uid, g.dash).
+		Metadata(resource.Named(uid).Annotations(crossDashboard(datasourceNames()...))).Build()
 	if err != nil {
 		return Dashboard{}, err
 	}
@@ -279,8 +282,12 @@ func (g *generator) row(r row) (*dashboard.RowBuilder, bool) {
 		return nil, false
 	}
 	b := dashboard.Row(r.title).Collapse(r.collapsed).AutoGridLayout(grid)
-	if len(r.vars) > 0 {
-		b.Variables(r.vars)
+	vars := r.vars
+	if len(r.filter) > 0 {
+		vars = append(vars, g.sectionFilter(r))
+	}
+	if len(vars) > 0 {
+		b.Variables(vars)
 	}
 	return b, true
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ADR 29: загрузка overview-dashboards в stack Grafana Cloud через gcx для проверки на данных
+# ADR 29: загрузка общих variables и overview-dashboards в stack Grafana Cloud через gcx для проверки на данных
 # kind. Stack и service account token берутся из .env.grafana-cloud; gcx config временный,
 # token gcx хранит в системном keychain.
 set -euo pipefail
@@ -31,6 +31,12 @@ status="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GRA
   -H 'Content-Type: application/json' -d "{\"uid\":\"${folder}\",\"title\":\"nomnom\"}" \
   "${GRAFANA_CLOUD_STACK_URL%/}/api/folders")"
 [[ "${status}" == 200 || "${status}" == 409 || "${status}" == 412 ]] || { echo "grafana-cloud: create folder: HTTP ${status}" >&2; exit 1; }
+
+# Общие variables (data sources) — раньше dashboards: dashboard подключает их annotation
+# grafana.app/useCrossDashboardVariables и без них не выполняет ни одного запроса. Global scope,
+# без folder. Stack без feature toggle grafana.dashboardGlobalVariables не обслуживает kind Variable,
+# и push падает здесь.
+g resources push -p "${root}/ops/grafana/variables" -o text
 
 # Артефакты не меняются: annotation folder добавляется во временные копии.
 mkdir "${config_dir}/dashboards"

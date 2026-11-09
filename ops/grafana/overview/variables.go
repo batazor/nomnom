@@ -10,10 +10,15 @@ import (
 
 	"github.com/grafana/grafana-foundation-sdk/go/cog"
 	dashboard "github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
+	"github.com/grafana/grafana-foundation-sdk/go/resource"
+
+	"nomnom/ops/grafana/inventory"
 )
 
 // Data sources выбираются variables по типу plugin: dashboard не содержит UID
-// конкретного окружения и работает с любым provisioning.
+// конкретного окружения и работает с любым provisioning. Это общие (cross-dashboard)
+// variables уровня организации: определение одно на все dashboards nomnom, dashboard
+// подключает их annotation useCrossDashboardVariables.
 var datasources = []struct{ name, label, plugin string }{
 	{"metrics", "Metrics (Prometheus)", "prometheus"},
 	{"logs", "Logs (Loki)", "loki"},
@@ -25,22 +30,101 @@ var datasources = []struct{ name, label, plugin string }{
 // алфавиту среди Loki идёт alert-state-history, и логи сервиса уходили бы в него.
 const appDatasources = "/^(?!.*(alert-state-history|usage)).*$/"
 
-func (g *generator) variables() []dashboard.VariableKind {
-	var vars []dashboard.VariableKind
+// GlobalVariablesDir — артефакты общих variables: вне каталогов Git Sync, применяются до
+// dashboards (make grafana-cloud-push).
+const GlobalVariablesDir = "ops/grafana/variables"
+
+// GlobalVariable — ресурс Variable (dashboard.grafana.app, public preview Grafana 13.3,
+// feature toggle grafana.dashboardGlobalVariables) в global scope: без annotation folder.
+// metadata.name равен имени variable: другое имя Grafana отклоняет.
+// Folder scope не подходит: Git Sync раскладывает dashboards по folder сервиса.
+type GlobalVariable struct {
+	Name     string
+	Manifest resource.Manifest
+}
+
+const variableAPIVersion = "dashboard.grafana.app/v2beta1"
+
+func GlobalVariables() ([]GlobalVariable, error) {
+	var out []GlobalVariable
 	for _, ds := range datasources {
 		v, err := dashboard.NewDatasourceVariableBuilder(ds.name).Label(ds.label).PluginId(ds.plugin).
 			Regex(appDatasources).Refresh(dashboard.VariableRefreshOnDashboardLoad).Build()
-		g.record(err)
-		vars = append(vars, dashboard.VariableKind{DatasourceVariableKind: &v})
+		if err != nil {
+			return nil, fmt.Errorf("variable %s: %w", ds.name, err)
+		}
+		out = append(out, GlobalVariable{Name: ds.name, Manifest: resource.Manifest{
+			ApiVersion: variableAPIVersion, Kind: "Variable",
+			Metadata: resource.Metadata{Name: ds.name},
+			Spec:     dashboard.VariableKind{DatasourceVariableKind: &v},
+		}})
 	}
+	return out, nil
+}
+
+// crossDashboard — annotation dashboard со списком общих variables: без неё dashboard
+// не видит ни одной, перечисленные подключаются явно (новые сами не появляются).
+func crossDashboard(names ...string) map[string]string {
+	raw, _ := json.Marshal(map[string][]string{"global": names})
+	return map[string]string{"grafana.app/useCrossDashboardVariables": string(raw)}
+}
+
+// datasourceNames — все общие data source variables: их подключает overview сервиса.
+func datasourceNames() []string {
+	var names []string
+	for _, ds := range datasources {
+		names = append(names, ds.name)
+	}
+	return names
+}
+
+// sectionFilter — Filter row (section variable): ad hoc filter Prometheus. Grafana добавляет
+// фильтр в каждый selector запросов row, поэтому ключ должен быть у всех метрик row (по
+// инвентарю), иначе генерация падает. Поэтому фильтра нет в rows с join target_info или с
+// разными семействами метрик (Kafka): он опустошил бы соседние панели. Group by выключен:
+// Grafana 13.3 показывает его, но в запросы Prometheus не подставляет (sum by не меняется).
+func (g *generator) sectionFilter(r row) dashboard.VariableKind {
+	for _, p := range r.panels {
+		for _, q := range p.Queries {
+			a, err := Analyze(q.Expr)
+			if err != nil {
+				g.errs = append(g.errs, fmt.Sprintf("%s: %v", p.Title, err))
+				continue
+			}
+			for _, s := range a.Selectors {
+				m, ok := inventory.Lookup(s.Series)
+				for _, k := range r.filter {
+					if ok && !slices.Contains(m.Labels, k) {
+						g.errs = append(g.errs, fmt.Sprintf("row %s: filter %s, у метрики %s нет label %s", r.title, k, m.Name, k))
+					}
+				}
+			}
+		}
+	}
+	var keys []cog.Builder[dashboard.MetricFindValue]
+	for _, k := range r.filter {
+		keys = append(keys, dashboard.NewMetricFindValueBuilder().Text(k))
+	}
+	v, err := dashboard.NewAdhocVariableBuilder(sectionFilterName(r.title)).Label("Filter").Group("prometheus").
+		Datasource(dashboard.NewDashboardv2AdhocVariableKindDatasourceBuilder().Name("${metrics}")).
+		DefaultKeys(keys).AllowCustomValue(false).EnableGroupBy(false).Build()
+	g.record(err)
+	return dashboard.VariableKind{AdhocVariableKind: &v}
+}
+
+// sectionFilterName — имя variable из заголовка row: Pods → pods_filter.
+func sectionFilterName(title string) string {
+	return strings.ToLower(strings.ReplaceAll(title, " ", "_")) + "_filter"
+}
+
+func (g *generator) variables() []dashboard.VariableKind {
 	jobs := `job=~"nomnom/(` + strings.Join(g.opts.Services, "|") + `)"`
-	vars = append(vars,
+	return []dashboard.VariableKind{
 		g.queryVariable("environment", "Environment", `label_values(target_info{`+jobs+`}, deployment_environment_name)`, false),
 		customVariable("service", "Service", g.opts.Services, true),
 		g.queryVariable("version", "Version", `label_values(target_info{job=~"nomnom/(${service:pipe})", deployment_environment_name=~"$environment"}, service_version)`, true),
 		g.queryVariable("service_instance", "Instance", `label_values(target_info{job=~"nomnom/(${service:pipe})", deployment_environment_name=~"$environment", service_version=~"$version"}, instance)`, true),
-	)
-	return vars
+	}
 }
 
 func (g *generator) queryVariable(name, label, query string, multi bool) dashboard.VariableKind {

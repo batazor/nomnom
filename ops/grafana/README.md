@@ -16,6 +16,7 @@ make grafana-tools      # go install gcx
 | `dashboards/` | Артефакт `Platform / Overview` (`platform.json`) и его README. |
 | `cmd/dashboards/` | CLI: запись артефактов, `-check`, `-preview DIR` (все метрики «есть»). |
 | `alerts/` | Rule group Platform / Overview (`platform.json`); rule groups сервисов — `boundaries/<service>/ops/grafana/alerts/rules.json`. Формат provisioning API, push — `make grafana-cloud-push`. |
+| `variables/` | Общие (cross-dashboard, global) variables data sources: ресурсы `Variable` (`dashboard.grafana.app/v2beta1`), push до dashboards — `make grafana-cloud-push`. Нужен feature toggle `grafana.dashboardGlobalVariables`. |
 | `git-sync/` | Git Sync `Repository` на сервис и на Platform (`provisioning.grafana.app/v1beta1`, read-only). |
 
 ## Версии
@@ -37,9 +38,11 @@ make grafana-tools      # go install gcx
 
 ## Проверки
 
-- `go test ./...` — стабильные uid, общий порядок rows, ни одной живой панели без метрик «есть», все панели живые при полном инвентаре, data sources только через variables, нет секретов и namespace окружения, отказ на неинвентаризованной метрике и `order_id`.
+- `go test ./...` — стабильные uid, общий порядок rows, ни одной живой панели без метрик «есть», все панели живые при полном инвентаре, data sources только через общие variables, подключённые annotation, ключ ad hoc Filter row есть у всех метрик row, нет секретов и namespace окружения, отказ на неинвентаризованной метрике и `order_id`.
 - `-check` — артефакты совпадают с генератором.
 - `gcx dev lint run` — правила gcx, включая `target-valid-promql` для live-варианта.
+
+Проверено вручную 2026-11-09 на `grafana/grafana:13.3.0` в Docker с `[feature_toggles] grafana.dashboardGlobalVariables = true` и пустым Prometheus: `variables/*.json` приняты API `dashboard.grafana.app/v2beta1` (без toggle — `403 global dashboard variables feature is not enabled`, при `metadata.name`, отличном от имени variable, — отказ); dashboards сохранены без потерь, кроме пустых `custom: {}`, и получают `metrics` из общей variable; section variables `owner` и `namespace` показываются в своих rows; ad hoc Filter row Pods предлагает только ключ `pod` и добавляет `pod="…"` в каждый selector запросов row Pods, не трогая запросы других rows. Group by того же контрола в запросы Prometheus не подставлялся, поэтому выключен.
 
 Проверено вручную 2026-10-25 на `grafana/grafana:13.2.4` в Docker: все dashboards приняты API `dashboard.grafana.app/v2` и сохранены без потерь (section variable `worker` сохраняется); live-варианты отрендерены, 258 запросов выполнены через Grafana против Prometheus без ошибок; Explore-ссылка Loki открывается с подставленными variables и интервалом; `Repository` прошёл `dryRun`. Grafana и Alloy в kind тогда не были развёрнуты, поэтому end-to-end с реальными данными не выполнялся.
 

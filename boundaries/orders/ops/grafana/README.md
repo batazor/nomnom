@@ -26,7 +26,7 @@ JSON — артефакт генератора: правки вносятся в
 
 ## Data sources
 
-Выбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).
+Выбираются общими (cross-dashboard, global) variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope). Определения — [`ops/grafana/variables`](../../../../ops/grafana/variables), dashboard подключает их annotation `grafana.app/useCrossDashboardVariables`; нужен feature toggle `grafana.dashboardGlobalVariables` ([ADR 29](../../../../docs/adr/0029-grafana-dashboards-as-code.md)).
 
 ## Variables
 
@@ -37,6 +37,7 @@ JSON — артефакт генератора: правки вносятся в
 | `version` | `target_info` → `service_version` | Сравнение версий во время выкатки. |
 | `service_instance` | `target_info` → `instance` (`service.instance.id`) | Диагностика экземпляра. |
 | `worker` (section, row Temporal) | `orders-worker` | Temporal worker фильтруется отдельно от API. |
+| `pods_filter` (section, row Pods) | ad hoc Filter, ключи `pod` | Фильтр панелей row; ключ есть у всех метрик row. |
 
 `namespace` не добавлен: `k8s.namespace.name` не входит в принятые resource attributes. High-cardinality variables (`order_id`, `user_id`, `payment_id`, `event_id`, `workflow_id`) запрещены — для них traces и logs.
 

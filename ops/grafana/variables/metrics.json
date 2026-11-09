@@ -1,0 +1,27 @@
+{
+  "apiVersion": "dashboard.grafana.app/v2beta1",
+  "kind": "Variable",
+  "metadata": {
+    "name": "metrics"
+  },
+  "spec": {
+    "kind": "DatasourceVariable",
+    "spec": {
+      "name": "metrics",
+      "pluginId": "prometheus",
+      "refresh": "onDashboardLoad",
+      "regex": "/^(?!.*(alert-state-history|usage)).*$/",
+      "current": {
+        "text": "",
+        "value": ""
+      },
+      "options": [],
+      "multi": false,
+      "includeAll": false,
+      "label": "Metrics (Prometheus)",
+      "hide": "dontHide",
+      "skipUrlSync": false,
+      "allowCustomValue": true
+    }
+  }
+}

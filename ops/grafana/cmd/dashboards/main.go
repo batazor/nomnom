@@ -1,4 +1,4 @@
-// Command dashboards генерирует overview-dashboards, README и инвентарь метрик.
+// Command dashboards генерирует overview-dashboards, общие variables, README и инвентарь метрик.
 //
 //	go run ./cmd/dashboards -root ../..           # записать артефакты
 //	go run ./cmd/dashboards -root ../.. -check    # CI: упасть при расхождении
@@ -63,6 +63,13 @@ func main() {
 	files[overview.PlatformAlertsPath] = encodeAlerts(platformAlerts)
 	files[filepath.Join(filepath.Dir(overview.PlatformPath), "README.md")] = []byte(overview.PlatformREADME(platform, platformAlerts))
 	files[inventory.DocPath] = []byte(inventory.Markdown())
+	globals, err := overview.GlobalVariables()
+	if err != nil {
+		fail(err)
+	}
+	for _, v := range globals {
+		files[filepath.Join(overview.GlobalVariablesDir, v.Name+".json")] = encodeJSON(v.Manifest)
+	}
 
 	switch {
 	case *preview != "":

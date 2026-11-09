@@ -2,12 +2,15 @@
   "apiVersion": "dashboard.grafana.app/v2",
   "kind": "Dashboard",
   "metadata": {
-    "name": "nomnom-platform-overview"
+    "name": "nomnom-platform-overview",
+    "annotations": {
+      "grafana.app/useCrossDashboardVariables": "{\"global\":[\"metrics\"]}"
+    }
   },
   "spec": {
     "annotations": [],
     "cursorSync": "Crosshair",
-    "description": "Серверная сторона SpiceDB, PostgreSQL, CDC Outbox (Kafka Connect, Debezium) и Valkey, pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.",
+    "description": "Серверная сторона SpiceDB, PostgreSQL, CDC Outbox (Kafka Connect, Debezium) и Valkey, pods прикладных неймспейсов и сертификаты cert-manager: Prometheus scrape Alloy (job infra/*, PostgreSQL — integrations/db-o11y). Клиентская сторона — overview сервисов. Сгенерировано ops/grafana; правки — через генератор.",
     "editable": false,
     "elements": {
       "panel-1": {
@@ -96,7 +99,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (pg_stat_database_numbackends{job=\"infra/postgresql\", owner=~\"$owner\"})",
+                        "expr": "sum by (owner) (pg_stat_database_numbackends{job=\"integrations/db-o11y\", owner=~\"$owner\"})",
                         "legendFormat": "{{owner}}",
                         "range": true
                       }
@@ -160,7 +163,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (rate(pg_stat_database_xact_commit{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval]))",
+                        "expr": "sum by (owner) (rate(pg_stat_database_xact_commit{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval]))",
                         "legendFormat": "{{owner}} commit",
                         "range": true
                       }
@@ -180,7 +183,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (rate(pg_stat_database_xact_rollback{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval]))",
+                        "expr": "sum by (owner) (rate(pg_stat_database_xact_rollback{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval]))",
                         "legendFormat": "{{owner}} rollback",
                         "range": true
                       }
@@ -244,7 +247,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (rate(pg_stat_database_blks_hit{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval])) / (sum by (owner) (rate(pg_stat_database_blks_hit{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval])) + sum by (owner) (rate(pg_stat_database_blks_read{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval])))",
+                        "expr": "sum by (owner) (rate(pg_stat_database_blks_hit{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval])) / (sum by (owner) (rate(pg_stat_database_blks_hit{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval])) + sum by (owner) (rate(pg_stat_database_blks_read{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval])))",
                         "legendFormat": "{{owner}}",
                         "range": true
                       }
@@ -308,7 +311,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (rate(pg_stat_database_deadlocks{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval]))",
+                        "expr": "sum by (owner) (rate(pg_stat_database_deadlocks{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval]))",
                         "legendFormat": "{{owner}} deadlocks",
                         "range": true
                       }
@@ -328,7 +331,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (rate(pg_stat_database_conflicts{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval]))",
+                        "expr": "sum by (owner) (rate(pg_stat_database_conflicts{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval]))",
                         "legendFormat": "{{owner}} conflicts",
                         "range": true
                       }
@@ -392,7 +395,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (rate(pg_stat_database_temp_bytes{job=\"infra/postgresql\", owner=~\"$owner\"}[$__rate_interval]))",
+                        "expr": "sum by (owner) (rate(pg_stat_database_temp_bytes{job=\"integrations/db-o11y\", owner=~\"$owner\"}[$__rate_interval]))",
                         "legendFormat": "{{owner}}",
                         "range": true
                       }
@@ -456,7 +459,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "sum by (owner) (pg_database_size_bytes{job=\"infra/postgresql\", owner=~\"$owner\"})",
+                        "expr": "sum by (owner) (pg_database_size_bytes{job=\"integrations/db-o11y\", owner=~\"$owner\"})",
                         "legendFormat": "{{owner}}",
                         "range": true
                       }
@@ -520,7 +523,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "max by (owner, slot_name) (pg_replication_slot_slot_current_wal_lsn{job=\"infra/postgresql\", owner=~\"$owner\"} - pg_replication_slot_slot_confirmed_flush_lsn{job=\"infra/postgresql\", owner=~\"$owner\"})",
+                        "expr": "max by (owner, slot_name) (pg_replication_slot_slot_current_wal_lsn{job=\"integrations/db-o11y\", owner=~\"$owner\"} - pg_replication_slot_slot_confirmed_flush_lsn{job=\"integrations/db-o11y\", owner=~\"$owner\"})",
                         "legendFormat": "{{owner}} {{slot_name}}",
                         "range": true
                       }
@@ -584,7 +587,7 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "min by (owner, slot_name) (pg_replication_slot_slot_is_active{job=\"infra/postgresql\", owner=~\"$owner\"})",
+                        "expr": "min by (owner, slot_name) (pg_replication_slot_slot_is_active{job=\"integrations/db-o11y\", owner=~\"$owner\"})",
                         "legendFormat": "{{owner}} {{slot_name}}",
                         "range": true
                       }
@@ -1983,7 +1986,7 @@
         "spec": {
           "id": 9,
           "title": "Up",
-          "description": "0 — экспортер Alloy не подключился к базе владельца.",
+          "description": "0 — Database Observability Alloy не подключилась к серверу.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -2000,8 +2003,8 @@
                         "name": "${metrics}"
                       },
                       "spec": {
-                        "expr": "max by (owner) (pg_up{job=\"infra/postgresql\", owner=~\"$owner\"})",
-                        "legendFormat": "{{owner}}",
+                        "expr": "max by (instance) (pg_up{job=\"integrations/db-o11y\"})",
+                        "legendFormat": "{{instance}}",
                         "range": true
                       }
                     },
@@ -2496,7 +2499,40 @@
                               }
                             ]
                           }
-                        }
+                        },
+                        "variables": [
+                          {
+                            "kind": "CustomVariable",
+                            "spec": {
+                              "name": "owner",
+                              "query": "orders,payments,delivery",
+                              "current": {
+                                "text": "All",
+                                "value": "$__all"
+                              },
+                              "options": [
+                                {
+                                  "text": "orders",
+                                  "value": "orders"
+                                },
+                                {
+                                  "text": "payments",
+                                  "value": "payments"
+                                },
+                                {
+                                  "text": "delivery",
+                                  "value": "delivery"
+                                }
+                              ],
+                              "multi": true,
+                              "includeAll": true,
+                              "label": "PostgreSQL owner",
+                              "hide": "dontHide",
+                              "skipUrlSync": false,
+                              "allowCustomValue": true
+                            }
+                          }
+                        ]
                       }
                     },
                     {
@@ -2772,7 +2808,70 @@
                               }
                             ]
                           }
-                        }
+                        },
+                        "variables": [
+                          {
+                            "kind": "CustomVariable",
+                            "spec": {
+                              "name": "namespace",
+                              "query": "nomnom-orders,nomnom-payments,nomnom-delivery,nomnom-restaurants,nomnom-bff",
+                              "current": {
+                                "text": "All",
+                                "value": "$__all"
+                              },
+                              "options": [
+                                {
+                                  "text": "nomnom-orders",
+                                  "value": "nomnom-orders"
+                                },
+                                {
+                                  "text": "nomnom-payments",
+                                  "value": "nomnom-payments"
+                                },
+                                {
+                                  "text": "nomnom-delivery",
+                                  "value": "nomnom-delivery"
+                                },
+                                {
+                                  "text": "nomnom-restaurants",
+                                  "value": "nomnom-restaurants"
+                                },
+                                {
+                                  "text": "nomnom-bff",
+                                  "value": "nomnom-bff"
+                                }
+                              ],
+                              "multi": true,
+                              "includeAll": true,
+                              "label": "Namespace",
+                              "hide": "dontHide",
+                              "skipUrlSync": false,
+                              "allowCustomValue": true
+                            }
+                          },
+                          {
+                            "kind": "AdhocVariable",
+                            "group": "prometheus",
+                            "datasource": {
+                              "name": "${metrics}"
+                            },
+                            "spec": {
+                              "name": "pods_filter",
+                              "baseFilters": [],
+                              "filters": [],
+                              "defaultKeys": [
+                                {
+                                  "text": "pod"
+                                }
+                              ],
+                              "label": "Filter",
+                              "hide": "dontHide",
+                              "skipUrlSync": false,
+                              "allowCustomValue": false,
+                              "enableGroupBy": false
+                            }
+                          }
+                        ]
                       }
                     },
                     {
@@ -2929,120 +3028,6 @@
       "fiscalYearStartMonth": 0
     },
     "title": "Platform / Overview",
-    "variables": [
-      {
-        "kind": "DatasourceVariable",
-        "spec": {
-          "name": "metrics",
-          "pluginId": "prometheus",
-          "refresh": "onDashboardLoad",
-          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
-          "current": {
-            "text": "",
-            "value": ""
-          },
-          "options": [],
-          "multi": false,
-          "includeAll": false,
-          "label": "Metrics (Prometheus)",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
-      {
-        "kind": "CustomVariable",
-        "spec": {
-          "name": "owner",
-          "query": "orders,payments,delivery",
-          "current": {
-            "text": "All",
-            "value": "$__all"
-          },
-          "options": [
-            {
-              "text": "orders",
-              "value": "orders"
-            },
-            {
-              "text": "payments",
-              "value": "payments"
-            },
-            {
-              "text": "delivery",
-              "value": "delivery"
-            }
-          ],
-          "multi": true,
-          "includeAll": true,
-          "label": "PostgreSQL owner",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
-      {
-        "kind": "CustomVariable",
-        "spec": {
-          "name": "valkey_owner",
-          "query": "restaurants",
-          "current": {
-            "text": "All",
-            "value": "$__all"
-          },
-          "options": [
-            {
-              "text": "restaurants",
-              "value": "restaurants"
-            }
-          ],
-          "multi": true,
-          "includeAll": true,
-          "label": "Valkey owner",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
-      {
-        "kind": "CustomVariable",
-        "spec": {
-          "name": "namespace",
-          "query": "nomnom-orders,nomnom-payments,nomnom-delivery,nomnom-restaurants,nomnom-bff",
-          "current": {
-            "text": "All",
-            "value": "$__all"
-          },
-          "options": [
-            {
-              "text": "nomnom-orders",
-              "value": "nomnom-orders"
-            },
-            {
-              "text": "nomnom-payments",
-              "value": "nomnom-payments"
-            },
-            {
-              "text": "nomnom-delivery",
-              "value": "nomnom-delivery"
-            },
-            {
-              "text": "nomnom-restaurants",
-              "value": "nomnom-restaurants"
-            },
-            {
-              "text": "nomnom-bff",
-              "value": "nomnom-bff"
-            }
-          ],
-          "multi": true,
-          "includeAll": true,
-          "label": "Namespace",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      }
-    ]
+    "variables": []
   }
 }

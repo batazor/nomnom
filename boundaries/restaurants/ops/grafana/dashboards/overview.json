@@ -2,7 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v2",
   "kind": "Dashboard",
   "metadata": {
-    "name": "nomnom-restaurants-overview"
+    "name": "nomnom-restaurants-overview",
+    "annotations": {
+      "grafana.app/useCrossDashboardVariables": "{\"global\":[\"metrics\",\"logs\",\"traces\",\"profiles\"]}"
+    }
   },
   "spec": {
     "annotations": [
@@ -2831,7 +2834,31 @@
                               }
                             ]
                           }
-                        }
+                        },
+                        "variables": [
+                          {
+                            "kind": "AdhocVariable",
+                            "group": "prometheus",
+                            "datasource": {
+                              "name": "${metrics}"
+                            },
+                            "spec": {
+                              "name": "pods_filter",
+                              "baseFilters": [],
+                              "filters": [],
+                              "defaultKeys": [
+                                {
+                                  "text": "pod"
+                                }
+                              ],
+                              "label": "Filter",
+                              "hide": "dontHide",
+                              "skipUrlSync": false,
+                              "allowCustomValue": false,
+                              "enableGroupBy": false
+                            }
+                          }
+                        ]
                       }
                     },
                     {
@@ -3169,86 +3196,6 @@
     },
     "title": "Restaurants / Overview",
     "variables": [
-      {
-        "kind": "DatasourceVariable",
-        "spec": {
-          "name": "metrics",
-          "pluginId": "prometheus",
-          "refresh": "onDashboardLoad",
-          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
-          "current": {
-            "text": "",
-            "value": ""
-          },
-          "options": [],
-          "multi": false,
-          "includeAll": false,
-          "label": "Metrics (Prometheus)",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
-      {
-        "kind": "DatasourceVariable",
-        "spec": {
-          "name": "logs",
-          "pluginId": "loki",
-          "refresh": "onDashboardLoad",
-          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
-          "current": {
-            "text": "",
-            "value": ""
-          },
-          "options": [],
-          "multi": false,
-          "includeAll": false,
-          "label": "Logs (Loki)",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
-      {
-        "kind": "DatasourceVariable",
-        "spec": {
-          "name": "traces",
-          "pluginId": "tempo",
-          "refresh": "onDashboardLoad",
-          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
-          "current": {
-            "text": "",
-            "value": ""
-          },
-          "options": [],
-          "multi": false,
-          "includeAll": false,
-          "label": "Traces (Tempo)",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
-      {
-        "kind": "DatasourceVariable",
-        "spec": {
-          "name": "profiles",
-          "pluginId": "grafana-pyroscope-datasource",
-          "refresh": "onDashboardLoad",
-          "regex": "/^(?!.*(alert-state-history|usage)).*$/",
-          "current": {
-            "text": "",
-            "value": ""
-          },
-          "options": [],
-          "multi": false,
-          "includeAll": false,
-          "label": "Profiles (Pyroscope)",
-          "hide": "dontHide",
-          "skipUrlSync": false,
-          "allowCustomValue": true
-        }
-      },
       {
         "kind": "QueryVariable",
         "spec": {

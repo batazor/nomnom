@@ -68,10 +68,16 @@ func PlatformREADME(d Dashboard, alerts AlertGroup) string {
 	var b strings.Builder
 	b.WriteString("<!-- Сгенерировано ops/grafana (make grafana-generate). Не редактировать вручную. -->\n\n# Platform / Overview\n\n")
 	b.WriteString("Серверная сторона общей инфраструктуры и pods всех прикладных неймспейсов. Клиентская сторона (Authorization, Dependencies) и Pods конкретного сервиса — в overview сервиса; оттуда ведёт ссылка сюда.\n\n")
-	fmt.Fprintf(&b, "| | |\n| --- | --- |\n| UID | `%s` |\n| Файл | [`platform.json`](platform.json) |\n| Схема | `dashboard.grafana.app/v2` (Grafana 13) |\n| Доставка | Git Sync, repository [`ops/grafana/git-sync/platform.yaml`](../git-sync/platform.yaml) |\n| Генератор | [`ops/grafana`](../README.md), функция `overview.PlatformOverview` |\n| Источники | Alloy Prometheus scrape: `infra/spicedb`, `infra/postgresql`, `infra/kubernetes` ([`infra.alloy`](../../kind/manifests/observability/alloy/infra.alloy)) |\n\n", d.UID)
+	fmt.Fprintf(&b, "| | |\n| --- | --- |\n| UID | `%s` |\n| Файл | [`platform.json`](platform.json) |\n| Схема | `dashboard.grafana.app/v2` (Grafana 13) |\n| Доставка | Git Sync, repository [`ops/grafana/git-sync/platform.yaml`](../git-sync/platform.yaml) |\n| Генератор | [`ops/grafana`](../README.md), функция `overview.PlatformOverview` |\n| Источники | Alloy Prometheus scrape: `infra/spicedb`, `integrations/db-o11y` (PostgreSQL), `infra/kubernetes` ([`infra.alloy`](../../kind/manifests/observability/alloy/infra.alloy)) |\n\n", d.UID)
 	b.WriteString("## Variables\n\n| Variable | Источник | Назначение |\n| --- | --- | --- |\n")
-	fmt.Fprintf(&b, "| `owner` | владельцы PostgreSQL (`%s`) | label `owner` экспортера. |\n", strings.Join(postgresOwners, "`, `"))
-	fmt.Fprintf(&b, "| `namespace` | прикладные неймспейсы (`%s`) | Row Pods. |\n\n", strings.Join(appNamespaces, "`, `"))
+	b.WriteString("| `metrics` (общая, global) | data source Prometheus, [`ops/grafana/variables`](../variables) | Все запросы. |\n")
+	fmt.Fprintf(&b, "| `owner` (section, row PostgreSQL) | владельцы PostgreSQL (`%s`) | label `owner` метрик баз и слотов (Alloy берёт его из `datname` и `slot_name`); Up — сервер, без фильтра. |\n", strings.Join(postgresOwners, "`, `"))
+	if liveRow(d, "Valkey") {
+		fmt.Fprintf(&b, "| `valkey_owner` (section, row Valkey) | владельцы Valkey (`%s`) | label `owner` метрик Valkey. |\n", strings.Join(valkeyOwners, "`, `"))
+	}
+	fmt.Fprintf(&b, "| `namespace` (section, row Pods) | прикладные неймспейсы (`%s`) | Неймспейс pods. |\n", strings.Join(appNamespaces, "`, `"))
+	b.WriteString(filterRow(d, "Pods", "pod"))
+	b.WriteString("\n")
 	b.WriteString("Environment и version не фильтруются: у Prometheus-метрик инфраструктуры нет `target_info`.\n\n")
 	rowsTable(&b, d, "../../../")
 	alertsTable(&b, alerts, "../alerts/platform.json", "../../../")
@@ -88,7 +94,7 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	b.WriteString("JSON — артефакт генератора: правки вносятся в `ops/grafana/overview/services.go` или в инвентарь, затем `make grafana-generate`. CI (`make grafana-check`) падает при расхождении.\n\n")
 
 	sloTable(&b, o)
-	b.WriteString("## Data sources\n\nВыбираются dashboard variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope).\n\n")
+	b.WriteString("## Data sources\n\nВыбираются общими (cross-dashboard, global) variables по типу plugin, без UID окружения: `metrics` (Prometheus API Grafana Cloud), `logs` (Loki), `traces` (Tempo), `profiles` (Pyroscope). Определения — [`ops/grafana/variables`](../../../../ops/grafana/variables), dashboard подключает их annotation `grafana.app/useCrossDashboardVariables`; нужен feature toggle `grafana.dashboardGlobalVariables` ([ADR 29](../../../../docs/adr/0029-grafana-dashboards-as-code.md)).\n\n")
 
 	b.WriteString("## Variables\n\n| Variable | Источник | Назначение |\n| --- | --- | --- |\n")
 	b.WriteString("| `environment` | `target_info` → `deployment_environment_name` | Фильтр окружения через join с `target_info`. |\n")
@@ -98,6 +104,7 @@ func README(o Options, d Dashboard, alerts AlertGroup) string {
 	if o.Temporal != nil {
 		fmt.Fprintf(&b, "| `worker` (section, row Temporal) | `%s` | Temporal worker фильтруется отдельно от API. |\n", o.Temporal.Worker)
 	}
+	b.WriteString(filterRow(d, "Pods", "pod"))
 	b.WriteString("\n`namespace` не добавлен: `k8s.namespace.name` не входит в принятые resource attributes. High-cardinality variables (`order_id`, `user_id`, `payment_id`, `event_id`, `workflow_id`) запрещены — для них traces и logs.\n\n")
 
 	rowsTable(&b, d, "../../../../")
@@ -131,4 +138,25 @@ func sloTable(b *strings.Builder, o Options) {
 		fmt.Fprintf(b, "| %s | %s | %s |\n", s.name, percent(s.target), percent(1-s.target))
 	}
 	b.WriteString("\n")
+}
+
+// filterRow — строка таблицы Variables для Filter row (ad hoc filter).
+func filterRow(d Dashboard, title string, keys ...string) string {
+	if !liveRow(d, title) {
+		return ""
+	}
+	return fmt.Sprintf("| `%s` (section, row %s) | ad hoc Filter, ключи `%s` | Фильтр панелей row; ключ есть у всех метрик row. |\n",
+		sectionFilterName(title), title, strings.Join(keys, "`, `"))
+}
+
+// liveRow — row выводится: в нём есть живая панель. У невыведенного row нет и его section variables.
+func liveRow(d Dashboard, title string) bool {
+	for _, r := range d.Rows {
+		for _, p := range r.Panels {
+			if r.Title == title && p.Live {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -151,14 +151,78 @@ func TestDatasourceVariablesSkipServiceDatasources(t *testing.T) {
 	if !strings.Contains(appDatasources, "alert-state-history|usage") {
 		t.Errorf("фильтр %s", appDatasources)
 	}
-	withAllPresent(t)
-	for ctx, d := range render(t) {
-		raw, err := json.Marshal(d.Manifest)
+	globals, err := GlobalVariables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range globals {
+		raw, err := json.Marshal(v.Manifest)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(string(raw), `alert-state-history|usage`) {
-			t.Errorf("%s: переменные data source без фильтра", ctx)
+			t.Errorf("%s: переменная data source без фильтра", v.Name)
 		}
+	}
+}
+
+// Data sources — только общие variables: dashboard не определяет их сам и подключает
+// annotation каждую, на которую ссылается.
+func TestDatasourcesAreCrossDashboardVariables(t *testing.T) {
+	globals, err := GlobalVariables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defined := map[string]bool{}
+	for _, v := range globals {
+		if v.Manifest.Kind != "Variable" || v.Manifest.ApiVersion != "dashboard.grafana.app/v2beta1" || v.Manifest.Metadata.Annotations["grafana.app/folder"] != "" {
+			t.Errorf("%s: не global Variable: %+v", v.Name, v.Manifest)
+		}
+		defined[v.Name] = true
+	}
+	withAllPresent(t)
+	dashboards := render(t)
+	platform, err := PlatformOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dashboards["platform"] = platform
+	for ctx, d := range dashboards {
+		var use struct{ Global []string }
+		if err := json.Unmarshal([]byte(d.Manifest.Metadata.Annotations["grafana.app/useCrossDashboardVariables"]), &use); err != nil {
+			t.Fatalf("%s: annotation: %v", ctx, err)
+		}
+		raw, err := json.Marshal(d.Manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), `"kind":"DatasourceVariable"`) {
+			t.Errorf("%s: dashboard определяет data source variable сам", ctx)
+		}
+		for _, chunk := range strings.Split(string(raw), `"datasource":{"name":"${`)[1:] {
+			name, _, _ := strings.Cut(chunk, "}")
+			if !slices.Contains(use.Global, name) {
+				t.Errorf("%s: ${%s} не подключена annotation %v", ctx, name, use.Global)
+			}
+		}
+		for _, name := range use.Global {
+			if !defined[name] {
+				t.Errorf("%s: подключена неизвестная variable %s", ctx, name)
+			}
+		}
+	}
+}
+
+// Ad hoc Filter row попадает в каждый selector: ключ без label у метрики row — ошибка генерации.
+func TestSectionFilterRequiresKeyOnEveryMetric(t *testing.T) {
+	g := &generator{opts: Options{}}
+	sc := Scope{Var: "service", Services: []string{inventory.Orders}}
+	g.sectionFilter(row{title: "Mixed", filter: []string{"pod"}, panels: []Panel{
+		{Title: "CPU", Queries: []Query{{Expr: Sum("pod", sc.Rate("container_cpu_usage_seconds_total"))}}},
+		{Title: "Orders", Queries: []Query{{Expr: Sum("", sc.Rate("nomnom_orders_placed_total"))}}},
+	}})
+	joined := strings.Join(g.errs, "\n")
+	if !strings.Contains(joined, "у метрики nomnom_orders_placed_total нет label pod") || strings.Contains(joined, "container_cpu_usage_seconds_total") {
+		t.Errorf("ошибки %q", joined)
 	}
 }

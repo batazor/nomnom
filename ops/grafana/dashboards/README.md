@@ -11,14 +11,16 @@
 | Схема | `dashboard.grafana.app/v2` (Grafana 13) |
 | Доставка | Git Sync, repository [`ops/grafana/git-sync/platform.yaml`](../git-sync/platform.yaml) |
 | Генератор | [`ops/grafana`](../README.md), функция `overview.PlatformOverview` |
-| Источники | Alloy Prometheus scrape: `infra/spicedb`, `infra/postgresql`, `infra/kubernetes` ([`infra.alloy`](../../kind/manifests/observability/alloy/infra.alloy)) |
+| Источники | Alloy Prometheus scrape: `infra/spicedb`, `integrations/db-o11y` (PostgreSQL), `infra/kubernetes` ([`infra.alloy`](../../kind/manifests/observability/alloy/infra.alloy)) |
 
 ## Variables
 
 | Variable | Источник | Назначение |
 | --- | --- | --- |
-| `owner` | владельцы PostgreSQL (`orders`, `payments`, `delivery`) | label `owner` экспортера. |
-| `namespace` | прикладные неймспейсы (`nomnom-orders`, `nomnom-payments`, `nomnom-delivery`, `nomnom-restaurants`, `nomnom-bff`) | Row Pods. |
+| `metrics` (общая, global) | data source Prometheus, [`ops/grafana/variables`](../variables) | Все запросы. |
+| `owner` (section, row PostgreSQL) | владельцы PostgreSQL (`orders`, `payments`, `delivery`) | label `owner` метрик баз и слотов (Alloy берёт его из `datname` и `slot_name`); Up — сервер, без фильтра. |
+| `namespace` (section, row Pods) | прикладные неймспейсы (`nomnom-orders`, `nomnom-payments`, `nomnom-delivery`, `nomnom-restaurants`, `nomnom-bff`) | Неймспейс pods. |
+| `pods_filter` (section, row Pods) | ad hoc Filter, ключи `pod` | Фильтр панелей row; ключ есть у всех метрик row. |
 
 Environment и version не фильтруются: у Prometheus-метрик инфраструктуры нет `target_info`.
 
