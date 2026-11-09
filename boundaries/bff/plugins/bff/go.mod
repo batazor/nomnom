@@ -3,13 +3,6 @@ module github.com/batazor/nomnom/boundaries/bff/plugins/bff
 go 1.27
 
 require (
-	github.com/stretchr/testify v1.12.1
-	github.com/wundergraph/cosmo/router-plugin v0.0.0-20250824152218-8eebc34c4995 // v0.4.1
-	google.golang.org/grpc v1.84.0
-	google.golang.org/protobuf v1.36.12
-)
-
-require (
 	buf.build/gen/go/nomnom/delivery/grpc/go v1.6.2-20261030084627-2e2e4e0040d5.1
 	buf.build/gen/go/nomnom/delivery/protocolbuffers/go v1.36.12-20261030084627-2e2e4e0040d5.2
 	buf.build/gen/go/nomnom/orders/grpc/go v1.6.2-20261030170202-9cd012038d91.1
@@ -19,8 +12,12 @@ require (
 	github.com/MicahParks/keyfunc/v3 v3.8.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/stretchr/testify v1.12.1
+	github.com/wundergraph/cosmo/router-plugin v0.0.0-20250824152218-8eebc34c4995 // v0.4.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc
+	google.golang.org/grpc v1.84.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (

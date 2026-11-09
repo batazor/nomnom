@@ -6,7 +6,7 @@
 #
 # SMT SchemaFraming (FR-714): value стримов Integration Events — wire format Schema Registry.
 # connect-api, protobuf-java и Jackson — provided: те же версии лежат в /opt/kafka/libs Strimzi
-# Kafka 4.3.1. Тесты модуля (testcontainers) идут mvn package вне сборки образа.
+# Kafka 4.3.2. Тесты модуля (testcontainers) идут mvn package вне сборки образа.
 FROM maven:3.10.0-eclipse-temurin-25@sha256:9d329e21adce7c0cc53f2fd21e73c127a247c73287b8503196136ec5cff52328 AS schema-framing
 WORKDIR /src
 COPY schema-framing/pom.xml ./
@@ -14,11 +14,11 @@ RUN --mount=type=cache,target=/root/.m2 mvn -q -B dependency:go-offline
 COPY schema-framing/src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests package
 
-# Плагины Debezium 3.7.0.Final — каталоги из закреплённого образа Debezium Connect: каждый
+# Плагины Debezium 3.7.1.Final — каталоги из закреплённого образа Debezium Connect: каждый
 # самодостаточен (EventRouter — в debezium-connect-plugins, MongoEventRouter — в jar коннектора).
-FROM quay.io/debezium/connect:3.7.0.Final@sha256:19e5f6f86255473ee7f813280fe5ce3d0d987b83dfce590b77c31a7564533e13 AS debezium
+FROM quay.io/debezium/connect:3.7.1.Final@sha256:53c6d0424d09f7ccef813c895fb9b1056a726bc14ff2e6a592856cd627ebd491 AS debezium
 
-FROM quay.io/strimzi/kafka:1.3.0-kafka-4.3.1@sha256:1f189b1f0f32684302d8b018b1d21b411e2469a9c465fbdc18fa3599cb5bbdad
+FROM quay.io/strimzi/kafka:1.3.1-kafka-4.3.2@sha256:9cea505e434a53cea40941d2c6e9aa5896792fe9c9380feb1d7adea3867a3a0b
 
 # Владелец — пользователь Connect образа Strimzi (1001, группа 0). Без --chmod: он задал бы
 # каталогам режим файла. Connect находит плагины по манифестам ServiceLoader

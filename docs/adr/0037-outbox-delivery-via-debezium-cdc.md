@@ -42,7 +42,7 @@ Debezium Server не подходит: заголовки он пишет тол
 ### Kafka Connect + Debezium
 
 Один Kafka Connect кластер в `nomnom-infra` — ресурс Strimzi `KafkaConnect kafka-connect` (образ
-`ops/kind/kafka-connect`: Strimzi Kafka 4.3.1 с плагинами Debezium 3.7.0.Final и SMT в
+`ops/kind/kafka-connect`: Strimzi Kafka 4.3.2 с плагинами Debezium 3.7.1.Final и SMT в
 `/opt/kafka/plugins`, метрики — `metricsConfig` Strimzi). Его config, offsets и status хранятся в
 topics брокера (`KafkaTopic` `nomnom-cdc-*`, `compact`), поэтому сам Connect stateless. На каждый
 контекст свой коннектор:

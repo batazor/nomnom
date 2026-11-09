@@ -34,7 +34,7 @@ import org.testcontainers.containers.wait.strategy.Wait;
 class SchemaFramingTest {
 
   /** Kafka and Confluent Schema Registry of ops/kind/manifests/messaging (kafka.yaml, schema-registry.yaml). */
-  private static final String KAFKA_IMAGE = "apache/kafka:4.3.1";
+  private static final String KAFKA_IMAGE = "apache/kafka:4.3.2";
 
   private static final String SCHEMA_REGISTRY_IMAGE =
       "docker.io/confluentinc/cp-schema-registry:8.4.0@sha256:12cd2770fa25df65243dabafd5eef5337ea1145a3cb85afc8a27f7151dfa2999";

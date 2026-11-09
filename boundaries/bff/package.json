@@ -17,6 +17,16 @@
   "license": "UNLICENSED",
   "devDependencies": {
     "graphql": "16.14.2",
-    "wgc": "0.133.3"
+    "wgc": "0.133.6"
+  },
+  "overrides": {
+    "@graphql-tools/utils": "12.1.0",
+    "@hono/node-server": "2.1.6",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "axios": "1.21.0",
+    "follow-redirects": "1.16.3",
+    "js-yaml": "4.3.2",
+    "tmp": "0.2.7",
+    "undici": "6.29.1"
   }
 }
