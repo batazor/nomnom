@@ -115,7 +115,7 @@ jobs:
       - uses: actions/setup-node@v5
         if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: boundaries/${{ matrix.boundary }}/package-lock.json
       - if: inputs.boundary == 'all' || inputs.boundary == matrix.boundary

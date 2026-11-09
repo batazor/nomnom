@@ -56,7 +56,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -o "/out/plugins/bff/bin/${TARGETOS}_${TARGETARCH}" ./src
 
-FROM --platform=$BUILDPLATFORM node:24.22.1-trixie-slim AS config
+FROM --platform=$BUILDPLATFORM node:26.13.0-trixie-slim AS config
 
 WORKDIR /src
 

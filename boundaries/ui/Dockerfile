@@ -5,7 +5,7 @@
 # and sets UI__CONTENT_SECURITY_POLICY, so one image serves every environment.
 # Build context: boundaries/ (Vite reads the client schema of BFF from ../bff, alias
 # @public-schema); ui/Dockerfile.dockerignore keeps only the UI and that schema.
-FROM node:24.11.0-bookworm-slim AS build
+FROM node:26.13.0-trixie-slim AS build
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
