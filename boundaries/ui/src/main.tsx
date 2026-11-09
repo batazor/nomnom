@@ -5,6 +5,9 @@ import { AppProviders } from "./app/providers";
 import { AppRouter } from "./app/router";
 import { getRuntimeConfig } from "./shared/config/runtime-config";
 import { initTelemetry } from "./shared/telemetry/faro";
+// Self-hosted faces of the theme fonts (CSP allows font-src 'self' only).
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./styles.css";
 
 async function bootstrap() {

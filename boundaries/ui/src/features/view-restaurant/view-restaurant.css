@@ -26,9 +26,9 @@
 .restaurant-message h3 {
   margin: 0;
   color: var(--color-foreground);
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: var(--font-size-display);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-display);
   line-height: 1.1;
   overflow-wrap: anywhere;
 }
@@ -61,6 +61,10 @@
 
 .restaurant-layout {
   display: grid;
+  /* One column that never grows past the sheet: without it the implicit
+     track takes the menu's min-content and pushes its buttons out of view
+     at 320px (FR-004, AC-1098). */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   min-width: 0;
 }
@@ -74,8 +78,8 @@
 .restaurant-cart h4 {
   margin: 0 0 var(--space-3);
   color: var(--color-foreground);
-  font-size: 1.0625rem;
-  font-weight: 650;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-strong);
 }
 
 .menu-items {
@@ -107,7 +111,7 @@
   margin: 0;
   color: var(--color-foreground);
   font-size: var(--font-size-md);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -121,7 +125,7 @@
 .menu-items .menu-item-price {
   color: var(--color-foreground);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .menu-items li[data-available="false"] .menu-item-copy {
@@ -138,22 +142,24 @@
 
 .menu-item-sold-out {
   color: var(--color-warning);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .menu-item-in-cart {
   color: var(--color-success);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .restaurant-cart {
   display: grid;
+  /* Lines and the checkout wrap inside the cart, not past it (AC-1098). */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-content: start;
   padding: var(--space-5);
-  border: 1px solid var(--color-border);
+  /* A tinted well beside the menu, not a card in the column's card. */
   border-radius: var(--radius-card);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   scroll-margin-top: var(--space-4);
 }
 
@@ -190,7 +196,7 @@
 .cart-line-name {
   min-width: 0;
   color: var(--color-foreground);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -203,7 +209,7 @@
   margin: 0;
   color: var(--color-danger);
   font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .cart-line-controls {
@@ -226,12 +232,13 @@
 .cart-quantity {
   min-width: 1.5rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   text-align: center;
 }
 
 .cart-subtotal {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
@@ -244,10 +251,11 @@
 
 .cart-subtotal dl div {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   justify-content: space-between;
   color: var(--color-foreground);
-  font-weight: 650;
+  font-weight: var(--font-weight-strong);
 }
 
 .cart-subtotal dd {
@@ -349,11 +357,10 @@
   font-size: var(--font-size-xs);
 }
 
+/* Wraps rather than trails off: at 320px the total is the part that matters
+   (FR-004). */
 .cart-bar-total {
-  overflow: hidden;
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: var(--font-weight-strong);
 }

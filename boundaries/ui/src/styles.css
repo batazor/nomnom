@@ -24,6 +24,28 @@ body {
   overflow-x: hidden;
 }
 
+/* Headings default to the strong weight, not the browser's bold; screens set
+   size and tracking where a heading needs more presence. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+b,
+strong {
+  font-weight: var(--font-weight-strong);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  letter-spacing: var(--tracking-tight);
+}
+
 /* manipulation keeps pan and pinch zoom but drops double-tap zoom, so fast
    repeated taps on the cart stepper do not zoom the page. */
 button,
@@ -62,10 +84,12 @@ a,
 .app-topbar {
   display: flex;
   min-height: 4rem;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: 0 var(--space-5);
+  /* Row gap only when the controls wrap under the brand at 320px. */
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
 }
 
 .brand {
@@ -73,7 +97,8 @@ a,
   align-items: center;
   gap: var(--space-3);
   color: var(--color-foreground);
-  font-weight: 650;
+  font-weight: var(--font-weight-strong);
+  letter-spacing: var(--tracking-tight);
   text-decoration: none;
 }
 
@@ -88,7 +113,7 @@ a,
   background: var(--color-surface);
   color: var(--color-primary);
   font-size: var(--font-size-sm);
-  font-weight: 700;
+  font-weight: var(--font-weight-strong);
   /* Trim the font's ascent and descent so the letter sits optically centred. */
   text-box: trim-both cap alphabetic;
 }
@@ -111,8 +136,10 @@ a,
 .app-topbar-end {
   display: flex;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-4);
 }
 
 .app-sheet {
@@ -147,7 +174,7 @@ a,
   background: transparent;
   color: var(--color-foreground);
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   text-box: trim-both cap alphabetic;
   cursor: pointer;
 }
@@ -173,6 +200,11 @@ a,
 }
 
 .nomnom-button[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.nomnom-button[data-inert] {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -242,7 +274,7 @@ a,
 
 .nomnom-label {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 .nomnom-switch {
@@ -261,6 +293,11 @@ a,
   border-radius: 999px;
   background: var(--color-border-strong);
   cursor: pointer;
+}
+
+.nomnom-switch-control[data-pending] {
+  cursor: progress;
+  opacity: 0.75;
 }
 
 .nomnom-switch-control[data-checked] {
@@ -448,6 +485,8 @@ a,
 .nomnom-expanded-title {
   margin: 0;
   font-size: var(--font-size-md);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: var(--tracking-tight);
 }
 
 .nomnom-expanded-close {
@@ -511,9 +550,7 @@ a,
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
-  box-shadow:
-    0 1px 2px rgb(23 23 20 / 6%),
-    var(--shadow-floating);
+  box-shadow: var(--shadow-floating);
   color: var(--color-foreground);
   transform-origin: top center;
   cursor: grab;
@@ -562,7 +599,7 @@ a,
 
 .nomnom-toast-title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 .nomnom-toast-description {
@@ -598,7 +635,7 @@ a,
   flex: none;
   place-items: center;
   border-radius: 28%;
-  font-weight: 700;
+  font-weight: var(--font-weight-strong);
   line-height: 1;
 }
 

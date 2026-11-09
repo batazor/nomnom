@@ -11,15 +11,32 @@
   --color-on-primary: #ffffff;
   --color-primary-soft: #f3d8cf;
   --color-success: #236b46;
-  --color-warning: #8a4a08;
+  /* Amber, not a second terracotta: a warning must not read as the brand. */
+  --color-warning: #855800;
   --color-danger: #b4232d;
-  --color-border: #e6e2da;
-  --color-border-strong: #ccc6bb;
+  /* Hairlines are translucent ink, so one line reads the same on the frame,
+     a surface and a muted well. */
+  --color-border: rgb(23 23 20 / 9%);
+  --color-border-strong: rgb(23 23 20 / 18%);
 
-  --font-family-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-family-sans: "Geist Variable", sans-serif;
+  /* Numbers, times, ids and the small caps labels: the instrument layer. */
+  --font-family-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --font-size-label: 0.6875rem;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-md: 1rem;
+  --font-size-title: 1.0625rem;
+  --font-size-display: clamp(1.5rem, 4vw, 2rem);
+
+  /* Quiet weights: emphasis comes from size and tracking, not from bold. */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-strong: 600;
+
+  --tracking-tight: -0.011em;
+  --tracking-display: -0.035em;
+  --tracking-label: 0.08em;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -35,7 +52,10 @@
   --radius-control: 0.625rem;
   --radius-card: 1rem;
   --radius-sheet: 1rem;
-  --shadow-floating: 0 0.5rem 1.5rem rgb(23 23 20 / 10%);
+  /* Two depths only: the page lies flat on hairlines, and the one live
+     thing (a menu, the cart, a toast) floats on a wide soft shadow. */
+  --shadow-floating:
+    0 1px 2px rgb(23 23 20 / 5%), 0 1.5rem 4rem -0.5rem rgb(23 23 20 / 16%);
 
   --motion-fast: 140ms;
   --motion-standard: 220ms;
@@ -55,10 +75,12 @@
   --color-on-primary: #171714;
   --color-primary-soft: #4b2b21;
   --color-success: #6fca98;
-  --color-warning: #efb25f;
+  --color-warning: #e3b341;
   --color-danger: #f57a82;
-  --color-border: #2c2c28;
-  --color-border-strong: #4a4943;
+  --color-border: rgb(250 249 246 / 10%);
+  --color-border-strong: rgb(250 249 246 / 20%);
+  --shadow-floating:
+    0 1px 2px rgb(0 0 0 / 40%), 0 1.5rem 4rem -0.5rem rgb(0 0 0 / 60%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -73,10 +95,12 @@
     --color-on-primary: #171714;
     --color-primary-soft: #4b2b21;
     --color-success: #6fca98;
-    --color-warning: #efb25f;
+    --color-warning: #e3b341;
     --color-danger: #f57a82;
-    --color-border: #2c2c28;
-    --color-border-strong: #4a4943;
+    --color-border: rgb(250 249 246 / 10%);
+    --color-border-strong: rgb(250 249 246 / 20%);
+    --shadow-floating:
+      0 1px 2px rgb(0 0 0 / 40%), 0 1.5rem 4rem -0.5rem rgb(0 0 0 / 60%);
   }
 }
 
@@ -120,4 +144,5 @@
   --color-danger: var(--color-danger);
   --color-border: var(--color-border);
   --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
 }

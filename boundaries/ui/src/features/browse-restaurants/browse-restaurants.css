@@ -80,7 +80,7 @@
   /* Up to two lines, so a long name is read whole instead of cut. */
   display: -webkit-box;
   overflow: hidden;
-  font-weight: 650;
+  font-weight: var(--font-weight-strong);
   line-height: 1.25;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;

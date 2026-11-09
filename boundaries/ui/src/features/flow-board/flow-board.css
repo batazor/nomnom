@@ -9,25 +9,27 @@
 .board h4 {
   margin: 0;
   color: var(--color-foreground);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--tracking-tight);
 }
 
 /* Orders and the path of the chosen one */
 
+/* The orders strip lies flat on the sheet: a section over a hairline, not
+   one more box. */
 .board-top {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-muted);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .board-top-title {
-  font-size: var(--font-size-sm);
-  font-weight: 650;
+  color: var(--color-muted);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .board-strip-empty,
@@ -87,12 +89,14 @@
 
 .board-chip-name {
   font-size: var(--font-size-sm);
-  font-weight: 650;
+  font-weight: var(--font-weight-strong);
 }
 
 .board-chip-meta {
   color: var(--color-muted);
-  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-label);
+  font-variant-numeric: tabular-nums;
 }
 
 .board-chip[data-status="DELIVERED"] .board-chip-meta {
@@ -154,13 +158,14 @@
 
 .board-step-label {
   font-size: var(--font-size-sm);
-  font-weight: 650;
+  font-weight: var(--font-weight-strong);
   overflow-wrap: anywhere;
 }
 
 .board-step-actor {
-  font-size: var(--font-size-xs);
   color: var(--color-muted);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-label);
 }
 
 .board-timeline-footer {
@@ -173,7 +178,7 @@
 
 .board-next {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 /* Columns: side by side on a wide desktop; a phone scrolls them sideways; a
@@ -241,15 +246,24 @@
   background: var(--color-surface);
 }
 
+/* The column head is a strip over a hairline that runs edge to edge, with
+   the role in mono caps, like the label of an instrument panel. */
 .board-column-header h2 {
-  font-size: var(--font-size-md);
-  font-weight: 700;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
 }
 
 .board-column-header {
   display: flex;
+  min-height: 1.75rem;
   align-items: center;
   gap: var(--space-2);
+  margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1) 0;
+  padding: 0 var(--space-3) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .board-column-body {
@@ -330,7 +344,7 @@ button.board-card-head {
 }
 
 .board-card-title {
-  font-weight: 650;
+  font-weight: var(--font-weight-strong);
 }
 
 .board-badge {
@@ -339,7 +353,7 @@ button.board-card-head {
   background: var(--color-surface-muted);
   color: var(--color-muted);
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
 }
 
@@ -376,10 +390,50 @@ button.board-card-head {
   align-items: center;
 }
 
+/* Offer to a courier without dragging (FR-779): a menu anchored under the
+   card's button, the way the account menu sits under the avatar. */
+.board-offer-items {
+  z-index: 50;
+  min-width: 12rem;
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  outline: none;
+  --anchor-gap: var(--space-1);
+}
+
+.board-offer-item {
+  display: flex;
+  width: 100%;
+  min-height: 2.25rem;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--color-foreground);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+span.board-offer-item {
+  color: var(--color-muted);
+  cursor: default;
+}
+
+.board-offer-item[data-focus] {
+  background: var(--color-surface-muted);
+}
+
 .board-card-wait {
   color: var(--color-success);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 .board-courier {
@@ -400,7 +454,7 @@ button.board-card-head {
   gap: var(--space-2);
   align-items: center;
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
 }
 
@@ -490,12 +544,12 @@ button.board-card-head {
 /* Cook Pool and Courier Pool in the column headers (FR-624): the load of the
    line, the workers with their line actions and the form that adds one. */
 
+/* A tinted well inside the column, not a card in a card. */
 .board-pool {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: var(--color-surface-muted);
 }
 
@@ -507,11 +561,13 @@ button.board-card-head {
 .board-pool-line,
 .board-pool-backlog {
   margin: 0;
-  font-size: var(--font-size-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .board-pool-line {
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 .board-pool-backlog {
@@ -550,7 +606,7 @@ button.board-card-head {
   background: var(--color-surface);
   color: var(--color-warning);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 .board-pool-members {
@@ -579,7 +635,7 @@ button.board-card-head {
 
 .board-pool-name {
   overflow: hidden;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -628,6 +684,7 @@ button.board-card-head {
 .board-badge[data-scheduled="true"] {
   background: var(--color-primary-soft);
   color: var(--color-foreground);
+  font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -644,7 +701,7 @@ button.board-card-head {
   margin: 0;
   color: var(--color-muted);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 
 .board-take-next {

@@ -28,11 +28,28 @@ Vertical UI slices: `browse-restaurants` (`/`), `view-restaurant` с корзи�
 
 CSS variables разделены на semantic color, typography, spacing, radius, shadow и motion roles. Light и dark theme поддерживают system preference и будущий явный override. `prefers-reduced-motion` отключает non-essential transitions. Компоненты не содержат hardcoded palette values.
 
+Визуальный язык — спокойный инструмент:
+
+- **Шрифты.** Geist для текста и Geist Mono для «приборного» слоя: время, номера, счётчики линий, ETA и мелкие подписи капсом (`--font-size-label`, `--tracking-label`). Оба шрифта self-hosted из `@fontsource-variable/*`, потому что CSP разрешает только `font-src 'self'`.
+- **Жирность.** Только `--font-weight-regular`, `--font-weight-medium` и `--font-weight-strong`, без 650/700. Крупные заголовки (`--font-size-display`) набираются medium со сжатым трекингом `--tracking-display`: акцент дают размер и трекинг, а не bold.
+- **Глубина.** Два уровня. Страница лежит плоско на полупрозрачных hairline-границах (`--color-border` — это чернила с alpha, одинаково читаются на любой поверхности). Вложенные группы — тонированные «колодцы» `--color-surface-muted` без рамки, а не карточка в карточке. Над страницей парит только живое: меню, тост, корзина — на `--shadow-floating`.
+- **Цвет.** Терракотовый `--color-primary` — бренд, главное действие и живой прогресс. Предупреждения — отдельный янтарный `--color-warning`, чтобы не читаться как бренд.
+
 ## Accessibility и responsive
 
-Интерактивные элементы сохраняют keyboard activation, logical focus order, visible focus ring, semantic labels и screen-reader state. Dialog/Drawer/Alert Dialog в будущем строятся на Headless UI primitives, а не на `div`-эмуляции. Contrast проверяется в обеих темах.
+Цель — WCAG 2.2 уровня AA (FR-004). Интерактивные элементы сохраняют keyboard activation, logical focus order, visible focus ring, semantic labels и screen-reader state. Dialog/Drawer/Alert Dialog в будущем строятся на Headless UI primitives, а не на `div`-эмуляции. Contrast проверяется в обеих темах.
 
-Layout начинается с mobile viewport, не создаёт horizontal overflow и расширяется на tablet/desktop без изменения порядка задач пользователя. Accessibility проверяется component-тестами и axe; критические journeys позже проверяются реальным браузером.
+Layout начинается с mobile viewport и расширяется на tablet/desktop без изменения порядка задач пользователя. На ширине 320 CSS px всё содержимое и все элементы управления видны без горизонтальной прокрутки и без обрезки. `overflow: clip` у листа и `overflow-x: hidden` у `body` прячут переполнение, а не убирают его, поэтому колонки grid задаются `minmax(0, …)`, а длинный текст переносится, а не обрезается многоточием.
+
+Правила, которые легко нарушить:
+
+- **Без перетаскивания.** У каждого действия перетаскиванием есть альтернатива одним нажатием, доступная с клавиатуры (FR-779). Пример: заказ кухни предлагается курьеру и перетаскиванием на его строку, и из меню «Предложить курьеру» на карточке.
+- **Фокус после действия не теряется** (FR-780).
+  - Кнопка, которую выключает её же нажатие, получает `isPending` (или `aria-disabled`), а не нативный `disabled`: так она остаётся в фокусе, а повторные нажатия игнорируются. Нативный `disabled` — только для кнопок, недоступных заранее.
+  - Если нажатый элемент исчезает, фокус переходит на заголовок той же карточки, затем на карточку на её месте, затем на заголовок колонки. Фокус переносится только если он уже потерян, то есть стоит на `body`: ответы приходят по subscription позже, и у пользователя, который перешёл дальше, фокус не забирается.
+- **Язык документа.** `lang` у `<html>` ставит провайдер i18n по локали из runtime config, в разметке он не зашит (FR-781).
+
+Accessibility проверяется component-тестами и axe, reflow на 320px — в браузере.
 
 ## i18n и форматирование
 
