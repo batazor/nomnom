@@ -1,4 +1,8 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+
+const hoverDelay = 500;
+const nearbyTipWindow = 300;
+let lastHoverEnd = -Infinity;
 
 export type HelpTipProps = Readonly<{
   // Names the button: "what is this column".
@@ -11,26 +15,66 @@ export type HelpTipProps = Readonly<{
 // Escape hides it. Headless UI has no tooltip (its Popover opens on click), so
 // this one is a plain button described by the tooltip.
 export function HelpTip({ label, children }: HelpTipProps) {
-  const [open, setOpen] = useState(false);
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const hoverTimer = useRef<number>(undefined);
   const tipId = useId();
+  const open = hoverOpen || focusOpen;
+
+  function cancelHover() {
+    window.clearTimeout(hoverTimer.current);
+  }
+
+  useEffect(() => {
+    return () => window.clearTimeout(hoverTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function dismiss(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      window.clearTimeout(hoverTimer.current);
+      setHoverOpen(false);
+      setFocusOpen(false);
+    }
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [open]);
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: hovering the button or its tooltip keeps it open for the mouse; keyboard users get it from the button's focus.
     <span
       className="nomnom-help"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "mouse" || open) return;
+        if (performance.now() - lastHoverEnd < nearbyTipWindow) {
+          setHoverOpen(true);
+          return;
+        }
+        hoverTimer.current = window.setTimeout(
+          () => setHoverOpen(true),
+          hoverDelay,
+        );
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType !== "mouse") return;
+        cancelHover();
+        if (hoverOpen) lastHoverEnd = performance.now();
+        setHoverOpen(false);
+      }}
     >
       <button
         aria-describedby={tipId}
         aria-label={label}
         className="nomnom-help-button"
         data-open={open || undefined}
-        onBlur={() => setOpen(false)}
-        onClick={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
+        onBlur={() => setFocusOpen(false)}
+        onClick={() => {
+          cancelHover();
+          setFocusOpen(true);
+        }}
+        onFocus={() => {
+          cancelHover();
+          setFocusOpen(true);
         }}
         type="button"
       >

@@ -16,24 +16,73 @@
   margin: 0;
 }
 
+@property --catalog-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --catalog-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes catalog-fade-start {
+  from {
+    --catalog-fade-start: 0px;
+  }
+  to {
+    --catalog-fade-start: 2.5rem;
+  }
+}
+
+@keyframes catalog-fade-end {
+  from {
+    --catalog-fade-end: 2.5rem;
+  }
+  to {
+    --catalog-fade-end: 0px;
+  }
+}
+
 /* A slider: cards keep a readable width and the next one peeks in, so it is
    clear the row scrolls. */
 .catalog-list {
+  --catalog-inset: calc(var(--focus-ring-width) + var(--focus-ring-offset));
   display: flex;
   justify-self: stretch;
   scrollbar-width: thin;
-  padding-inline-end: var(--space-8);
-  mask-image: linear-gradient(
-    to right,
-    #000 calc(100% - var(--space-8)),
-    transparent
-  );
   gap: var(--space-2);
   margin: 0;
-  padding: 0 0 var(--space-1);
+  padding: var(--catalog-inset);
   overflow-x: auto;
   list-style: none;
+  scroll-padding-inline: var(--catalog-inset);
   scroll-snap-type: x proximity;
+}
+
+@supports (animation-timeline: scroll(self inline)) {
+  .catalog-list {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--catalog-fade-start),
+      #000 calc(100% - var(--catalog-fade-end)),
+      transparent
+    );
+    animation:
+      catalog-fade-start 1ms linear both,
+      catalog-fade-end 1ms linear both;
+    animation-timeline: scroll(self inline);
+    animation-range:
+      0 min(3rem, 50%),
+      max(calc(100% - 3rem), 50%) 100%;
+  }
+
+  .catalog-list:has(:focus-visible) {
+    mask-image: none;
+  }
 }
 
 .catalog-list > li {

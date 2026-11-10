@@ -743,3 +743,10 @@ a,
   visibility: hidden;
   pointer-events: none;
 }
+
+/* Keep the tooltip hoverable across the gap below its button. */
+.nomnom-help > .nomnom-help-panel:not([data-closed])::before {
+  position: absolute;
+  inset: -0.4375rem 0 100%;
+  content: "";
+}
