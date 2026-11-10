@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -q -B -DskipTests package
 
 # Плагины Debezium 3.7.1.Final — каталоги из закреплённого образа Debezium Connect: каждый
 # самодостаточен (EventRouter — в debezium-connect-plugins, MongoEventRouter — в jar коннектора).
-FROM quay.io/debezium/connect:3.7.1.Final@sha256:53c6d0424d09f7ccef813c895fb9b1056a726bc14ff2e6a592856cd627ebd491 AS debezium
+FROM quay.io/debezium/connect:3.7.1.Final@sha256:9bf1239e4cc46199848d24489517432c98ab0071eb2b1fc3408a8767dbd65386 AS debezium
 
 FROM quay.io/strimzi/kafka:1.3.1-kafka-4.3.2@sha256:9cea505e434a53cea40941d2c6e9aa5896792fe9c9380feb1d7adea3867a3a0b
 
