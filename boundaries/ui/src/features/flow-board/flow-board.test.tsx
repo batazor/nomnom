@@ -31,6 +31,7 @@ import {
 import { mockServer } from "../../shared/graphql/mocks/server";
 import { parseBoardOrders } from "./board-orders";
 import { CookPoolPanel } from "./cook-pool";
+import { OrderTimeline } from "./order-flow";
 
 const config = {
   publicApiUrl: "https://public.example.test",
@@ -142,6 +143,8 @@ describe("flow board", () => {
     // AC-835: the order stands at the payment step of «Оплата», not of a column.
     const timeline = screen.getByRole("region", { name: "Путь заказа" });
     const paidStep = within(timeline).getByText("Оплачен").closest("li");
+    expect(within(timeline).getAllByRole("listitem")).toHaveLength(7);
+    expect(paidStep).toHaveAttribute("aria-current", "step");
     expect(paidStep).toHaveAttribute("data-state", "current");
     expect(within(paidStep as HTMLElement).getByText("Оплата")).toBeVisible();
 
@@ -433,7 +436,9 @@ describe("flow board", () => {
     await waitFor(() => expect(incoming()).toHaveLength(2));
 
     // Cards are re-rendered by kitchenChanged: look them up by order each time.
-    const [first, second] = [...incoming()].map((card) => card.dataset.focusKey);
+    const [first, second] = [...incoming()].map(
+      (card) => card.dataset.focusKey,
+    );
     const card = (key: string | undefined) => {
       const found = column("Кухня").querySelector<HTMLElement>(
         `.board-card[data-focus-key="${key}"]`,
@@ -505,9 +510,7 @@ describe("flow board", () => {
     screen.getByRole("button", { name: "← Все рестораны" }).focus();
     await user.keyboard("{Enter}");
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /^Кухня №8/ }),
-      ).toHaveFocus(),
+      expect(screen.getByRole("button", { name: /^Кухня №8/ })).toHaveFocus(),
     );
   });
 
@@ -996,4 +999,46 @@ describe("board state", () => {
     expect(parseBoardOrders("{")).toEqual([]);
     expect(parseBoardOrders(null)).toEqual([]);
   });
+});
+
+describe("order route terminal states", () => {
+  it.each(["CANCELLED", "FAILED"])(
+    "does not present %s as a completed route",
+    async (status) => {
+      mockServer.use(
+        publicGraphql.query("BoardOrderStatus", () =>
+          HttpResponse.json({
+            data: {
+              order: {
+                id: "ended-route",
+                status,
+                endReason: null,
+                restaurant: { id: "restaurant-1", name: "Кухня №8" },
+                total: { amount: 100, currency: "EUR" },
+                placedAt: "2026-11-10T10:00:00Z",
+              },
+            },
+          }),
+        ),
+      );
+      render(
+        <AppProviders config={config}>
+          <OrderTimeline orderId="ended-route" onDetails={() => {}} />
+        </AppProviders>,
+      );
+      const timeline = await screen.findByRole("region", {
+        name: "Путь заказа",
+      });
+      expect(timeline).toHaveAttribute("data-ended", "true");
+      expect(timeline.querySelector('[aria-current="step"]')).toBeNull();
+      expect(timeline.querySelector('[data-state="done"]')).toBeNull();
+      await waitFor(() =>
+        expect(
+          within(timeline).getByText(
+            status === "CANCELLED" ? "Отменён" : "Не выполнен",
+          ),
+        ).toBeVisible(),
+      );
+    },
+  );
 });

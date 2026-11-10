@@ -1,4 +1,4 @@
-import { m } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useQuery, useSubscription } from "urql";
 
@@ -64,7 +64,7 @@ function useBoardOrder(orderId: string) {
   const [{ data: pushed }] = useSubscription({
     query: BoardOrderChangedDocument,
     variables: { id: orderId },
-    pause: !loaded || final,
+    pause: !loaded || final || finalStatuses.has(loaded.status),
   });
   const order = useLatest(loaded, pushed?.orderChanged);
   useEffect(() => {
@@ -175,6 +175,7 @@ export function OrderTimeline({
   onDetails: () => void;
 }) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const order = useBoardOrder(orderId);
   if (order === null) return null;
   if (!order) {
@@ -191,7 +192,9 @@ export function OrderTimeline({
       animate={{ opacity: 1, y: 0 }}
       aria-label={t("board.timeline.title")}
       className="board-timeline"
-      initial={{ opacity: 0, y: -6 }}
+      initial={reduceMotion ? false : { opacity: 0, y: -6 }}
+      data-ended={ended || undefined}
+      data-complete={order.status === "DELIVERED" || undefined}
       layoutId={orderCardId("timeline", orderId)}
     >
       <ol className="board-steps">
@@ -209,8 +212,27 @@ export function OrderTimeline({
             }
             key={step.status}
           >
-            <span className="board-step-label">{t(step.label)}</span>
-            <span className="board-step-actor">{t(step.actor)}</span>
+            <span aria-hidden="true" className="board-step-node">
+              {index < reached ? "✓" : index + 1}
+            </span>
+            <div className="board-step-copy">
+              {index === reached ? (
+                <m.span
+                  aria-hidden="true"
+                  className="board-step-active"
+                  layoutId={`board-progress-${orderId}`}
+                  transition={{ duration: reduceMotion ? 0 : 0.22 }}
+                />
+              ) : null}
+              <span className="board-step-label">
+                {t(
+                  step.status === "CONFIRMED" && order.status === "SCHEDULED"
+                    ? "board.step.scheduled"
+                    : step.label,
+                )}
+              </span>
+              <span className="board-step-actor">{t(step.actor)}</span>
+            </div>
           </li>
         ))}
       </ol>
